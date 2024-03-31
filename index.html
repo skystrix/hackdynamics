@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HackDynamics</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Helvetica Neue', sans-serif;
+      background: linear-gradient(to right, #f9f9f9, #e6e6e6);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .container {
+      text-align: center;
+    }
+
+    h2 {
+      font-family: 'Open Sans', sans-serif;
+      font-size: 3rem;
+      font-weight: light;
+      color: #333;
+      margin-bottom: 1rem;
+    }
+
+    .line {
+      height: 1px;
+      width: 100%;
+      background: linear-gradient(to right, transparent, #ccc, transparent);
+      position: absolute;
+      left: 0;
+      animation: animate 5s linear infinite;
+    }
+
+    @keyframes animate {
+      0% {
+        transform: translateX(-100%);
+      }
+      100% {
+        transform: translateX(100%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Under Development.</h2>
+    <div class="line"></div>
+    <div class="line" style="top: 20%;"></div>
+    <div class="line" style="top: 40%;"></div>
+    <div class="line" style="top: 60%;"></div>
+    <div class="line" style="top: 80%;"></div>
+  </div>
+</body>
+</html>
