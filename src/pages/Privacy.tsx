@@ -16,7 +16,7 @@ const Privacy = () => {
             <section>
               <h2 className="text-2xl font-semibold mt-8 mb-4">1. Introduction</h2>
               <p>
-                This Privacy Policy explains how JobSpark ("we", "us", "our") collects, uses, discloses, 
+                This Privacy Policy explains how HackDynamics ("we", "us", "our") collects, uses, discloses, 
                 and safeguards your information when you visit our website or use our services.
               </p>
               <p>
@@ -172,10 +172,10 @@ const Privacy = () => {
                 If you have any questions about this Privacy Policy, please contact us at:
               </p>
               <div className="mt-4">
-                <p className="font-medium">JobSpark Inc.</p>
+                <p className="font-medium">HackDynamics Inc.</p>
                 <p>123 Tech Avenue</p>
                 <p>San Francisco, CA 94107</p>
-                <p>Email: privacy@jobspark.example.com</p>
+                <p>Email: privacy@hackdynamics.example.com</p>
                 <p>Phone: (555) 123-4567</p>
               </div>
             </section>
