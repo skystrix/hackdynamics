@@ -10,7 +10,7 @@ const Footer = () => {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <BriefcaseIcon className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">JobSpark</span>
+              <span className="text-xl font-bold">HackDynamics</span>
             </div>
             <p className="text-muted-foreground">
               Connecting talented software engineers with the best tech companies worldwide.
@@ -109,7 +109,7 @@ const Footer = () => {
 
         <div className="border-t mt-12 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} JobSpark. All rights reserved.
+            &copy; {new Date().getFullYear()} HackDynamics. All rights reserved.
           </p>
           <div className="flex gap-6">
             <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground">

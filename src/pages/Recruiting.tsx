@@ -41,7 +41,7 @@ const Recruiting = () => {
       
       <main className="flex-1">
         <section className="py-16 container">
-          <h2 className="text-3xl font-bold text-center mb-12">Why Companies Choose JobSpark</h2>
+          <h2 className="text-3xl font-bold text-center mb-12">Why Companies Choose HackDynamics</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card>
@@ -203,7 +203,7 @@ const Recruiting = () => {
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-6">Ready to transform your recruiting?</h2>
             <p className="text-xl text-muted-foreground mb-8">
-              Join thousands of companies finding their ideal tech talent through JobSpark
+              Join thousands of companies finding their ideal tech talent through HackDynamics
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Button size="lg">Schedule a Demo</Button>

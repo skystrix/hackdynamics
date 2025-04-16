@@ -15,8 +15,8 @@ const Terms = () => {
           <div className="prose max-w-none">
             <section>
               <p className="font-medium">
-                Please read these Terms of Service ("Terms", "Terms of Service") carefully before using the JobSpark website 
-                (the "Service") operated by JobSpark Inc. ("us", "we", or "our").
+                Please read these Terms of Service ("Terms", "Terms of Service") carefully before using the HackDynamics website 
+                (the "Service") operated by HackDynamics Inc. ("us", "we", or "our").
               </p>
               <p className="mb-4">
                 Your access to and use of the Service is conditioned upon your acceptance of and compliance with these Terms. 
@@ -76,12 +76,12 @@ const Terms = () => {
             <Separator className="my-6" />
             
             <section>
-              <h2 className="text-2xl font-semibold mt-8 mb-4">3. JobSpark Rights</h2>
+              <h2 className="text-2xl font-semibold mt-8 mb-4">3. HackDynamics Rights</h2>
               <p>
                 The Service and its original content (excluding Content provided by users), features and functionality are and will remain the exclusive 
-                property of JobSpark and its licensors. The Service is protected by copyright, trademark, and other laws of both the United States and 
+                property of HackDynamics and its licensors. The Service is protected by copyright, trademark, and other laws of both the United States and 
                 foreign countries. Our trademarks and trade dress may not be used in connection with any product or service without the prior written 
-                consent of JobSpark.
+                consent of HackDynamics.
               </p>
             </section>
             
@@ -96,17 +96,17 @@ const Terms = () => {
               </p>
               <p className="mt-4">
                 At the end of each Billing Cycle, your Subscription will automatically renew under the exact same conditions unless you cancel it or 
-                JobSpark cancels it. You may cancel your Subscription renewal either through your online account management page or by contacting 
-                JobSpark customer support team.
+                HackDynamics cancels it. You may cancel your Subscription renewal either through your online account management page or by contacting 
+                HackDynamics customer support team.
               </p>
               <p className="mt-4">
-                A valid payment method, including credit card, is required to process the payment for your Subscription. You shall provide JobSpark with 
+                A valid payment method, including credit card, is required to process the payment for your Subscription. You shall provide HackDynamics with 
                 accurate and complete billing information including full name, address, state, zip code, telephone number, and a valid payment method information. 
-                By submitting such payment information, you automatically authorize JobSpark to charge all Subscription fees incurred through your account to any 
+                By submitting such payment information, you automatically authorize HackDynamics to charge all Subscription fees incurred through your account to any 
                 such payment instruments.
               </p>
               <p className="mt-4">
-                Should automatic billing fail to occur for any reason, JobSpark will issue an electronic invoice indicating that you must proceed manually, 
+                Should automatic billing fail to occur for any reason, HackDynamics will issue an electronic invoice indicating that you must proceed manually, 
                 within a certain deadline date, with the full payment corresponding to the billing period as indicated on the invoice.
               </p>
             </section>
@@ -120,9 +120,9 @@ const Terms = () => {
                 <li>In any way that violates any applicable federal, state, local, or international law or regulation</li>
                 <li>To transmit, or procure the sending of, any advertising or promotional material, including any "junk mail", "chain letter," 
                   "spam," or any other similar solicitation</li>
-                <li>To impersonate or attempt to impersonate JobSpark, a JobSpark employee, another user, or any other person or entity</li>
+                <li>To impersonate or attempt to impersonate HackDynamics, a HackDynamics employee, another user, or any other person or entity</li>
                 <li>To engage in any other conduct that restricts or inhibits anyone's use or enjoyment of the Service, or which, as determined by us, 
-                  may harm JobSpark or users of the Service or expose them to liability</li>
+                  may harm HackDynamics or users of the Service or expose them to liability</li>
               </ul>
             </section>
             
@@ -131,7 +131,7 @@ const Terms = () => {
             <section>
               <h2 className="text-2xl font-semibold mt-8 mb-4">6. Limitation of Liability</h2>
               <p>
-                In no event shall JobSpark, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, 
+                In no event shall HackDynamics, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, 
                 special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, 
                 resulting from (i) your access to or use of or inability to access or use the Service; (ii) any conduct or content of any third party on the Service; 
                 (iii) any content obtained from the Service; and (iv) unauthorized access, use or alteration of your transmissions or content, whether based on warranty, 
@@ -161,10 +161,10 @@ const Terms = () => {
                 If you have any questions about these Terms, please contact us at:
               </p>
               <div className="mt-4">
-                <p className="font-medium">JobSpark Inc.</p>
+                <p className="font-medium">HackDynamics Inc.</p>
                 <p>123 Tech Avenue</p>
                 <p>San Francisco, CA 94107</p>
-                <p>Email: legal@jobspark.example.com</p>
+                <p>Email: legal@hackdynamics.example.com</p>
                 <p>Phone: (555) 123-4567</p>
               </div>
             </section>

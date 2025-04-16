@@ -36,7 +36,7 @@ const About = () => {
       <div className="bg-gradient-to-b from-accent/50 to-background pt-20 pb-16">
         <div className="container">
           <div className="max-w-2xl mx-auto text-center">
-            <h1 className="text-4xl font-bold tracking-tight mb-4">About JobSpark</h1>
+            <h1 className="text-4xl font-bold tracking-tight mb-4">About HackDynamics</h1>
             <p className="text-xl text-muted-foreground">
               Connecting talented engineers with innovative companies since 2018
             </p>
@@ -50,7 +50,7 @@ const About = () => {
             <h2 className="text-3xl font-bold mb-6">Our Mission</h2>
             <p className="text-xl mb-8">
               We believe that finding the right job—or the right candidate—shouldn't be left to chance. 
-              JobSpark was founded with a simple goal: to create a more efficient, transparent, and 
+              HackDynamics was founded with a simple goal: to create a more efficient, transparent, and 
               human-centered hiring process for the tech industry.
             </p>
             <p className="mb-8">
@@ -74,7 +74,7 @@ const About = () => {
                   <div className="md:w-2/3">
                     <h3 className="text-xl font-semibold mb-2">From Engineers, For Engineers</h3>
                     <p>
-                      JobSpark was founded by software engineers who experienced firsthand the frustration 
+                      HackDynamics was founded by software engineers who experienced firsthand the frustration 
                       of traditional job searching. After countless mismatched interviews and vague job descriptions, 
                       they decided to build the platform they wished existed.
                     </p>
@@ -102,7 +102,7 @@ const About = () => {
                   <div className="md:w-2/3">
                     <h3 className="text-xl font-semibold mb-2">Looking Ahead</h3>
                     <p>
-                      Today, JobSpark is leading the way in reimagining tech recruitment. We're constantly 
+                      Today, HackDynamics is leading the way in reimagining tech recruitment. We're constantly 
                       innovating with new features, insights, and tools that make hiring more efficient and 
                       finding the perfect job more accessible for everyone.
                     </p>
