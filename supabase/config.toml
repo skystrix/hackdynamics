@@ -1,1 +1,12 @@
-project_id = "dqgusfwwrpwiyqiyvtwe"
+# Razorpay calls this function with its own HMAC signature, not a Supabase JWT,
+# so JWT verification must be off. The function verifies the Razorpay signature
+# itself before doing anything.
+[functions.razorpay-webhook]
+verify_jwt = false
+
+# The platform's verify_jwt would (a) reject the CORS preflight OPTIONS request
+# and (b) only prove the token is *some* valid JWT — not that the user is
+# premium. The function does its own token + is_premium check, which is strictly
+# stronger, so we turn the platform gate off and let the code decide.
+[functions.course-content]
+verify_jwt = false

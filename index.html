@@ -1,26 +1,651 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>job-spark-engineers</title>
-    <meta name="description" content="Lovable Generated Project" />
-    <meta name="author" content="Lovable" />
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HackDynamics — Computer science, from the inside</title>
+<meta name="description" content="HackDynamics builds the best computer science courses on the planet: interactive, depth-first, free. Start with Databases in Depth.">
+<script src="js/theme.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<!--
+  HackDynamics landing page.
+  Styles and page scripts are inline; js/theme.js is the shared light/dark
+  controller used by every page. No dependencies, no build step.
+  The Databases in Depth course lives untouched at databases-in-depth.html.
+-->
+<style>
+  :root {
+    --bg: #05080f;
+    --bg-2: #0a101d;
+    --bg-3: #101a2e;
+    --line: #18243c;
+    --text: #d7e2f2;
+    --dim: #7e90b0;
+    --cyan: #2de2ff;
+    --blue: #4f7cff;
+    --gold: #ffd166;
+    --green: #3ddc97;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+    --serif: Georgia, "Times New Roman", serif;
+  }
 
-    <meta property="og:title" content="job-spark-engineers" />
-    <meta property="og:description" content="Lovable Generated Project" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@lovable_dev" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-  </head>
+  html { scroll-behavior: smooth; }
 
-  <body>
-    <div id="root"></div>
-    <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
-    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  ::selection { background: rgba(45, 226, 255, .25); }
+
+  /* Ambient canvas: drifting constellation, barely there */
+  #sky {
+    position: fixed; inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: .6;
+  }
+
+  /* Faint radial glow behind the hero */
+  .glow {
+    position: absolute;
+    top: -220px; left: 50%;
+    width: 900px; height: 620px;
+    transform: translateX(-50%);
+    background: radial-gradient(closest-side, rgba(79, 124, 255, .14), rgba(45, 226, 255, .05) 55%, transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative; z-index: 1;
+    max-width: 1020px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 26px 0 0;
+  }
+  .brand {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 2.5px;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .brand b { color: var(--cyan); text-shadow: 0 0 14px rgba(45,226,255,.5); font-weight: 700; }
+  .brand .tld { color: var(--dim); font-weight: 400; }
+  nav a {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    text-decoration: none;
+    margin-left: 26px;
+    transition: color .2s;
+  }
+  nav a:hover { color: var(--cyan); }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    padding: 118px 0 96px;
+    text-align: left;
+    max-width: 780px;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 4px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 22px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .kicker::after {
+    content: "";
+    height: 1px; width: 70px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+    display: inline-block;
+  }
+  h1 {
+    font-size: clamp(40px, 7vw, 72px);
+    line-height: 1.04;
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    color: #eef4fd;
+  }
+  h1 em {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: 0;
+    background: linear-gradient(110deg, var(--cyan), var(--blue));
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    padding-right: .06em; /* keep the italic's tail from clipping */
+  }
+  .hero p {
+    margin-top: 26px;
+    max-width: 560px;
+    font-size: 19px;
+    color: var(--dim);
+  }
+  .hero p strong { color: var(--text); font-weight: 600; }
+
+  .hero-cta {
+    margin-top: 42px;
+    display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 30px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 16px;
+    text-decoration: none;
+    color: #041018;
+    background: linear-gradient(90deg, var(--cyan), var(--blue));
+    box-shadow: 0 0 28px rgba(45, 226, 255, .28);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(45, 226, 255, .45); }
+  .btn .arr { transition: transform .2s; }
+  .btn:hover .arr { transform: translateX(4px); }
+  .hero-note {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--dim);
+  }
+  .hero-note b { color: var(--green); font-weight: 400; }
+
+  /* ---------- Section headers ---------- */
+  section { padding: 70px 0; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 16px;
+    margin-bottom: 14px;
+  }
+  .sec-head .idx {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--blue);
+  }
+  .sec-head h2 {
+    font-size: 30px;
+    letter-spacing: -.5px;
+    color: #eef4fd;
+  }
+  .sec-sub { color: var(--dim); max-width: 620px; margin-bottom: 42px; }
+  .sec-sub em { font-family: var(--serif); font-style: italic; color: var(--gold); }
+
+  /* ---------- Featured course card ---------- */
+  .course-featured {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 0;
+    background: linear-gradient(160deg, var(--bg-2), #0b1322);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    overflow: hidden;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color .25s, box-shadow .25s, transform .25s;
+  }
+  .course-featured:hover {
+    border-color: rgba(45, 226, 255, .55);
+    box-shadow: 0 0 44px rgba(45, 226, 255, .12), inset 0 0 60px rgba(45, 226, 255, .03);
+    transform: translateY(-3px);
+  }
+  .cf-body { padding: 42px 44px 38px; }
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(61, 220, 151, .45);
+    color: var(--green);
+    margin-bottom: 20px;
+  }
+  .tag.soon { border-color: var(--line); color: var(--dim); }
+  .cf-body h3 {
+    font-size: 34px;
+    letter-spacing: -.6px;
+    line-height: 1.15;
+    color: #eef4fd;
+    margin-bottom: 14px;
+  }
+  .cf-body .desc {
+    color: var(--dim);
+    font-size: 16px;
+    margin-bottom: 26px;
+  }
+  .cf-body .desc strong { color: var(--text); font-weight: 600; }
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-bottom: 30px;
+  }
+  .stat {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--cyan);
+    border: 1px solid rgba(45, 226, 255, .3);
+    border-radius: 999px;
+    padding: 5px 13px;
+  }
+  .cf-go {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--cyan);
+    letter-spacing: .5px;
+  }
+  .cf-go .arr { display: inline-block; transition: transform .2s; }
+  .course-featured:hover .cf-go .arr { transform: translateX(6px); }
+
+  /* Featured card's right pane: a living B-Tree motif */
+  .cf-art {
+    position: relative;
+    border-left: 1px solid var(--line);
+    background:
+      radial-gradient(ellipse at 70% 30%, rgba(79, 124, 255, .10), transparent 60%),
+      #070c16;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 300px;
+  }
+  .cf-art svg { width: 88%; height: auto; }
+  .cf-art .pulse { animation: pulse 3.2s ease-in-out infinite; }
+  .cf-art .pulse.d1 { animation-delay: .5s; }
+  .cf-art .pulse.d2 { animation-delay: 1s; }
+  @keyframes pulse {
+    0%, 100% { opacity: .45; }
+    50% { opacity: 1; }
+  }
+
+  /* ---------- Upcoming course cards ---------- */
+  .course-grid {
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  .course-card {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px 26px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .25s, transform .25s;
+  }
+  .course-card:hover { border-color: #24355a; transform: translateY(-2px); }
+  .course-card h4 {
+    font-size: 19px;
+    color: #cfdaec;
+    margin-bottom: 8px;
+    letter-spacing: -.2px;
+  }
+  .course-card p {
+    font-size: 14px;
+    color: var(--dim);
+  }
+  .course-card .num {
+    position: absolute;
+    right: 18px; top: 12px;
+    font-family: var(--mono);
+    font-size: 40px;
+    color: rgba(126, 144, 176, .12);
+    font-weight: 700;
+  }
+
+  /* ---------- Manifesto ---------- */
+  .creed {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 40px;
+  }
+  .creed > div { border-top: 1px solid var(--line); padding-top: 22px; }
+  .creed h4 {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 12px;
+  }
+  .creed p { font-size: 15px; color: var(--dim); }
+  .creed p strong { color: var(--text); font-weight: 600; }
+
+  /* ---------- Footer ---------- */
+  footer {
+    border-top: 1px solid var(--line);
+    margin-top: 40px;
+    padding: 34px 0 46px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: 12px;
+  }
+  footer .fbrand { font-family: var(--mono); font-size: 13px; letter-spacing: 2px; color: var(--dim); }
+  footer .fbrand b { color: var(--cyan); }
+  footer .fnote { font-size: 13px; color: var(--dim); }
+  footer .fnote em { font-family: var(--serif); font-style: italic; }
+
+  /* ---------- Scroll reveal ---------- */
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 860px) {
+    .course-featured { grid-template-columns: 1fr; }
+    .cf-art { border-left: none; border-top: 1px solid var(--line); min-height: 220px; }
+    .course-grid { grid-template-columns: 1fr; }
+    .creed { grid-template-columns: 1fr; gap: 26px; }
+    .hero { padding: 84px 0 70px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { transition: none; opacity: 1; transform: none; }
+    .cf-art .pulse { animation: none; }
+  }
+
+  /* ---------- Theme toggle ---------- */
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--gold);
+    font-size: 15px;
+    width: 36px; height: 36px;
+    border-radius: 999px;
+    cursor: pointer;
+    margin-left: 26px;
+    vertical-align: middle;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .theme-toggle:hover { border-color: var(--gold); box-shadow: 0 0 12px rgba(255, 209, 102, .22); }
+
+  /* ==========================================================================
+     Light theme (site default; js/theme.js sets data-theme before paint).
+     Paper background, ink text, brand accents darkened to hold AA contrast.
+     The featured card's art pane stays dark — an instrument panel, on purpose.
+     ========================================================================== */
+  html[data-theme="light"] {
+    --bg: #f3f5fa;
+    --bg-2: #ffffff;
+    --bg-3: #e9edf5;
+    --line: #d8dfea;
+    --text: #35415c;
+    --dim: #64718d;
+    --cyan: #0e7ea3;
+    --blue: #3b5bdb;
+    --gold: #a16207;
+    --green: #0e8a63;
+  }
+  html[data-theme="light"] ::selection { background: rgba(14, 126, 163, .18); }
+  html[data-theme="light"] .brand b { text-shadow: none; }
+  html[data-theme="light"] .glow {
+    background: radial-gradient(closest-side, rgba(59, 91, 219, .10), rgba(14, 126, 163, .04) 55%, transparent);
+  }
+  html[data-theme="light"] h1 { color: #141f3a; }
+  html[data-theme="light"] .btn {
+    color: #fff;
+    box-shadow: 0 6px 22px rgba(59, 91, 219, .28);
+  }
+  html[data-theme="light"] .btn:hover { box-shadow: 0 8px 30px rgba(59, 91, 219, .4); }
+  html[data-theme="light"] .sec-head h2,
+  html[data-theme="light"] .cf-body h3 { color: #141f3a; }
+  html[data-theme="light"] .course-card h4 { color: #26334f; }
+  html[data-theme="light"] .course-featured {
+    background: linear-gradient(160deg, #ffffff, #f1f4fb);
+  }
+  html[data-theme="light"] .course-featured:hover {
+    border-color: rgba(14, 126, 163, .5);
+    box-shadow: 0 10px 40px rgba(31, 51, 99, .12);
+  }
+  html[data-theme="light"] .cf-art { border-left-color: #141d31; }
+  html[data-theme="light"] .stat { border-color: rgba(14, 126, 163, .4); }
+  html[data-theme="light"] .tag { border-color: rgba(14, 138, 99, .5); }
+  html[data-theme="light"] #sky { opacity: .5; }
+
+  @media (max-width: 860px) {
+    html[data-theme="light"] .cf-art { border-top-color: #141d31; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="sky" aria-hidden="true"></canvas>
+<div class="glow" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="#">HACK<b>DYNAMICS</b></a>
+    <nav>
+      <a href="#courses">courses</a>
+      <a href="#creed">why</a>
+      <a id="nav-auth" href="login.html">log in</a>
+      <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div class="kicker">The best CS courses on the planet</div>
+    <h1>Computer science,<br>taught <em>from the inside.</em></h1>
+    <p>Most courses show you the controls. Ours hand you a screwdriver.
+       <strong>Interactive, depth-first courses</strong> that open the machine,
+       let you poke its moving parts, and quiz you until it sticks.</p>
+    <div class="hero-cta">
+      <a class="btn" id="hero-cta" href="databases-in-depth.html">Start the first course <span class="arr">→</span></a>
+      <span class="hero-note" id="hero-note"><b>email sign-in</b> · runs in your browser</span>
+    </div>
+  </div>
+
+  <section id="courses" class="reveal">
+    <div class="sec-head"><span class="idx">01</span><h2>The courses</h2></div>
+    <p class="sec-sub">One at a time, built with obsession. Each course is a complete journey —
+       <em>not a playlist of fragments.</em></p>
+
+    <a class="course-featured" href="databases-in-depth.html">
+      <div class="cf-body">
+        <span class="tag">AVAILABLE NOW</span>
+        <h3>Databases in Depth</h3>
+        <p class="desc">From bytes on a platter to planet-scale consensus. Storage engines,
+           B-Trees and LSM-Trees, transactions and recovery, replication, Paxos and Raft,
+           the operator's world of scaling and reliability — then you <strong>build a real
+           database from scratch in Java</strong> to make all of it permanent.
+           <strong>Junior-engineer to CTO depth,</strong> with living machinery you can drive.</p>
+        <div class="stats">
+          <span class="stat">32 chapters</span>
+          <span class="stat">28 interactive machines</span>
+          <span class="stat">46 diagrams</span>
+          <span class="stat">160 quiz questions</span>
+        </div>
+        <span class="cf-go">BEGIN THE DESCENT <span class="arr">→</span></span>
+      </div>
+      <div class="cf-art" aria-hidden="true">
+        <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
+          <line x1="150" y1="52" x2="82"  y2="108" stroke="#18243c" stroke-width="2"/>
+          <line x1="150" y1="52" x2="218" y2="108" stroke="#18243c" stroke-width="2"/>
+          <line x1="82"  y1="128" x2="48"  y2="178" stroke="#18243c" stroke-width="2"/>
+          <line x1="82"  y1="128" x2="116" y2="178" stroke="#18243c" stroke-width="2"/>
+          <line x1="218" y1="128" x2="184" y2="178" stroke="#18243c" stroke-width="2"/>
+          <line x1="218" y1="128" x2="252" y2="178" stroke="#18243c" stroke-width="2"/>
+          <rect x="112" y="34" width="76" height="30" rx="7" fill="#101a2e" stroke="#ffd166" stroke-width="2" class="pulse"/>
+          <rect x="46"  y="102" width="72" height="28" rx="7" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d1"/>
+          <rect x="182" y="102" width="72" height="28" rx="7" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d1"/>
+          <rect x="22"  y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
+          <rect x="90"  y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
+          <rect x="158" y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
+          <rect x="226" y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
+        </svg>
+      </div>
+    </a>
+
+    <div class="course-grid">
+      <div class="course-card reveal">
+        <span class="num">02</span>
+        <span class="tag soon">IN THE WORKS</span>
+        <h4>Operating Systems in Depth</h4>
+        <p>Processes, schedulers, virtual memory, filesystems, and the syscall boundary —
+           the machine your machine runs on.</p>
+      </div>
+      <div class="course-card reveal">
+        <span class="num">03</span>
+        <span class="tag soon">IN THE WORKS</span>
+        <h4>Networking in Depth</h4>
+        <p>From voltage on a wire to HTTP/3 — routing, congestion, TLS, and why the
+           internet works anyway.</p>
+      </div>
+      <div class="course-card reveal">
+        <span class="num">04</span>
+        <span class="tag soon">IN THE WORKS</span>
+        <h4>Compilers in Depth</h4>
+        <p>Lexers, parsers, type checkers, IRs, and optimizers — the road from source
+           text to machine code.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="creed" class="reveal">
+    <div class="sec-head"><span class="idx">02</span><h2>How we teach</h2></div>
+    <p class="sec-sub">Three rules, no exceptions.</p>
+    <div class="creed">
+      <div>
+        <h4>Depth first</h4>
+        <p>No hand-waving. If a B-Tree splits, you'll watch it split.
+           <strong>Every claim traces down to the bytes</strong> — worked examples,
+           real numbers, the actual algorithms.</p>
+      </div>
+      <div>
+        <h4>Living machinery</h4>
+        <p>Diagrams you can read, simulations you can drive, quizzes that push back.
+           <strong>You don't watch these courses — you operate them.</strong></p>
+      </div>
+      <div>
+        <h4>Zero friction</h4>
+        <p>No accounts, no paywalls, no tracking, no server.
+           <strong>Open a page and start learning.</strong> Your progress lives
+           in your own browser.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="fbrand">HACK<b>DYNAMICS</b></span>
+    <span class="fnote">Built with obsession, <em>for people who ask how.</em></span>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* Scroll reveal */
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (en.isIntersecting) { en.target.classList.add("in"); obs.unobserve(en.target); }
+    });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach(function (el) { obs.observe(el); });
+
+  /* Ambient constellation: slow-drifting nodes, faint links between neighbors.
+     Palette is read per frame so the theme toggle recolors it live. */
+  var cv = document.getElementById("sky"), ctx = cv.getContext("2d");
+  var pts = [], N = 46, raf;
+  var SKY = {
+    dark:  { link: "#4f7cff", linkA: .10, dot: "#2de2ff", accent: "#ffd166", dotA: .5  },
+    light: { link: "#3b5bdb", linkA: .14, dot: "#0e7ea3", accent: "#a16207", dotA: .45 }
+  };
+  function palette() {
+    return SKY[document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark"];
+  }
+  function resize() { cv.width = innerWidth; cv.height = innerHeight; }
+  function spawn() {
+    return {
+      x: Math.random() * cv.width,
+      y: Math.random() * cv.height,
+      vx: (Math.random() - .5) * .16,
+      vy: (Math.random() - .5) * .16,
+      r: Math.random() * 1.3 + .4
+    };
+  }
+  function tick() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    var pal = palette();
+    for (var i = 0; i < N; i++) {
+      var p = pts[i];
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < -10) p.x = cv.width + 10; if (p.x > cv.width + 10) p.x = -10;
+      if (p.y < -10) p.y = cv.height + 10; if (p.y > cv.height + 10) p.y = -10;
+      // links to near neighbors
+      for (var j = i + 1; j < N; j++) {
+        var q = pts[j], dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
+        if (d2 < 16900) { // 130px
+          ctx.globalAlpha = (1 - d2 / 16900) * pal.linkA;
+          ctx.strokeStyle = pal.link;
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = pal.dotA;
+      ctx.fillStyle = i % 7 === 0 ? pal.accent : pal.dot;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    raf = requestAnimationFrame(tick);
+  }
+  resize();
+  for (var i = 0; i < N; i++) pts.push(spawn());
+  window.addEventListener("resize", resize);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) cancelAnimationFrame(raf); else tick();
+  });
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) tick();
+})();
+</script>
+
+<script>
+/* Reflect sign-in state in the nav and hero CTA. Purely cosmetic — the course
+   page's gate is what actually enforces access. */
+(function () {
+  "use strict";
+  if (!window.HDAuth || !HDAuth.isConfigured()) return; // leave defaults ("log in")
+  var navAuth = document.getElementById("nav-auth");
+  var cta = document.getElementById("hero-cta");
+  var note = document.getElementById("hero-note");
+
+  HDAuth.status().then(function (st) {
+    if (!st.session) return; // logged out: defaults are correct
+    var email = (st.profile && st.profile.email) ||
+      (st.session.user && st.session.user.email) || "your account";
+
+    navAuth.textContent = "log out";
+    navAuth.href = "#";
+    navAuth.addEventListener("click", function (e) {
+      e.preventDefault();
+      HDAuth.signOut().then(function () { location.reload(); });
+    });
+
+    if (st.isPremium) {
+      cta.innerHTML = 'Continue your course <span class="arr">→</span>';
+      note.innerHTML = "signed in as <b>" + email.replace(/[&<>]/g, "") + "</b>";
+    } else {
+      note.innerHTML = "signed in · <b>premium unlocks the course</b>";
+    }
+  });
+})();
+</script>
+</body>
 </html>
