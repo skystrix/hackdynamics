@@ -1,0 +1,11 @@
+# DEPLOY SAFETY (see MANUAL_ACTIONS.md): the paid course content lives in
+# supabase/functions/course-content/_data/ — it must NEVER be served by Vercel.
+supabase/
+
+# Source material and internal docs — not part of the public site.
+*.pdf
+pdfs/
+MANUAL_ACTIONS.md
+SUPABASE_SETUP.md
+README.md
+.DS_Store
