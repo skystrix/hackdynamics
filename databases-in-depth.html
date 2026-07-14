@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inside the Database Machine — An Interactive Journey</title>
+<meta name="description" content="An interactive, visual journey through how databases work under the hood: storage engines, B-Trees, LSM-Trees, transactions, replication, and consensus.">
+<link rel="stylesheet" href="css/style.css">
+<script src="js/theme.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<!--
+  Everything is static and dependency-free: no CDN, no build step, no backend.
+  Open this file directly in a browser (file:// works) or serve the folder.
+-->
+</head>
+<body class="gated">
+  <!-- Paywall overlay: gate.js reveals content only for premium members -->
+  <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
+
+  <!-- Ambient particle background: a slow "data stream" drawn on canvas -->
+  <canvas id="bg-particles" aria-hidden="true"></canvas>
+
+  <!-- Top bar: brand, global progress, TOC toggle -->
+  <header id="topbar">
+    <button id="toc-toggle" aria-label="Toggle table of contents">☰</button>
+    <a href="#/" id="brand">DB<span>·</span>INTERNALS</a>
+    <div id="progress-wrap" title="Your journey progress">
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <span id="progress-label">0%</span>
+    </div>
+    <div id="account"></div>
+    <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
+  </header>
+
+  <!-- Sidebar: always-accessible table of contents -->
+  <nav id="toc" aria-label="Table of contents">
+    <div id="toc-inner"></div>
+  </nav>
+  <div id="toc-backdrop"></div>
+
+  <!-- Main content area: the SPA renders here -->
+  <main id="app"></main>
+
+  <!--
+    Book content is NOT loaded here anymore. It's paid material, so it's served
+    by the `course-content` Edge Function only to premium users, and gate.js
+    fetches it after verifying access, then boots the app (js/app.js).
+  -->
+  <!-- Engines -->
+  <script src="js/viz.js"></script>
+  <script src="js/viz2.js"></script>
+  <script src="js/viz3.js"></script>
+  <script src="js/viz4.js"></script>
+  <script src="js/quiz.js"></script>
+  <script src="js/app.js"></script>
+  <!-- Paywall: must run after the DOM and HDAuth exist -->
+  <script src="js/gate.js"></script>
+</body>
+</html>
