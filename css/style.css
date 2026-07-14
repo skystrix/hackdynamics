@@ -165,6 +165,15 @@ body {
 }
 #brand span { color: var(--cyan); text-shadow: var(--glow-cyan); }
 
+#home-link {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--text-dim); text-decoration: none;
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 10px; transition: all .2s;
+  white-space: nowrap;
+}
+#home-link:hover { border-color: var(--cyan); color: var(--cyan); }
+
 #toc-toggle {
   background: none; border: 1px solid var(--line);
   color: var(--cyan); font-size: 18px;
