@@ -95,7 +95,7 @@ should print a number). If not: `brew install supabase/tap/supabase`.
 
 ### B1. Log in and link the project
 ```bash
-cd db-internals
+cd hackdynamics
 supabase login          # opens a browser to authorize the CLI
 supabase link --project-ref gfmeewpztjxhuemrymzi
 ```
@@ -185,11 +185,11 @@ bottom of this file), and confirm the chapters load.
 
 ### C2. Create the webhook
 1. Dashboard → **Settings → Webhooks → + Add New Webhook**.
-2. **Webhook URL**: paste the function URL from step B3:
+2. **Webhook URL**: paste the function URL (shown after deploy in step B4):
    `https://gfmeewpztjxhuemrymzi.supabase.co/functions/v1/razorpay-webhook`
 3. **Secret**: type a strong random string of your choice (e.g. from a password
    manager). **This exact value is what you set as `RAZORPAY_WEBHOOK_SECRET` in
-   step B3** — they must match character-for-character.
+   step B4** — they must match character-for-character.
 4. **Active Events**: check **`payment.captured`** (and optionally `order.paid`).
    Leave everything else unchecked.
 5. Save.
@@ -272,7 +272,7 @@ it by hand, here's exactly what goes on the upgrade wall's button:
       be edited in the browser.
 - [x] **Content protection (#3): DONE.** Chapters now come from the `course-content`
       Edge Function, premium-only. Two things keep it real: deploy that function
-      (PART B2) and don't serve `supabase/` publicly (DEPLOY SAFETY above).
+      (PART B, step B2) and don't serve `supabase/` publicly (DEPLOY SAFETY above).
 - [ ] Optional: the interactive engines (`js/viz*.js`, `js/quiz.js`) are still
       public code. They're rendering logic, not the written course, so this is
       low priority — but if you consider them premium IP too, they can move behind
