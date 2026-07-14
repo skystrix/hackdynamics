@@ -399,6 +399,18 @@ pre {
 }
 pre code { background: none; border: none; padding: 0; color: #b8d4f0; font-size: 13.5px; line-height: 1.6; }
 
+/* Language tabs on Part V code examples (Java ⇄ Go) */
+.code-tab-bar { display: flex; gap: 6px; margin: 14px 0 0; }
+.code-tab {
+  background: none; border: 1px solid var(--line); color: var(--text-dim);
+  font-family: var(--mono); font-size: 11.5px; padding: 4px 14px;
+  border-radius: 8px; cursor: pointer; transition: all .2s;
+}
+.code-tab:hover { color: var(--cyan); border-color: var(--cyan); }
+.code-tab.active { color: var(--cyan); border-color: var(--cyan); background: var(--bg-3); }
+.code-tabs pre { margin-top: 8px; }
+.code-tabs pre[hidden] { display: none; }
+
 /* Call-out boxes */
 .callout {
   border: 1px solid rgba(255, 209, 102, .35);

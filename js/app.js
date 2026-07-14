@@ -67,6 +67,20 @@
     if (e.target.closest("a") && !wideLayout()) document.body.classList.remove("sidebar-toggled");
   });
 
+  // Java ⇄ Go tabs on Part V code examples (the .code-tabs markup ships
+  // with the course content; one delegated listener covers all of them).
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".code-tab");
+    if (!btn) return;
+    var tabs = btn.closest(".code-tabs");
+    tabs.querySelectorAll(".code-tab").forEach(function (b) {
+      b.classList.toggle("active", b === btn);
+    });
+    tabs.querySelectorAll("pre[data-lang]").forEach(function (p) {
+      p.hidden = p.dataset.lang !== btn.dataset.lang;
+    });
+  });
+
   /* ---------- scroll-reveal + lazy visualization mounting ---------- */
   // One observer reveals .block sections; another mounts a viz only when it
   // approaches the viewport (keeps heavy canvases from running off-screen).
