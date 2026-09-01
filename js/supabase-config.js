@@ -16,7 +16,17 @@ window.HD_CONFIG = {
 
   // Where to send people after they log in, and which page is the paid course.
   COURSE_URL: "databases-in-depth.html",
-  LOGIN_URL: "login.html"
+  LOGIN_URL: "login.html",
+  PRICING_URL: "pricing.html",
+
+  // Razorpay Checkout — the Key ID is the ONLY Razorpay value that belongs in
+  // browser code (it's public, like the anon key). The Key Secret and the
+  // webhook secret never appear here; see MANUAL_ACTIONS.md PART C.
+  RAZORPAY_KEY_ID: "rzp_test_TWpsPg24h4cp4b",
+  // Display only. The amount actually charged is set server-side in
+  // supabase/functions/razorpay-checkout/index.ts — keep the two in sync.
+  PRICE_PAISE: 49900,          // ₹499.00 per month
+  PRICE_LABEL: "₹499 / month"
 };
 
 window.HD_CONFIG.isConfigured = function () {

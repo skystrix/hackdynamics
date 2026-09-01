@@ -10,3 +10,9 @@ verify_jwt = false
 # stronger, so we turn the platform gate off and let the code decide.
 [functions.course-content]
 verify_jwt = false
+
+# Same reasoning: the browser's CORS preflight carries no Authorization header.
+# The function resolves the caller from their token itself (/auth/v1/user) and
+# refuses anything it can't identify, so no request goes unauthenticated.
+[functions.razorpay-checkout]
+verify_jwt = false
