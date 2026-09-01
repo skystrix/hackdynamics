@@ -66,9 +66,12 @@
   var HDAuth = {
     isConfigured: function () { return cfg() && cfg().isConfigured(); },
 
-    /** Create an account. Returns { session, needsEmailConfirm }. */
-    signUp: function (email, password) {
-      return api(authUrl("/signup"), {
+    /** Create an account. Returns { session, needsEmailConfirm }.
+        `redirectTo` is where the confirmation link lands; without it GoTrue
+        falls back to the project's Site URL (localhost by default). */
+    signUp: function (email, password, redirectTo) {
+      var q = redirectTo ? "?redirect_to=" + encodeURIComponent(redirectTo) : "";
+      return api(authUrl("/signup" + q), {
         method: "POST",
         body: JSON.stringify({ email: email, password: password })
       }).then(function (data) {
