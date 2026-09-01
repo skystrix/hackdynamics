@@ -91,6 +91,31 @@
       });
     },
 
+    /** Email a password-reset link. The link returns to `redirectTo` (this page)
+        with a recovery access_token in the URL hash. */
+    requestPasswordReset: function (email, redirectTo) {
+      var q = redirectTo ? "?redirect_to=" + encodeURIComponent(redirectTo) : "";
+      return api(authUrl("/recover" + q), {
+        method: "POST",
+        body: JSON.stringify({ email: email })
+      });
+    },
+
+    /** Set a new password. Pass the recovery token from the reset link's hash;
+        falls back to the current session for a logged-in user. */
+    updatePassword: function (newPassword, recoveryToken) {
+      var run = recoveryToken
+        ? Promise.resolve(recoveryToken)
+        : HDAuth.getSession().then(function (s) { return s && s.access_token; });
+      return run.then(function (token) {
+        if (!token) throw new Error("Your reset link has expired. Request a new one.");
+        return api(authUrl("/user"), {
+          method: "PUT",
+          body: JSON.stringify({ password: newPassword })
+        }, token);
+      });
+    },
+
     signOut: function () {
       var s = readSession();
       writeSession(null);
