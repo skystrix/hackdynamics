@@ -54,8 +54,12 @@
         return res.text().then(function (text) {
           var body = text ? JSON.parse(text) : null;
           if (!res.ok) {
-            var msg = (body && (body.error_description || body.msg ||
-              body.message || body.error)) || ("Request failed (" + res.status + ")");
+            // GoTrue's 429 text ("email rate limit exceeded") reads like our bug
+            // to a user, and the cap is project-wide — not something they did.
+            var msg = res.status === 429
+              ? "Too many attempts right now. Please wait a minute and try again."
+              : (body && (body.error_description || body.msg ||
+                body.message || body.error)) || ("Request failed (" + res.status + ")");
             var err = new Error(msg); err.status = res.status; throw err;
           }
           return body;
