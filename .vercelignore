@@ -2,6 +2,11 @@
 # supabase/functions/course-content/_data/ — it must NEVER be served by Vercel.
 supabase/
 
+# Secrets. Vercel serves this repo from the root, so a stray .env here would be
+# one URL away from leaking the Razorpay key secret. Belt and braces.
+.env
+.env.*
+
 # Source material and internal docs — not part of the public site.
 *.pdf
 pdfs/
