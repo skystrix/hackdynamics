@@ -210,46 +210,6 @@
   }
   window.addEventListener("hashchange", route);
 
-  /* ---------- ambient particle background ---------- */
-  // Slow-falling "data bits" — cheap to draw, capped particle count, paused
-  // when the tab is hidden. Purely decorative.
-  (function particles() {
-    var cv = $("#bg-particles"), ctx = cv.getContext("2d");
-    var pts = [], N = 70, raf;
-    function resize() {
-      cv.width = innerWidth; cv.height = innerHeight;
-    }
-    function spawn() {
-      return {
-        x: Math.random() * cv.width,
-        y: Math.random() * cv.height,
-        s: Math.random() * 1.6 + 0.4,          // size
-        v: Math.random() * 0.35 + 0.08,        // fall speed
-        c: Math.random() < 0.12 ? "#ffd166" : (Math.random() < 0.5 ? "#2de2ff" : "#4f7cff"),
-        a: Math.random() * 0.5 + 0.12          // alpha
-      };
-    }
-    function tick() {
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      pts.forEach(function (p) {
-        p.y += p.v;
-        if (p.y > cv.height + 4) { p.y = -4; p.x = Math.random() * cv.width; }
-        ctx.globalAlpha = p.a;
-        ctx.fillStyle = p.c;
-        ctx.fillRect(p.x, p.y, p.s, p.s * 2.2);
-      });
-      ctx.globalAlpha = 1;
-      raf = requestAnimationFrame(tick);
-    }
-    resize();
-    for (var i = 0; i < N; i++) pts.push(spawn());
-    window.addEventListener("resize", resize);
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden) cancelAnimationFrame(raf); else tick();
-    });
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) tick();
-  })();
-
   /* ---------- shared tooltip for visualizations ---------- */
   // viz.js positions this near hovered/tapped diagram elements.
   var tip = document.createElement("div");
@@ -269,7 +229,7 @@
 
   // Course content is paid material, fetched by gate.js from the course-content
   // Edge Function only after premium is verified. It hands us PARTS + CHAPTERS
-  // and calls this to render. (The particle background above runs regardless.)
+  // and calls this to render.
   window.HDApp = {
     boot: function () {
       CHAPTERS.sort(function (a, b) { return a.num - b.num; });

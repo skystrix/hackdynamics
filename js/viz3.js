@@ -16,6 +16,12 @@
   var NS = "http://www.w3.org/2000/svg";
   var C = { cyan: "#2de2ff", blue: "#4f7cff", gold: "#ffd166", red: "#ff5d73",
             green: "#3ddc97", dim: "#7d8fb0", line: "#1c2a45", bg: "#0c1220", text: "#c9d6ea" };
+  // C feeds SVG attributes (re-inked by the CSS remap in tokens.css). HTML
+  // strings with inline styles can't be reached that way, but inline styles
+  // DO support var() — so they use V instead, which is theme-reactive.
+  var V = { cyan: "var(--primary)", gold: "var(--orange)", green: "var(--green)",
+            dim: "var(--text-dim)", text: "var(--text)", line: "var(--line)",
+            bg: "var(--bg-2)", tint: "var(--tint-primary)" };
 
   function S(tag, attrs, parent) {
     var e = document.createElementNS(NS, tag);
@@ -175,20 +181,20 @@
         " postings list(s) → " + (lastHits.length ? "docs " + lastHits.join(", ") : "no matches") + ".");
     }
     function render() {
-      var html = '<div style="color:' + C.dim + '">DOCUMENTS</div>';
+      var html = '<div style="color:' + V.dim + '">DOCUMENTS</div>';
       docs.forEach(function (d) {
         var hit = lastHits && lastHits.indexOf(d.id) !== -1;
-        html += '<div style="color:' + (hit ? C.green : C.text) + '">' +
+        html += '<div style="color:' + (hit ? V.green : V.text) + '">' +
           (hit ? "▶ " : "&nbsp;&nbsp;") + "doc" + d.id + ': “' + d.text + '”</div>';
       });
-      html += '<div style="color:' + C.dim + ';margin-top:10px">INVERTED INDEX (term → postings)</div>';
+      html += '<div style="color:' + V.dim + ';margin-top:10px">INVERTED INDEX (term → postings)</div>';
       var terms = Object.keys(index).sort();
-      if (!terms.length) html += '<div style="color:' + C.dim + '">— empty —</div>';
+      if (!terms.length) html += '<div style="color:' + V.dim + '">— empty —</div>';
       terms.forEach(function (t) {
         var probed = lastTerms.indexOf(t) !== -1;
-        html += '<div><span style="color:' + (probed ? C.gold : C.cyan) + '">' + t.padEnd(12, " ") +
+        html += '<div><span style="color:' + (probed ? V.gold : V.cyan) + '">' + t.padEnd(12, " ") +
           "</span> → [" + index[t].map(function (d) {
-            return '<span style="color:' + (lastHits && lastHits.indexOf(d) !== -1 && probed ? C.green : C.dim) + '">doc' + d + "</span>";
+            return '<span style="color:' + (lastHits && lastHits.indexOf(d) !== -1 && probed ? V.green : V.dim) + '">doc' + d + "</span>";
           }).join(", ") + "]</div>";
       });
       listWrap.innerHTML = html;
@@ -541,24 +547,24 @@
     function render() {
       var html = "";
       questions.forEach(function (q) {
-        html += '<div style="margin:6px 0;color:' + C.dim + '">' + q.label.toUpperCase() + "</div><div>";
+        html += '<div style="margin:6px 0;color:' + V.dim + '">' + q.label.toUpperCase() + "</div><div>";
         q.opts.forEach(function (o) {
           var on = picks[q.key] === o;
           html += '<button data-k="' + q.key + '" data-v="' + o + '" style="margin:3px;padding:6px 12px;border-radius:8px;cursor:pointer;' +
-            "font-family:inherit;font-size:12px;background:" + (on ? "rgba(45,226,255,.15)" : "#0c1220") +
-            ";color:" + (on ? C.cyan : C.dim) + ";border:1px solid " + (on ? C.cyan : "#1c2a45") + '">' + o + "</button>";
+            "font-family:inherit;font-size:12px;background:" + (on ? V.tint : V.bg) +
+            ";color:" + (on ? V.cyan : V.dim) + ";border:1px solid " + (on ? V.cyan : V.line) + '">' + o + "</button>";
         });
         html += "</div>";
       });
-      html += '<div style="margin:14px 0 6px;color:' + C.dim + '">VERDICTS</div>';
+      html += '<div style="margin:14px 0 6px;color:' + V.dim + '">VERDICTS</div>';
       var scored = systems.map(function (s) { var r = s.fit(picks); return { name: s.name, score: r[0], why: r[1] }; })
         .sort(function (a, b) { return b.score - a.score; });
       scored.forEach(function (s) {
-        var col = s.score === 2 ? C.green : s.score === 1 ? C.gold : C.dim;
+        var col = s.score === 2 ? V.green : s.score === 1 ? V.gold : V.dim;
         var mark = s.score === 2 ? "★ strong fit " : s.score === 1 ? "◐ workable  " : "○ poor fit  ";
-        html += '<div style="padding:5px 8px;margin:3px 0;border-left:3px solid ' + col + ";background:rgba(255,255,255,.02)\">" +
-          '<span style="color:' + col + '">' + mark + "</span><b style=\"color:" + C.text + '">' + s.name + "</b>" +
-          ' <span style="color:' + C.dim + '"> — ' + s.why + "</span></div>";
+        html += '<div style="padding:5px 8px;margin:3px 0;border-left:3px solid ' + col + ";background:var(--tint-neutral)\">" +
+          '<span style="color:' + col + '">' + mark + "</span><b style=\"color:" + V.text + '">' + s.name + "</b>" +
+          ' <span style="color:' + V.dim + '"> — ' + s.why + "</span></div>";
       });
       wrapDiv.innerHTML = html;
       wrapDiv.querySelectorAll("button").forEach(function (b) {

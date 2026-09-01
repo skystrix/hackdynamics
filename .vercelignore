@@ -7,5 +7,6 @@ supabase/
 pdfs/
 MANUAL_ACTIONS.md
 SUPABASE_SETUP.md
+_preview.html
 README.md
 .DS_Store

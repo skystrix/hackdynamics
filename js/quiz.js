@@ -152,7 +152,8 @@
     cv.width = innerWidth; cv.height = innerHeight;
     document.body.appendChild(cv);
     var ctx = cv.getContext("2d");
-    var colors = ["#2de2ff", "#4f7cff", "#ffd166", "#3ddc97", "#ff5d73"];
+    // sticker palette (DESIGN-notion.md) — confetti is exactly what it's for
+    var colors = ["#0075de", "#ff64c8", "#dd5b00", "#2a9d99", "#1aae39", "#d6b6f6", "#62aef0"];
     var parts = [];
     for (var i = 0; i < 130; i++) {
       parts.push({

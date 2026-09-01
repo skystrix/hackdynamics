@@ -5,32 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HackDynamics — Computer science, from the inside</title>
 <meta name="description" content="HackDynamics builds the best computer science courses on the planet: interactive, depth-first, free. Start with Databases in Depth.">
+<link rel="stylesheet" href="css/tokens.css">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/auth.js"></script>
 <!--
   HackDynamics landing page.
-  Styles and page scripts are inline; js/theme.js is the shared light/dark
-  controller used by every page. No dependencies, no build step.
-  The Databases in Depth course lives untouched at databases-in-depth.html.
+  Notion-style system (DESIGN-notion.md): warm paper canvas, Inter type,
+  one structural blue, and a single deep-indigo "night" hero band.
+  Tokens live in css/tokens.css; page styles are inline. No build step.
 -->
 <style>
-  :root {
-    --bg: #05080f;
-    --bg-2: #0a101d;
-    --bg-3: #101a2e;
-    --line: #18243c;
-    --text: #d7e2f2;
-    --dim: #7e90b0;
-    --cyan: #2de2ff;
-    --blue: #4f7cff;
-    --gold: #ffd166;
-    --green: #3ddc97;
-    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    --sans: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
-    --serif: Georgia, "Times New Roman", serif;
-  }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   html { scroll-behavior: smooth; }
@@ -39,110 +24,99 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
-    font-size: 17px;
-    line-height: 1.7;
+    font-size: 16px;
+    line-height: 1.6;
     overflow-x: hidden;
   }
 
-  ::selection { background: rgba(45, 226, 255, .25); }
-
-  /* Ambient canvas: drifting constellation, barely there */
-  #sky {
-    position: fixed; inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    opacity: .6;
-  }
-
-  /* Faint radial glow behind the hero */
-  .glow {
-    position: absolute;
-    top: -220px; left: 50%;
-    width: 900px; height: 620px;
-    transform: translateX(-50%);
-    background: radial-gradient(closest-side, rgba(79, 124, 255, .14), rgba(45, 226, 255, .05) 55%, transparent);
-    pointer-events: none;
-    z-index: 0;
-  }
+  ::selection { background: rgba(0, 117, 222, .15); }
 
   .wrap {
-    position: relative; z-index: 1;
     max-width: 1020px;
     margin: 0 auto;
     padding: 0 24px;
   }
 
-  /* ---------- Header ---------- */
-  header {
+  /* ---------- Header: slim white nav bar ---------- */
+  .topnav {
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .topnav .wrap {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 26px 0 0;
+    padding-top: 14px; padding-bottom: 14px;
   }
   .brand {
-    font-family: var(--mono);
     font-weight: 700;
     font-size: 16px;
-    letter-spacing: 2.5px;
+    letter-spacing: -0.125px;
     color: var(--text);
     text-decoration: none;
   }
-  .brand b { color: var(--cyan); text-shadow: 0 0 14px rgba(45,226,255,.5); font-weight: 700; }
-  .brand .tld { color: var(--dim); font-weight: 400; }
+  .brand b { color: var(--primary); font-weight: 700; }
+  nav { display: flex; align-items: center; }
   nav a {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    letter-spacing: 1px;
-    color: var(--dim);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-dim);
     text-decoration: none;
     margin-left: 26px;
     transition: color .2s;
   }
-  nav a:hover { color: var(--cyan); }
+  nav a:hover { color: var(--text); }
+  nav a#nav-auth {
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 4px 14px;
+    background: var(--bg-2);
+    color: var(--text);
+  }
+  nav a#nav-auth:hover { box-shadow: var(--shadow-1); }
 
-  /* ---------- Hero ---------- */
+  /* ---------- Hero: the one dark "night" band ---------- */
+  .hero-band {
+    position: relative;
+    background: var(--indigo);
+    overflow: hidden;
+  }
+  #sky {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: .6;
+  }
   .hero {
-    padding: 118px 0 96px;
+    position: relative; z-index: 1;
+    padding: 108px 0 96px;
     text-align: left;
     max-width: 780px;
   }
   .kicker {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    letter-spacing: 4px;
-    color: var(--gold);
-    text-transform: uppercase;
-    margin-bottom: 22px;
-    display: flex; align-items: center; gap: 14px;
-  }
-  .kicker::after {
-    content: "";
-    height: 1px; width: 70px;
-    background: linear-gradient(90deg, var(--gold), transparent);
     display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--indigo);
+    background: #ffffff;
+    border-radius: var(--r-full);
+    padding: 5px 12px;
+    margin-bottom: 24px;
   }
   h1 {
-    font-size: clamp(40px, 7vw, 72px);
-    line-height: 1.04;
+    font-size: clamp(40px, 7vw, 64px);
+    line-height: 1.0;
     font-weight: 700;
-    letter-spacing: -1.5px;
-    color: #eef4fd;
+    letter-spacing: -2.125px;
+    color: #ffffff;
   }
-  h1 em {
-    font-family: var(--serif);
-    font-style: italic;
-    font-weight: 400;
-    letter-spacing: 0;
-    background: linear-gradient(110deg, var(--cyan), var(--blue));
-    -webkit-background-clip: text; background-clip: text;
-    -webkit-text-fill-color: transparent;
-    padding-right: .06em; /* keep the italic's tail from clipping */
-  }
+  h1 em { font-style: normal; color: var(--sky); }
   .hero p {
     margin-top: 26px;
     max-width: 560px;
-    font-size: 19px;
-    color: var(--dim);
+    font-size: 18px;
+    color: rgba(255, 255, 255, .72);
   }
-  .hero p strong { color: var(--text); font-weight: 600; }
+  .hero p strong { color: #ffffff; font-weight: 600; }
 
   .hero-cta {
     margin-top: 42px;
@@ -150,25 +124,24 @@
   }
   .btn {
     display: inline-flex; align-items: center; gap: 10px;
-    padding: 14px 30px;
-    border-radius: 999px;
-    font-weight: 600;
+    padding: 13px 30px;
+    border-radius: var(--r-full);
+    font-weight: 500;
     font-size: 16px;
     text-decoration: none;
-    color: #041018;
-    background: linear-gradient(90deg, var(--cyan), var(--blue));
-    box-shadow: 0 0 28px rgba(45, 226, 255, .28);
-    transition: transform .2s, box-shadow .2s;
+    color: #ffffff;
+    background: #0075de; /* hero band is theme-invariant, so the CTA is too */
+    transition: background .15s, transform .15s;
   }
-  .btn:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(45, 226, 255, .45); }
+  .btn:hover { background: #005bab; }
+  .btn:active { transform: scale(.97); }
   .btn .arr { transition: transform .2s; }
   .btn:hover .arr { transform: translateX(4px); }
   .hero-note {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    color: var(--dim);
+    font-size: 13px;
+    color: rgba(255, 255, 255, .55);
   }
-  .hero-note b { color: var(--green); font-weight: 400; }
+  .hero-note b { color: rgba(255, 255, 255, .85); font-weight: 500; }
 
   /* ---------- Section headers ---------- */
   section { padding: 70px 0; }
@@ -177,17 +150,19 @@
     margin-bottom: 14px;
   }
   .sec-head .idx {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--blue);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--text-faint);
   }
   .sec-head h2 {
-    font-size: 30px;
-    letter-spacing: -.5px;
-    color: #eef4fd;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.8px;
+    color: var(--text);
   }
-  .sec-sub { color: var(--dim); max-width: 620px; margin-bottom: 42px; }
-  .sec-sub em { font-family: var(--serif); font-style: italic; color: var(--gold); }
+  .sec-sub { color: var(--text-dim); max-width: 620px; margin-bottom: 42px; }
+  .sec-sub em { font-style: italic; }
 
   /* ---------- Featured course card ---------- */
   .course-featured {
@@ -195,42 +170,43 @@
     display: grid;
     grid-template-columns: 1.25fr 1fr;
     gap: 0;
-    background: linear-gradient(160deg, var(--bg-2), #0b1322);
+    background: var(--bg-2);
     border: 1px solid var(--line);
-    border-radius: 20px;
+    border-radius: var(--r-xl);
     overflow: hidden;
     text-decoration: none;
     color: var(--text);
-    transition: border-color .25s, box-shadow .25s, transform .25s;
+    transition: box-shadow .25s, transform .25s;
   }
   .course-featured:hover {
-    border-color: rgba(45, 226, 255, .55);
-    box-shadow: 0 0 44px rgba(45, 226, 255, .12), inset 0 0 60px rgba(45, 226, 255, .03);
+    box-shadow: var(--shadow-1);
     transform: translateY(-3px);
   }
   .cf-body { padding: 42px 44px 38px; }
   .tag {
     display: inline-block;
-    font-family: var(--mono);
     font-size: 11px;
-    letter-spacing: 2px;
-    padding: 5px 12px;
-    border-radius: 999px;
-    border: 1px solid rgba(61, 220, 151, .45);
+    font-weight: 600;
+    letter-spacing: 1px;
+    padding: 4px 11px;
+    border-radius: var(--r-full);
+    border: 1px solid var(--line);
+    background: var(--bg-2);
     color: var(--green);
     margin-bottom: 20px;
   }
-  .tag.soon { border-color: var(--line); color: var(--dim); }
+  .tag.soon { color: var(--text-faint); }
   .cf-body h3 {
-    font-size: 34px;
-    letter-spacing: -.6px;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.8px;
     line-height: 1.15;
-    color: #eef4fd;
+    color: var(--text);
     margin-bottom: 14px;
   }
   .cf-body .desc {
-    color: var(--dim);
-    font-size: 16px;
+    color: var(--text-dim);
+    font-size: 15px;
     margin-bottom: 26px;
   }
   .cf-body .desc strong { color: var(--text); font-weight: 600; }
@@ -239,29 +215,29 @@
     margin-bottom: 30px;
   }
   .stat {
-    font-family: var(--mono);
     font-size: 12px;
-    color: var(--cyan);
-    border: 1px solid rgba(45, 226, 255, .3);
-    border-radius: 999px;
-    padding: 5px 13px;
+    font-weight: 600;
+    letter-spacing: .125px;
+    color: var(--primary);
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: var(--r-full);
+    padding: 4px 12px;
   }
   .cf-go {
-    font-family: var(--mono);
-    font-size: 14px;
-    color: var(--cyan);
-    letter-spacing: .5px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--primary);
   }
   .cf-go .arr { display: inline-block; transition: transform .2s; }
   .course-featured:hover .cf-go .arr { transform: translateX(6px); }
 
-  /* Featured card's right pane: a living B-Tree motif */
+  /* Featured card's right pane: a living B-Tree motif on a paper well */
   .cf-art {
     position: relative;
     border-left: 1px solid var(--line);
-    background:
-      radial-gradient(ellipse at 70% 30%, rgba(79, 124, 255, .10), transparent 60%),
-      #070c16;
+    background: var(--bg);
     display: flex; align-items: center; justify-content: center;
     min-height: 300px;
   }
@@ -284,29 +260,40 @@
   .course-card {
     background: var(--bg-2);
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: var(--r-lg);
     padding: 28px 26px 24px;
     position: relative;
     overflow: hidden;
-    transition: border-color .25s, transform .25s;
+    transition: box-shadow .25s, transform .25s;
   }
-  .course-card:hover { border-color: #24355a; transform: translateY(-2px); }
+  .course-card:hover { box-shadow: var(--shadow-1); transform: translateY(-2px); }
+  /* sticker-palette dot: the decorative color note on each card */
+  .course-card::before {
+    content: "";
+    display: block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-bottom: 14px;
+  }
+  .course-card:nth-of-type(1)::before { background: var(--purple); }
+  .course-card:nth-of-type(2)::before { background: var(--teal); }
+  .course-card:nth-of-type(3)::before { background: var(--pink); }
   .course-card h4 {
     font-size: 19px;
-    color: #cfdaec;
+    font-weight: 600;
+    color: var(--text);
     margin-bottom: 8px;
-    letter-spacing: -.2px;
+    letter-spacing: -0.25px;
   }
   .course-card p {
     font-size: 14px;
-    color: var(--dim);
+    color: var(--text-dim);
   }
   .course-card .num {
     position: absolute;
     right: 18px; top: 12px;
-    font-family: var(--mono);
     font-size: 40px;
-    color: rgba(126, 144, 176, .12);
+    color: var(--line);
     font-weight: 700;
   }
 
@@ -318,14 +305,14 @@
   }
   .creed > div { border-top: 1px solid var(--line); padding-top: 22px; }
   .creed h4 {
-    font-family: var(--mono);
-    font-size: 13px;
-    letter-spacing: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
     text-transform: uppercase;
-    color: var(--gold);
+    color: var(--text-dim);
     margin-bottom: 12px;
   }
-  .creed p { font-size: 15px; color: var(--dim); }
+  .creed p { font-size: 15px; color: var(--text-dim); }
   .creed p strong { color: var(--text); font-weight: 600; }
 
   /* ---------- Footer ---------- */
@@ -336,14 +323,29 @@
     display: flex; justify-content: space-between; align-items: baseline;
     flex-wrap: wrap; gap: 12px;
   }
-  footer .fbrand { font-family: var(--mono); font-size: 13px; letter-spacing: 2px; color: var(--dim); }
-  footer .fbrand b { color: var(--cyan); }
-  footer .fnote { font-size: 13px; color: var(--dim); }
-  footer .fnote em { font-family: var(--serif); font-style: italic; }
+  footer .fbrand { font-size: 13px; font-weight: 700; letter-spacing: -0.125px; color: var(--text-secondary); }
+  footer .fbrand b { color: var(--primary); }
+  footer .fnote { font-size: 13px; color: var(--text-dim); }
+  footer .fnote em { font-style: italic; }
 
   /* ---------- Scroll reveal ---------- */
   .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
   .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- Theme toggle ---------- */
+  .theme-toggle {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-size: 15px;
+    width: 36px; height: 36px;
+    border-radius: var(--r-full);
+    cursor: pointer;
+    margin-left: 26px;
+    vertical-align: middle;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .theme-toggle:hover { border-color: var(--text-faint); box-shadow: var(--shadow-1); }
 
   /* ---------- Responsive ---------- */
   @media (max-width: 860px) {
@@ -351,7 +353,7 @@
     .cf-art { border-left: none; border-top: 1px solid var(--line); min-height: 220px; }
     .course-grid { grid-template-columns: 1fr; }
     .creed { grid-template-columns: 1fr; gap: 26px; }
-    .hero { padding: 84px 0 70px; }
+    .hero { padding: 76px 0 64px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -359,98 +361,40 @@
     .reveal { transition: none; opacity: 1; transform: none; }
     .cf-art .pulse { animation: none; }
   }
-
-  /* ---------- Theme toggle ---------- */
-  .theme-toggle {
-    background: none;
-    border: 1px solid var(--line);
-    color: var(--gold);
-    font-size: 15px;
-    width: 36px; height: 36px;
-    border-radius: 999px;
-    cursor: pointer;
-    margin-left: 26px;
-    vertical-align: middle;
-    transition: border-color .2s, box-shadow .2s;
-  }
-  .theme-toggle:hover { border-color: var(--gold); box-shadow: 0 0 12px rgba(255, 209, 102, .22); }
-
-  /* ==========================================================================
-     Light theme (site default; js/theme.js sets data-theme before paint).
-     Paper background, ink text, brand accents darkened to hold AA contrast.
-     The featured card's art pane stays dark — an instrument panel, on purpose.
-     ========================================================================== */
-  html[data-theme="light"] {
-    --bg: #f3f5fa;
-    --bg-2: #ffffff;
-    --bg-3: #e9edf5;
-    --line: #d8dfea;
-    --text: #35415c;
-    --dim: #64718d;
-    --cyan: #0e7ea3;
-    --blue: #3b5bdb;
-    --gold: #a16207;
-    --green: #0e8a63;
-  }
-  html[data-theme="light"] ::selection { background: rgba(14, 126, 163, .18); }
-  html[data-theme="light"] .brand b { text-shadow: none; }
-  html[data-theme="light"] .glow {
-    background: radial-gradient(closest-side, rgba(59, 91, 219, .10), rgba(14, 126, 163, .04) 55%, transparent);
-  }
-  html[data-theme="light"] h1 { color: #141f3a; }
-  html[data-theme="light"] .btn {
-    color: #fff;
-    box-shadow: 0 6px 22px rgba(59, 91, 219, .28);
-  }
-  html[data-theme="light"] .btn:hover { box-shadow: 0 8px 30px rgba(59, 91, 219, .4); }
-  html[data-theme="light"] .sec-head h2,
-  html[data-theme="light"] .cf-body h3 { color: #141f3a; }
-  html[data-theme="light"] .course-card h4 { color: #26334f; }
-  html[data-theme="light"] .course-featured {
-    background: linear-gradient(160deg, #ffffff, #f1f4fb);
-  }
-  html[data-theme="light"] .course-featured:hover {
-    border-color: rgba(14, 126, 163, .5);
-    box-shadow: 0 10px 40px rgba(31, 51, 99, .12);
-  }
-  html[data-theme="light"] .cf-art { border-left-color: #141d31; }
-  html[data-theme="light"] .stat { border-color: rgba(14, 126, 163, .4); }
-  html[data-theme="light"] .tag { border-color: rgba(14, 138, 99, .5); }
-  html[data-theme="light"] #sky { opacity: .5; }
-
-  @media (max-width: 860px) {
-    html[data-theme="light"] .cf-art { border-top-color: #141d31; }
-  }
 </style>
 </head>
 <body>
 
-<canvas id="sky" aria-hidden="true"></canvas>
-<div class="glow" aria-hidden="true"></div>
-
-<div class="wrap">
-
-  <header>
+<header class="topnav">
+  <div class="wrap">
     <a class="brand" href="#">HACK<b>DYNAMICS</b></a>
     <nav>
       <a href="#courses">courses</a>
       <a href="#creed">why</a>
-      <a id="nav-auth" href="login.html">log in</a>
+      <a id="nav-auth" href="login.html">Log in</a>
       <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
     </nav>
-  </header>
+  </div>
+</header>
 
-  <div class="hero">
-    <div class="kicker">The best CS courses on the planet</div>
-    <h1>Computer science,<br>taught <em>from the inside.</em></h1>
-    <p>Most courses show you the controls. Ours hand you a screwdriver.
-       <strong>Interactive, depth-first courses</strong> that open the machine,
-       let you poke its moving parts, and quiz you until it sticks.</p>
-    <div class="hero-cta">
-      <a class="btn" id="hero-cta" href="databases-in-depth.html">Start the first course <span class="arr">→</span></a>
-      <span class="hero-note" id="hero-note"><b>email sign-in</b> · runs in your browser</span>
+<div class="hero-band">
+  <canvas id="sky" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <div class="hero">
+      <div class="kicker">The best CS courses on the planet</div>
+      <h1>Computer science,<br>taught <em>from the inside.</em></h1>
+      <p>Most courses show you the controls. Ours hand you a screwdriver.
+         <strong>Interactive, depth-first courses</strong> that open the machine,
+         let you poke its moving parts, and quiz you until it sticks.</p>
+      <div class="hero-cta">
+        <a class="btn" id="hero-cta" href="databases-in-depth.html">Start the first course <span class="arr">→</span></a>
+        <span class="hero-note" id="hero-note"><b>email sign-in</b> · runs in your browser</span>
+      </div>
     </div>
   </div>
+</div>
+
+<div class="wrap">
 
   <section id="courses" class="reveal">
     <div class="sec-head"><span class="idx">01</span><h2>The courses</h2></div>
@@ -561,18 +505,13 @@
   }, { threshold: 0.12 });
   document.querySelectorAll(".reveal").forEach(function (el) { obs.observe(el); });
 
-  /* Ambient constellation: slow-drifting nodes, faint links between neighbors.
-     Palette is read per frame so the theme toggle recolors it live. */
+  /* Starfield constellation, confined to the indigo hero band. The band is
+     theme-invariant (the one dark "night" moment), so one palette suffices. */
   var cv = document.getElementById("sky"), ctx = cv.getContext("2d");
+  var band = cv.parentElement;
   var pts = [], N = 46, raf;
-  var SKY = {
-    dark:  { link: "#4f7cff", linkA: .10, dot: "#2de2ff", accent: "#ffd166", dotA: .5  },
-    light: { link: "#3b5bdb", linkA: .14, dot: "#0e7ea3", accent: "#a16207", dotA: .45 }
-  };
-  function palette() {
-    return SKY[document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark"];
-  }
-  function resize() { cv.width = innerWidth; cv.height = innerHeight; }
+  var PAL = { link: "#62aef0", linkA: .12, dot: "#ffffff", accent: "#d6b6f6", dotA: .55 };
+  function resize() { cv.width = band.clientWidth; cv.height = band.clientHeight; }
   function spawn() {
     return {
       x: Math.random() * cv.width,
@@ -584,7 +523,6 @@
   }
   function tick() {
     ctx.clearRect(0, 0, cv.width, cv.height);
-    var pal = palette();
     for (var i = 0; i < N; i++) {
       var p = pts[i];
       p.x += p.vx; p.y += p.vy;
@@ -594,13 +532,13 @@
       for (var j = i + 1; j < N; j++) {
         var q = pts[j], dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
         if (d2 < 16900) { // 130px
-          ctx.globalAlpha = (1 - d2 / 16900) * pal.linkA;
-          ctx.strokeStyle = pal.link;
+          ctx.globalAlpha = (1 - d2 / 16900) * PAL.linkA;
+          ctx.strokeStyle = PAL.link;
           ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
         }
       }
-      ctx.globalAlpha = pal.dotA;
-      ctx.fillStyle = i % 7 === 0 ? pal.accent : pal.dot;
+      ctx.globalAlpha = PAL.dotA;
+      ctx.fillStyle = i % 7 === 0 ? PAL.accent : PAL.dot;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832); ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -631,7 +569,7 @@
     var email = (st.profile && st.profile.email) ||
       (st.session.user && st.session.user.email) || "your account";
 
-    navAuth.textContent = "log out";
+    navAuth.textContent = "Log out";
     navAuth.href = "#";
     navAuth.addEventListener("click", function (e) {
       e.preventDefault();
