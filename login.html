@@ -135,14 +135,22 @@
   var email = document.getElementById("email");
   var forgotRow = document.getElementById("forgot-row");
 
-  // A password-reset link lands here with a recovery token in the URL hash.
-  function recoveryToken() {
+  // Reset and confirmation links both land here with tokens in the URL hash:
+  //   #access_token=…&type=recovery   (password reset)
+  //   #access_token=…&type=signup     (email confirmed)
+  function hashToken(type) {
     var h = location.hash.replace(/^#/, "");
-    if (!/(?:^|&)type=recovery(?:&|$)/.test(h)) return null;
+    if (!new RegExp("(?:^|&)type=" + type + "(?:&|$)").test(h)) return null;
     var m = h.match(/(?:^|&)access_token=([^&]+)/);
     return m ? decodeURIComponent(m[1]) : null;
   }
-  var recovering = recoveryToken();
+  var recovering = hashToken("recovery");
+  var justConfirmed = !!hashToken("signup");
+  // ponytail: the signup hash carries a usable session, but we just ask for a
+  // login. Consume it here if that extra step ever bothers anyone.
+  if (justConfirmed && history.replaceState) {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
 
   function nextUrl() {
     var m = location.search.match(/[?&]next=([^&]+)/);
@@ -214,6 +222,7 @@
   });
 
   if (recovering) setMode("reset");
+  else if (justConfirmed) say("Email confirmed. Log in to continue.", "ok");
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
@@ -227,10 +236,10 @@
       var resetOrig = submit.textContent; submit.textContent = "Saving…";
       HDAuth.updatePassword(password, recovering).then(function () {
         if (history.replaceState) history.replaceState(null, "", location.pathname + location.search);
-        say("Password updated. You can log in now.", "ok");
         recovering = null;
         submit.disabled = false;
-        setMode("login");
+        setMode("login"); // clears the message box, so say() must come after it
+        say("Password updated. You can log in now.", "ok");
       }).catch(function (err) {
         say(err.message || "Couldn't update the password. Request a fresh reset link.");
         submit.disabled = false; submit.textContent = resetOrig;
@@ -247,14 +256,15 @@
     var original = submit.textContent; submit.textContent = busyLabel;
 
     var op = mode === "signup"
-      ? HDAuth.signUp(addr, password)
+      ? HDAuth.signUp(addr, password, location.origin + location.pathname)
       : HDAuth.signIn(addr, password).then(function (s) { return { session: s }; });
 
     op.then(function (r) {
       if (mode === "signup" && r.needsEmailConfirm) {
-        say("Account created! Check your email to confirm, then log in.", "ok");
         submit.disabled = false; submit.textContent = original;
-        setMode("login");
+        setMode("login"); // clears the message box, so say() must come after it
+        say("Account created. We sent a confirmation link to " + addr +
+            " — click it, then log in here. (Check spam if it's not there in a minute.)", "ok");
         return;
       }
       say("Success — taking you to your course…", "ok");

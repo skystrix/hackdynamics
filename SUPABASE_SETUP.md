@@ -72,8 +72,17 @@ may want **Authentication → Sign In / Providers → "Confirm email" = OFF** so
 account can log in immediately. Turn it back on before launch — the login page
 already handles the "check your email to confirm" case when it's on.
 
-Also add your site's URL (and `http://localhost:8643` for local testing) under
-**Authentication → URL Configuration**.
+**Authentication → URL Configuration** decides where confirmation and reset
+links land. Out of the box **Site URL** is `http://localhost:3000`, which is why
+a confirmation email dumps you on a dead localhost page. Set:
+
+- **Site URL**: `https://hackdynamics.com`
+- **Redirect URLs**: `https://hackdynamics.com/*` and `http://localhost:8643/*`
+  for local testing.
+
+The login page now passes its own URL as `redirect_to` on signup, so links come
+back to whichever origin you signed up from — but only if that origin is in the
+Redirect URLs list. Anything not on the list silently falls back to Site URL.
 
 ## 5. Grant yourself premium (until Razorpay is wired)
 
