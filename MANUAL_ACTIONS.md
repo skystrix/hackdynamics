@@ -38,9 +38,57 @@ The `anon` key already in `js/supabase-config.js` is fine — it's meant to be p
 
 ### A3. Lock down redirect URLs
 1. **Authentication → URL Configuration**.
-2. **Site URL**: set to your real deployed site (e.g. `https://hackdynamics.com`).
-3. **Redirect URLs**: add your production URL **and** `http://localhost:8643`
-   (the local preview port). Remove anything you don't recognize.
+2. **Site URL**: `https://www.hackdynamics.com` — **with the `www.`**. The apex
+   308-redirects to `www`, so `www` is the host browsers actually sit on.
+3. **Redirect URLs**: add all three, wildcards included:
+   - `https://www.hackdynamics.com/**`
+   - `https://hackdynamics.com/**`
+   - `http://localhost:8643/**`
+
+   Remove anything you don't recognize.
+
+> **This list is what makes password-reset and confirmation links work.** Auth
+> links carry `redirect_to=https://www.hackdynamics.com/login.html`; if that URL
+> isn't matched here, GoTrue *silently drops it* and sends the user to the Site
+> URL instead — they land on the homepage with the recovery token stranded in the
+> URL hash and no way to set a password. Symptom: "the reset link just goes to
+> hackdynamics.com". Cause: `www` missing from this list.
+
+### A4. Custom SMTP — REQUIRED before launch (fixes the signup 429s)
+
+Symptom: `POST /auth/v1/signup` returns **429** and the page says *"email rate
+limit exceeded"*. Nothing is wrong with the code. Supabase's built-in email
+sender is a shared sandbox capped at **2 emails per hour for the entire
+project** — not per user. With "Confirm email" ON, every signup sends one, so
+the third person to sign up in an hour is blocked. It is meant for development
+only and Supabase will never raise it.
+
+Fix = bring your own SMTP, then raise the rate limit.
+
+1. Get SMTP credentials from any transactional provider. Cheapest sane options:
+   **Resend** (3k emails/month free), **Brevo**, **Postmark**, or **Amazon SES**.
+   Verify your sending domain (`hackdynamics.com`) in their dashboard and add the
+   DKIM/SPF DNS records they give you — without this your mail lands in spam.
+2. Supabase → **Authentication → Emails → SMTP Settings** → enable **Custom SMTP**:
+   - Sender email: `no-reply@hackdynamics.com` (must be on the verified domain)
+   - Sender name: `HackDynamics`
+   - Host / Port / Username / Password: from the provider (usually port `587`)
+3. Supabase → **Authentication → Rate Limits** → **"Rate limit for sending emails"**.
+   It is stuck at 2/hour until custom SMTP is on; afterwards set it to **100 per
+   hour** (raise later if signups justify it). While you're there, leave
+   "Rate limit for sign ups and sign ins" at its default — that one is per-IP and
+   is genuine abuse protection.
+4. Test: sign up with a fresh address and confirm the mail arrives from your own
+   domain, and that a second and third signup in the same minute also work.
+
+Also confirm `https://www.hackdynamics.com/login.html` is in **Authentication →
+URL Configuration → Redirect URLs** (with the `www.`) — the signup call in the
+logs uses that exact `redirect_to`, and an unlisted URL is silently dropped.
+
+Interim workaround only, if you need signups working this minute: turn
+**Authentication → Providers → Email → "Confirm email" OFF**. No email is sent,
+so no 429 — but anyone can register with an address they don't own. Turn it back
+on the moment SMTP is configured.
 
 ---
 
@@ -350,6 +398,8 @@ Prereq: `razorpay-checkout` deployed (D1) and `razorpay-webhook` deployed (B4).
       re-run `supabase secrets set` + `functions deploy` with the live webhook secret.
 - [ ] **Authentication → Email**: turn **"Confirm email" back ON** for production
       (see `SUPABASE_SETUP.md` step 4).
+- [ ] **Custom SMTP configured** (PART A4). Blocking — without it signups fail
+      with 429 after 2 accounts per hour.
 - [ ] **Decide one-time vs. genuinely monthly** (PART D2 above) and make the pricing
       page tell the truth. Blocking — don't take live payments until this is settled.
 - [x] **Server-side order creation: DONE.** `razorpay-checkout` derives both the

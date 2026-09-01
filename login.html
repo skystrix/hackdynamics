@@ -221,8 +221,15 @@
     }).catch(function (err) { say(err.message || "Couldn't send the reset link. Please try again."); });
   });
 
+  // A dead link (expired, or already consumed by an email link-scanner) comes
+  // back as #error=access_denied&error_description=… — say so, don't show a
+  // blank login form as if nothing happened.
+  var linkError = (location.hash.match(/(?:^|[#&])error_description=([^&]+)/) || [])[1];
+
   if (recovering) setMode("reset");
   else if (justConfirmed) say("Email confirmed. Log in to continue.", "ok");
+  else if (linkError) say(decodeURIComponent(linkError.replace(/\+/g, " ")) +
+    ". Enter your email below and request a fresh reset link.");
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
