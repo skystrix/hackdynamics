@@ -11,6 +11,16 @@
   var NS = "http://www.w3.org/2000/svg";
   var C = { cyan: "#2de2ff", blue: "#4f7cff", gold: "#ffd166", red: "#ff5d73",
             green: "#3ddc97", dim: "#7d8fb0", line: "#1c2a45", bg: "#0c1220", text: "#c9d6ea" };
+  // SVG attributes keep the legacy hexes above and are re-inked by the CSS
+  // remap in tokens.css. Canvas can't be reached by CSS, so canvas draw passes
+  // shadow C with this live token palette (read per frame → theme-reactive).
+  function CP() {
+    var s = getComputedStyle(document.documentElement);
+    function v(n) { return s.getPropertyValue(n).trim(); }
+    return { cyan: v("--primary"), blue: v("--teal"), gold: v("--orange"),
+             red: v("--pink"), green: v("--green"), dim: v("--text-dim"),
+             line: v("--line"), bg: v("--bg-3"), text: v("--text") };
+  }
 
   function S(tag, attrs, parent) {
     var e = document.createElementNS(NS, tag);
@@ -92,10 +102,11 @@
     f.btn("reset", function () { msgs = []; acks = 0; lost = 0; status = "No finite number of messages creates COMMON knowledge over a lossy link."; });
 
     function draw() {
+      var C = CP();
       ctx.clearRect(0, 0, 700, 220);
       // camps
       [["General A", 70], ["General B", 630]].forEach(function (g) {
-        ctx.strokeStyle = C.blue; ctx.fillStyle = "#0c1220";
+        ctx.strokeStyle = C.blue; ctx.fillStyle = C.bg;
         ctx.beginPath(); ctx.arc(g[1], 90, 34, 0, 7); ctx.fill(); ctx.stroke();
         ctx.fillStyle = C.text; ctx.font = "12px ui-monospace,Menlo,monospace"; ctx.textAlign = "center";
         ctx.fillText(g[0], g[1], 94);
@@ -151,6 +162,7 @@
     f.btn("▶ resume the node", function () { alive = true; nextBeat = performance.now() + 300; });
 
     function draw() {
+      var C = CP();
       var now = performance.now();
       if (alive && now >= nextBeat) {
         lastBeat = now;
@@ -167,7 +179,7 @@
       ctx.clearRect(0, 0, 700, 230);
       // node icon
       ctx.strokeStyle = suspected ? C.red : C.green;
-      ctx.fillStyle = "#0c1220";
+      ctx.fillStyle = C.bg;
       ctx.beginPath(); ctx.arc(70, 70, 30, 0, 7); ctx.fill(); ctx.stroke();
       ctx.fillStyle = suspected ? C.red : C.green;
       ctx.font = "11px ui-monospace,Menlo,monospace"; ctx.textAlign = "center";
@@ -409,14 +421,16 @@
       });
     }
     function draw() {
+      var C = CP();
       ctx.clearRect(0, 0, 700, 300);
       // flights
       flights = flights.filter(function (fl) {
         fl.t += 0.045;
         var x = fl.a.x + (fl.b.x - fl.a.x) * fl.t;
         var y = fl.a.y + (fl.b.y - fl.a.y) * fl.t;
-        ctx.strokeStyle = "rgba(45,226,255,.25)";
+        ctx.globalAlpha = 0.3; ctx.strokeStyle = C.cyan;
         ctx.beginPath(); ctx.moveTo(fl.a.x, fl.a.y); ctx.lineTo(x, y); ctx.stroke();
+        ctx.globalAlpha = 1;
         ctx.fillStyle = C.cyan;
         ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
         if (fl.t >= 1) { fl.b.hot = true; return false; }
@@ -426,7 +440,7 @@
       var hotN = 0;
       nodes.forEach(function (n) {
         if (n.hot) hotN++;
-        ctx.fillStyle = n.hot ? C.gold : "#1c2a45";
+        ctx.fillStyle = n.hot ? C.gold : C.line;
         ctx.strokeStyle = n.hot ? C.gold : C.dim;
         ctx.beginPath(); ctx.arc(n.x, n.y, 6, 0, 7); ctx.fill();
       });

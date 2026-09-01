@@ -1,7 +1,7 @@
 /* ==========================================================================
    theme.js — shared light/dark theme controller for all HackDynamics pages.
    Loaded in <head> so the attribute lands before first paint (no flash).
-   Default: dark. Persisted in localStorage under "hd-theme".
+   Default: light (Notion-style paper). Persisted in localStorage under "hd-theme".
    Any element with class "theme-toggle" flips the theme when clicked.
    ========================================================================== */
 (function () {
@@ -10,7 +10,7 @@
   var theme;
 
   try { theme = localStorage.getItem(KEY); } catch (e) { /* private mode */ }
-  if (theme !== "dark" && theme !== "light") theme = "dark";
+  if (theme !== "dark" && theme !== "light") theme = "light";
 
   function apply() {
     document.documentElement.setAttribute("data-theme", theme);

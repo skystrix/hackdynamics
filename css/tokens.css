@@ -1,0 +1,159 @@
+/* ==========================================================================
+   tokens.css — the HackDynamics design system (Notion-style).
+   Single source of truth for every page: warm paper canvas, near-black Inter
+   type, one structural blue, sticker-palette accents for decoration/status.
+   Light is the default; html[data-theme="dark"] re-binds the same tokens.
+   Derived from DESIGN-notion.md.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg: #f6f5f4;              /* warm paper canvas */
+  --bg-2: #ffffff;            /* cards, panels, nav */
+  --bg-3: #efedeb;            /* chips, code blocks, raised wells */
+  --line: #e6e6e6;            /* hairline borders */
+
+  /* ink */
+  --text: rgba(0, 0, 0, .95);
+  --text-secondary: #31302e;
+  --text-dim: #615d59;
+  --text-faint: #a39e98;
+
+  /* the one structural accent */
+  --primary: #0075de;
+  --primary-active: #005bab;
+  --on-primary: #ffffff;
+  --indigo: #213183;          /* the single dark "night" hero band */
+
+  /* sticker palette (decoration + status; never structural fills) */
+  --teal: #2a9d99;
+  --orange: #dd5b00;
+  --pink: #ff64c8;
+  --green: #1aae39;
+  --purple: #d6b6f6;
+  --sky: #62aef0;
+  --red: var(--pink);         /* error alias — status via sticker palette, no red */
+
+  /* soft tints (accent fills at low strength; re-bound for dark) */
+  --tint-primary: rgba(0, 117, 222, .09);
+  --tint-teal: rgba(42, 157, 153, .12);
+  --tint-green: rgba(26, 174, 57, .10);
+  --tint-orange: rgba(221, 91, 0, .08);
+  --tint-red: rgba(255, 100, 200, .12);
+  --tint-neutral: rgba(0, 0, 0, .045);
+
+  /* type */
+  --sans: "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* radius scale */
+  --r-xs: 4px;   /* form fields, chips */
+  --r-sm: 5px;   /* menu rows, list rows */
+  --r-md: 8px;   /* utility buttons, small cards */
+  --r-lg: 12px;  /* feature cards, tiles */
+  --r-xl: 16px;  /* large containers, image wells */
+  --r-full: 9999px;
+  --radius: var(--r-lg);
+
+  /* barely-there layered elevation */
+  --shadow-1: 0 0.2px 1px rgba(0,0,0,.01), 0 0.8px 3px rgba(0,0,0,.02),
+              0 2px 8px rgba(0,0,0,.027), 0 4px 18px rgba(0,0,0,.04);
+  --shadow-2: 0 1px 2px rgba(0,0,0,.02), 0 3px 8px rgba(0,0,0,.03),
+              0 8px 20px rgba(0,0,0,.04), 0 16px 36px rgba(0,0,0,.045),
+              0 23px 52px rgba(0,0,0,.05);
+}
+
+html[data-theme="dark"] {
+  --bg: #191919;
+  --bg-2: #202020;
+  --bg-3: #2a2a2a;
+  --line: #373737;
+  --text: rgba(255, 255, 255, .92);
+  --text-secondary: #cfcecb;
+  --text-dim: #9b9998;
+  --text-faint: #6f6d6b;
+  --primary: #4da3f5;
+  --primary-active: #77b9f7;
+  --on-primary: #ffffff;
+  --teal: #3fbfba;
+  --orange: #f0904a;
+  --pink: #ff7fd1;
+  --green: #3ecb5e;
+  --tint-primary: rgba(77, 163, 245, .16);
+  --tint-teal: rgba(63, 191, 186, .16);
+  --tint-green: rgba(62, 203, 94, .16);
+  --tint-orange: rgba(240, 144, 74, .15);
+  --tint-red: rgba(255, 127, 209, .16);
+  --tint-neutral: rgba(255, 255, 255, .06);
+  --shadow-1: 0 0 0 1px rgba(255,255,255,.04);
+  --shadow-2: 0 8px 30px rgba(0,0,0,.5);
+}
+
+/* ==========================================================================
+   SVG re-ink. The old dark-theme hexes act as semantic IDs: every diagram —
+   the 4 viz engines, the 47 course-content figures (served by the edge
+   function), and the landing-page art — hardcodes the same palette as SVG
+   presentation attributes, which lose to any CSS rule.
+   ponytail: remap here instead of editing 75+ SVGs + redeploying the edge
+   function; tokens make the remap theme-reactive for free.
+   ========================================================================== */
+
+/* surfaces */
+:is(.fig, .viz, .cf-art) svg [fill="#111a2e"],
+:is(.fig, .viz, .cf-art) svg [fill="#101a2e"] { fill: var(--bg-2); }
+:is(.fig, .viz, .cf-art) svg [fill="#0c1220"],
+:is(.fig, .viz, .cf-art) svg [fill="#060a12"],
+:is(.fig, .viz, .cf-art) svg [fill="#0a0f1c"] { fill: var(--bg-3); }
+/* neutral arrowheads / connectors match their lines */
+:is(.fig, .viz, .cf-art) svg [fill="#1c2a45"] { fill: var(--text-faint); }
+:is(.fig, .viz, .cf-art) svg [stroke="#1c2a45"],
+:is(.fig, .viz, .cf-art) svg [stroke="#18243c"] { stroke: var(--text-faint); }
+/* text */
+:is(.fig, .viz, .cf-art) svg [fill="#c9d6ea"] { fill: var(--text-secondary); }
+:is(.fig, .viz, .cf-art) svg [stroke="#c9d6ea"] { stroke: var(--text-secondary); }
+:is(.fig, .viz, .cf-art) svg [fill="#7d8fb0"] { fill: var(--text-dim); }
+:is(.fig, .viz, .cf-art) svg [stroke="#7d8fb0"] { stroke: var(--text-dim); }
+/* accents: cyan→primary blue, blue→teal, gold→orange, red→pink, green→green */
+:is(.fig, .viz, .cf-art) svg [fill="#2de2ff"] { fill: var(--primary); }
+:is(.fig, .viz, .cf-art) svg [stroke="#2de2ff"] { stroke: var(--primary); }
+:is(.fig, .viz, .cf-art) svg [fill="#4f7cff"] { fill: var(--teal); }
+:is(.fig, .viz, .cf-art) svg [stroke="#4f7cff"] { stroke: var(--teal); }
+:is(.fig, .viz, .cf-art) svg [fill="#ffd166"] { fill: var(--orange); }
+:is(.fig, .viz, .cf-art) svg [stroke="#ffd166"] { stroke: var(--orange); }
+:is(.fig, .viz, .cf-art) svg [fill="#ff5d73"] { fill: var(--pink); }
+:is(.fig, .viz, .cf-art) svg [stroke="#ff5d73"] { stroke: var(--pink); }
+:is(.fig, .viz, .cf-art) svg [fill="#3ddc97"] { fill: var(--green); }
+:is(.fig, .viz, .cf-art) svg [stroke="#3ddc97"] { stroke: var(--green); }
+/* viz3 extras (hash-ring owner palette, moved-key outline) */
+:is(.fig, .viz) svg [fill="#c792ea"] { fill: var(--purple); }
+:is(.fig, .viz) svg [fill="#f78c6c"] { fill: var(--sky); }
+:is(.fig, .viz) svg [stroke="#fff"] { stroke: var(--bg-2); }
+/* low-alpha highlight fills → tint tokens (one strength per hue) */
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.06)"],
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.07)"],
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.08)"],
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.1)"],
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.12)"],
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.15)"],
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.2)"],
+:is(.fig, .viz) svg [fill="rgba(45,226,255,.25)"] { fill: var(--tint-primary); }
+:is(.fig, .viz) svg [stroke="rgba(45,226,255,.25)"] { stroke: var(--tint-primary); }
+:is(.fig, .viz) svg [fill="rgba(61,220,151,.05)"],
+:is(.fig, .viz) svg [fill="rgba(61,220,151,.08)"],
+:is(.fig, .viz) svg [fill="rgba(61,220,151,.1)"],
+:is(.fig, .viz) svg [fill="rgba(61,220,151,.12)"],
+:is(.fig, .viz) svg [fill="rgba(61,220,151,.15)"],
+:is(.fig, .viz) svg [fill="rgba(61,220,151,.2)"] { fill: var(--tint-green); }
+:is(.fig, .viz) svg [fill="rgba(255,209,102,.05)"],
+:is(.fig, .viz) svg [fill="rgba(255,209,102,.08)"],
+:is(.fig, .viz) svg [fill="rgba(255,209,102,.1)"],
+:is(.fig, .viz) svg [fill="rgba(255,209,102,.12)"],
+:is(.fig, .viz) svg [fill="rgba(255,209,102,.15)"],
+:is(.fig, .viz) svg [fill="rgba(255,209,102,.18)"] { fill: var(--tint-orange); }
+:is(.fig, .viz) svg [fill="rgba(255,93,115,.1)"],
+:is(.fig, .viz) svg [fill="rgba(255,93,115,.14)"],
+:is(.fig, .viz) svg [fill="rgba(255,93,115,.15)"] { fill: var(--tint-red); }
+:is(.fig, .viz) svg [fill="rgba(79,124,255,.12)"] { fill: var(--tint-teal); }
+:is(.fig, .viz) svg [fill="rgba(125,143,176,.08)"],
+:is(.fig, .viz) svg [fill="rgba(125,143,176,.1)"] { fill: var(--tint-neutral); }
