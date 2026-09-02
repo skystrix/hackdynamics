@@ -154,15 +154,26 @@
       return Promise.resolve(s);
     },
 
-    /** Read the signed-in user's profile row (id, email, is_premium). */
+    /** Read the signed-in user's profile row (id, email, is_premium,
+        premium_until). */
     getProfile: function () {
       return HDAuth.getSession().then(function (s) {
         if (!s) return null;
         var uid = s.user && s.user.id;
-        var q = "/profiles?select=id,email,is_premium" + (uid ? "&id=eq." + uid : "") + "&limit=1";
+        var q = "/profiles?select=id,email,is_premium,premium_until" +
+          (uid ? "&id=eq." + uid : "") + "&limit=1";
         return api(restUrl(q), { method: "GET" }, s.access_token)
           .then(function (rows) { return (rows && rows[0]) || null; });
       });
+    },
+
+    /** Is this profile's membership currently active? `premium_until` is null
+        for the one-time plan (never expires) and a period end for the monthly
+        subscription; a past date means it lapsed. Display only — course-content
+        makes the same call server-side, which is what actually protects it. */
+    isActive: function (profile) {
+      if (!profile || !profile.is_premium) return false;
+      return !profile.premium_until || Date.parse(profile.premium_until) > Date.now();
     },
 
     /** Resolve to { session, profile, isPremium } — the one call gates use. */
@@ -170,7 +181,7 @@
       return HDAuth.getSession().then(function (session) {
         if (!session) return { session: null, profile: null, isPremium: false };
         return HDAuth.getProfile().then(function (profile) {
-          return { session: session, profile: profile, isPremium: !!(profile && profile.is_premium) };
+          return { session: session, profile: profile, isPremium: HDAuth.isActive(profile) };
         }).catch(function () {
           return { session: session, profile: null, isPremium: false };
         });

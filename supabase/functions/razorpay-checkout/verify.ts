@@ -38,3 +38,18 @@ export async function verifyPaymentSignature(
   const expected = await hmacHex(`${orderId}|${paymentId}`, secret);
   return timingSafeEqual(expected, signature);
 }
+
+/* Subscription checkout signs "<payment_id>|<subscription_id>" — note the
+   REVERSED order versus the order flow above. Getting this backwards silently
+   rejects every legitimate subscription payment, so the two have separate
+   functions rather than one with a flag. */
+export async function verifySubscriptionSignature(
+  paymentId: string,
+  subscriptionId: string,
+  signature: string,
+  secret: string,
+): Promise<boolean> {
+  if (!signature) return false;
+  const expected = await hmacHex(`${paymentId}|${subscriptionId}`, secret);
+  return timingSafeEqual(expected, signature);
+}

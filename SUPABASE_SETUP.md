@@ -36,12 +36,16 @@ SUPABASE_ANON_KEY: "eyJhbGciOi...your-anon-key...",
 **SQL Editor → New query**, paste this, and run it:
 
 ```sql
--- One profile row per user, holding the premium flag.
+-- One profile row per user, holding the premium entitlement.
 create table public.profiles (
-  id         uuid primary key references auth.users (id) on delete cascade,
-  email      text,
-  is_premium boolean not null default false,
-  created_at timestamptz not null default now()
+  id            uuid primary key references auth.users (id) on delete cascade,
+  email         text,
+  is_premium    boolean not null default false,
+  -- When the membership runs out. NULL = never (the ₹1999 one-time plan);
+  -- a timestamp = the end of the current ₹299 subscription period, pushed
+  -- forward by the subscription.charged webhook on every renewal.
+  premium_until timestamptz,
+  created_at    timestamptz not null default now()
 );
 
 -- Row Level Security: a user may READ only their own row, and may NOT write it
@@ -90,9 +94,19 @@ Payments aren't connected yet, so premium is granted by hand. After you've signe
 up once, run this in the SQL Editor:
 
 ```sql
-update public.profiles set is_premium = true
+-- premium_until = null means "never expires", the one-time plan.
+update public.profiles set is_premium = true, premium_until = null
 where email = 'you@example.com';
 ```
+
+**Already have a `profiles` table from before the two-plan pricing?** Add the
+column instead of recreating the table:
+
+```sql
+alter table public.profiles add column if not exists premium_until timestamptz;
+```
+
+Existing premium members keep `premium_until = null`, so nobody loses access.
 
 Reload the course page and the content unlocks.
 
@@ -103,8 +117,9 @@ Reload the course page and the content unlocks.
 | Visitor state                    | Course page (`databases-in-depth.html`)     |
 | -------------------------------- | ------------------------------------------- |
 | Not signed in                    | Redirected to `login.html`                  |
-| Signed in, `is_premium = false`  | "Upgrade" wall (checkout coming soon)       |
-| Signed in, `is_premium = true`   | Full course + a "Log out" chip in the top bar |
+| Signed in, not premium           | Upgrade wall with both plans + Razorpay checkout |
+| Premium, `premium_until` null or future | Full course + a "Log out" chip in the top bar |
+| Premium, `premium_until` in the past | Upgrade wall again — the subscription lapsed |
 | Keys not filled in yet           | A friendly "not configured" notice          |
 
 ## Files involved

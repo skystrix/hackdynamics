@@ -93,26 +93,34 @@
       return;
     }
 
-    // Logged in, but hasn't paid — the upgrade wall.
+    // Logged in, but hasn't paid — the upgrade wall. Two plans, one button each.
     var email = (st.profile && st.profile.email) || (st.session.user && st.session.user.email) || "";
+    var plans = (cfg.PLANS) || {};
+    var monthly = plans.monthly || { label: "\u20b9299 / month" };
+    var lifetime = plans.lifetime || { label: "\u20b91999 one-time" };
     show(
       '<div class="gate-card">' +
         '<div class="gate-brand">HACK<b>DYNAMICS</b></div>' +
         '<span class="gate-tag">PREMIUM COURSE</span>' +
         '<h1>Databases in Depth</h1>' +
         '<p>You\'re signed in as <strong>' + escapeHtml(email) + '</strong>, but this ' +
-        'course is for premium members. Membership is <strong>' +
-        escapeHtml(cfg.PRICE_LABEL || "₹499 / month") + '</strong> and unlocks all ' +
-        '32 chapters, every interactive machine, and the full build-your-own-database capstone.</p>' +
-        '<button class="gate-btn" id="gate-upgrade">Upgrade — ' +
-        escapeHtml(cfg.PRICE_LABEL || "₹499 / month") + '</button>' +
+        'course is for premium members. Either plan unlocks all 32 chapters, every ' +
+        'interactive machine, and the full build-your-own-database capstone.</p>' +
+        '<button class="gate-btn" id="gate-monthly" data-plan="monthly">Subscribe — ' +
+        escapeHtml(monthly.label) + '</button>' +
+        '<button class="gate-btn gate-btn-alt" id="gate-lifetime" data-plan="lifetime">Buy once — ' +
+        escapeHtml(lifetime.label) + '</button>' +
         '<p class="gate-fine" id="gate-pay-msg"></p>' +
-        '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">See pricing</a>' +
+        '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a>' +
         '<a href="#" id="gate-logout">Log out</a></div>' +
       '</div>'
     );
-    var up = document.getElementById("gate-upgrade");
-    if (up) up.addEventListener("click", function () { startCheckout(st, up); });
+    ["gate-monthly", "gate-lifetime"].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) b.addEventListener("click", function () {
+        startCheckout(st, b, b.getAttribute("data-plan"));
+      });
+    });
     var out = document.getElementById("gate-logout");
     if (out) out.addEventListener("click", function (e) {
       e.preventDefault();
@@ -128,14 +136,20 @@
   });
 
   /* ---------- Razorpay Standard Checkout ----------------------------------
-     The browser never names the price or the payer: create-order derives both
-     from the caller's Supabase token server-side. We just open the modal with
-     the order it returns, then hand the signed result back for verification.
-     The razorpay-webhook is the backstop if the browser dies mid-payment. */
-  function startCheckout(st, btn) {
+     The browser names the PLAN, never the price or the payer: create-order
+     derives both from the caller's Supabase token server-side. It returns
+     either an order (one-time) or a subscription (monthly); we open the modal
+     with whichever came back and hand the signed result back for verification.
+     The razorpay-webhook is the backstop if the browser dies mid-payment, and
+     the only thing that extends a subscription on renewal. */
+  function startCheckout(st, btn, plan) {
     var msg = document.getElementById("gate-pay-msg");
+    var buttons = [].slice.call(document.querySelectorAll("[data-plan]"));
     function say(text) { if (msg) msg.textContent = text || ""; }
-    function reset(text) { btn.disabled = false; btn.textContent = label; say(text); }
+    // Disable BOTH plan buttons while one checkout is in flight — two open
+    // Razorpay modals would race to grant the same account two products.
+    function busy(on) { buttons.forEach(function (b) { b.disabled = on; }); }
+    function reset(text) { busy(false); btn.textContent = label; say(text); }
 
     var label = btn.textContent;
     if (typeof Razorpay === "undefined") {
@@ -143,44 +157,49 @@
       return;
     }
 
-    btn.disabled = true;
+    busy(true);
     btn.textContent = "Starting checkout…";
     say("");
 
-    api("create-order", st.session.access_token).then(function (order) {
+    api("create-order", st.session.access_token, { plan: plan }).then(function (order) {
       btn.textContent = label;
-      var rzp = new Razorpay({
-        key: order.key_id || cfg.RAZORPAY_KEY_ID,
-        order_id: order.order_id,
-        amount: order.amount,
-        currency: order.currency,
-        name: "HackDynamics",
-        description: "Databases in Depth — premium membership",
-        prefill: { email: (st.profile && st.profile.email) ||
-          (st.session.user && st.session.user.email) || "" },
-        modal: {
-          ondismiss: function () { reset("Payment cancelled — nothing was charged."); }
-        },
-        handler: function (res) {
-          btn.disabled = true;
-          btn.textContent = "Confirming payment…";
-          say("");
-          api("verify-payment", st.session.access_token, {
-            razorpay_order_id: res.razorpay_order_id,
-            razorpay_payment_id: res.razorpay_payment_id,
-            razorpay_signature: res.razorpay_signature
-          }).then(function () {
-            btn.textContent = "Unlocked — loading your course…";
-            location.reload(); // gate re-runs and now sees is_premium
-          }).catch(function (err) {
-            // Payment went through; only our confirmation failed. The webhook
-            // still grants premium, so tell them to reload rather than re-pay.
-            reset((err.message || "Could not confirm the payment.") +
-              " Your payment may still have gone through — reload in a moment " +
-              "before trying again.");
-          });
-        }
-      });
+      // A subscription opens with subscription_id and no amount (the Razorpay
+      // plan carries that); a one-time buy opens with order_id + amount.
+      var opts = order.subscription_id
+        ? { subscription_id: order.subscription_id }
+        : { order_id: order.order_id, amount: order.amount, currency: order.currency };
+      opts.key = order.key_id || cfg.RAZORPAY_KEY_ID;
+      opts.name = "HackDynamics";
+      opts.description = order.subscription_id
+        ? "Databases in Depth — monthly membership"
+        : "Databases in Depth — lifetime access";
+      opts.prefill = { email: (st.profile && st.profile.email) ||
+        (st.session.user && st.session.user.email) || "" };
+      opts.modal = {
+        ondismiss: function () { reset("Payment cancelled — nothing was charged."); }
+      };
+      opts.handler = function (res) {
+        busy(true);
+        btn.textContent = "Confirming payment…";
+        say("");
+        api("verify-payment", st.session.access_token, {
+          razorpay_order_id: res.razorpay_order_id,
+          razorpay_subscription_id: res.razorpay_subscription_id,
+          razorpay_payment_id: res.razorpay_payment_id,
+          razorpay_signature: res.razorpay_signature
+        }).then(function () {
+          btn.textContent = "Unlocked — loading your course…";
+          location.reload(); // gate re-runs and now sees an active membership
+        }).catch(function (err) {
+          // Payment went through; only our confirmation failed. The webhook
+          // still grants premium, so tell them to reload rather than re-pay.
+          reset((err.message || "Could not confirm the payment.") +
+            " Your payment may still have gone through — reload in a moment " +
+            "before trying again.");
+        });
+      };
+
+      var rzp = new Razorpay(opts);
       rzp.on("payment.failed", function (e) {
         var d = (e && e.error && e.error.description) || "The payment failed.";
         reset(d + " Nothing was charged.");

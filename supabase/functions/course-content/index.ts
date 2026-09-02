@@ -6,10 +6,13 @@
    site. The browser must present a valid Supabase access token belonging to a
    profile with is_premium = true, or it gets nothing but 401/403.
 
-   How the gate works: we query `profiles?select=is_premium` with the CALLER's
-   token. Supabase RLS returns their own row only, and only if the token is
-   valid — so this one call both authenticates the user and reads their premium
-   flag. No service_role key is used or needed here.
+   How the gate works: we query `profiles?select=is_premium,premium_until` with
+   the CALLER's token. Supabase RLS returns their own row only, and only if the
+   token is valid — so this one call both authenticates the user and reads their
+   entitlement. No service_role key is used or needed here.
+
+   `premium_until` is null for the one-time plan (never expires) and a period
+   end for the monthly subscription — a past date means the membership lapsed.
 
    The content JSON is assembled once at cold start (the imports below populate
    window.PARTS / window.CHAPTERS) and reused for every request.
@@ -45,12 +48,15 @@ function deny(status: number, msg: string) {
 
 async function isPremium(token: string): Promise<boolean> {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/profiles?select=is_premium&limit=1`,
+    `${SUPABASE_URL}/rest/v1/profiles?select=is_premium,premium_until&limit=1`,
     { headers: { apikey: ANON_KEY, Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) return false; // invalid/expired token → PostgREST returns 401
   const rows = await res.json().catch(() => null);
-  return Array.isArray(rows) && rows[0]?.is_premium === true;
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (row?.is_premium !== true) return false;
+  // null = one-time plan, never expires. Otherwise the subscription period end.
+  return !row.premium_until || Date.parse(row.premium_until) > Date.now();
 }
 
 Deno.serve(async (req) => {

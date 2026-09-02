@@ -524,6 +524,13 @@ body.gated { overflow: hidden; }
 .gate-btn:hover { background: var(--primary-active); }
 .gate-btn:active { transform: scale(.97); }
 .gate-btn:disabled { opacity: .7; cursor: default; transform: none; }
+/* Secondary plan (one-time) — same size, quieter, so the monthly plan leads. */
+.gate-btn-alt {
+  margin-left: 10px;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--line);
+}
+.gate-btn-alt:hover { background: var(--bg-3); }
 .gate-links { margin-top: 22px; display: flex; justify-content: center; gap: 20px; }
 .gate-links a { color: var(--text-dim); text-decoration: none; font-size: 14px; }
 .gate-links a:hover { color: var(--primary); }
