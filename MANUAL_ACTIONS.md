@@ -245,8 +245,17 @@ bottom of this file), and confirm the chapters load.
 3. **Secret**: type a strong random string of your choice (e.g. from a password
    manager). **This exact value is what you set as `RAZORPAY_WEBHOOK_SECRET` in
    step B4** — they must match character-for-character.
-4. **Active Events**: check **`payment.captured`** (and optionally `order.paid`).
-   Leave everything else unchecked.
+4. **Active Events**: check exactly these three:
+   - **`payment.captured`** — the ₹1999 one-time payment.
+   - **`subscription.charged`** — the ₹299 subscription. Fires on the first
+     charge **and on every monthly renewal**; each one extends the member's
+     access. Without this, subscribers lose access after one month.
+   - **`order.paid`** (optional, a second belt for the one-time plan).
+
+   Leave everything else unchecked. You do **not** need
+   `subscription.cancelled` / `subscription.halted`: access is stored as an
+   expiry date, so a cancelled subscription simply stops being extended and
+   lapses on its own at the end of the period the member already paid for.
 5. Save.
 
 ### C3. Get your API key ID and put it in the config
@@ -256,11 +265,16 @@ bottom of this file), and confirm the chapters load.
 3. Paste it into **`js/supabase-config.js`**, replacing the placeholder:
    ```js
    RAZORPAY_KEY_ID: "rzp_test_YOUR_KEY_ID",   // ← your Key ID from step 2
-   PRICE_PAISE: 49900,                        // ₹499.00 per month
-   PRICE_LABEL: "₹499 / month"                // shown on the upgrade wall
+   PLANS: {
+     monthly:  { label: "₹299 / month",   price: "₹299",  per: "/ month" },
+     lifetime: { label: "₹1999 one-time", price: "₹1999", per: "one-time" }
+   }
    ```
-   Keep all three in this one file — the pricing page, the upgrade wall, and the
-   checkout button read them from here, so the price lives in exactly one place.
+   The `PLANS` labels are **display only** — the pricing page and the upgrade
+   wall read them so the wording lives in one place. The amounts actually
+   charged come from the server (the Razorpay plan for monthly, `LIFETIME_PAISE`
+   in the Edge Function for one-time), so editing these in devtools changes the
+   words, never the price.
 4. The **Key Secret** shown here is NOT the webhook secret and must never go in the
    browser or the repo. You only need it later if you add server-side order creation.
 
@@ -269,8 +283,45 @@ bottom of this file), and confirm the chapters load.
 | Value | Where it goes | Public? |
 |---|---|---|
 | **Key ID** (`rzp_test_…` / `rzp_live_…`) | `js/supabase-config.js` → `RAZORPAY_KEY_ID` | Yes, safe in the browser |
-| **Key Secret** | Nowhere yet (only needed for server-side orders, PART F) | **No — never commit** |
+| **Key Secret** | `supabase secrets set RAZORPAY_KEY_SECRET=…` (step D1) | **No — never commit** |
 | **Webhook Secret** (you invent it in C2) | `supabase secrets set RAZORPAY_WEBHOOK_SECRET=…` (step B4) | **No — never commit** |
+| **Monthly Plan ID** (`plan_…`, created in C4) | `supabase secrets set RAZORPAY_PLAN_ID_MONTHLY=…` (step D1) | Not secret, but keep it server-side |
+
+### C4. Create the ₹299 monthly plan (needed for the subscription)
+
+A Razorpay **Plan** is the recurring price. You create it once in the dashboard;
+the code never creates plans, it only starts subscriptions against this one.
+
+1. Dashboard → **Subscriptions → Plans → + Create Plan**.
+   (If you don't see "Subscriptions" in the sidebar, the feature isn't enabled on
+   your account yet: **Account & Settings → Configuration → Subscriptions**, or
+   ask Razorpay support to enable it. Test Mode usually has it on by default.)
+2. Fill in:
+   - **Plan name**: `HackDynamics Monthly`
+   - **Billing frequency / period**: **Monthly**, interval **1**
+   - **Amount**: **299** INR (enter rupees here; the API talks in paise, the
+     dashboard does not)
+   - **Plan description**: `Databases in Depth — monthly membership`
+   - Leave **trial period** and **add-ons** empty.
+3. **Create Plan**, then copy the **Plan ID** — it looks like `plan_NxxxxxxxxxxxxX`.
+4. You'll paste it into step **D1** as `RAZORPAY_PLAN_ID_MONTHLY`.
+
+> **Test vs Live plans are different objects.** A `plan_…` created in Test Mode
+> does not exist in Live Mode. When you flip to live (PART F) you must create the
+> plan again in Live Mode and re-run `supabase secrets set` with the new ID.
+
+> **Changing the price later**: Razorpay plans are immutable. To move off ₹299
+> you create a *new* plan and point `RAZORPAY_PLAN_ID_MONTHLY` at it. Existing
+> subscribers stay on the old plan until they cancel and resubscribe — which is
+> the honest behaviour anyway.
+
+### C5. Enable e-mandate / UPI Autopay methods (subscriptions only)
+
+A subscription needs a payment method that supports recurring debits. In
+Razorpay → **Account & Settings → Configuration → Payment Methods**, make sure at
+least **Cards (recurring)** and **UPI Autopay** are enabled. Netbanking e-mandate
+is optional. If none are on, the subscription checkout will open but no payment
+method will be selectable, and customers just see an empty modal.
 
 ---
 
@@ -280,28 +331,57 @@ bottom of this file), and confirm the chapters load.
 end. You don't have to edit any code — you only need to push the secrets and
 deploy the function below.
 
+**Two plans are wired end to end:**
+
+| Plan | ₹ | Razorpay object | `profiles.premium_until` |
+|---|---|---|---|
+| Monthly | 299 / month | **Subscription** on the plan from C4 | period end, extended on every `subscription.charged` |
+| One-time | 1999 once | **Order** (a normal payment) | `null` — never expires |
+
 What's in place:
 - `supabase/functions/razorpay-checkout/` — one function, two endpoints:
-  - `POST …/razorpay-checkout/create-order` → creates the Razorpay order
-  - `POST …/razorpay-checkout/verify-payment` → verifies the HMAC signature and
-    flips `is_premium`
-- `js/gate.js` — opens the Razorpay modal from the upgrade wall, handles cancel,
+  - `POST …/razorpay-checkout/create-order` → takes `{"plan":"monthly"}` or
+    `{"plan":"lifetime"}` and creates a Razorpay **subscription** or **order**
+  - `POST …/razorpay-checkout/verify-payment` → verifies the HMAC signature
+    (different message format for each) and grants access
+- `supabase/functions/razorpay-webhook/` — grants the one-time plan and, more
+  importantly, **extends the subscription every month** on `subscription.charged`.
+- `js/gate.js` — the upgrade wall now has two buttons; handles cancel,
   `payment.failed`, and confirmation errors.
-- `databases-in-depth.html` — loads `checkout.js`.
-- `js/supabase-config.js` — holds your **Key ID** (public).
+- `pricing.html` — two plan cards.
+- `js/supabase-config.js` — your **Key ID** (public) and the display labels.
 
-**The price is server-side.** `create-order` ignores anything the browser sends
-and uses `PRICE_PAISE` in
-`supabase/functions/razorpay-checkout/index.ts` (49900 = ₹499). Nobody can edit
-the amount in devtools and buy the course for ₹1. `PRICE_PAISE` in
-`js/supabase-config.js` is display-only — change both together.
+**The price is server-side.** `create-order` reads only *which plan* from the
+browser, never an amount. Monthly's price lives in the Razorpay plan
+(`RAZORPAY_PLAN_ID_MONTHLY`); one-time's lives in `LIFETIME_PAISE` in
+`supabase/functions/razorpay-checkout/index.ts` (199900 = ₹1999). Nobody can edit
+the amount in devtools and buy the course for ₹1. The `PLANS` labels in
+`js/supabase-config.js` are display-only — change them together with the server
+values.
+
+### D0. Add the `premium_until` column (do this before deploying)
+
+Supabase → **SQL Editor → New query**, run:
+
+```sql
+alter table public.profiles add column if not exists premium_until timestamptz;
+```
+
+Existing premium members keep `premium_until = null`, which means "never
+expires" — nobody loses access. This is idempotent, safe to re-run.
 
 ### D1. Push the Razorpay keys as Supabase secrets and deploy
 ```bash
 supabase secrets set RAZORPAY_KEY_ID=rzp_test_TWpsPg24h4cp4b
 supabase secrets set RAZORPAY_KEY_SECRET=your_key_secret_here
+supabase secrets set RAZORPAY_PLAN_ID_MONTHLY=plan_YOUR_PLAN_ID_FROM_C4
 supabase functions deploy razorpay-checkout
+supabase functions deploy razorpay-webhook   # re-deploy: it now handles renewals
 ```
+
+If `RAZORPAY_PLAN_ID_MONTHLY` is missing, the one-time plan still works and the
+monthly button returns a clear "Monthly plan is not configured yet" instead of
+a crash.
 - The **Key Secret** lives only here and in your local `.env` (gitignored and
   vercelignored). It must never appear in `js/` or any HTML page.
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are
@@ -309,52 +389,43 @@ supabase functions deploy razorpay-checkout
 - `supabase/config.toml` already sets `verify_jwt = false` for this function; it
   authenticates callers itself. Deploy from the repo root so that's picked up.
 
-### ⚠️ D2. "₹499 / month" is advertised, but the backend charges once
+### D2. How access is granted and expires
 
-`pricing.html` and the upgrade wall say **₹499 per month**. What's actually built
-today is a **one-time payment**: checkout creates a normal Razorpay *order*, and
-both `verify-payment` and the `payment.captured` webhook set `is_premium = true`
-**permanently** — nothing ever bills again or expires.
+This is the bit worth understanding before you take real money.
 
-So right now a member pays ₹499 once and keeps access forever. Pick one before you
-take real money:
+`profiles.premium_until` is the single source of truth for *when* access ends:
 
-- **(a) Sell it as one-time.** Change the pricing page to "₹499 one-time" and drop
-  "Cancel anytime". Zero new code — what's built is already correct for this.
-- **(b) Make it genuinely monthly.** Razorpay **Subscriptions**, not orders:
-  1. Dashboard → **Subscriptions → Plans → Create Plan**: ₹499, billing cycle
-     *monthly*. Copy the **Plan ID** (`plan_…`).
-  2. `create-order` returns a `subscription_id` instead of an order, and checkout
-     opens with that.
-  3. Add `subscription.charged` (renewal) and `subscription.cancelled` /
-     `subscription.halted` to the webhook's events, and add an `expires_at` column
-     to `profiles` so lapsed members lose access.
+- **`null`** → never expires. Set by the one-time ₹1999 purchase.
+- **a timestamp** → the end of the current subscription period, plus 3 days of
+  grace so a retried renewal charge doesn't lock someone out mid-retry.
 
-Until you choose, keep Razorpay in **Test Mode**. Selling "per month" while the
-system only ever charges once is the kind of thing that causes chargebacks.
+Both `js/auth.js` (the UI) and the `course-content` Edge Function (the real
+gate) treat `is_premium = true` **and** a past `premium_until` as *not* premium.
 
-### ⚠️ D2. "₹499 / month" is advertised, but the backend charges once
+The monthly renewal loop is entirely webhook-driven: Razorpay charges the card,
+sends `subscription.charged`, and the webhook pushes `premium_until` to the new
+period end. **If you forget to tick `subscription.charged` in C2, subscribers
+pay every month and lose access after the first one.** That is the single most
+important checkbox in this file.
 
-`pricing.html` and the upgrade wall say **₹499 per month**. What's actually built
-today is a **one-time payment**: `razorpay-webhook` listens for `payment.captured`
-and sets `is_premium = true` **permanently** — nothing ever bills again or expires.
+Cancellations need no code: a cancelled subscription stops sending
+`subscription.charged`, so `premium_until` stops moving and access ends when the
+already-paid period does — which is exactly what the pricing page promises.
 
-So right now a member pays ₹499 once and keeps access forever. Pick one before you
-take real money:
+One subtlety already handled: a subscription charge *also* emits
+`payment.captured`. The webhook skips any payment carrying an `invoice_id`
+(every subscription charge has one) so a ₹299 subscriber is never accidentally
+granted the never-expiring one-time plan.
 
-- **(a) Sell it as one-time.** Change the pricing page to "₹499 one-time" and drop
-  "Cancel anytime". Zero new code — the current backend is already correct for this.
-- **(b) Make it genuinely monthly.** Razorpay **Subscriptions**, not orders:
-  1. Dashboard → **Subscriptions → Plans → Create Plan**: ₹499, billing cycle
-     *monthly*. Copy the **Plan ID** (`plan_…`).
-  2. Checkout opens with `subscription_id` instead of `amount`, which needs a
-     server-side call to create the subscription (a third Edge Function).
-  3. Add `subscription.charged` (renewal) and `subscription.cancelled` /
-     `subscription.halted` to the webhook's events, and add an `expires_at` column
-     to `profiles` so lapsed members lose access.
+### D3. Cancelling a subscription
 
-Until you choose, keep Razorpay in **Test Mode**. Selling "per month" while the
-system only ever charges once is the kind of thing that causes chargebacks.
+There is no self-serve cancel button in the UI yet. Until there is: Razorpay
+Dashboard → **Subscriptions** → find the subscription → **Cancel** → choose
+**"at the end of the current cycle"**. The member keeps access to the end of the
+period they paid for, then lapses automatically.
+
+If you'd rather members cancel themselves, that's a fourth endpoint plus storing
+the `sub_…` id on the profile — say the word and it's a small addition.
 
 ---
 
@@ -363,22 +434,49 @@ system only ever charges once is the kind of thing that causes chargebacks.
 Prereq: `razorpay-checkout` deployed (D1) and `razorpay-webhook` deployed (B4).
 
 1. Make sure Razorpay is in **Test Mode** and you used `rzp_test_...` keys.
-2. Open the course page, log in with a test account that is **not** premium → you
-   should see the upgrade wall showing **Upgrade — ₹499 / month**.
-3. Click it → Razorpay's test checkout opens. Pay with a
+2. Open the course page, log in with a test account that is **not** premium → the
+   upgrade wall should show **two** buttons: **Subscribe — ₹299 / month** and
+   **Buy once — ₹1999 one-time**.
+
+**Test the one-time plan first (simplest):**
+
+3. Click **Buy once** → Razorpay's test checkout opens for ₹1999. Pay with a
    [Razorpay test card](https://razorpay.com/docs/payments/payments/test-card-details/)
    (e.g. card `4111 1111 1111 1111`, any future expiry, any CVV).
 4. The button shows "Confirming payment…", then the page reloads and the course
-   unlocks — `verify-payment` checked the signature and flipped `is_premium`.
-5. Also worth testing the unhappy paths:
+   unlocks. In Table Editor → `profiles`, that user should now have
+   `is_premium = true` and `premium_until = null`.
+
+**Then the subscription:**
+
+5. Reset the test user (`update public.profiles set is_premium = false,
+   premium_until = null where email = '…';`), reload, and click
+   **Subscribe — ₹299 / month**. Razorpay's subscription checkout opens — note it
+   asks to *authorise* a mandate, not just a one-off payment. Use a
+   [recurring-enabled test card](https://razorpay.com/docs/payments/subscriptions/test-cards/)
+   (`5104 0155 5555 5558` works for recurring in test mode).
+6. After it succeeds, `profiles` should show `is_premium = true` and a
+   `premium_until` about a month out. Razorpay → **Subscriptions** should list it
+   as **Active**.
+7. Check the renewal path without waiting a month: Razorpay → **Settings →
+   Webhooks → your webhook → Test webhook**, send a `subscription.charged` event
+   — or just confirm the webhook's recent deliveries show a `200` for the first
+   charge. A `200` means renewals will extend `premium_until` correctly.
+8. Expiry check: set `premium_until` to yesterday in the SQL editor and reload
+   the course page — you should be back at the upgrade wall, and
+   `curl`ing `course-content` with that user's token should return **403**.
+9. Also worth testing the unhappy paths:
    - **Close the modal** without paying → "Payment cancelled — nothing was
      charged", button re-enables. Nothing should change in `profiles`.
    - **Failed card** (Razorpay's failure test card) → the error description shows
      and no premium is granted.
 6. If it does **not** unlock, check in this order:
    - Dashboard → **Edge Functions → razorpay-checkout → Logs**. A `401` means the
-     browser's token didn't resolve; `500` with "Razorpay order failed" usually
-     means the Key ID/Secret pair is wrong or not set (re-run D1).
+     browser's token didn't resolve; `500` with a Razorpay error usually means
+     the Key ID/Secret pair is wrong or not set (re-run D1); `503` "Monthly plan
+     is not configured" means `RAZORPAY_PLAN_ID_MONTHLY` is missing; a Razorpay
+     error mentioning the plan means the ID belongs to the *other* mode (test
+     plan with live keys, or vice versa).
    - Dashboard → **Edge Functions → razorpay-webhook → Logs** for the backstop.
    - Razorpay → **Settings → Webhooks → your webhook → recent deliveries**: a `200`
      means success; `400` = signature mismatch (secret doesn't match B3/C2); `404`
@@ -394,8 +492,14 @@ Prereq: `razorpay-checkout` deployed (D1) and `razorpay-webhook` deployed (B4).
 ## PART F — Before you go live (later, not blocking)
 
 - [ ] Switch Razorpay to **Live Mode**; regenerate **live** keys and a **live**
-      webhook (repeat C2/C3 with `rzp_live_...`); update `key` in `gate.js` and
-      re-run `supabase secrets set` + `functions deploy` with the live webhook secret.
+      webhook (repeat C2/C3 with `rzp_live_...`), and **create the ₹299 plan again
+      in Live Mode** (C4) — test plans do not exist in live. Update
+      `RAZORPAY_KEY_ID` in `js/supabase-config.js`, then re-run
+      `supabase secrets set` for `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
+      `RAZORPAY_PLAN_ID_MONTHLY` and `RAZORPAY_WEBHOOK_SECRET`, and re-deploy both
+      functions.
+- [ ] Confirm the live webhook has **`subscription.charged`** ticked. Renewals
+      silently stop working without it.
 - [ ] **Authentication → Email**: turn **"Confirm email" back ON** for production
       (see `SUPABASE_SETUP.md` step 4).
 - [ ] **Custom SMTP configured** (PART A4). Blocking — without it signups fail

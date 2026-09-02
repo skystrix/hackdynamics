@@ -23,10 +23,26 @@ window.HD_CONFIG = {
   // browser code (it's public, like the anon key). The Key Secret and the
   // webhook secret never appear here; see MANUAL_ACTIONS.md PART C.
   RAZORPAY_KEY_ID: "rzp_test_TWpsPg24h4cp4b",
-  // Display only. The amount actually charged is set server-side in
-  // supabase/functions/razorpay-checkout/index.ts — keep the two in sync.
-  PRICE_PAISE: 49900,          // ₹499.00 per month
-  PRICE_LABEL: "₹499 / month"
+
+  // The two plans. DISPLAY ONLY — what a member is actually charged comes from
+  // the server: the monthly amount lives in the Razorpay Plan you created
+  // (RAZORPAY_PLAN_ID_MONTHLY), the one-time amount in LIFETIME_PAISE in
+  // supabase/functions/razorpay-checkout/index.ts. Editing these labels in
+  // devtools changes the wording, never the price. Keep them in sync by hand.
+  PLANS: {
+    monthly: {
+      label: "₹299 / month",
+      price: "₹299",
+      per: "/ month",
+      note: "Billed monthly in INR. Cancel anytime."
+    },
+    lifetime: {
+      label: "₹1999 one-time",
+      price: "₹1999",
+      per: "one-time",
+      note: "Pay once. Access never expires."
+    }
+  }
 };
 
 window.HD_CONFIG.isConfigured = function () {

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pricing — HackDynamics</title>
-<meta name="description" content="One plan, ₹499 per month. Full access to Databases in Depth — 32 chapters, 28 interactive machines, and the build-your-own-database capstone.">
+<meta name="description" content="Two ways to pay: ₹299 per month, or ₹1999 once for lifetime access. Full access to Databases in Depth — 32 chapters, 28 interactive machines, and the build-your-own-database capstone.">
 <link rel="stylesheet" href="css/tokens.css">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
@@ -71,17 +71,24 @@
     font-size: 17px; color: var(--text-dim);
   }
 
-  /* ---------- The one plan ---------- */
+  /* ---------- The two plans ---------- */
+  .plans {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px; max-width: 860px; margin: 0 auto; align-items: start;
+  }
   .plan {
-    max-width: 460px; margin: 0 auto;
+    position: relative;
     background: var(--bg-2);
     border: 1px solid var(--line);
     border-radius: var(--r-xl);
     padding: 32px 32px 28px;
     box-shadow: var(--shadow-2);
+    height: 100%; display: flex; flex-direction: column;
   }
+  /* The subscription is the plan we lead with. */
+  .plan.featured { border-color: var(--primary); }
   .plan-tag {
-    display: inline-block;
+    display: inline-block; align-self: flex-start; /* .plan is a flex column */
     font-size: 12px; font-weight: 600; letter-spacing: .125px;
     color: var(--primary); background: var(--tint-primary);
     border-radius: var(--r-full); padding: 4px 10px;
@@ -100,7 +107,7 @@
   .price .per { font-size: 16px; color: var(--text-dim); }
   .price-note { font-size: 13px; color: var(--text-faint); margin-bottom: 26px; }
 
-  .features { list-style: none; margin: 0 0 28px; }
+  .features { list-style: none; margin: 0 0 28px; flex: 1; }
   .features li {
     display: flex; align-items: flex-start; gap: 10px;
     font-size: 15px; color: var(--text-secondary);
@@ -124,11 +131,9 @@
   }
   .btn:hover { background: var(--primary-active); }
   .btn:active { transform: scale(.98); }
-  .plan .under {
-    margin-top: 14px; text-align: center;
-    font-size: 13px; color: var(--text-dim);
-  }
-  .plan .under a { color: var(--primary); text-decoration: none; font-weight: 500; }
+  /* Sits under the two cards, not inside one. */
+  .under { text-align: center; font-size: 14px; color: var(--text-dim); }
+  .under a { color: var(--primary); text-decoration: none; font-weight: 500; }
 
   /* ---------- Fine print ---------- */
   .notes {
@@ -156,6 +161,9 @@
   footer .fnote { font-size: 13px; color: var(--text-dim); }
   footer .fnote em { font-style: italic; }
 
+  @media (max-width: 780px) {
+    .plans { grid-template-columns: 1fr; max-width: 460px; }
+  }
   @media (max-width: 720px) {
     .page-head { padding: 48px 0 32px; }
     .notes { grid-template-columns: 1fr; gap: 20px; }
@@ -181,33 +189,60 @@
 
     <div class="page-head">
       <span class="eyebrow">Pricing</span>
-      <h1>One plan. Everything unlocked.</h1>
-      <p>No tiers, no upsells, no per-course checkout. One membership opens
-         every chapter and every interactive machine.</p>
+      <h1>Two ways to pay. Same everything.</h1>
+      <p>No tiers, no upsells, no per-course checkout. Subscribe monthly, or pay
+         once and keep it — both open every chapter and every interactive machine.</p>
     </div>
 
-    <div class="plan">
-      <span class="plan-tag">PREMIUM MEMBERSHIP</span>
-      <h2>Full access</h2>
-      <p class="plan-sub">Everything HackDynamics publishes, while your membership is active.</p>
+    <div class="plans">
 
-      <div class="price">
-        <span class="amount">₹499</span>
-        <span class="per">/ month</span>
+      <div class="plan featured">
+        <span class="plan-tag">MONTHLY</span>
+        <h2>Membership</h2>
+        <p class="plan-sub">Everything HackDynamics publishes, while your membership is active.</p>
+
+        <div class="price">
+          <span class="amount" id="monthly-price">₹299</span>
+          <span class="per">/ month</span>
+        </div>
+        <p class="price-note">Billed monthly in INR. Cancel anytime.</p>
+
+        <ul class="features">
+          <li>All 32 chapters of <strong>Databases in Depth</strong></li>
+          <li>28 interactive machines you can drive</li>
+          <li>46 diagrams and 160 quiz questions</li>
+          <li>The build-your-own-database capstone in Java</li>
+          <li>New courses included as they ship</li>
+        </ul>
+
+        <a class="btn" id="plan-cta-monthly" href="login.html">Get started</a>
       </div>
-      <p class="price-note">Billed monthly in INR. Cancel anytime.</p>
 
-      <ul class="features">
-        <li>All 32 chapters of <strong>Databases in Depth</strong></li>
-        <li>28 interactive machines you can drive</li>
-        <li>46 diagrams and 160 quiz questions</li>
-        <li>The build-your-own-database capstone in Java</li>
-        <li>New courses included as they ship</li>
-      </ul>
+      <div class="plan">
+        <span class="plan-tag">ONE-TIME</span>
+        <h2>Lifetime access</h2>
+        <p class="plan-sub">Pay once. Keep it forever — about seven months of the monthly plan.</p>
 
-      <a class="btn" id="plan-cta" href="login.html">Get started</a>
-      <p class="under" id="plan-under">Already a member? <a href="login.html">Log in</a></p>
+        <div class="price">
+          <span class="amount" id="lifetime-price">₹1999</span>
+          <span class="per">one-time</span>
+        </div>
+        <p class="price-note">A single payment in INR. Nothing renews.</p>
+
+        <ul class="features">
+          <li>Everything in the monthly plan</li>
+          <li>No renewals, no expiry, no cancelling</li>
+          <li>46 diagrams and 160 quiz questions</li>
+          <li>The build-your-own-database capstone in Java</li>
+          <li>New courses included as they ship</li>
+        </ul>
+
+        <a class="btn" id="plan-cta-lifetime" href="login.html">Buy once</a>
+      </div>
+
     </div>
+
+    <p class="under" id="plan-under" style="margin-top:20px">Already a member? <a href="login.html">Log in</a></p>
 
     <div class="notes">
       <div>
@@ -216,7 +251,8 @@
       </div>
       <div>
         <h3>Cancelling</h3>
-        <p>Cancel whenever you like. Access runs to the end of the period you paid for.</p>
+        <p>Cancel the monthly plan whenever you like — access runs to the end of the
+           period you paid for. The one-time plan has nothing to cancel.</p>
       </div>
       <div>
         <h3>Questions</h3>
@@ -235,13 +271,20 @@
 </footer>
 
 <script>
-/* Point the CTA at the right next step for whoever is reading. Cosmetic only —
-   js/gate.js is what actually enforces access. */
+/* Point the CTAs at the right next step for whoever is reading, and take the
+   displayed prices from HD_CONFIG.PLANS so they live in one place. Cosmetic
+   only — js/gate.js is what actually enforces access, and the server sets the
+   amount actually charged. */
 (function () {
   "use strict";
+  var plans = (window.HD_CONFIG && HD_CONFIG.PLANS) || {};
+  if (plans.monthly) document.getElementById("monthly-price").textContent = plans.monthly.price;
+  if (plans.lifetime) document.getElementById("lifetime-price").textContent = plans.lifetime.price;
+
   if (!window.HDAuth || !HDAuth.isConfigured()) return; // leave defaults
   var navAuth = document.getElementById("nav-auth");
-  var cta = document.getElementById("plan-cta");
+  var ctas = [document.getElementById("plan-cta-monthly"),
+              document.getElementById("plan-cta-lifetime")];
   var under = document.getElementById("plan-under");
   var courseUrl = (window.HD_CONFIG && HD_CONFIG.COURSE_URL) || "databases-in-depth.html";
 
@@ -256,12 +299,12 @@
     });
 
     if (st.isPremium) {
-      cta.textContent = "Go to your course";
-      cta.href = courseUrl;
+      ctas.forEach(function (c) { c.textContent = "Go to your course"; c.href = courseUrl; });
       under.textContent = "You're already a premium member.";
     } else {
-      cta.textContent = "Get premium";
-      cta.href = courseUrl; // the gate's upgrade wall is where checkout opens
+      // Both land on the course page — the gate's upgrade wall is where
+      // checkout opens, and it offers both plans.
+      ctas.forEach(function (c) { c.href = courseUrl; });
       under.textContent = "You're signed in — one step left.";
     }
   });

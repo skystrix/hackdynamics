@@ -1,15 +1,24 @@
 /* ==========================================================================
-   razorpay-webhook — grants premium after a verified Razorpay payment.
+   razorpay-webhook — grants and RENEWS premium after a verified Razorpay event.
 
-   Razorpay calls this URL server-to-server after checkout. We NEVER trust the
-   browser for "payment succeeded" — this webhook is the only thing that flips
-   is_premium = true, and only after verifying Razorpay's HMAC signature.
+   Razorpay calls this URL server-to-server. We NEVER trust the browser for
+   "payment succeeded" — this webhook is the authoritative grant, and only after
+   verifying Razorpay's HMAC signature.
+
+   Two products arrive here:
+     payment.captured / order.paid  → the ONE-TIME plan (₹1999). Grants
+       is_premium with premium_until = null, i.e. it never expires.
+     subscription.charged           → the MONTHLY plan (₹299). Fires on the
+       first charge AND on every renewal; each time we push premium_until out
+       to the new period end. Miss a renewal and access lapses on its own —
+       which is exactly what we want, so subscription.cancelled/halted need no
+       handling at all.
 
    Flow:
-     1. Razorpay Checkout runs in the browser with notes.user_id = <supabase uid>.
-     2. On capture, Razorpay POSTs the event here with an x-razorpay-signature.
+     1. Checkout runs in the browser with notes.user_id = <supabase uid>.
+     2. Razorpay POSTs the event here with an x-razorpay-signature.
      3. We verify HMAC-SHA256(rawBody, RAZORPAY_WEBHOOK_SECRET) == that header.
-     4. We PATCH profiles.is_premium = true (service_role, bypasses RLS).
+     4. We PATCH profiles (service_role, bypasses RLS).
 
    Env (set with `supabase secrets set`):
      RAZORPAY_WEBHOOK_SECRET   — Dashboard → Settings → Webhooks → your secret
@@ -23,10 +32,19 @@ const WEBHOOK_SECRET = Deno.env.get("RAZORPAY_WEBHOOK_SECRET") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// We grant on capture. order.paid works too; captured is the money-in-hand event.
-const GRANT_EVENTS = new Set(["payment.captured", "order.paid"]);
+// Same 3-day grace as razorpay-checkout: absorbs a retried renewal charge.
+function periodEnd(currentEnd: unknown): string {
+  const secs = Number(currentEnd);
+  const base = Number.isFinite(secs) && secs > 0
+    ? secs * 1000
+    : Date.now() + 31 * 86400_000;
+  return new Date(base + 3 * 86400_000).toISOString();
+}
 
-async function grantPremium(match: { by: "id" | "email"; value: string }) {
+async function grantPremium(
+  match: { by: "id" | "email"; value: string },
+  premiumUntil: string | null,
+) {
   const q = `${match.by}=eq.${encodeURIComponent(match.value)}`;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?${q}`, {
     method: "PATCH",
@@ -36,7 +54,7 @@ async function grantPremium(match: { by: "id" | "email"; value: string }) {
       "Content-Type": "application/json",
       Prefer: "return=representation", // so we can tell if a row actually matched
     },
-    body: JSON.stringify({ is_premium: true }),
+    body: JSON.stringify({ is_premium: true, premium_until: premiumUntil }),
   });
   const rows = await res.json().catch(() => null);
   if (!res.ok) throw new Error(`profiles PATCH failed (${res.status})`);
@@ -56,11 +74,31 @@ Deno.serve(async (req) => {
   let event: any;
   try { event = JSON.parse(raw); } catch { return new Response("Bad JSON", { status: 400 }); }
 
-  // Not a payment event we care about — ack so Razorpay stops retrying.
-  if (!GRANT_EVENTS.has(event?.event)) return new Response("ignored", { status: 200 });
+  const payload = event?.payload ?? {};
+  const name = event?.event;
 
-  const entity =
-    event?.payload?.payment?.entity ?? event?.payload?.order?.entity ?? {};
+  // Which entity carries the notes, and how long access should last.
+  let entity: any;
+  let premiumUntil: string | null;
+
+  if (name === "subscription.charged") {
+    entity = payload.subscription?.entity ?? {};
+    premiumUntil = periodEnd(entity.current_end);
+  } else if (name === "payment.captured" || name === "order.paid") {
+    entity = payload.payment?.entity ?? payload.order?.entity ?? {};
+    // A subscription's own charge ALSO emits payment.captured. Granting the
+    // never-expiring one-time plan here would hand a ₹299/month member
+    // lifetime access — so anything billed through an invoice is skipped and
+    // left to subscription.charged above.
+    if (entity.invoice_id || entity.notes?.plan === "monthly") {
+      return new Response("subscription payment — handled by subscription.charged", { status: 200 });
+    }
+    premiumUntil = null; // one-time plan: never expires
+  } else {
+    // Not an event we grant on — ack so Razorpay stops retrying.
+    return new Response("ignored", { status: 200 });
+  }
+
   const notes = entity.notes ?? {};
 
   // Prefer the Supabase uid we stamped into notes at checkout; fall back to email.
@@ -72,7 +110,7 @@ Deno.serve(async (req) => {
 
   if (!match) return new Response("no user reference in payment", { status: 422 });
 
-  const updated = await grantPremium(match);
+  const updated = await grantPremium(match, premiumUntil);
   if (updated === 0) return new Response("no matching profile", { status: 404 });
 
   return new Response("premium granted", { status: 200 });
