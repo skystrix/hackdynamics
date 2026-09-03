@@ -46,8 +46,10 @@
         var cls = [];
         if (location.hash === "#/ch/" + ch.num) cls.push("active");
         if (progress.quiz[ch.num] !== undefined) cls.push("done");
+        if (ch.locked) cls.push("locked");
         html += '<a href="#/ch/' + ch.num + '" class="' + cls.join(" ") + '">' +
-                '<span class="n">' + ch.num + "</span>" + ch.title + "</a>";
+                '<span class="n">' + ch.num + "</span>" + ch.title +
+                (ch.locked ? ' <span class="toc-lock">🔒</span>' : "") + "</a>";
       });
     });
     $("#toc-inner").innerHTML = html;
@@ -122,16 +124,21 @@
               '<p class="part-desc">' + part.desc + "</p>" +
               '<div class="journey">';
       CHAPTERS.filter(function (c) { return c.part === part.num; }).forEach(function (ch) {
-        var vizCount = ch.sections.filter(function (s) { return s.viz; }).length;
+        // Locked chapters arrive as metadata stubs (no sections/quiz), carrying
+        // vizCount/quizCount instead — use those so the card still shows badges.
+        var vizCount = ch.locked ? (ch.vizCount || 0) : ch.sections.filter(function (s) { return s.viz; }).length;
+        var quizCount = ch.locked ? (ch.quizCount || 0) : ch.quiz.length;
         var quizDone = progress.quiz[ch.num] !== undefined;
-        html += '<a class="ch-card' + (progress.visited[ch.num] ? " visited" : "") + '" href="#/ch/' + ch.num + '">' +
-                '<span class="num">CHAPTER ' + ch.num + "</span>" +
+        html += '<a class="ch-card' + (progress.visited[ch.num] ? " visited" : "") +
+                (ch.locked ? " locked" : "") + '" href="#/ch/' + ch.num + '">' +
+                '<span class="num">CHAPTER ' + ch.num + (ch.locked ? " 🔒" : "") + "</span>" +
                 "<h3>" + ch.title + "</h3>" +
                 "<p>" + ch.blurb + "</p>" +
                 '<div class="badges">' +
                 (vizCount ? '<span class="badge viz">⚡ ' + vizCount + " interactive</span>" : "") +
-                '<span class="badge">' + ch.quiz.length + " quiz questions</span>" +
-                (quizDone ? '<span class="badge quiz-done">✓ quiz ' + progress.quiz[ch.num] + "/" + ch.quiz.length + "</span>" : "") +
+                '<span class="badge">' + quizCount + " quiz questions</span>" +
+                (ch.locked ? '<span class="badge locked">🔒 premium</span>' : "") +
+                (quizDone ? '<span class="badge quiz-done">✓ quiz ' + progress.quiz[ch.num] + "/" + quizCount + "</span>" : "") +
                 "</div></a>";
       });
       html += "</div>";
@@ -142,10 +149,32 @@
   function chapterView(num) {
     var ch = CHAPTERS.find(function (c) { return c.num === num; });
     if (!ch) { location.hash = "#/"; return; }
+    var part = PARTS.find(function (p) { return p.num === ch.part; });
+
+    // Locked chapter: only its metadata was served. Show the hero + an upgrade
+    // panel (drawn by gate.js) in place of the body/quiz, plus prev/next nav.
+    if (ch.locked) {
+      var lhtml =
+        '<div class="ch-hero">' +
+        '<div class="kicker">PART ' + part.num + " · " + part.title.toUpperCase() + " · CHAPTER " + ch.num + "</div>" +
+        "<h1>" + ch.title + " 🔒</h1>" +
+        '<p class="intro">' + ch.blurb + "</p>" +
+        "</div>" +
+        '<div id="chapter-upgrade"></div>';
+      var lprev = CHAPTERS.find(function (c) { return c.num === num - 1; });
+      var lnext = CHAPTERS.find(function (c) { return c.num === num + 1; });
+      lhtml += '<div class="ch-nav">' +
+        (lprev ? '<a href="#/ch/' + lprev.num + '"><span class="dir">← PREVIOUS</span><span class="t">' + lprev.title + "</span></a>" : "<span></span>") +
+        (lnext ? '<a class="next" href="#/ch/' + lnext.num + '"><span class="dir">NEXT →</span><span class="t">' + lnext.title + "</span></a>" : "<span></span>") +
+        "</div>";
+      app.innerHTML = lhtml;
+      if (window.HDGate) HDGate.renderUpgrade($("#chapter-upgrade"));
+      return;
+    }
+
     progress.visited[num] = true;
     saveProgress();
 
-    var part = PARTS.find(function (p) { return p.num === ch.part; });
     var html =
       '<div class="ch-hero">' +
       '<div class="kicker">PART ' + part.num + " · " + part.title.toUpperCase() + " · CHAPTER " + ch.num + "</div>" +

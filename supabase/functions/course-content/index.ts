@@ -1,21 +1,27 @@
 /* ==========================================================================
-   course-content — serves the paid course text to PREMIUM users only.
+   course-content — serves the course text, gated by entitlement.
 
    The chapter content (js/bookData-*.js) used to be static files anyone could
    fetch. It now lives here, bundled with this function and NOT in the public
-   site. The browser must present a valid Supabase access token belonging to a
-   profile with is_premium = true, or it gets nothing but 401/403.
+   site — so the ONLY thing protecting a paid chapter is that its text never
+   leaves this function unless the caller is entitled to it.
 
-   How the gate works: we query `profiles?select=is_premium,premium_until` with
-   the CALLER's token. Supabase RLS returns their own row only, and only if the
-   token is valid — so this one call both authenticates the user and reads their
-   entitlement. No service_role key is used or needed here.
+   Two payloads are built once at cold start:
+     • FULL    — every chapter with its full sections/quiz/terms. Premium only.
+     • PREVIEW — free chapters (free: true) keep full content; every other
+                 chapter is reduced to metadata (num/part/title/blurb + counts)
+                 and marked locked: true, with sections/quiz/terms REMOVED.
+   Premium callers get FULL; everyone else — including anonymous, tokenless
+   requests — gets PREVIEW. Paid chapter bodies are simply absent from PREVIEW,
+   so there is nothing in the browser to unlock.
+
+   How premium is checked: we query `profiles?select=is_premium,premium_until`
+   with the CALLER's token. Supabase RLS returns their own row only, and only if
+   the token is valid — so this authenticates the user and reads their
+   entitlement in one call. No service_role key is used or needed here.
 
    `premium_until` is null for the one-time plan (never expires) and a period
    end for the monthly subscription — a past date means the membership lapsed.
-
-   The content JSON is assembled once at cold start (the imports below populate
-   window.PARTS / window.CHAPTERS) and reused for every request.
    ========================================================================== */
 
 import "./_data/_shim.js";
@@ -26,9 +32,31 @@ import "./_data/bookData-additions2.js";
 import "./_data/bookData-additions3.js";
 import "./_data/bookData-part5.js";
 
-const g = globalThis as unknown as { PARTS: unknown[]; CHAPTERS: unknown[] };
-// Built once per warm instance; the payload is identical for every premium user.
-const COURSE_JSON = JSON.stringify({ PARTS: g.PARTS, CHAPTERS: g.CHAPTERS });
+export type Chapter = {
+  num: number; part: number; title: string; blurb: string; free?: boolean;
+  sections?: { viz?: string }[]; quiz?: unknown[]; terms?: unknown[];
+};
+
+// The security boundary: free chapters pass through whole; every other chapter
+// is reduced to the metadata the journey map / TOC needs and marked locked —
+// its sections/quiz/terms are DROPPED, so no paid body reaches a non-member.
+export function toPreview(chapters: Chapter[]): unknown[] {
+  return chapters.map((ch) =>
+    ch.free ? ch : {
+      num: ch.num, part: ch.part, title: ch.title, blurb: ch.blurb,
+      locked: true,
+      vizCount: (ch.sections ?? []).filter((s) => s.viz).length,
+      quizCount: (ch.quiz ?? []).length,
+    }
+  );
+}
+
+const g = globalThis as unknown as { PARTS: unknown[]; CHAPTERS: Chapter[] };
+
+// Built once per warm instance; each payload is identical for every caller in
+// its tier, so we stringify them at cold start and reuse the strings.
+const FULL_JSON = JSON.stringify({ PARTS: g.PARTS, CHAPTERS: g.CHAPTERS });
+const PREVIEW_JSON = JSON.stringify({ PARTS: g.PARTS, CHAPTERS: toPreview(g.CHAPTERS) });
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -59,22 +87,26 @@ async function isPremium(token: string): Promise<boolean> {
   return !row.premium_until || Date.parse(row.premium_until) > Date.now();
 }
 
-Deno.serve(async (req) => {
+// import.meta.main is false when a test imports this module, so importing
+// toPreview for a unit test doesn't spin up a listener.
+if (import.meta.main) Deno.serve(handler);
+
+async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "GET") return deny(405, "Method Not Allowed");
 
-  // Expect "Authorization: Bearer <user access token>".
+  // A token is optional now: anonymous callers get the free-preview payload.
+  // "Authorization: Bearer <user access token>" grants FULL only if premium.
   const auth = req.headers.get("Authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!token) return deny(401, "Sign in required");
+  const premium = token ? await isPremium(token) : false;
 
-  if (!(await isPremium(token))) return deny(403, "Premium membership required");
-
-  return new Response(COURSE_JSON, {
+  return new Response(premium ? FULL_JSON : PREVIEW_JSON, {
     headers: {
       ...CORS,
       "Content-Type": "application/json",
-      "Cache-Control": "private, no-store", // never let a shared cache hold paid content
+      // FULL is paid + per-user; PREVIEW is public and identical for everyone.
+      "Cache-Control": premium ? "private, no-store" : "public, max-age=300",
     },
   });
-});
+}

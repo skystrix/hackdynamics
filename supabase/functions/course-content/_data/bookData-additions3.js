@@ -7,7 +7,7 @@
 
 /* ======================= CHAPTER 3 ======================= */
 CHAPTERS.push({
-  num: 3, part: 1, title: "Relational Design: ER Diagrams, Dependencies & Normal Forms",
+  num: 3, part: 1, free: true, title: "Relational Design: ER Diagrams, Dependencies & Normal Forms",
   blurb: "Before you store anything, you have to decide how to organize it into tables, and there's a well-worn theory for doing that well. This chapter covers how to sketch your data as things (entities) and the relationships between them, how to turn that sketch into tables, and the step-by-step rules (the normal forms) for splitting tables so no fact is ever stored in two places. You'll also see exactly what goes wrong when you don't, so the rules feel like plain common sense rather than ceremony.",
   sections: [
     { title: "Entity-Relationship Modeling",
