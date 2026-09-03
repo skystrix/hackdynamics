@@ -114,7 +114,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 4 ======================= */
 CHAPTERS.push({
-  num: 4, part: 1, title: "Speaking to the Database: Relational Algebra & SQL",
+  num: 4, part: 1, free: true, title: "Speaking to the Database: Relational Algebra & SQL",
   blurb: "This chapter is about actually asking the database for what you want. We'll start with the small set of basic operations (filter rows, pick columns, combine tables) that every query is really built from, then dig into SQL itself: the different kinds of joins, subqueries, grouping and totals, window functions, and views. We'll also spend real time on NULL, SQL's stand-in for 'unknown', because its rules surprise almost everyone at least once and quietly cause bugs.",
   sections: [
     { title: "Relational Algebra: The Engine's Native Tongue",

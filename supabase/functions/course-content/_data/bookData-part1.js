@@ -154,7 +154,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 2 ======================= */
 CHAPTERS.push({
-  num: 5, part: 1, title: "B-Tree Basics",
+  num: 5, part: 1, free: true, title: "B-Tree Basics",
   blurb: "The B-Tree is the structure most databases use to find a row fast, and here we build the idea up from scratch. We start with the simple search trees you may have seen before, see exactly why they get painfully slow once the data lives on a disk instead of in memory, and then watch how the B-Tree fixes that by packing hundreds of keys into each node and keeping itself balanced as new data is added.",
   sections: [
     { title: "Binary Search Trees — and Why Disks Reject Them",
