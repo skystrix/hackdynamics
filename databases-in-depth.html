@@ -18,7 +18,8 @@
 -->
 </head>
 <body class="gated">
-  <!-- Paywall overlay: gate.js reveals content only for premium members -->
+  <!-- Loading overlay: gate.js fetches the course, then reveals the page for
+       everyone. Free chapters render in full; locked ones show an upgrade CTA. -->
   <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
 
   <!-- Top bar: brand, global progress, TOC toggle -->
@@ -44,9 +45,10 @@
   <main id="app"></main>
 
   <!--
-    Book content is NOT loaded here anymore. It's paid material, so it's served
-    by the `course-content` Edge Function only to premium users, and gate.js
-    fetches it after verifying access, then boots the app (js/app.js).
+    Book content is NOT loaded here. It's served by the `course-content` Edge
+    Function, which returns full chapters to premium members and free chapters
+    + locked stubs to everyone else. gate.js fetches it, then boots the app
+    (js/app.js). Locked chapter bodies never reach the browser.
   -->
   <!-- Engines -->
   <script src="js/viz.js"></script>

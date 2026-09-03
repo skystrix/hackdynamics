@@ -9,7 +9,7 @@
 
 /* ======================= CHAPTER 2 ======================= */
 CHAPTERS.push({
-  num: 2, part: 1, title: "Data Models: How Databases Think About Data",
+  num: 2, part: 1, free: true, title: "Data Models: How Databases Think About Data",
   blurb: "Every database forces your data into a particular shape, and that choice quietly decides which questions are easy to answer and which are painful. This chapter walks through the main options, such as tables, documents, simple key-value pairs, graphs, time series, and the newer vector databases used for AI, and explains what each is good and bad at. The goal is to help you pick the right shape for the job instead of forcing everything into the one you happen to already know.",
   sections: [
     { title: "The Relational Model & SQL",

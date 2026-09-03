@@ -1,59 +1,70 @@
 /* ==========================================================================
-   gate.js — the course paywall. Runs on the course page, decides whether to
-   reveal the content, send the visitor to log in, or show an upgrade wall.
+   gate.js — course loader + upgrade flow.
 
-   Reveals content ONLY for a signed-in user whose server-side profile has
-   is_premium = true. (Remember: this gates the UI; the static JS content is
-   still directly fetchable — see auth.js for why real protection is a backend
-   concern for the payments step.)
+   The course page is now open to everyone: we always fetch from the
+   course-content Edge Function (with the signed-in user's token when there is
+   one, without it otherwise) and reveal the page. What comes back is already
+   gated server-side — premium members get every chapter, everyone else gets
+   the free chapters in full plus locked stubs for the rest. So there is no
+   whole-page paywall here anymore; the lock lives on individual chapters, and
+   app.js calls HDGate.renderUpgrade() to draw the upgrade CTA inside a locked
+   chapter. (Real protection is the Edge Function — see its header.)
    ========================================================================== */
 (function () {
   "use strict";
 
   var gate = document.getElementById("auth-gate");
   var cfg = window.HD_CONFIG;
+  var STATUS = null; // resolved auth status, shared with app.js via HDGate
 
   function show(html) { if (gate) gate.innerHTML = html; }
 
   function reveal(status) {
-    if (gate) gate.parentNode.removeChild(gate);
+    if (gate && gate.parentNode) gate.parentNode.removeChild(gate);
     document.body.classList.remove("gated");
-    // Populate the top-bar account chip with a log-out control.
-    var slot = document.getElementById("account");
-    if (slot && status) {
-      var email = (status.profile && status.profile.email) ||
-        (status.session && status.session.user && status.session.user.email) || "";
-      slot.innerHTML = '<span title="' + escapeHtml(email) + '">✦ premium</span>' +
-        '<button id="account-logout">Log out</button>';
-      var out = document.getElementById("account-logout");
-      if (out) out.addEventListener("click", function () {
-        HDAuth.signOut().then(function () { location.replace(cfg.LOGIN_URL); });
-      });
-    }
+    accountChip(status);
   }
 
-  // Fetch the paid course text from the course-content Edge Function using the
-  // signed-in user's token, and hand it to app.js. The server returns it only
-  // for premium members, so this is also where a lapsed/forged session fails.
-  function loadCourse(session) {
-    return fetch(cfg.SUPABASE_URL + "/functions/v1/course-content", {
-      headers: { "Authorization": "Bearer " + session.access_token }
-    }).then(function (res) {
-      if (!res.ok) throw new Error("Could not load course content (" + res.status + ").");
-      return res.json();
-    }).then(function (data) {
-      window.PARTS = data.PARTS;
-      window.CHAPTERS = data.CHAPTERS;
+  // Top-bar account chip: log-in link for guests, email + log-out otherwise,
+  // with a ✦ premium marker for members.
+  function accountChip(status) {
+    var slot = document.getElementById("account");
+    if (!slot) return;
+    if (!status || !status.session) {
+      slot.innerHTML = '<a href="' + loginHref() + '">Log in</a>';
+      return;
+    }
+    var email = (status.profile && status.profile.email) ||
+      (status.session.user && status.session.user.email) || "";
+    slot.innerHTML =
+      (status.isPremium ? '<span title="' + escapeHtml(email) + '">✦ premium</span>' : "") +
+      '<button id="account-logout">Log out</button>';
+    var out = document.getElementById("account-logout");
+    if (out) out.addEventListener("click", function () {
+      HDAuth.signOut().then(function () { location.reload(); });
     });
   }
 
-  function loginBtn(label) {
-    return '<a class="gate-btn" href="' + cfg.LOGIN_URL +
-      '?next=' + encodeURIComponent(location.pathname.split("/").pop() + location.hash) +
-      '">' + (label || "Log in") + '</a>';
+  // Fetch the course text. Passes the token when signed in so premium members
+  // get the full payload; a guest request goes tokenless and gets the preview.
+  function loadCourse(session) {
+    var headers = session ? { "Authorization": "Bearer " + session.access_token } : {};
+    return fetch(cfg.SUPABASE_URL + "/functions/v1/course-content", { headers: headers })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Could not load course content (" + res.status + ").");
+        return res.json();
+      }).then(function (data) {
+        window.PARTS = data.PARTS;
+        window.CHAPTERS = data.CHAPTERS;
+      });
   }
 
-  // Not wired up yet: tell the developer, don't pretend to be secure.
+  function loginHref(nextHash) {
+    return cfg.LOGIN_URL + "?next=" +
+      encodeURIComponent(location.pathname.split("/").pop() + (nextHash || location.hash));
+  }
+
+  // Not wired up yet: tell the developer, don't pretend to work.
   if (!window.HDAuth || !HDAuth.isConfigured()) {
     show(
       '<div class="gate-card">' +
@@ -62,78 +73,75 @@
         '<p>Sign-in isn\'t configured yet. Add your Supabase keys in ' +
         '<code>js/supabase-config.js</code> and run the SQL in ' +
         '<code>SUPABASE_SETUP.md</code>, then reload.</p>' +
-        '<p class="gate-fine">Until then the paywall stays closed.</p>' +
       '</div>'
     );
     return;
   }
 
-  show('<div class="gate-card"><div class="gate-spinner"></div><p>Checking your access…</p></div>');
+  show('<div class="gate-card"><div class="gate-spinner"></div><p>Loading the course…</p></div>');
 
   HDAuth.status().then(function (st) {
-    if (!st.session) {
-      // Not logged in → straight to the login page, remembering where to return.
-      location.replace(cfg.LOGIN_URL +
-        "?next=" + encodeURIComponent(location.pathname.split("/").pop() + location.hash));
-      return;
-    }
-    if (st.isPremium) {
-      show('<div class="gate-card"><div class="gate-spinner"></div><p>Unlocking the course…</p></div>');
-      loadCourse(st.session).then(function () {
-        reveal(st);
-        window.HDApp.boot();
-      }).catch(function (err) {
-        show('<div class="gate-card"><h1>Couldn\'t load the course</h1>' +
-          '<p>' + escapeHtml(err.message || "Please try again.") + '</p>' +
-          '<div class="gate-links"><a href="#" id="gate-retry">Retry</a>' +
-          '<a href="index.html">Home</a></div></div>');
-        var r = document.getElementById("gate-retry");
-        if (r) r.addEventListener("click", function (e) { e.preventDefault(); location.reload(); });
-      });
-      return;
-    }
-
-    // Logged in, but hasn't paid — the upgrade wall. Two plans, one button each.
-    var email = (st.profile && st.profile.email) || (st.session.user && st.session.user.email) || "";
-    var plans = (cfg.PLANS) || {};
-    var monthly = plans.monthly || { label: "\u20b9299 / month" };
-    var lifetime = plans.lifetime || { label: "\u20b91999 one-time" };
-    show(
-      '<div class="gate-card">' +
-        '<div class="gate-brand">HACK<b>DYNAMICS</b></div>' +
-        '<span class="gate-tag">PREMIUM COURSE</span>' +
-        '<h1>Databases in Depth</h1>' +
-        '<p>You\'re signed in as <strong>' + escapeHtml(email) + '</strong>, but this ' +
-        'course is for premium members. Either plan unlocks all 32 chapters, every ' +
-        'interactive machine, and the full build-your-own-database capstone.</p>' +
-        '<button class="gate-btn" id="gate-monthly" data-plan="monthly">Subscribe — ' +
-        escapeHtml(monthly.label) + '</button>' +
-        '<button class="gate-btn gate-btn-alt" id="gate-lifetime" data-plan="lifetime">Buy once — ' +
-        escapeHtml(lifetime.label) + '</button>' +
-        '<p class="gate-fine" id="gate-pay-msg"></p>' +
-        '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a>' +
-        '<a href="#" id="gate-logout">Log out</a></div>' +
-      '</div>'
-    );
-    ["gate-monthly", "gate-lifetime"].forEach(function (id) {
-      var b = document.getElementById(id);
-      if (b) b.addEventListener("click", function () {
-        startCheckout(st, b, b.getAttribute("data-plan"));
-      });
-    });
-    var out = document.getElementById("gate-logout");
-    if (out) out.addEventListener("click", function (e) {
-      e.preventDefault();
-      HDAuth.signOut().then(function () { location.replace(cfg.LOGIN_URL); });
+    STATUS = st;
+    return loadCourse(st.session).then(function () {
+      reveal(st);
+      window.HDApp.boot();
     });
   }).catch(function (err) {
     show(
-      '<div class="gate-card"><h1>Something went wrong</h1>' +
-      '<p>' + escapeHtml(err.message || "Could not verify your access.") + '</p>' +
-      '<div class="gate-links">' + loginBtn("Try logging in") +
+      '<div class="gate-card"><h1>Couldn\'t load the course</h1>' +
+      '<p>' + escapeHtml(err.message || "Please try again.") + '</p>' +
+      '<div class="gate-links"><a href="#" id="gate-retry">Retry</a>' +
       '<a href="index.html">Home</a></div></div>'
     );
+    var r = document.getElementById("gate-retry");
+    if (r) r.addEventListener("click", function (e) { e.preventDefault(); location.reload(); });
   });
+
+  /* ---------- upgrade CTA for a locked chapter (called by app.js) ---------- */
+  // Renders into `container`. Guests are pointed to log in first (checkout needs
+  // an account); signed-in non-members get the two plan buttons + Razorpay.
+  function renderUpgrade(container) {
+    if (!container) return;
+    var st = STATUS;
+    var plans = (cfg.PLANS) || {};
+    var monthly = plans.monthly || { label: "₹299 / month" };
+    var lifetime = plans.lifetime || { label: "₹1999 one-time" };
+
+    if (!st || !st.session) {
+      container.innerHTML =
+        '<div class="gate-card gate-inline">' +
+          '<span class="gate-tag">PREMIUM CHAPTER</span>' +
+          '<h1>This chapter is for members</h1>' +
+          '<p>The first three chapters are free. Log in or create a free ' +
+          'account to unlock all 32 chapters, every interactive machine, and ' +
+          'the full build-your-own-database capstone.</p>' +
+          '<a class="gate-btn" href="' + loginHref("#/") + '">Log in to unlock</a>' +
+          '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a></div>' +
+        '</div>';
+      return;
+    }
+
+    var email = (st.profile && st.profile.email) || (st.session.user && st.session.user.email) || "";
+    container.innerHTML =
+      '<div class="gate-card gate-inline">' +
+        '<span class="gate-tag">PREMIUM CHAPTER</span>' +
+        '<h1>Unlock the full course</h1>' +
+        '<p>You\'re signed in as <strong>' + escapeHtml(email) + '</strong>. ' +
+        'Either plan unlocks all 32 chapters, every interactive machine, and ' +
+        'the full build-your-own-database capstone.</p>' +
+        '<button class="gate-btn" data-plan="monthly">Subscribe — ' + escapeHtml(monthly.label) + '</button>' +
+        '<button class="gate-btn gate-btn-alt" data-plan="lifetime">Buy once — ' + escapeHtml(lifetime.label) + '</button>' +
+        '<p class="gate-fine" id="gate-pay-msg"></p>' +
+        '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a></div>' +
+      '</div>';
+    container.querySelectorAll("[data-plan]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        startCheckout(st, container, b, b.getAttribute("data-plan"));
+      });
+    });
+  }
+
+  window.HDGate = { renderUpgrade: renderUpgrade, status: function () { return STATUS; } };
 
   /* ---------- Razorpay Standard Checkout ----------------------------------
      The browser names the PLAN, never the price or the payer: create-order
@@ -142,9 +150,9 @@
      with whichever came back and hand the signed result back for verification.
      The razorpay-webhook is the backstop if the browser dies mid-payment, and
      the only thing that extends a subscription on renewal. */
-  function startCheckout(st, btn, plan) {
-    var msg = document.getElementById("gate-pay-msg");
-    var buttons = [].slice.call(document.querySelectorAll("[data-plan]"));
+  function startCheckout(st, container, btn, plan) {
+    var msg = container.querySelector("#gate-pay-msg");
+    var buttons = [].slice.call(container.querySelectorAll("[data-plan]"));
     function say(text) { if (msg) msg.textContent = text || ""; }
     // Disable BOTH plan buttons while one checkout is in flight — two open
     // Razorpay modals would race to grant the same account two products.
@@ -189,7 +197,7 @@
           razorpay_signature: res.razorpay_signature
         }).then(function () {
           btn.textContent = "Unlocked — loading your course…";
-          location.reload(); // gate re-runs and now sees an active membership
+          location.reload(); // reloads with a premium token → full payload
         }).catch(function (err) {
           // Payment went through; only our confirmation failed. The webhook
           // still grants premium, so tell them to reload rather than re-pay.

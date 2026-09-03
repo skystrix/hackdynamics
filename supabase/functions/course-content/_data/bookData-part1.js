@@ -19,7 +19,7 @@ window.CHAPTERS = [];
 
 /* ======================= CHAPTER 1 ======================= */
 CHAPTERS.push({
-  num: 1, part: 1, title: "Introduction and Overview",
+  num: 1, part: 1, free: true, title: "Introduction and Overview",
   blurb: "Start here. We'll look at what a database really is on the inside: not the SQL you type, but the layers your query passes through to get answered, from the part that talks to your app all the way down to the part that reads and writes the disk. Then you'll meet three simple questions to ask about any database, such as whether it keeps data sorted, that turn out to explain how almost every storage engine works.",
   sections: [
     { title: "DBMS Architecture", viz: "dbmsArch", vizTitle: "Anatomy of a DBMS",
