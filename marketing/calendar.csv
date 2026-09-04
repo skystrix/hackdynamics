@@ -1,0 +1,105 @@
+day,date,platform,format,pillar,topic,hook,cta
+1,2026-09-07,X,diagram post,db-internals,DBMS layers (ch1),"Your query passes through 6 layers before it touches disk. Most engineers can name 2.",none
+1,2026-09-07,X,poll,distributed,Quorum R+W (ch17),"N=5 replicas, W=2, R=2. You write, then read — and get the OLD value. Broken?",answer in 4h
+1,2026-09-07,LinkedIn,text post,career,The follow-up question,"The DB round isn't about the question. It's about the follow-up.",link in comments → free ch5
+1,2026-09-07,Instagram,reel,db-internals,Kill -9 WAL demo (ch8),"I killed a database mid-write. It lost nothing.",8-question challenge in bio
+2,2026-09-08,X,diagram post,db-internals,B-Tree fanout math (ch5),"A 4KB page holds ~250 keys. log₂₅₀(1 billion) ≈ 3.7. That's the whole reason B-Trees exist.",none
+2,2026-09-08,X,thread,db-internals,Thread 1: why every DB uses a B-Tree (ch5),"A binary search tree on disk needs 30 reads to find one row in a billion. A B-Tree needs 4 🧵",last tweet → free ch5
+2,2026-09-08,LinkedIn,document,db-internals,Carousel: 6 layers of a SELECT (ch1),"Your query passes through 6 layers before it touches disk.",free ch1
+2,2026-09-08,Instagram,carousel,db-internals,6 layers of a SELECT (ch1),"Your query passes through 6 layers before it touches disk.",save + URL on last slide
+3,2026-09-09,X,sim clip,db-internals,B-Tree split simulation (ch5),"This is what happens inside the index on every INSERT that overflows a page.",none
+3,2026-09-09,X,diagram post,first-principles,Slotted pages vs fixed records (ch6),"Every tutorial: 'rows are stored in a table.' Actually: a page has a slot directory at the front and cells growing backward from the end. Here's why.",none
+3,2026-09-09,LinkedIn,text post,db-internals,WAL before ack (ch8),"The database said 'committed'. The data pages were never written. Nothing was lost. This one idea is half of storage engines.",link in comments → free ch8
+3,2026-09-09,Instagram,reel,first-principles,Every tutorial gets B-Trees wrong (ch5),"This explanation is useless.",challenge in bio
+4,2026-09-10,X,poll answer,distributed,Quorum answer (ch17),"Answer: not broken. 2+2=4 ≤ 5, so the read set and the write set never had to overlap. R+W>N is the entire rule.",free ch17 excerpt
+4,2026-09-10,X,diagram post,distributed,Overlapping quorums diagram (ch17),"R+W>N in one picture.",none
+4,2026-09-10,LinkedIn,video,db-internals,CLOCK page cache sim (ch8),"Your database has a fixed number of memory frames. Here's how it decides what to throw out — and it's not LRU.",free ch8
+4,2026-09-10,Instagram,quiz reel,career,Quiz: why is INSERT slower with more indexes (ch5),"Interview question. You have 3 seconds.",challenge in bio
+5,2026-09-11,X,build in public,pocketdb,What I built this week (ch27),"PocketDB week 1: a pager that reads and writes 4KB pages from an empty file. ~120 lines. Here's the header layout.",none
+5,2026-09-11,X,diagram post,db-internals,Tombstones in LSM (ch10),"An LSM-Tree can't delete anything. It writes a tombstone and lets compaction do the killing.",none
+5,2026-09-11,LinkedIn,thought leadership,first-principles,Text beats video for systems,"Unpopular in edtech: video is the wrong medium for database internals.",free ch1
+5,2026-09-11,Instagram,carousel,db-internals,LSM-Trees: how Cassandra writes so fast (ch10),"They never update a file. Ever.",save + URL
+6,2026-09-12,X,sim clip,db-internals,LSM memtable flush + compaction (ch10),"Watch a memtable flush into an SSTable and then get compacted away.",none
+6,2026-09-12,Instagram,reel,distributed,Old value not a bug (ch17),"5 replicas. Write to 2. Success. Read from 2. Old value.",challenge in bio
+7,2026-09-13,X,community,community,What clicked for you?,"What's the database internals concept that finally clicked for you — and what made it click?",none
+7,2026-09-13,Instagram,static,first-principles,Quote card (ch29),"Durability is owed at commit, not before.",none
+8,2026-09-14,X,diagram post,db-internals,ARIES three passes (ch8),"Crash recovery in 3 passes: analysis, redo, undo. Redo replays EVEN the transactions you're about to undo. Here's why.",none
+8,2026-09-14,X,poll,db-internals,Bloom filter poll (ch10),"A Bloom filter returns all-ones for key K. What do we know?",answer in 4h
+8,2026-09-14,LinkedIn,text post,career,DDIA didn't stick until I built one,"DDIA is the best book on databases. It's also why most engineers *think* they understand replication.",link in comments → free ch8
+8,2026-09-14,Instagram,reel,db-internals,ARIES crash simulator (ch8),"Crash. Restart. Replay. Watch it.",challenge in bio
+9,2026-09-15,X,diagram post,distributed,Raft one leader per term (ch20),"Why can a Raft term never have two leaders? One vote per node per term + majorities must overlap. Arithmetic, not luck.",none
+9,2026-09-15,X,thread,db-internals,Thread 2: commit acknowledged then power out (ch8),"Your database acknowledged the commit. Then the power went out. The pages were never written. You lost nothing 🧵",last tweet → free ch8
+9,2026-09-15,LinkedIn,document,career,30-day DB interview plan,"A 30-day plan for the DBMS + system design rounds, mapped to what interviewers actually follow up on.",free chapters link
+9,2026-09-15,Instagram,carousel,career,5 interview questions with the why,"5 database interview questions. Each with the *why*.",save + URL
+10,2026-09-16,X,sim clip,distributed,Raft election + log replication (ch20),"A Raft election, start to finish, in 12 seconds.",none
+10,2026-09-16,X,diagram post,first-principles,Isolation levels are about anomalies not locks (ch8),"Every tutorial lists isolation levels. None tell you they're defined by which *anomalies* you tolerate. Dirty read, non-repeatable, phantom — one diagram.",none
+10,2026-09-16,LinkedIn,text post,db-internals,Lock queue behind a long transaction (ch8),"We restarted the database three times before someone asked what the lock queue looked like.",link in comments → pricing
+10,2026-09-16,Instagram,reel,pocketdb,PocketDB pager in 30s (ch27),"A database starts as an empty file and a page size.",challenge in bio
+11,2026-09-17,X,poll answer,db-internals,Bloom answer (ch10),"All-ones means PROBABLY present. Zeros are definitive absence. One-sided error is the whole trick.",free ch10 excerpt
+11,2026-09-17,X,diagram post,db-internals,Write vs read amplification table (ch10),"B-Tree vs LSM in one table: write amp, read amp, space amp. Pick your tax.",none
+11,2026-09-17,LinkedIn,video,distributed,Two Generals sim (ch14),"Two armies, one messenger, no way to agree. This is why every distributed system is built on timeouts.",free ch14 excerpt
+11,2026-09-17,Instagram,quiz reel,distributed,Quiz: Raft two leaders (ch20),"Can a Raft term have two leaders? 3 seconds.",challenge in bio
+12,2026-09-18,X,build in public,pocketdb,Slotted pages this week (ch28),"PocketDB week 2: slotted pages. Delete leaves a hole; defragment compacts. Here's the before/after hex dump.",none
+12,2026-09-18,X,diagram post,db-internals,Copy-on-write B-Tree (ch9),"LMDB never overwrites a page. Ever. Copy-on-write B-Trees in one diagram.",none
+12,2026-09-18,LinkedIn,thought leadership,career,Interview prep sites teach the wrong thing,"Interview-prep sites teach the answer. Interviewers grade the derivation.",free ch5
+12,2026-09-18,Instagram,carousel,db-internals,Page cache: why not LRU (ch8),"Your database doesn't use LRU. Here's the hand on the clock.",save + URL
+13,2026-09-19,X,sim clip,db-internals,CLOCK eviction sim (ch8),"CLOCK eviction: one bit per page and a sweeping hand. Cheaper than LRU, nearly as good.",none
+13,2026-09-19,Instagram,reel,db-internals,Bloom filter in 30s (ch10),"A data structure that can say 'no' for sure and 'yes' only probably.",challenge in bio
+14,2026-09-20,X,community,coming-next,Which internals next?,"Networking in Depth is being built. Which mechanism do you want opened up first: TCP congestion control, TLS handshake, or DNS resolution?",waitlist
+14,2026-09-20,Instagram,static,db-internals,Diagram card: R+W>N,"R + W > N. That's the rule.",none
+15,2026-09-21,X,diagram post,db-internals,Nested loop vs hash join (ch12),"12 rows joined to 100M rows with an index: nested loop, 12 probes. Hashing 100M rows to serve 12 lookups is the most common planner mistake.",none
+15,2026-09-21,X,poll,db-internals,Optimizer misestimate poll (ch12),"Optimizer estimated 40 rows, got 2.1 million. Most likely cause?",answer in 4h
+15,2026-09-21,LinkedIn,text post,career,The senior/staff dividing line,"Mid-level: 'add an index.' Senior: 'which columns, in which order, and what does it cost every INSERT?'",link in comments → free ch5
+15,2026-09-21,Instagram,reel,db-internals,Hash join animation (ch12),"Build phase. Probe phase. That's a hash join.",challenge in bio
+16,2026-09-22,X,diagram post,db-internals,Cardinality independence assumption (ch12),"The planner multiplies selectivities as if predicates were independent. city='Mumbai' AND country='India' is not independent. Everything above it goes wrong.",none
+16,2026-09-22,X,thread,distributed,Thread 3: quorum explanation (ch17),"You wrote to 2 of 5 replicas. Read from 2. Got the old value. Not a bug — here's the arithmetic Dynamo runs on 🧵",last tweet → ch17
+16,2026-09-22,LinkedIn,document,db-internals,Carousel: reading EXPLAIN like an engineer (ch12),"EXPLAIN ANALYZE has two numbers per row. The gap between them is your whole problem.",free ch12 excerpt
+16,2026-09-22,Instagram,carousel,db-internals,Reading EXPLAIN (ch12),"Estimated rows vs actual rows. The gap is your whole problem.",save + URL
+17,2026-09-23,X,sim clip,distributed,Bully election sim (ch16),"Bully election: the highest ID always wins, and here's the message storm that proves it.",none
+17,2026-09-23,X,diagram post,first-principles,Linearizable vs sequential (ch17),"'Strong consistency' is not a thing. Linearizability is: once anyone sees a write, nobody may see its absence. Here's the timeline that separates it from sequential.",none
+17,2026-09-23,LinkedIn,text post,db-internals,Retries without regret (ch26),"Your retry just charged the customer twice. The database didn't fail — the ack got lost. Idempotency keys exist for this exact moment.",link in comments → pricing
+17,2026-09-23,Instagram,reel,distributed,Two Generals (ch14),"Two armies. One valley. No way to agree.",challenge in bio
+18,2026-09-24,X,poll answer,db-internals,Optimizer answer (ch12),"Answer: correlated predicates multiplied as independent, or stale stats. Run ANALYZE — and when that doesn't fix it, you've found a correlation.",free ch12 excerpt
+18,2026-09-24,X,diagram post,db-internals,Keyset vs OFFSET pagination (ch26),"OFFSET 100000 reads 100,000 rows to throw them away. Keyset pagination reads 20. One diagram.",none
+18,2026-09-24,LinkedIn,video,distributed,Gossip dissemination sim (ch18),"How 1,000 nodes learn a fact without anyone broadcasting: gossip, in 15 seconds.",free ch18 excerpt
+18,2026-09-24,Instagram,quiz reel,db-internals,Quiz: tombstone delete (ch10),"How does an LSM-Tree delete a key from an immutable file? 3 seconds.",challenge in bio
+19,2026-09-25,X,build in public,pocketdb,B+Tree split this week (ch28),"PocketDB week 3: the B⁺-tree split. 40 lines I rewrote 4 times. The bug was in which half keeps the separator key.",none
+19,2026-09-25,X,diagram post,db-internals,Connection pool lifecycle (ch26),"A Postgres connection costs a process fork and ~10MB. That's why your pool size matters more than your query.",none
+19,2026-09-25,LinkedIn,thought leadership,coming-next,Why the next course is networking,"After databases, the second thing every backend engineer pretends to understand: the network. Networking in Depth is being built. Here's the chapter list.",waitlist
+19,2026-09-25,Instagram,carousel,db-internals,Connection pools (ch26),"Every connection is a process. Here's what that costs.",save + URL
+20,2026-09-26,X,sim clip,db-internals,Slotted page insert/delete/defrag (ch6),"Insert, delete, defragment — a slotted page doing all three.",none
+20,2026-09-26,Instagram,reel,pocketdb,B+Tree split in PocketDB (ch28),"The bug that took me 4 rewrites.",challenge in bio
+21,2026-09-27,X,community,career,Interview debrief thread,"Reply with the hardest database question you've been asked in an interview. I'll answer the top 5 with the mechanism.",none
+21,2026-09-27,Instagram,static,first-principles,Quote card (ch8),"Repeat history. Then undo the losers.",none
+22,2026-09-28,X,diagram post,distributed,2PC blocking problem (ch19),"Two-phase commit has a coordinator. If it dies after PREPARE, every participant is stuck holding locks. Forever. Here's the diagram.",none
+22,2026-09-28,X,poll,distributed,Paxos prepare poll (ch20),"A Paxos proposer wins prepare and finds an acceptor already accepted value v at a lower ballot. It must…",answer in 4h
+22,2026-09-28,LinkedIn,text post,career,The question that gets the offer,"'What is an index?' Everyone. 'Why is INSERT slower with more indexes?' Half. 'What happens in the B-Tree on that INSERT?' One person.",link in comments → free ch5
+22,2026-09-28,Instagram,reel,distributed,2PC failure injection sim (ch19),"Kill the coordinator after PREPARE. Watch everyone freeze.",challenge in bio
+23,2026-09-29,X,diagram post,db-internals,MVCC snapshot visibility (ch30),"MVCC: readers never block writers. Every row carries a create-version and a delete-version. Visibility is a comparison, not a lock.",none
+23,2026-09-29,X,thread,pocketdb,Thread 4: I built a database from an empty file (ch27–32),"6 chapters, ~2000 lines, survives kill -9. What surprised me at every layer 🧵",last tweet → pricing
+23,2026-09-29,LinkedIn,document,distributed,Carousel: consensus in 10 slides (ch20),"Paxos and Raft solve the same problem. Here's the one safety rule they share.",free ch20 excerpt
+23,2026-09-29,Instagram,carousel,distributed,Consensus in 10 slides (ch20),"One safety rule. Every consensus algorithm.",save + URL
+24,2026-09-30,X,sim clip,pocketdb,WAL replay crash simulator (ch29),"kill -9 mid-transaction, restart, replay. PocketDB's WAL doing its one job.",none
+24,2026-09-30,X,diagram post,first-principles,fsync only on commit (ch29),"PocketDB fsyncs the WAL only on COMMIT, never on every put. Losing un-fsynced puts of an open transaction is *correct*: nothing was promised.",none
+24,2026-09-30,LinkedIn,text post,db-internals,Backups: the only test is a restore (ch22),"You don't have backups. You have files you hope are backups. The only test is a restore.",link in comments → pricing
+24,2026-09-30,Instagram,reel,db-internals,MVCC visibility stepper (ch30),"Readers never wait. Here's the trick.",challenge in bio
+25,2026-10-01,X,poll answer,distributed,Paxos answer (ch20),"Answer: propose v, the highest-ballot value seen. Re-proposing possibly-chosen values is THE safety rule.",free ch20 excerpt
+25,2026-10-01,X,diagram post,db-internals,Merkle anti-entropy (ch18),"How Cassandra finds the 3 rows out of 3 billion that differ between replicas: a Merkle tree and log(N) comparisons.",none
+25,2026-10-01,LinkedIn,video,db-internals,Consistent hashing ring (ch21),"Add one node. Only 1/N of the keys move. That's the ring.",free ch21 excerpt
+25,2026-10-01,Instagram,quiz reel,db-internals,Quiz: WAL fsync on commit only (ch29),"The WAL only fsyncs on COMMIT. Why is losing the rest safe? 3 seconds.",challenge in bio
+26,2026-10-02,X,build in public,pocketdb,MVCC this week (ch30),"PocketDB week 4: MVCC. Transactions that don't wait. The visibility check is 6 lines. Here they are.",none
+26,2026-10-02,X,diagram post,db-internals,Zero-downtime migration expand/contract (ch22),"Rename a column without downtime: expand, backfill, switch, contract. Four deploys, zero locks held long.",none
+26,2026-10-02,LinkedIn,thought leadership,first-principles,Benchmarks: how numbers lie (ch25),"Every database benchmark you've seen was run on a warm cache. Here's what p99 looks like cold.",free ch25 excerpt
+26,2026-10-02,Instagram,carousel,db-internals,Zero-downtime migrations (ch22),"Rename a column. Zero downtime. Four steps.",save + URL
+27,2026-10-03,X,sim clip,db-internals,Consistent hashing ring sim (ch21),"Adding a node to a consistent-hashing ring. Watch how few keys move.",none
+27,2026-10-03,Instagram,reel,db-internals,Merkle tree diff (ch18),"3 billion rows. 3 differ. Found in 30 comparisons.",challenge in bio
+28,2026-10-04,X,community,community,Month 1 numbers,"30 days of posting internals daily. Here are the honest numbers: followers, emails, paying members, what worked, what didn't.",none
+28,2026-10-04,Instagram,static,db-internals,Diagram card: B-Tree height,"height = log₂₅₀(N)",none
+29,2026-10-05,X,diagram post,db-internals,Choosing a database: the decision framework (ch25),"'Which database should I use?' is the wrong question. 'What's my read/write ratio, consistency need, and access pattern?' is the diagram.",none
+29,2026-10-05,X,poll,db-internals,Join algorithm poll (ch12),"12-row result joined to a 100M-row indexed table. Best join?",answer in 4h
+29,2026-10-05,LinkedIn,text post,career,What I'd tell a 2-YOE backend engineer,"Stop learning frameworks for 90 days. Learn what the database does with your query. Here's the order I'd learn it in.",link in comments → free ch1
+29,2026-10-05,Instagram,reel,db-internals,Database picker sim (ch25),"Tell it your workload. It tells you the database.",challenge in bio
+30,2026-10-06,X,diagram post,coming-next,Networking teaser: TCP handshake,"Networking in Depth, chapter 1 preview: the three-way handshake is actually a four-way handshake with a shortcut. Diagram.",waitlist
+30,2026-10-06,X,thread,db-internals,Thread 5: the optimizer estimated 40 rows (ch12),"Most slow queries aren't slow because of the query. They're slow because the planner guessed wrong 🧵",last tweet → ch12
+30,2026-10-06,LinkedIn,document,coming-next,Networking in Depth chapter list,"The 20 chapters of Networking in Depth — and the production incident each one would have prevented.",waitlist
+30,2026-10-06,Instagram,carousel,coming-next,Networking in Depth preview,"Next: the network, opened up.",waitlist in bio
