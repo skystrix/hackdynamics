@@ -182,6 +182,7 @@
     box-shadow: var(--shadow-1);
     transform: translateY(-3px);
   }
+  .course-featured + .course-featured { margin-top: 22px; }
   .cf-body { padding: 42px 44px 38px; }
   .tag {
     display: inline-block;
@@ -362,6 +363,7 @@
     .cf-art .pulse { animation: none; }
   }
 </style>
+<script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
 </head>
 <body>
 
@@ -438,23 +440,59 @@
       </div>
     </a>
 
+    <a class="course-featured" href="rag-in-depth.html">
+      <div class="cf-body">
+        <span class="tag">NEW — CHAPTERS 1–30 LIVE</span>
+        <h3>RAG In Depth</h3>
+        <p class="desc">Everything between a question and a grounded answer. Chunking and
+           embeddings, the inverted index and BM25, <strong>HNSW, IVF and product
+           quantization</strong>, hybrid search and rank fusion, reranking, context
+           assembly, agentic and graph retrieval — then how to actually measure whether
+           any of it works. <strong>Built from the papers,</strong> not from blog posts.</p>
+        <div class="stats">
+          <span class="stat">30 chapters</span>
+          <span class="stat">262 diagrams</span>
+          <span class="stat">329 quiz questions</span>
+        </div>
+        <span class="cf-go">OPEN THE PIPELINE <span class="arr">→</span></span>
+      </div>
+      <div class="cf-art" aria-hidden="true">
+        <!-- the pipeline motif: question → retriever → chunks → answer -->
+        <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
+          <line x1="150" y1="52" x2="150" y2="80" stroke="#18243c" stroke-width="2"/>
+          <line x1="150" y1="110" x2="60"  y2="140" stroke="#18243c" stroke-width="2"/>
+          <line x1="150" y1="110" x2="150" y2="140" stroke="#18243c" stroke-width="2"/>
+          <line x1="150" y1="110" x2="240" y2="140" stroke="#18243c" stroke-width="2"/>
+          <line x1="60"  y1="166" x2="150" y2="188" stroke="#18243c" stroke-width="2"/>
+          <line x1="150" y1="166" x2="150" y2="188" stroke="#18243c" stroke-width="2"/>
+          <line x1="240" y1="166" x2="150" y2="188" stroke="#18243c" stroke-width="2"/>
+          <rect x="106" y="26" width="88" height="28" rx="7" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse"/>
+          <rect x="112" y="82" width="76" height="28" rx="7" fill="#101a2e" stroke="#ffd166" stroke-width="2" class="pulse d1"/>
+          <rect x="26"  y="140" width="68" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d2"/>
+          <rect x="116" y="140" width="68" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d2"/>
+          <rect x="206" y="140" width="68" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d2"/>
+          <rect x="106" y="186" width="88" height="26" rx="6" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse"/>
+        </svg>
+      </div>
+    </a>
+
     <div class="course-grid">
       <div class="course-card reveal">
-        <span class="num">02</span>
+        <span class="num">03</span>
         <span class="tag soon">IN THE WORKS</span>
         <h4>Operating Systems in Depth</h4>
         <p>Processes, schedulers, virtual memory, filesystems, and the syscall boundary —
            the machine your machine runs on.</p>
       </div>
       <div class="course-card reveal">
-        <span class="num">03</span>
+        <span class="num">04</span>
         <span class="tag soon">IN THE WORKS</span>
         <h4>Networking in Depth</h4>
         <p>From voltage on a wire to HTTP/3 — routing, congestion, TLS, and why the
            internet works anyway.</p>
       </div>
       <div class="course-card reveal">
-        <span class="num">04</span>
+        <span class="num">05</span>
         <span class="tag soon">IN THE WORKS</span>
         <h4>Compilers in Depth</h4>
         <p>Lexers, parsers, type checkers, IRs, and optimizers — the road from source

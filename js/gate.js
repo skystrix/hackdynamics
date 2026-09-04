@@ -15,6 +15,14 @@
 
   var gate = document.getElementById("auth-gate");
   var cfg = window.HD_CONFIG;
+  // Which course this shell page serves (see js/app.js). "db" is the original
+  // Databases in Depth page, which predates the field.
+  var COURSE = window.HD_COURSE || {};
+  var COURSE_KEY = COURSE.key || "db";
+  var COURSE_TITLE = COURSE.title || "Databases in Depth";
+  var UNLOCK_LINE = COURSE.unlockLine ||
+    "all 32 chapters, every interactive machine, and the full " +
+    "build-your-own-database capstone";
   var STATUS = null; // resolved auth status, shared with app.js via HDGate
 
   function show(html) { if (gate) gate.innerHTML = html; }
@@ -49,7 +57,8 @@
   // get the full payload; a guest request goes tokenless and gets the preview.
   function loadCourse(session) {
     var headers = session ? { "Authorization": "Bearer " + session.access_token } : {};
-    return fetch(cfg.SUPABASE_URL + "/functions/v1/course-content", { headers: headers })
+    return fetch(cfg.SUPABASE_URL + "/functions/v1/course-content?course=" +
+      encodeURIComponent(COURSE_KEY), { headers: headers })
       .then(function (res) {
         if (!res.ok) throw new Error("Could not load course content (" + res.status + ").");
         return res.json();
@@ -112,9 +121,8 @@
         '<div class="gate-card gate-inline">' +
           '<span class="gate-tag">PREMIUM CHAPTER</span>' +
           '<h1>This chapter is for members</h1>' +
-          '<p>The first three chapters are free. Log in or create a free ' +
-          'account to unlock all 32 chapters, every interactive machine, and ' +
-          'the full build-your-own-database capstone.</p>' +
+          '<p>Some chapters are free. Log in or create a free account to ' +
+          'unlock ' + UNLOCK_LINE + '.</p>' +
           '<a class="gate-btn" href="' + loginHref("#/") + '">Log in to unlock</a>' +
           '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a></div>' +
         '</div>';
@@ -127,8 +135,8 @@
         '<span class="gate-tag">PREMIUM CHAPTER</span>' +
         '<h1>Unlock the full course</h1>' +
         '<p>You\'re signed in as <strong>' + escapeHtml(email) + '</strong>. ' +
-        'Either plan unlocks all 32 chapters, every interactive machine, and ' +
-        'the full build-your-own-database capstone.</p>' +
+        'Either plan unlocks every course on HackDynamics, including ' +
+        UNLOCK_LINE + '.</p>' +
         '<button class="gate-btn" data-plan="monthly">Subscribe — ' + escapeHtml(monthly.label) + '</button>' +
         '<button class="gate-btn gate-btn-alt" data-plan="lifetime">Buy once — ' + escapeHtml(lifetime.label) + '</button>' +
         '<p class="gate-fine" id="gate-pay-msg"></p>' +
@@ -178,9 +186,8 @@
         : { order_id: order.order_id, amount: order.amount, currency: order.currency };
       opts.key = order.key_id || cfg.RAZORPAY_KEY_ID;
       opts.name = "HackDynamics";
-      opts.description = order.subscription_id
-        ? "Databases in Depth — monthly membership"
-        : "Databases in Depth — lifetime access";
+      opts.description = COURSE_TITLE +
+        (order.subscription_id ? " — monthly membership" : " — lifetime access");
       opts.prefill = { email: (st.profile && st.profile.email) ||
         (st.session.user && st.session.user.email) || "" };
       opts.modal = {
