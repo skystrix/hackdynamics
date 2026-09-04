@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG In Depth — Retrieval-Augmented Generation, Opened Up</title>
+<meta name="description" content="An interactive, depth-first course on Retrieval-Augmented Generation: chunking, embeddings, HNSW and IVF, hybrid search, reranking, context assembly, agentic retrieval, GraphRAG, and evaluation.">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/style.css?v=3">
+<script src="js/theme.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<!-- Razorpay Standard Checkout — used by the upgrade wall in js/gate.js -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<!--
+  Which course this shell serves. gate.js asks the course-content function for
+  it (?course=rag) and app.js keys progress and hero copy off it.
+-->
+<script>
+window.HD_COURSE = {
+  key: "rag",
+  title: "RAG In Depth",
+  heroTitle: "Inside the Retrieval Machine",
+  heroSub: "How Retrieval-Augmented Generation really works — chunking, embeddings, " +
+           "HNSW and product quantization, hybrid search and rank fusion, reranking, " +
+           "context assembly, agentic and graph retrieval, and how to measure any of it.",
+  heroCta: "Start with the machine ↓",
+  unlockLine: "every chapter, diagram, and knowledge check in RAG In Depth"
+};
+</script>
+<script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
+</head>
+<body class="gated">
+  <!-- Loading overlay: gate.js fetches the course, then reveals the page for
+       everyone. Free chapters render in full; locked ones show an upgrade CTA. -->
+  <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
+
+  <!-- Top bar: brand, global progress, TOC toggle -->
+  <header id="topbar">
+    <button id="toc-toggle" aria-label="Toggle table of contents">☰</button>
+    <a href="#/" id="brand">RAG<span>·</span>IN DEPTH</a>
+    <a href="index.html" id="home-link">← Home</a>
+    <div id="progress-wrap" title="Your journey progress">
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <span id="progress-label">0%</span>
+    </div>
+    <div id="account"></div>
+    <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
+  </header>
+
+  <!-- Sidebar: always-accessible table of contents -->
+  <nav id="toc" aria-label="Table of contents">
+    <div id="toc-inner"></div>
+  </nav>
+  <div id="toc-backdrop"></div>
+
+  <!-- Main content area: the SPA renders here -->
+  <main id="app"></main>
+
+  <!--
+    Book content is NOT loaded here. It's served by the `course-content` Edge
+    Function (?course=rag), which returns full chapters to premium members and
+    free chapters + locked stubs to everyone else.
+
+    No js/viz*.js here: this course's machines aren't built yet, and app.js
+    skips the interactive frames for machines that aren't registered.
+  -->
+  <script src="js/quiz.js"></script>
+  <script src="js/app.js?v=2"></script>
+  <!-- Paywall: must run after the DOM and HDAuth exist -->
+  <script src="js/gate.js"></script>
+</body>
+</html>
