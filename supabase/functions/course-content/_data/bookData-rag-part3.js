@@ -250,7 +250,7 @@ CHAPTERS.push({
     { type: "mc", q: "You are choosing between a semantic router and a model-classifier router for a latency-sensitive assistant. What is the substantive trade?",
       opts: ["The semantic router is more accurate but slower", "They are equivalent; only the API differs", "The semantic router costs one embedding and no generation, so it stays in the millisecond range but decides only from example utterances; the classifier reasons about descriptions and unseen phrasings at the price of a full model call before retrieval starts", "The classifier is cheaper because it needs no index"], a: 2,
       why: "Cost and capability move together. A rule router is free and covers what you thought of, a semantic router generalizes from examples for the price of an embedding, and a classifier reasons but adds the largest single latency item in a fast pipeline." },
-    { type: "blank", q: "Mapping the user's word \"Lisbon\" onto the value LIS that the column actually stores, before a filter is applied, is called ____ normalization.",
+    { type: "blank", q: "Mapping the user's word \"Lisbon\" onto the code LIS that the column actually stores, before a filter is applied, is called ____ normalization.",
       a: ["value", "entity value"],
       why: "Skip it and you generate a syntactically valid filter that matches no rows, and zero rows is not an error. Resolve against the distinct values in the column and log every filter that matched nothing." },
     { type: "mc", q: "The refund policy branches on fare class, who cancelled, and when. A user supplies none of the three. Your system retrieves the correct passage and answers with the most common branch. Which statement is right?",
