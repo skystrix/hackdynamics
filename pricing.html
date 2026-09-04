@@ -194,7 +194,7 @@
   <div class="wrap">
     <a class="brand" href="index.html">HACK<b>DYNAMICS</b></a>
     <nav>
-      <a href="index.html#courses">courses</a>
+      <a href="courses.html">courses</a>
       <a href="pricing.html">pricing</a>
       <a id="nav-auth" href="login.html">Log in</a>
       <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
@@ -230,7 +230,7 @@
 
         <ul class="features">
           <li>All 32 chapters of <strong>Databases in Depth</strong></li>
-          <li>All 27 chapters of <strong>RAG In Depth</strong></li>
+          <li>All 36 chapters of <strong>RAG In Depth</strong></li>
           <li>28 interactive machines you can drive</li>
           <li>46 diagrams and 160 quiz questions</li>
           <li>The build-your-own-database capstone in Java</li>
@@ -319,6 +319,9 @@
   var ctas = [document.getElementById("plan-cta-monthly"),
               document.getElementById("plan-cta-yearly")];
   var under = document.getElementById("plan-under");
+  // Members pick from the catalogue; non-members still go to a course page,
+  // because gate.js's upgrade wall is the only place checkout opens.
+  var coursesUrl = (window.HD_CONFIG && HD_CONFIG.COURSES_URL) || "courses.html";
   var courseUrl = (window.HD_CONFIG && HD_CONFIG.COURSE_URL) || "databases-in-depth.html";
 
   HDAuth.status().then(function (st) {
@@ -332,7 +335,7 @@
     });
 
     if (st.isPremium) {
-      ctas.forEach(function (c) { c.textContent = "Go to your course"; c.href = courseUrl; });
+      ctas.forEach(function (c) { c.textContent = "Go to your courses"; c.href = coursesUrl; });
       under.textContent = "You're already a premium member.";
     } else {
       // Both land on the course page — the gate's upgrade wall is where
