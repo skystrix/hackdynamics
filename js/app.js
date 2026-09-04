@@ -11,13 +11,21 @@
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var app = $("#app");
 
+  // Which course this shell page is. Set by the page (window.HD_COURSE);
+  // "db" is the original Databases in Depth page, which predates the field.
+  var COURSE = window.HD_COURSE || {};
+  var COURSE_KEY = COURSE.key || "db";
+  // Chapter numbers restart per course, so progress must be keyed per course.
+  // The db course keeps its original key so existing progress survives.
+  var PROGRESS_KEY = COURSE_KEY === "db" ? "dbi-progress-v3" : "hd-progress-" + COURSE_KEY;
+
   /* ---------- persistent progress (localStorage, no login needed) ---------- */
   var store = {
     read: function () {
-      try { return JSON.parse(localStorage.getItem("dbi-progress-v3")) || {}; }
+      try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; }
       catch (e) { return {}; }
     },
-    write: function (p) { localStorage.setItem("dbi-progress-v3", JSON.stringify(p)); }
+    write: function (p) { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); }
   };
   var progress = store.read();           // { visited: {chNum: true}, quiz: {chNum: score} }
   progress.visited = progress.visited || {};
@@ -41,8 +49,10 @@
   function renderTOC() {
     var html = "";
     PARTS.forEach(function (part) {
+      var chs = CHAPTERS.filter(function (c) { return c.part === part.num; });
+      if (!chs.length) return;   // a part whose chapters aren't written yet
       html += '<div class="toc-part">Part ' + part.num + " · " + part.title + "</div>";
-      CHAPTERS.filter(function (c) { return c.part === part.num; }).forEach(function (ch) {
+      chs.forEach(function (ch) {
         var cls = [];
         if (location.hash === "#/ch/" + ch.num) cls.push("active");
         if (progress.quiz[ch.num] !== undefined) cls.push("done");
@@ -112,21 +122,28 @@
   function homeView() {
     var html =
       '<div class="hero">' +
-      "<h1>Journey Into the Machine</h1>" +
-      '<p class="sub">How databases really work — storage engines, B-Trees, log-structured storage, ' +
-      "transactions, replication, and consensus — explained with living, interactive machinery. " +
-      "No login. No server. Just you and the internals.</p>" +
-      '<a class="cta" href="#/ch/1">Begin the descent ↓</a>' +
+      "<h1>" + (COURSE.heroTitle || "Journey Into the Machine") + "</h1>" +
+      '<p class="sub">' + (COURSE.heroSub ||
+        "How databases really work — storage engines, B-Trees, log-structured storage, " +
+        "transactions, replication, and consensus — explained with living, interactive machinery. " +
+        "No login. No server. Just you and the internals.") + "</p>" +
+      '<a class="cta" href="#/ch/1">' + (COURSE.heroCta || "Begin the descent ↓") + "</a>" +
       "</div>";
 
     PARTS.forEach(function (part) {
+      var chs = CHAPTERS.filter(function (c) { return c.part === part.num; });
+      if (!chs.length) return;   // a part whose chapters aren't written yet
       html += '<div class="part-head">Part ' + part.num + " — " + part.title + "</div>" +
               '<p class="part-desc">' + part.desc + "</p>" +
               '<div class="journey">';
-      CHAPTERS.filter(function (c) { return c.part === part.num; }).forEach(function (ch) {
+      chs.forEach(function (ch) {
         // Locked chapters arrive as metadata stubs (no sections/quiz), carrying
         // vizCount/quizCount instead — use those so the card still shows badges.
-        var vizCount = ch.locked ? (ch.vizCount || 0) : ch.sections.filter(function (s) { return s.viz; }).length;
+        // Machines live in the course shell's viz scripts; a course that
+        // ships none (window.VIZ absent) shows no interactive badge.
+        var vizCount = !window.VIZ ? 0
+          : ch.locked ? (ch.vizCount || 0)
+          : ch.sections.filter(function (s) { return s.viz && VIZ[s.viz]; }).length;
         var quizCount = ch.locked ? (ch.quizCount || 0) : ch.quiz.length;
         var quizDone = progress.quiz[ch.num] !== undefined;
         html += '<a class="ch-card' + (progress.visited[ch.num] ? " visited" : "") +
@@ -186,7 +203,9 @@
       html += '<section class="block">' +
               "<h2>" + sec.title + "</h2>" +
               sec.html +
-              (sec.viz
+              // A chapter may name a machine this course hasn't built yet;
+              // draw the frame only when the machine is registered.
+              (sec.viz && window.VIZ && VIZ[sec.viz]
                 ? '<div class="viz" data-viz="' + sec.viz + '">' +
                   '<div class="viz-head">INTERACTIVE — ' + (sec.vizTitle || sec.viz) + "</div>" +
                   '<div class="viz-mount"></div></div>'

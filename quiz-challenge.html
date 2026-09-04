@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Database Internals Challenge — HackDynamics</title>
+<meta name="description" content="Eight questions from inside the database machine: B-Trees, the write-ahead log, LSM tombstones, quorums, Raft. Score yourself, then get the chapters for what you missed.">
+<meta property="og:title" content="The Database Internals Challenge">
+<meta property="og:description" content="8 questions. Every answer comes with the why. Most engineers score 4.">
+<link rel="stylesheet" href="css/tokens.css">
+<script src="js/theme.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; width: 100%; }
+  .topnav { background: var(--bg-2); border-bottom: 1px solid var(--line); }
+  .topnav .wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; padding-bottom: 14px; max-width: 1020px; }
+  .brand { font-weight: 700; font-size: 16px; letter-spacing: -0.125px; color: var(--text); text-decoration: none; }
+  .brand b { color: var(--primary); }
+  nav a { font-size: 15px; font-weight: 500; color: var(--text-dim); text-decoration: none; margin-left: 26px; }
+  nav a:hover { color: var(--text); }
+  main { flex: 1; }
+  .page-head { text-align: center; padding: 64px 0 28px; }
+  .eyebrow { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--teal); margin-bottom: 14px; }
+  h1 { font-size: 40px; line-height: 1.15; letter-spacing: -0.6px; font-weight: 700; text-wrap: balance; }
+  .lede { color: var(--text-dim); font-size: 17px; margin-top: 14px; max-width: 34em; margin-left: auto; margin-right: auto; }
+  .quiz { margin: 8px 0 40px; }
+  .quiz .q-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px 20px; margin: 14px 0; box-shadow: var(--shadow-1); }
+  .quiz .q-num { font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--text-faint); }
+  .quiz .q-text { font-size: 17px; font-weight: 500; color: var(--text); margin: 6px 0 12px; }
+  .quiz .opts { display: grid; gap: 8px; }
+  .quiz .opt { text-align: left; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: var(--r-md); padding: 10px 14px; font-size: 15px; font-family: var(--sans); cursor: pointer; transition: all .15s; }
+  .quiz .opt:hover { box-shadow: var(--shadow-1); }
+  .quiz .opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .quiz .opt.sel { border-color: var(--primary); background: var(--tint-primary); }
+  .quiz .opt.correct { border-color: var(--green); background: var(--tint-green); }
+  .quiz .opt.wrong { border-color: var(--pink); background: var(--tint-red); }
+  .quiz .opt:disabled { cursor: default; }
+  .quiz .why { display: none; margin-top: 10px; padding: 10px 14px; border-left: 3px solid var(--orange); background: var(--tint-orange); border-radius: 0 var(--r-md) var(--r-md) 0; font-size: 14px; color: var(--text-secondary); }
+  .quiz .why.show { display: block; }
+  .quiz .result { margin-top: 16px; padding: 16px 20px; border-radius: var(--r-lg); text-align: center; font-size: 16px; border: 1px solid var(--line); background: var(--bg-2); }
+  .quiz .result b { color: var(--primary); font-size: 22px; }
+  /* email capture, shown after the last answer */
+  .capture { display: none; background: var(--indigo); color: #fff; border-radius: var(--r-xl); padding: 28px 28px 24px; margin-bottom: 56px; }
+  .capture.show { display: block; }
+  .capture h2 { font-size: 22px; letter-spacing: -0.3px; margin-bottom: 6px; text-wrap: balance; }
+  .capture p { color: rgba(255,255,255,.8); font-size: 15px; max-width: 40em; }
+  .capture form { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+  .capture input[type=email] { flex: 1 1 240px; font: inherit; font-size: 15px; padding: 10px 14px; border-radius: var(--r-md); border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; }
+  .capture input[type=email]::placeholder { color: rgba(255,255,255,.5); }
+  .capture input[type=email]:focus { outline: 2px solid var(--sky); outline-offset: 1px; }
+  .capture button { font: inherit; font-size: 15px; font-weight: 600; padding: 10px 18px; border-radius: var(--r-md); border: 0; background: var(--sky); color: #08142b; cursor: pointer; }
+  .capture button:hover { filter: brightness(1.05); }
+  .capture .fine { font-size: 13px; color: rgba(255,255,255,.55); margin-top: 12px; }
+  .capture .fine a { color: rgba(255,255,255,.85); }
+  .free { text-align: center; color: var(--text-dim); font-size: 15px; padding-bottom: 64px; }
+  .free a { color: var(--primary); text-decoration: none; font-weight: 500; }
+  footer { border-top: 1px solid var(--line); color: var(--text-faint); font-size: 13px; padding: 18px 0; text-align: center; }
+  @media (max-width: 560px) { h1 { font-size: 30px; } .page-head { padding-top: 40px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="index.html">HACK<b>DYNAMICS</b></a>
+    <nav><a href="databases-in-depth.html">Course</a><a href="pricing.html">Pricing</a></nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="page-head">
+      <span class="eyebrow">Database internals · 8 questions</span>
+      <h1>Can you reason from inside the machine?</h1>
+      <p class="lede">Eight questions pulled straight from <em>Databases in Depth</em>. Every answer comes with the <em>why</em>. Most engineers score 4.</p>
+    </div>
+
+    <div id="quiz" class="quiz"></div>
+
+    <section id="capture" class="capture" aria-live="polite">
+      <h2 id="capture-title">Get the chapters for what you missed</h2>
+      <p id="capture-body">One email now with the chapter for each miss, then one mechanism a week. Unsubscribe any time.</p>
+      <!-- ponytail: plain HTML POST to Buttondown; swap the action for any ESP that accepts a form post -->
+      <form action="https://buttondown.com/api/emails/embed-subscribe/CHANGE_ME" method="post" target="_blank">
+        <input type="email" name="email" placeholder="you@company.com" required autocomplete="email" aria-label="Email address">
+        <input type="hidden" name="tag" value="quiz">
+        <input type="hidden" name="metadata__score" id="f-score" value="">
+        <input type="hidden" name="metadata__missed" id="f-missed" value="">
+        <button type="submit">Send me the chapters</button>
+      </form>
+      <p class="fine">Chapters 1, 5 and 8 are free without an email: <a href="databases-in-depth.html">start reading</a>.</p>
+    </section>
+
+    <p class="free">Prefer to skip the quiz? <a href="databases-in-depth.html">Read the three free chapters</a> or <a href="pricing.html">see the full course</a>.</p>
+  </div>
+</main>
+
+<footer>© HackDynamics · hackdynamics.com</footer>
+
+<script src="js/quiz.js"></script>
+<script>
+  // Real questions from the course; `ch` is the chapter that teaches each one.
+  var QUESTIONS = [
+    { ch: 5, type: "mc", q: "Why are plain binary search trees a poor fit for disk storage?",
+      opts: ["They can't store strings", "Low fanout means many levels — and each level can cost a random disk read", "They can't be balanced", "Binary search doesn't work on sorted pages"], a: 1,
+      why: "With 2 children per node, height (and thus potential disk seeks) is log₂N; B-Trees pack hundreds of keys per page-sized node to slash the height." },
+    { ch: 5, type: "mc", q: "What happens when a B-Tree root splits?",
+      opts: ["The tree loses a level", "Data is rebalanced into the leaves", "A new root is created and the tree grows one level taller", "The database must rebuild the index"], a: 2,
+      why: "Splits propagate upward; a root split mints a fresh root above it. Growing only at the root is what keeps every leaf at the same depth." },
+    { ch: 8, type: "mc", q: "A database acknowledged a commit, then lost power before flushing the dirty pages. Why is the data safe?",
+      opts: ["Dirty pages are stored in the CPU cache", "The WAL record was forced to disk before the acknowledgment; redo replays it", "Commits block until all pages flush", "The OS journal restores the pages"], a: 1,
+      why: "Write-ahead means the log — cheap sequential I/O — is durable first; recovery's redo pass rebuilds the page changes from it." },
+    { ch: 10, type: "mc", q: "How does an LSM-Tree delete a key from an immutable SSTable?",
+      opts: ["It rewrites the SSTable without the key", "It writes a tombstone that shadows the key until compaction drops both", "It flips a deletion bit inside the table", "Deletes are unsupported"], a: 1,
+      why: "Immutable files can't be edited; the tombstone wins reconciliation against older versions, and compaction eventually makes the deletion physical." },
+    { ch: 10, type: "mc", q: "A Bloom filter probe returns all-ones for key K. What do we know?",
+      opts: ["K is certainly in the table", "K is probably in the table — but this may be a false positive", "K was deleted", "The filter is full and useless"], a: 1,
+      why: "Bloom filters have one-sided error: zeros are definitive absence, ones are only probable presence." },
+    { ch: 12, type: "mc", q: "A query joins a 12-row result against a 100M-row table with an index on the join key. Best join?",
+      opts: ["Hash join, building on the big table", "Sort-merge join", "Nested-loop join probing the index 12 times", "Cross join with a filter"], a: 2,
+      why: "Twelve index probes cost almost nothing; hashing or sorting 100M rows to serve 12 lookups is pure waste. Small outer + indexed inner = nested loop." },
+    { ch: 17, type: "mc", q: "N=5 replicas, W=2, R=2. A read right after a successful write returns the OLD value. Is the system broken?",
+      opts: ["Yes — quorums forbid this", "No — R+W=4 ≤ N=5, so read and write sets may miss each other entirely", "Yes — W must always be a majority", "No — reads always lag by design"], a: 1,
+      why: "Overlap is only guaranteed when R+W > N. With 4 ≤ 5, the two readers may both hold stale copies." },
+    { ch: 20, type: "mc", q: "Why can a Raft term never have two leaders?",
+      opts: ["The network delivers votes in order", "Each node votes at most once per term, and winning takes a majority — two majorities would share a voter", "Leaders are assigned round-robin", "Election timeouts are synchronized"], a: 1,
+      why: "One-vote-per-term plus overlapping majorities makes a second winner arithmetically impossible." }
+  ];
+
+  // Quiz.mount reports only the total; watch the option buttons to learn which chapters were missed.
+  var missed = [];
+  var root = document.getElementById("quiz");
+  root.addEventListener("click", function (e) {
+    var opt = e.target.closest(".opt");
+    if (!opt || !opt.classList.contains("wrong")) return;
+    var idx = Array.prototype.indexOf.call(root.querySelectorAll(".q-card"), opt.closest(".q-card"));
+    var ch = QUESTIONS[idx].ch;
+    if (missed.indexOf(ch) < 0) missed.push(ch);
+  });
+
+  Quiz.mount(root, QUESTIONS, function (score) {
+    missed.sort(function (a, b) { return a - b; });
+    document.getElementById("f-score").value = score;
+    document.getElementById("f-missed").value = missed.join(", ");
+    var title = document.getElementById("capture-title"), body = document.getElementById("capture-body");
+    if (score === QUESTIONS.length) {
+      title.textContent = "8/8. You think from the internals up.";
+      body.textContent = "Get one mechanism a week — the ones you haven't seen move yet: a B-Tree split, an LSM compaction, a Raft election.";
+    } else {
+      title.textContent = "You scored " + score + "/8. The misses are chapters " + missed.join(", ") + ".";
+    }
+    var cap = document.getElementById("capture");
+    cap.classList.add("show");
+    cap.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+</script>
+</body>
+</html>
