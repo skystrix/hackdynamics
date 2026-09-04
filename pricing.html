@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pricing — HackDynamics</title>
-<meta name="description" content="Two ways to pay: ₹299 per month, or ₹1999 once for lifetime access. Full access to every course: Databases in Depth and RAG In Depth, with new courses included as they ship.">
+<meta name="description" content="Launch pricing: ₹499 per month (was ₹999), or ₹2499 for a full year — the best value, 58% off monthly. Full access to every course: Databases in Depth and RAG In Depth, with new courses included as they ship.">
 <link rel="stylesheet" href="css/tokens.css">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
@@ -85,8 +85,12 @@
     box-shadow: var(--shadow-2);
     height: 100%; display: flex; flex-direction: column;
   }
-  /* The subscription is the plan we lead with. */
-  .plan.featured { border-color: var(--primary); }
+  /* The yearly plan is the one we lead with — ringed and badged, so it reads
+     as the recommendation from either card's side. */
+  .plan.featured {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--tint-primary), var(--shadow-2);
+  }
   .plan-tag {
     display: inline-block; align-self: flex-start; /* .plan is a flex column */
     font-size: 12px; font-weight: 600; letter-spacing: .125px;
@@ -94,18 +98,30 @@
     border-radius: var(--r-full); padding: 4px 10px;
     margin-bottom: 18px;
   }
+  .plan-tag.best { color: var(--on-primary); background: var(--primary); }
   .plan h2 {
     font-size: 22px; font-weight: 700; letter-spacing: -0.25px;
     color: var(--text); margin-bottom: 6px;
   }
   .plan .plan-sub { font-size: 15px; color: var(--text-dim); margin-bottom: 24px; }
-  .price { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 6px; }
   .price .amount {
     font-size: 54px; font-weight: 700; letter-spacing: -1.875px;
     line-height: 1.04; color: var(--text);
   }
   .price .per { font-size: 16px; color: var(--text-dim); }
+  /* Anchor price: what the plan costs after the launch discount ends. */
+  .price .was {
+    font-size: 22px; font-weight: 600; color: var(--text-faint);
+    text-decoration-thickness: 2px;
+  }
+  .save {
+    font-size: 12px; font-weight: 600; color: var(--green);
+    background: var(--tint-green); border-radius: var(--r-full);
+    padding: 3px 9px; white-space: nowrap;
+  }
   .price-note { font-size: 13px; color: var(--text-faint); margin-bottom: 26px; }
+  .price-note b { color: var(--text-dim); font-weight: 600; }
 
   .features { list-style: none; margin: 0 0 28px; flex: 1; }
   .features li {
@@ -131,6 +147,7 @@
   }
   .btn:hover { background: var(--primary-active); }
   .btn:active { transform: scale(.98); }
+  .btn-note { text-align: center; font-size: 12px; color: var(--text-faint); margin-top: 10px; }
   /* Sits under the two cards, not inside one. */
   .under { text-align: center; font-size: 14px; color: var(--text-dim); }
   .under a { color: var(--primary); text-decoration: none; font-weight: 500; }
@@ -189,21 +206,24 @@
   <div class="wrap">
 
     <div class="page-head">
-      <span class="eyebrow">Pricing</span>
+      <span class="eyebrow">Launch pricing — up to 58% off</span>
       <h1>Two ways to pay. Same everything.</h1>
-      <p>No tiers, no upsells, no per-course checkout. Subscribe monthly, or pay
-         once and keep it — both open every chapter and every interactive machine.</p>
+      <p>No tiers, no upsells, no per-course checkout. Take the year and save 58%,
+         or subscribe monthly — both open every chapter and every interactive machine.</p>
     </div>
 
     <div class="plans">
 
-      <div class="plan featured">
+      <!-- Monthly sits left; the yearly card is the one carrying the ring and
+           the BEST VALUE badge, so it still wins the eye. -->
+      <div class="plan">
         <span class="plan-tag">MONTHLY</span>
         <h2>Membership</h2>
         <p class="plan-sub">Everything HackDynamics publishes, while your membership is active.</p>
 
         <div class="price">
-          <span class="amount" id="monthly-price">₹299</span>
+          <s class="was" id="monthly-was">₹999</s>
+          <span class="amount" id="monthly-price">₹499</span>
           <span class="per">/ month</span>
         </div>
         <p class="price-note">Billed monthly in INR. Cancel anytime.</p>
@@ -217,29 +237,33 @@
           <li>New courses included as they ship</li>
         </ul>
 
-        <a class="btn" id="plan-cta-monthly" href="login.html">Get started</a>
+        <a class="btn" id="plan-cta-monthly" href="login.html">Start monthly</a>
+        <p class="btn-note">Cancel in one click, any time</p>
       </div>
 
-      <div class="plan">
-        <span class="plan-tag">ONE-TIME</span>
-        <h2>Lifetime access</h2>
-        <p class="plan-sub">Pay once. Keep it forever — about seven months of the monthly plan.</p>
+      <div class="plan featured">
+        <span class="plan-tag best">BEST VALUE</span>
+        <h2>1 year</h2>
+        <p class="plan-sub">A full year of everything, for less than half the monthly rate.</p>
 
         <div class="price">
-          <span class="amount" id="lifetime-price">₹1999</span>
-          <span class="per">one-time</span>
+          <s class="was" id="yearly-was">₹5988</s>
+          <span class="amount" id="yearly-price">₹2499</span>
+          <span class="per">/ year</span>
+          <span class="save">Save 58%</span>
         </div>
-        <p class="price-note">A single payment in INR. Nothing renews.</p>
+        <p class="price-note"><b>₹208 a month</b>, paid once in INR. Covers 12 months.</p>
 
         <ul class="features">
-          <li>Everything in the monthly plan</li>
-          <li>No renewals, no expiry, no cancelling</li>
-          <li>46 diagrams and 160 quiz questions</li>
-          <li>The build-your-own-database capstone in Java</li>
+          <li>Everything in the monthly plan, for 12 months</li>
+          <li>Saves ₹3,489 against twelve monthly payments</li>
+          <li>One payment — nothing to remember, nothing to cancel</li>
+          <li>28 interactive machines you can drive</li>
           <li>New courses included as they ship</li>
         </ul>
 
-        <a class="btn" id="plan-cta-lifetime" href="login.html">Buy once</a>
+        <a class="btn" id="plan-cta-yearly" href="login.html">Get the full year</a>
+        <p class="btn-note">UPI, cards, netbanking · secured by Razorpay</p>
       </div>
 
     </div>
@@ -254,7 +278,8 @@
       <div>
         <h3>Cancelling</h3>
         <p>Cancel the monthly plan whenever you like — access runs to the end of the
-           period you paid for. The one-time plan has nothing to cancel.</p>
+           period you paid for. The 1-year plan doesn't renew, so there is nothing
+           to cancel; it simply ends after twelve months.</p>
       </div>
       <div>
         <h3>Questions</h3>
@@ -280,13 +305,19 @@
 (function () {
   "use strict";
   var plans = (window.HD_CONFIG && HD_CONFIG.PLANS) || {};
-  if (plans.monthly) document.getElementById("monthly-price").textContent = plans.monthly.price;
-  if (plans.lifetime) document.getElementById("lifetime-price").textContent = plans.lifetime.price;
+  ["monthly", "yearly"].forEach(function (key) {
+    var plan = plans[key];
+    if (!plan) return;
+    document.getElementById(key + "-price").textContent = plan.price;
+    var was = document.getElementById(key + "-was");
+    if (!was) return;
+    if (plan.was) was.textContent = plan.was; else was.remove();
+  });
 
   if (!window.HDAuth || !HDAuth.isConfigured()) return; // leave defaults
   var navAuth = document.getElementById("nav-auth");
   var ctas = [document.getElementById("plan-cta-monthly"),
-              document.getElementById("plan-cta-lifetime")];
+              document.getElementById("plan-cta-yearly")];
   var under = document.getElementById("plan-under");
   var courseUrl = (window.HD_CONFIG && HD_CONFIG.COURSE_URL) || "databases-in-depth.html";
 

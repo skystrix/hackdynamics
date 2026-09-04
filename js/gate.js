@@ -113,8 +113,8 @@
     if (!container) return;
     var st = STATUS;
     var plans = (cfg.PLANS) || {};
-    var monthly = plans.monthly || { label: "₹299 / month" };
-    var lifetime = plans.lifetime || { label: "₹1999 one-time" };
+    var monthly = plans.monthly || { label: "₹499 / month" };
+    var yearly = plans.yearly || { label: "₹2499 for 1 year" };
 
     if (!st || !st.session) {
       container.innerHTML =
@@ -138,7 +138,7 @@
         'Either plan unlocks every course on HackDynamics, including ' +
         UNLOCK_LINE + '.</p>' +
         '<button class="gate-btn" data-plan="monthly">Subscribe — ' + escapeHtml(monthly.label) + '</button>' +
-        '<button class="gate-btn gate-btn-alt" data-plan="lifetime">Buy once — ' + escapeHtml(lifetime.label) + '</button>' +
+        '<button class="gate-btn gate-btn-alt" data-plan="yearly">Best value — ' + escapeHtml(yearly.label) + '</button>' +
         '<p class="gate-fine" id="gate-pay-msg"></p>' +
         '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a></div>' +
       '</div>';
@@ -187,7 +187,7 @@
       opts.key = order.key_id || cfg.RAZORPAY_KEY_ID;
       opts.name = "HackDynamics";
       opts.description = COURSE_TITLE +
-        (order.subscription_id ? " — monthly membership" : " — lifetime access");
+        (order.subscription_id ? " — monthly membership" : " — 1 year access");
       opts.prefill = { email: (st.profile && st.profile.email) ||
         (st.session.user && st.session.user.email) || "" };
       opts.modal = {
