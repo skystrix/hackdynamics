@@ -70,3 +70,6 @@ resources/RAG_In_Depth/
 
 # Local chapter preview scratch files
 _preview*.html
+
+# PocketRAG generated databases (rebuildable from the scripts)
+resources/pocketrag/*.db

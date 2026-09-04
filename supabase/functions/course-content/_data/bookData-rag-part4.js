@@ -1820,3 +1820,1950 @@ CHAPTERS.push({
       why: "Each question eliminates rather than scores, and the order matters: size decides whether the question is interesting at all, an existing stack ends the procedure early far more often than teams expect, and filter selectivity is the dimension that actually separates the purpose-built stores." }
   ]
 });
+
+/* ======================= CHAPTER 31 =======================
+   Sources consulted, read 2026-09-04. Framework defaults were taken from
+   source rather than documentation, because the documentation and the
+   tutorials disagree with it: LangChain's TextSplitter.__init__ in
+   libs/text-splitters/langchain_text_splitters/base.py defaults chunk_size to
+   4000 and chunk_overlap to 200 with length_function defaulting to len, so the
+   unit is CHARACTERS; LlamaIndex's SentenceSplitter defaults chunk_size to
+   DEFAULT_CHUNK_SIZE and chunk_overlap to SENTENCE_CHUNK_OVERLAP, which
+   llama-index-core/llama_index/core/constants.py gives as 1024 and 200
+   TOKENS, in the same file that sets DEFAULT_SIMILARITY_TOP_K to 2 and
+   DEFAULT_CHUNK_OVERLAP to 20; Haystack's DocumentSplitter defaults split_by
+   to "word", split_length to 200 and split_overlap to 0, so the unit is
+   WORDS. The blueprint for this chapter predicted that three frameworks share
+   a 1,000-character recursive default; that is not what the source says, and
+   the measured section corrects it. DSPy's README for the programming model:
+   signatures as input-output contracts, modules as composable units, and
+   optimizers that tune prompts and weights, with GEPA (July 2025) cited for
+   reflective prompt evolution outperforming reinforcement learning. Managed
+   platforms: the Amazon Bedrock Knowledge Bases user guide for the split
+   between Managed and Customer-managed knowledge bases, the connector list
+   (S3, SharePoint, Confluence, Google Drive, OneDrive, Web Crawler),
+   document-level permission filtering by access control list at retrieval
+   time, Smart Parsing selecting a parsing strategy per document type, and
+   Agentic Retrieval decomposing queries and retrieving iteratively; Google's
+   Agent Search documentation, the product formerly published as Vertex AI
+   Search, for its data store types and for chunking, parsing, custom
+   embeddings and ranking being configurable while query understanding and
+   extractive summarization are not; Microsoft Learn's Azure AI Search
+   documentation, already cited in Chapter 28 for security trimming; Vectara's
+   documentation for its API-first positioning, built-in multimodal retrieval,
+   factual-consistency enforcement and hallucination correction, and its SaaS,
+   VPC, on-premises and air-gapped deployment options. Multimodal: Radford,
+   Kim, Hallacy, Ramesh, Goh, Agarwal, Sastry, Askell, Mishkin, Clark,
+   Krueger & Sutskever 2021, arXiv 2103.00020, "Learning Transferable Visual
+   Models From Natural Language Supervision" (CLIP), for 400 million
+   image-text pairs, the caption-matching pre-training task, matching a
+   ResNet-50's ImageNet accuracy zero-shot without any of its 1.28 million
+   training examples, and evaluation across more than 30 datasets; Faysse,
+   Sibille, Wu, Omrani, Viaud, Hudelot & Colombo 2024, arXiv 2407.01449,
+   "ColPali: Efficient Document Retrieval with Vision Language Models"
+   (ICLR 2025), for the ViDoRe benchmark of page-level retrieval tasks and for
+   a vision language model producing multi-vector page embeddings matched by
+   late interaction. Measurements are the output of resources/frameworks.py,
+   which converts the three defaults into one unit and runs each default
+   splitting policy over the same 50 pages of the Essential GraphRAG PDF that
+   Chapter 17 measured chunk sizes against. The splitters there are
+   reimplementations of each library's documented default behaviour rather
+   than the libraries themselves, so the comparison needs no install; the
+   script says so and so does this chapter. */
+CHAPTERS.push({
+  num: 31, part: 4, title: "Frameworks, Platforms, and Multimodal RAG: A Field Guide",
+  blurb: "Every framework wraps the stages you now understand, and every managed platform wraps the whole pipeline. This chapter maps the abstractions back onto the stages so you can read any of them in an afternoon. Then it does something the documentation does not: it reads three frameworks' default chunkers out of their source, converts them into one unit, and runs all three over the same fifty pages. The same document becomes 23, 37 or 77 chunks depending only on which import you typed. It ends where text stops, with images, page-image retrieval, audio and tables.",
+  sections: [
+    { title: "Every Framework Is the Same Six Stages",
+      viz: "frameworkMap", vizTitle: "Pick a framework; hover a stage; read the default",
+      html: "<p>The frameworks look different because they name things differently. They are not different. Each one is the pipeline this course built, with a class per stage and an opinion about the defaults, and once you see the mapping you can read any of them by looking for six words.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 258' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>the same six stages, in four vocabularies</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9'>stage</text><text x='170' y='48' fill='#7d8fb0' font-size='9'>LangChain</text><text x='340' y='48' fill='#7d8fb0' font-size='9'>LlamaIndex</text><text x='510' y='48' fill='#7d8fb0' font-size='9'>Haystack</text><text x='650' y='48' fill='#7d8fb0' font-size='9'>chapter</text>" +
+      "<text x='24' y='74' fill='#ffd166' font-size='9.5'>load</text><text x='170' y='74' fill='#c9d6ea' font-size='9'>DocumentLoader</text><text x='340' y='74' fill='#c9d6ea' font-size='9'>Reader</text><text x='510' y='74' fill='#c9d6ea' font-size='9'>Converter</text><text x='670' y='74' fill='#7d8fb0' font-size='9'>4</text>" +
+      "<text x='24' y='98' fill='#ffd166' font-size='9.5'>chunk</text><text x='170' y='98' fill='#c9d6ea' font-size='9'>TextSplitter</text><text x='340' y='98' fill='#c9d6ea' font-size='9'>NodeParser</text><text x='510' y='98' fill='#c9d6ea' font-size='9'>DocumentSplitter</text><text x='670' y='98' fill='#7d8fb0' font-size='9'>5, 6</text>" +
+      "<text x='24' y='122' fill='#ffd166' font-size='9.5'>embed and store</text><text x='170' y='122' fill='#c9d6ea' font-size='9'>VectorStore</text><text x='340' y='122' fill='#c9d6ea' font-size='9'>VectorStoreIndex</text><text x='510' y='122' fill='#c9d6ea' font-size='9'>DocumentStore</text><text x='670' y='122' fill='#7d8fb0' font-size='9'>7, 30</text>" +
+      "<text x='24' y='146' fill='#ffd166' font-size='9.5'>retrieve</text><text x='170' y='146' fill='#c9d6ea' font-size='9'>Retriever</text><text x='340' y='146' fill='#c9d6ea' font-size='9'>Retriever</text><text x='510' y='146' fill='#c9d6ea' font-size='9'>Retriever</text><text x='670' y='146' fill='#7d8fb0' font-size='9'>9-15</text>" +
+      "<text x='24' y='170' fill='#ffd166' font-size='9.5'>rerank and pack</text><text x='170' y='170' fill='#c9d6ea' font-size='9'>DocumentCompressor</text><text x='340' y='170' fill='#c9d6ea' font-size='9'>NodePostprocessor</text><text x='510' y='170' fill='#c9d6ea' font-size='9'>Ranker</text><text x='670' y='170' fill='#7d8fb0' font-size='9'>16, 17</text>" +
+      "<text x='24' y='194' fill='#ffd166' font-size='9.5'>generate</text><text x='170' y='194' fill='#c9d6ea' font-size='9'>Chain / LCEL</text><text x='340' y='194' fill='#c9d6ea' font-size='9'>ResponseSynthesizer</text><text x='510' y='194' fill='#c9d6ea' font-size='9'>PromptBuilder</text><text x='670' y='194' fill='#7d8fb0' font-size='9'>18</text>" +
+      "<line x1='24' y1='210' x2='736' y2='210' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='230' fill='#3ddc97' font-size='10'>DSPy is not in this table because it does not have these classes</text>" +
+      "<text x='24' y='250' fill='#c9d6ea' font-size='9.5'>it wraps the PROMPT, not the pipeline, and Section 3 explains why that matters</text>" +
+      "</svg><div class='fig-cap'>Six rows. Learning a framework is learning its nouns for things you already understand, which is an afternoon rather than a course.</div></div>" +
+      "<p>Pick a framework in the machine above, hover the <em>chunk</em> stage, and read the default it ships. Then switch frameworks and read it again. The next section is that comparison done properly.</p>" +
+      "<p>Two rows in that table deserve their proper names, because they are where the interesting work happens and where the naming diverges most. A <strong>node postprocessor</strong> is LlamaIndex's term for anything that sits between retrieval and generation: a reranker, a similarity cutoff, a deduplicator, a recency boost. LangChain calls the same slot a document compressor and Haystack calls it a ranker. Everything in Chapters 16 and 17 plugs in here, and it is the stage most quickstarts leave empty. A <strong>response synthesizer</strong> is the last stage, turning ranked chunks and a question into a prompt and an answer, and its default strategy decides whether the model sees all your chunks at once or one at a time in a refinement loop. Those two defaults, together, are Chapter 17 and Chapter 18 being configured without you.</p>" +
+      "<p>What a framework buys you is real and worth naming: connectors to a hundred data sources you would otherwise write yourself, a uniform interface over a dozen vector stores from Chapter 30, retry and batching logic, and a community that has already hit the bug you are about to hit. What it costs is that every stage now has a default you did not choose, and those defaults were set by someone who had never seen your corpus.</p>" +
+      "<p>The failure mode is specific, and it is not that the abstraction is leaky. It is that the abstraction is <em>opaque about the decisions this course spent thirty chapters making</em>. A three-line quickstart makes a chunking decision, an embedding decision, a top-k decision and a packing decision, and reports none of them. You already know each of those is worth measuring, which puts you in the small group of people for whom a framework is safe.</p>" +
+      "<div class='callout'><strong>Read the defaults first, not the tutorial.</strong> For any framework you adopt, open the constructor of its splitter, its retriever and its synthesizer, and write down the default values. It takes twenty minutes and it is the highest-value twenty minutes in the adoption. LlamaIndex's <code>DEFAULT_SIMILARITY_TOP_K</code> is <strong>2</strong>, meaning the out-of-the-box retriever hands the model two chunks. Chapter 17 measured what context size does to answers. Two is a choice, and it is being made for you.</div>" },
+
+    { title: "The Defaults Are Not the Same Defaults",
+      html: "<p>Here is the comparison nobody publishes, because it requires reading three codebases and converting between three units. All three numbers below were read out of source, not documentation, and the documentation for at least one of them is out of date.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 284' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>measured: three default chunkers over the SAME 50 pages (22,702 tokens)</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9'>default, as the source writes it</text><text x='330' y='48' fill='#7d8fb0' font-size='9'>unit</text><text x='420' y='48' fill='#7d8fb0' font-size='9'>in tokens</text><text x='520' y='48' fill='#7d8fb0' font-size='9'>overlap</text><text x='630' y='48' fill='#7d8fb0' font-size='9'>chunks made</text>" +
+      "<text x='24' y='74' fill='#c9d6ea' font-size='9.5'>LangChain   4000, 200</text><text x='330' y='74' fill='#ffd166' font-size='9.5'>characters</text><text x='430' y='74' fill='#c9d6ea' font-size='9.5'>901</text><text x='530' y='74' fill='#c9d6ea' font-size='9.5'>5%</text><text x='660' y='74' fill='#c9d6ea' font-size='10'>37</text>" +
+      "<text x='24' y='98' fill='#c9d6ea' font-size='9.5'>LlamaIndex  1024, 200</text><text x='330' y='98' fill='#ff5d73' font-size='9.5'>tokens</text><text x='430' y='98' fill='#c9d6ea' font-size='9.5'>1,024</text><text x='530' y='98' fill='#ff5d73' font-size='9.5'>20%</text><text x='660' y='98' fill='#c9d6ea' font-size='10'>23</text>" +
+      "<text x='24' y='122' fill='#c9d6ea' font-size='9.5'>Haystack    200, 0</text><text x='330' y='122' fill='#3ddc97' font-size='9.5'>words</text><text x='430' y='122' fill='#c9d6ea' font-size='9.5'>295</text><text x='530' y='122' fill='#3ddc97' font-size='9.5'>0%</text><text x='660' y='122' fill='#c9d6ea' font-size='10'>77</text>" +
+      "<line x1='24' y1='138' x2='736' y2='138' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='158' fill='#7d8fb0' font-size='9'>median chunk size produced, against Chapter 5's measured recall knee</text>" +
+      "<line x1='120' y1='232' x2='700' y2='232' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='236' y1='168' x2='236' y2='240' stroke='#3ddc97' stroke-width='2' stroke-dasharray='4 4'/>" +
+      "<text x='196' y='252' fill='#3ddc97' font-size='9'>knee ~400</text>" +
+      "<rect x='120' y='176' width='96' height='14' fill='#3ddc97'/><text x='248' y='187' fill='#3ddc97' font-size='9'>Haystack 265 tok</text>" +
+      "<rect x='120' y='196' width='236' height='14' fill='#ffd166'/><text x='364' y='207' fill='#ffd166' font-size='9'>LangChain 651 tok</text>" +
+      "<rect x='120' y='216' width='432' height='14' fill='#ff5d73'/><text x='560' y='227' fill='#ff5d73' font-size='9'>LlamaIndex 1,191 tok</text>" +
+      "<text x='24' y='268' fill='#2de2ff' font-size='10.5'>same document, same code path, 23 to 77 chunks: a 3.3x spread from imports alone</text>" +
+      "<text x='24' y='282' fill='#c9d6ea' font-size='9.5'>overlap tax on the index: LangChain +7%, LlamaIndex +19%, Haystack none</text>" +
+      "</svg><div class='fig-cap'>Two of the three defaults sit past the knee Chapter 5 measured, and the widest is three times it. Nobody chose that; it is what the constructor says.</div></div>" +
+      "<p>Start with the unit, because it is the trap. LangChain's <code>chunk_size</code> counts <strong>characters</strong>, because <code>length_function</code> defaults to <code>len</code>. LlamaIndex's counts <strong>tokens</strong>. Haystack's <code>split_length</code> counts <strong>words</strong>. The same integer means three different quantities, and moving a configuration between frameworks by copying the number across is a silent four-fold change in chunk size.</p>" +
+      "<p>Measured on this corpus at 4.44 characters per token, LangChain's 4,000 characters is about 901 tokens and Haystack's 200 words is about 295. Run each default policy over the same fifty pages and you get <strong>37, 23 and 77 chunks</strong>. Same document, same pipeline, a 3.3-fold difference in index size, retrieval granularity and embedding bill, decided entirely by which library was imported.</p>" +
+      "<p>Now put that against Chapter 5, which measured a recall knee around 400 tokens and concluded that the right size is the smallest one at the knee. Haystack's default lands near it. LangChain's is 1.6 times past it. LlamaIndex's median chunk is <strong>1,191 tokens</strong>, three times the knee, which Chapter 5 predicts costs precision on every query. None of these is a bug. They are three reasonable guesses made without your corpus.</p>" +
+      "<p>The overlap column is the same story with a bill attached. Chapter 5 found overlap bought nothing on the corpora it measured, and here LangChain duplicates 5% of every chunk boundary and LlamaIndex 20%. Over the fifty pages that is a <strong>19% larger index</strong> for LlamaIndex: 19% more vectors, 19% more storage, and 19% more embedding cost, for a mechanism Chapter 5 could not show a benefit from.</p>" +
+      "<div class='callout'><strong>The measurement, and its honest limits.</strong> The splitters in <code>resources/frameworks.py</code> are reimplementations of each library's documented default behaviour, not the libraries themselves, so the comparison runs without installing three frameworks. The parameter values are read from source; the chunk boundaries a real install produces will differ by a few tokens. One detail worth knowing anyway: word-splitting rejoins with single spaces, so Haystack's default silently discards the original whitespace and you cannot reconstruct the source document from its chunks.</div>" },
+
+    { title: "What Each One Is Actually For",
+      html: "<p>The frameworks are not competing for the same job, and picking by popularity gets this wrong.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 206' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>four tools, four different jobs, and what each one asks of you</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9'>tool</text><text x='150' y='48' fill='#7d8fb0' font-size='9'>the layer it owns</text><text x='350' y='48' fill='#7d8fb0' font-size='9'>pick it when</text><text x='590' y='48' fill='#7d8fb0' font-size='9'>it demands</text>" +
+      "<text x='24' y='76' fill='#c9d6ea' font-size='9.5'>LangChain</text><text x='150' y='76' fill='#ffd166' font-size='9.5'>integration</text><text x='350' y='76' fill='#c9d6ea' font-size='9'>you must talk to many things</text><text x='590' y='76' fill='#ff5d73' font-size='9'>pinned versions</text>" +
+      "<text x='24' y='104' fill='#c9d6ea' font-size='9.5'>LlamaIndex</text><text x='150' y='104' fill='#ffd166' font-size='9.5'>indexing</text><text x='350' y='104' fill='#c9d6ea' font-size='9'>corpus SHAPE is the problem</text><text x='590' y='104' fill='#ffd166' font-size='9'>reading its defaults</text>" +
+      "<text x='24' y='132' fill='#c9d6ea' font-size='9.5'>Haystack</text><text x='150' y='132' fill='#ffd166' font-size='9.5'>pipeline</text><text x='350' y='132' fill='#c9d6ea' font-size='9'>others will operate it</text><text x='590' y='132' fill='#c9d6ea' font-size='9'>verbosity up front</text>" +
+      "<text x='24' y='160' fill='#c9d6ea' font-size='9.5'>DSPy</text><text x='150' y='160' fill='#3ddc97' font-size='9.5'>the prompt</text><text x='350' y='160' fill='#c9d6ea' font-size='9'>the prompt is the variable</text><text x='590' y='160' fill='#ff5d73' font-size='9'>a labelled set</text>" +
+      "<line x1='24' y1='176' x2='736' y2='176' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='198' fill='#3ddc97' font-size='10'>they are not alternatives: DSPy sits on top of any of the other three</text>" +
+      "</svg><div class='fig-cap'>Picking by popularity compares an integration layer to a prompt optimiser. Pick by which layer your problem lives in.</div></div>" +
+      "<p><strong>LangChain</strong> is the integration layer. Its value is breadth: the loaders, the model wrappers, the store adapters, and the expression language for wiring them. Choose it when your problem is that you need to talk to eleven things and would rather not write eleven clients. Its cost is churn, and the honest version of that complaint is specific: the surface is large enough that the parts you depend on are unlikely to all be the stable parts. Pin versions and read release notes.</p>" +
+      "<p><strong>LlamaIndex</strong> is the indexing layer. Its centre of gravity is what happens to documents before retrieval, and its distinctive contribution is treating index structure as a first-class choice rather than assuming one flat vector store. The composable index types are where Chapter 6's small-to-big and Chapters 23 and 24's graph structures show up as library features rather than code you write. Choose it when the interesting part of your problem is the shape of the corpus.</p>" +
+      "<p><strong>Haystack</strong> is the pipeline layer. It is explicit where the others are convenient: components with declared inputs and outputs, wired into a graph you can serialise and inspect. That verbosity is the point, because the pipeline is a document rather than a call stack, and Chapter 29's observability problem is easier when the topology is data. Choose it when the system will be operated by people who did not write it.</p>" +
+      "<p><strong>DSPy</strong> is not in the previous section's table, and that is the most useful thing to know about it. It does not wrap the six stages. It wraps <em>the prompt</em>, replacing hand-written instructions with a <strong>signature</strong>, a declared input-output contract, composed into modules, and then it compiles them. An <strong>optimizer</strong> searches over prompts, examples and sometimes weights against a metric you supply. The pitch is that a prompt should be a tuned hyperparameter rather than a string somebody edited on a Friday.</p>" +
+      "<p>Two things follow. DSPy needs the thing most teams do not have, which is Chapter 25's labelled set and a metric worth optimising, so it is the framework that punishes skipping evaluation most directly. And it composes with the others rather than replacing them: retrieval stays wherever you built it, and DSPy tunes the generation step against Chapter 26's answer metrics.</p>" +
+      "<div class='callout'><strong>The edge: what the abstraction hides is the thing you measured.</strong> Every framework's quickstart hides the four decisions Chapters 5, 7, 16 and 17 spent their length on. That is fine when you know they are hidden and go read the constructors, and it is how teams end up with 1,191-token chunks and a top-k of 2 when they do not. The framework is not the problem. Adopting a set of defaults without reading them is, and the name for what that costs is the <strong>abstraction tax</strong>: not the overhead of the wrapper, which is negligible, but the quality you leave on the table by accepting decisions you know how to make better.</div>" },
+
+    { title: "The Managed Platforms",
+      html: "<p>A framework wraps the stages. A platform wraps the whole pipeline, and the trade is different in kind: you stop making decisions rather than making them faster.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>what the platforms take over, and what they leave you</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9'>platform</text><text x='230' y='48' fill='#7d8fb0' font-size='9'>you still choose</text><text x='450' y='48' fill='#7d8fb0' font-size='9'>it decides</text><text x='620' y='48' fill='#7d8fb0' font-size='9'>the hook</text>" +
+      "<text x='24' y='74' fill='#c9d6ea' font-size='9'>Bedrock Knowledge Bases</text><text x='230' y='74' fill='#c9d6ea' font-size='9'>models, store, chunking</text><text x='450' y='74' fill='#c9d6ea' font-size='9'>parsing, orchestration</text><text x='620' y='74' fill='#3ddc97' font-size='9'>ACL filtering</text>" +
+      "<text x='44' y='90' fill='#7d8fb0' font-size='8.5'>managed mode gives up the store and models; customer-managed keeps them</text>" +
+      "<text x='24' y='116' fill='#c9d6ea' font-size='9'>Agent Search (was Vertex)</text><text x='230' y='116' fill='#c9d6ea' font-size='9'>chunking, embeddings, boosts</text><text x='450' y='116' fill='#c9d6ea' font-size='9'>query understanding</text><text x='620' y='116' fill='#3ddc97' font-size='9'>self-tuning rank</text>" +
+      "<text x='24' y='142' fill='#c9d6ea' font-size='9'>Azure AI Search</text><text x='230' y='142' fill='#c9d6ea' font-size='9'>nearly everything</text><text x='450' y='142' fill='#c9d6ea' font-size='9'>little</text><text x='620' y='142' fill='#3ddc97' font-size='9'>security trimming</text>" +
+      "<text x='24' y='168' fill='#c9d6ea' font-size='9'>Vectara</text><text x='230' y='168' fill='#c9d6ea' font-size='9'>deployment, policy</text><text x='450' y='168' fill='#ff5d73' font-size='9'>the whole pipeline</text><text x='620' y='168' fill='#3ddc97' font-size='9'>factual consistency</text>" +
+      "<line x1='24' y1='184' x2='736' y2='184' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='204' fill='#ffd166' font-size='10'>the column that matters is the middle one, and it is the column nobody reads</text>" +
+      "<text x='24' y='220' fill='#c9d6ea' font-size='9.5'>a decision you cannot make is a decision you cannot fix when Chapter 29's procedure names it</text>" +
+      "</svg><div class='fig-cap'>Read the middle column against the six checks. Every stage a platform owns is a stage you can observe and cannot repair.</div></div>" +
+      "<p><strong>Bedrock Knowledge Bases</strong> splits the difference explicitly, which makes it the clearest illustration of the trade. Its <em>managed</em> mode owns ingestion, indexing, storage and retrieval, with service-managed embedding and reranking models, <strong>smart parsing</strong> that picks a strategy per document type rather than running one parser over everything, and <strong>agentic retrieval</strong> that decomposes a question into sub-queries and retrieves iteratively, which is Chapter 20's mechanism sold as a feature rather than written as code. Both are worth stealing even if you build: per-type parsing is the fix for Chapter 4's worst failures, and the iterative loop is what Chapter 20 measured on the two-hop question. Its <em>customer-managed</em> mode hands back the vector store and the pipeline and takes away the connectors and the permission filtering. The genuinely valuable piece is document-level permission filtering by access control list at retrieval time: Chapter 28's pre-filter, built in and tested by someone else.</p>" +
+      "<p><strong>Agent Search</strong>, the product previously published as Vertex AI Search, leaves more open than its reputation suggests: chunking and parsing strategies, custom embeddings, boost and bury rules. What it owns is query understanding and its self-learning ranking model, which improves with your user events. That is a real asset and a real lock-in, because the asset is trained on data you cannot export.</p>" +
+      "<p><strong>Azure AI Search</strong> is closer to a store than a platform, which Chapter 28 already used it as, and it configures nearly everything. <strong>Vectara</strong> goes furthest the other way: it owns the pipeline end to end and competes on the layer above, with factual-consistency enforcement and hallucination correction built in, which is Chapter 18's grounding check and Chapter 26's answer metrics as product surface. Its deployment options run to on-premises and air-gapped, which is the answer to Chapter 28's residency question.</p>" +
+      "<p>The one-throat-to-choke argument is real and usually understated by engineers. A platform means one contract, one security review, one compliance posture and one vendor to escalate to at 2am. Chapter 28's data-protection section is a month of work that arrives pre-done. Price that honestly against the salary of the person who would otherwise do it.</p>" },
+
+    { title: "Build Against Buy, With a Procedure",
+      html: "<p>The question is asked as a binary and is not one. There are four positions, and the decision is which one to occupy for each stage.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>four positions, and the question that moves you along the line</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='24' y='42' width='160' height='46' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='38' y='60' fill='#3ddc97' font-size='9.5'>1. from parts</text><text x='38' y='78' fill='#7d8fb0' font-size='8.5'>a store + your code</text>" +
+      "<rect x='204' y='42' width='160' height='46' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='218' y='60' fill='#4f7cff' font-size='9.5'>2. framework</text><text x='218' y='78' fill='#7d8fb0' font-size='8.5'>their nouns, your defaults</text>" +
+      "<rect x='384' y='42' width='160' height='46' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='398' y='60' fill='#ffd166' font-size='9.5'>3. platform, open</text><text x='398' y='78' fill='#7d8fb0' font-size='8.5'>you keep the knobs</text>" +
+      "<rect x='564' y='42' width='172' height='46' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='578' y='60' fill='#ff5d73' font-size='9.5'>4. platform, closed</text><text x='578' y='78' fill='#7d8fb0' font-size='8.5'>you keep the outcome</text>" +
+      "<line x1='184' y1='65' x2='198' y2='65' stroke='#4f7cff' stroke-width='2'/><polygon points='204,65 196,61 196,69' fill='#4f7cff'/>" +
+      "<line x1='364' y1='65' x2='378' y2='65' stroke='#4f7cff' stroke-width='2'/><polygon points='384,65 376,61 376,69' fill='#4f7cff'/>" +
+      "<line x1='544' y1='65' x2='558' y2='65' stroke='#4f7cff' stroke-width='2'/><polygon points='564,65 556,61 556,69' fill='#4f7cff'/>" +
+      "<line x1='24' y1='104' x2='736' y2='104' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='126' fill='#7d8fb0' font-size='9.5'>ask in this order; the first NO stops you moving right</text>" +
+      "<text x='44' y='150' fill='#c9d6ea' font-size='9.5'>1. may the data leave your boundary at all?</text><text x='430' y='150' fill='#ff5d73' font-size='9'>no -> position 1 or 2, or air-gapped</text>" +
+      "<text x='44' y='172' fill='#c9d6ea' font-size='9.5'>2. is retrieval quality your product, or plumbing?</text><text x='430' y='172' fill='#ffd166' font-size='9'>product -> keep the knobs</text>" +
+      "<text x='44' y='194' fill='#c9d6ea' font-size='9.5'>3. do you have a labelled set and someone to run it?</text><text x='430' y='194' fill='#ffd166' font-size='9'>no -> buy; you cannot tune blind</text>" +
+      "<text x='44' y='216' fill='#c9d6ea' font-size='9.5'>4. what does the person cost, against the platform?</text><text x='430' y='216' fill='#3ddc97' font-size='9'>compare salaries, not licence fees</text>" +
+      "<text x='24' y='236' fill='#2de2ff' font-size='9.5'>question 3 surprises people: without evaluation, building is strictly worse than buying</text>" +
+      "</svg><div class='fig-cap'>Question three is the one that flips the usual answer. Custom retrieval you cannot measure is not customisation, it is untested code.</div></div>" +
+      "<p>Position one is a vector store from Chapter 30 plus your own code at every stage. Position two keeps that shape and borrows someone else's nouns and connectors. Position three is a platform that still exposes chunking, embeddings and ranking, which Agent Search and Azure AI Search do. Position four is a platform that owns the pipeline and sells you the outcome, which is where Vectara sits and where Bedrock's managed mode sits by choice.</p>" +
+      "<p>Moving right buys speed and support and spends control, and the thing being spent is specific: every stage you hand over is a stage Chapter 29's six checks can still diagnose and can no longer repair. A platform whose parser drops your tables will tell you nothing useful when check 1 says corpus gap, because the gap is inside a component you cannot open.</p>" +
+      "<p>Question one is a hard gate and Chapter 28 supplies it. If the corpus cannot leave a jurisdiction or a network, positions three and four are available only where the vendor ships on-premises or air-gapped, and most do not.</p>" +
+      "<p>Question three is the one worth arguing about. The instinct is that a team without evaluation should build, because building feels like control. The opposite holds. Position one gives you every knob in this course and no way to tell whether turning one helped, which is Chapter 25's result stated as a purchasing decision. A platform's defaults were at least tuned against <em>somebody's</em> benchmark. Untuned custom retrieval is worse than tuned generic retrieval, and the way out is a labelled set, not a rewrite.</p>" +
+      "<p>Finally, the decision is per stage rather than per system, and the mixed position is usually right. Buy the connectors, because writing a SharePoint loader teaches you nothing. Buy the store, because Chapter 30 said so. Build the chunker, because Chapter 5 showed the defaults are guesses about your corpus. Build the evaluation, always, because it is the instrument you use to judge everything else and a vendor's score on their own benchmark is not evidence about yours.</p>" },
+
+    { title: "Where Text Stops",
+      html: "<p>Everything so far assumed the corpus is text. Most real corpora are not: they are PDFs with figures, screenshots in tickets, recorded calls, and tables that mean nothing once flattened into a sentence. There are two ways to handle that and the choice is architectural.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 252' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>two architectures for non-text, and what each one loses</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='50' fill='#ffd166' font-size='10'>A. CONVERT TO TEXT, then use everything in this course unchanged</text>" +
+      "<rect x='40' y='62' width='108' height='34' rx='7' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='54' y='83' fill='#c9d6ea' font-size='9'>image</text>" +
+      "<line x1='148' y1='79' x2='172' y2='79' stroke='#4f7cff' stroke-width='2'/><polygon points='178,79 170,75 170,83' fill='#4f7cff'/>" +
+      "<rect x='178' y='62' width='140' height='34' rx='7' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='192' y='83' fill='#ffd166' font-size='9'>caption / OCR / ASR</text>" +
+      "<line x1='318' y1='79' x2='342' y2='79' stroke='#4f7cff' stroke-width='2'/><polygon points='348,79 340,75 340,83' fill='#4f7cff'/>" +
+      "<rect x='348' y='62' width='128' height='34' rx='7' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='362' y='83' fill='#c9d6ea' font-size='9'>text embedding</text>" +
+      "<text x='500' y='75' fill='#3ddc97' font-size='9'>+ one index, one metric, cheap</text>" +
+      "<text x='500' y='91' fill='#ff5d73' font-size='9'>- the caption is now the document</text>" +
+      "<line x1='24' y1='112' x2='736' y2='112' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='134' fill='#ffd166' font-size='10'>B. EMBED NATIVELY into a joint space, query with text</text>" +
+      "<rect x='40' y='146' width='108' height='34' rx='7' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='54' y='167' fill='#c9d6ea' font-size='9'>image</text>" +
+      "<line x1='148' y1='163' x2='172' y2='163' stroke='#4f7cff' stroke-width='2'/><polygon points='178,163 170,159 170,167' fill='#4f7cff'/>" +
+      "<rect x='178' y='146' width='140' height='34' rx='7' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='192' y='167' fill='#3ddc97' font-size='9'>vision encoder</text>" +
+      "<line x1='318' y1='163' x2='342' y2='163' stroke='#4f7cff' stroke-width='2'/><polygon points='348,163 340,159 340,167' fill='#4f7cff'/>" +
+      "<rect x='348' y='146' width='128' height='34' rx='7' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='362' y='167' fill='#3ddc97' font-size='9'>joint space</text>" +
+      "<text x='500' y='159' fill='#3ddc97' font-size='9'>+ nothing is thrown away</text>" +
+      "<text x='500' y='175' fill='#ff5d73' font-size='9'>- new model, new failure modes</text>" +
+      "<line x1='24' y1='196' x2='736' y2='196' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='216' fill='#2de2ff' font-size='10'>the honest default is A for most corpora, and the reason is Chapter 25</text>" +
+      "<text x='24' y='234' fill='#c9d6ea' font-size='9.5'>A reuses every metric, every rerank and every eval you already built; B needs new labels</text>" +
+      "<text x='24' y='248' fill='#7d8fb0' font-size='9'>choose B when the layout IS the meaning: forms, charts, scanned pages, slides</text>" +
+      "</svg><div class='fig-cap'>Converting to text is not a compromise, it is a decision to spend your effort on retrieval rather than on encoders. It stops working when the layout carries the answer.</div></div>" +
+      "<p>The <strong>convert-to-text</strong> path runs every image through a captioner or optical character recognition, every audio file through automatic speech recognition, and then does exactly what the last thirty chapters did. It is underrated. One index, one metric, one set of labels, and Chapter 16's reranker still works because everything is text by the time it reaches the ranker.</p>" +
+      "<p>The native path needs a <strong>joint embedding space</strong>, where an image and the text describing it land near each other. CLIP is the origin: Radford and colleagues trained on 400 million image-text pairs with the deliberately simple task of predicting which caption belongs to which image, and matched a ResNet-50's ImageNet accuracy zero-shot, without any of that model's 1.28 million labelled training examples. Everything in Chapter 7 about contrastive training is the same mechanism with a second encoder attached.</p>" +
+      "<h3>Page-image retrieval, and the pipeline that disappears</h3>" +
+      "<p>The most interesting recent result is that for documents you can skip parsing entirely. ColPali (Faysse and colleagues, 2024, ICLR 2025) embeds the <em>rendered page image</em> with a vision language model, producing multi-vector page embeddings matched to the query by <strong>late interaction</strong>, the same MaxSim machinery Chapter 16 introduced for ColBERT. Their ViDoRe benchmark exists because no page-level visual retrieval benchmark did.</p>" +
+      "<p>What <strong>page-image retrieval</strong> deletes is the entire brittle half of Chapter 4: the PDF parser, the layout detection, the table extractor, the figure captioner. A page becomes an image, and the model reads it. The price is a multi-vector index, which Chapter 30's arithmetic says is many times larger per document, and a new evaluation set because none of your text labels transfer.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 232' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>the classic document pipeline against page-image retrieval</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#ff5d73' font-size='9.5'>classic: five stages, each one able to lose the answer</text>" +
+      "<rect x='24' y='60' width='92' height='28' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='40' y='78' fill='#c9d6ea' font-size='8.5'>pdf parse</text>" +
+      "<rect x='132' y='60' width='92' height='28' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='146' y='78' fill='#c9d6ea' font-size='8.5'>layout detect</text>" +
+      "<rect x='240' y='60' width='92' height='28' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='252' y='78' fill='#c9d6ea' font-size='8.5'>table extract</text>" +
+      "<rect x='348' y='60' width='92' height='28' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='358' y='78' fill='#c9d6ea' font-size='8.5'>fig caption</text>" +
+      "<rect x='456' y='60' width='92' height='28' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='470' y='78' fill='#c9d6ea' font-size='8.5'>chunk+embed</text>" +
+      "<text x='566' y='78' fill='#7d8fb0' font-size='9'>one vector per chunk</text>" +
+      "<line x1='24' y1='106' x2='736' y2='106' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='126' fill='#3ddc97' font-size='9.5'>page-image: render the page, embed the picture, match late</text>" +
+      "<rect x='24' y='138' width='110' height='28' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='40' y='156' fill='#3ddc97' font-size='8.5'>render page</text>" +
+      "<line x1='134' y1='152' x2='156' y2='152' stroke='#3ddc97' stroke-width='2'/><polygon points='162,152 154,148 154,156' fill='#3ddc97'/>" +
+      "<rect x='162' y='138' width='150' height='28' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='176' y='156' fill='#3ddc97' font-size='8.5'>vision language model</text>" +
+      "<line x1='312' y1='152' x2='334' y2='152' stroke='#3ddc97' stroke-width='2'/><polygon points='340,152 332,148 332,156' fill='#3ddc97'/>" +
+      "<rect x='340' y='138' width='150' height='28' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='352' y='156' fill='#ffd166' font-size='8.5'>MANY vectors per page</text>" +
+      "<text x='506' y='156' fill='#7d8fb0' font-size='9'>late interaction, as in ch 16</text>" +
+      "<line x1='24' y1='182' x2='736' y2='182' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='202' fill='#3ddc97' font-size='10'>four brittle stages deleted, and the figures become retrievable</text>" +
+      "<text x='24' y='222' fill='#ff5d73' font-size='10'>paid for in index size, and in an evaluation set none of your text labels transfer to</text>" +
+      "</svg><div class='fig-cap'>The trade is a parsing problem exchanged for a storage problem. Chapter 30 taught you to price the second one exactly.</div></div>" +
+      "<p>Price it before adopting it. A text chunk is one vector; a ColPali-style page is one vector per image patch, which Chapter 30's arithmetic turns into a number rather than a worry. Run that calculation on your page count first, because it is usually the deciding constraint and it takes two minutes.</p>" +
+      "<p>Two shorter notes. Audio and video need a <strong>timestamped chunk</strong>: transcribe, chunk on the transcript, and carry the start and end offsets as metadata so a citation is a place in the recording rather than a claim about it, which is Chapter 18's citation requirement in a medium where skipping it goes unnoticed. And tables should stay tables: flattening a table into prose destroys the row-column relationship that made it a table, so keep the structure, retrieve the table as a unit, and let Chapter 22's text-to-SQL answer questions that are really queries.</p>" +
+      "<div class='callout'><strong>Evaluate multimodal the same way, and expect it to be harder.</strong> Chapter 25's metrics apply unchanged once you have judgments, and the judgments are the problem: labelling whether a page image answers a question is slower than labelling text, and pooling bias is worse because fewer systems exist to pool from. Budget for the labelling, not for the model.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take the three defaults in Section 2 and a 60,000-character document. Compute, by hand, how many chunks each produces, the total tokens embedded including overlap, and the embedding cost at $0.02 per million tokens. You should find the chunk counts differ by more than three times and the cost by about a quarter, and you should be able to say which of the two effects dominates.</li>" +
+      "<li><strong>Trace.</strong> A team moves a working pipeline from LangChain to LlamaIndex and copies <code>chunk_size=512</code> across unchanged. State what actually changes, in tokens, using this chapter's measured conversion factor. Then say which of Chapter 29's six checks would fire on a query that stops working, and whether the aggregate metric would move enough for a mean-based gate to notice.</li>" +
+      "<li><strong>Investigate.</strong> Open the constructor of the splitter, the retriever and the response synthesiser in whichever framework you use, and write down every default. Compare each against the chapter that measured it: chunk size against Chapter 5, top-k against Chapter 17, reranking against Chapter 16. Report how many defaults you would keep after reading them. You should keep fewer than half.</li>" +
+      "<li><strong>Investigate.</strong> Run <code>python3 frameworks.py</code> from the course resources against one of your own documents by pointing it at your file. Report the three chunk counts and the median sizes, and decide which default is closest to right for that document type. Then check whether your production setting is any of the three.</li>" +
+      "<li><strong>Build.</strong> Write the adapter that makes the build-versus-buy decision reversible: a retriever interface with two implementations, one calling a managed platform and one calling your own store, returning the same chunk objects with the same score field. Run Chapter 25's evaluation against both on the same gold set and report the difference. The number you get is the real price of the platform, in quality rather than dollars.</li>" +
+      "<li><strong>Build.</strong> Take twenty pages of a PDF that contains at least three figures and two tables. Build the convert-to-text path: extract text, caption the figures, keep the tables as structured rows. Then write five questions whose answers live in the figures or tables, and measure recall@5. You should find the questions about figures fail and the questions about tables succeed or fail depending entirely on whether you preserved the structure.</li>" +
+      "<li><strong>Build, optional.</strong> Add the native path for the same twenty pages using any page-image embedding model, and compare recall@5 on the same five questions, along with index size per page. Report both. You should see the figure questions recover and the index grow by a factor you can now put a number on.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "loader", d: "The stage that turns a source file or system into documents, named DocumentLoader, Reader or Converter depending on the framework." },
+    { t: "splitter", d: "The stage that cuts documents into chunks, and the one whose default is expressed in a different unit by every framework that ships one." },
+    { t: "node postprocessor", d: "LlamaIndex's name for anything that filters or reorders retrieved chunks before generation, which is where reranking and context assembly live." },
+    { t: "response synthesizer", d: "The stage that turns ranked chunks and a question into a prompt and an answer, named Chain, ResponseSynthesizer or PromptBuilder." },
+    { t: "signature", d: "In DSPy, a declared input-output contract for a model call, which replaces a hand-written prompt string as the unit a program is built from." },
+    { t: "optimizer", d: "In DSPy, an algorithm that searches over prompts, examples and sometimes weights against a supplied metric, making the prompt a tuned parameter rather than an edit." },
+    { t: "managed platform", d: "A service that owns the whole retrieval pipeline rather than individual stages, trading the decisions this course teaches for a single contract and support path." },
+    { t: "convert-to-text", d: "The multimodal architecture that turns images, audio and layout into text before indexing, so every existing retrieval mechanism and metric keeps working." },
+    { t: "joint embedding space", d: "A vector space in which an image and the text describing it land near each other, so a text query can retrieve an image without any caption in between." },
+    { t: "late interaction", d: "Scoring by matching each query token against each document token and taking the best match per query token, which ColBERT introduced for text and ColPali applies to page images." },
+    { t: "page-image retrieval", d: "Embedding a rendered document page as an image rather than parsing it, which removes the whole parsing stage at the cost of a much larger multi-vector index." },
+    { t: "timestamped chunk", d: "A transcript chunk carrying the start and end offsets of the audio or video it came from, so a citation points at a place in the recording." },
+    { t: "smart parsing", d: "Selecting a parsing strategy per document type rather than applying one parser to everything, offered by managed platforms and worth copying if you build your own." },
+    { t: "agentic retrieval", d: "A platform feature that decomposes a question into sub-queries and retrieves iteratively, which is the mechanism Chapter 20 built, sold rather than written." },
+    { t: "security trimming", d: "Applying a principal's permissions as a retrieval filter inside the search, which several platforms provide built in and which Chapter 28 showed is the only correct placement." },
+    { t: "overlap tax", d: "The increase in index size, storage and embedding cost caused by duplicating text across chunk boundaries, paid on every vector regardless of whether the overlap helps." },
+    { t: "abstraction tax", d: "The cost of accepting a framework's defaults for decisions you would otherwise measure, which is invisible until something is evaluated." }
+  ],
+  quiz: [
+    { type: "mc",
+      q: "A team copies chunk_size=512 from a working LangChain pipeline into LlamaIndex, changing nothing else. What actually happens to their chunks?",
+      opts: [
+        "Nothing: 512 means the same thing in both libraries",
+        "Chunks become roughly four times smaller, because LlamaIndex counts characters",
+        "Chunks become roughly four times larger, because LangChain counts characters and LlamaIndex counts tokens",
+        "The pipeline raises a unit error at configuration time"
+      ], a: 2,
+      why: "LangChain's length_function defaults to len, so chunk_size is characters; LlamaIndex's is tokens. At the measured 4.44 characters per token, 512 characters is about 115 tokens and 512 tokens is about 2,270 characters. Nothing errors." },
+    { type: "mc",
+      q: "The same 50-page document was split by three frameworks' defaults and produced 37, 23 and 77 chunks. What does that spread come from?",
+      opts: [
+        "The default size and unit in each library's constructor, and nothing else",
+        "Different tokenizers producing different token counts for the same text",
+        "Different sentence-boundary detection quality between the libraries",
+        "One library dropping content that failed to parse"
+      ], a: 0,
+      why: "Same document, same code path. The defaults are 4,000 characters, 1,024 tokens and 200 words, which are about 901, 1,024 and 295 tokens. A 3.3x difference in index size and retrieval granularity follows from which import was typed." },
+    { type: "mc",
+      q: "Chapter 5 measured a recall knee at about 400 tokens and found overlap bought nothing. LlamaIndex's default produces a median chunk of 1,191 tokens with 20% overlap. What is the honest reading?",
+      opts: [
+        "The default is a bug and should be reported upstream",
+        "The overlap compensates for the oversized chunks, so the two cancel",
+        "Chapter 5's measurement does not apply because it used different corpora",
+        "The default is a reasonable guess made without your corpus, and it costs precision plus a 19% larger index"
+      ], a: 3,
+      why: "It is not a bug and it is not free. Three times the knee costs precision on every query, and the 20% overlap measured out as a 19% larger index: 19% more vectors, storage and embedding cost, for a mechanism with no measured benefit on those corpora." },
+    { type: "mc",
+      q: "Which statement best captures why DSPy does not appear in the stage-mapping table alongside LangChain, LlamaIndex and Haystack?",
+      opts: [
+        "It is newer and has not implemented all six stages yet",
+        "It is a retrieval library only and does not touch generation",
+        "It wraps the prompt rather than the pipeline, replacing written instructions with signatures that an optimizer tunes against a metric",
+        "It targets research rather than production systems"
+      ], a: 2,
+      why: "DSPy composes with the others rather than replacing them: retrieval stays where you built it. Its unit is the signature, and its optimizer needs a labelled set and a metric, which makes it the framework that punishes skipping Chapter 25 most directly." },
+    { type: "mc",
+      q: "A team has no labelled evaluation set and no one to run one. Should they build custom retrieval or buy a platform?",
+      opts: [
+        "Buy, because without evaluation they cannot tell whether any knob they turn helped, and a platform's defaults were at least tuned against some benchmark",
+        "Build, because custom retrieval gives them the control they will need later",
+        "Build, because platform lock-in is the larger long-term risk",
+        "Either, since the decision depends only on cost"
+      ], a: 0,
+      why: "The instinct is that building means control, and the opposite holds. Untuned custom retrieval is worse than tuned generic retrieval, and the way out is a labelled set rather than a rewrite. This is Chapter 25's result stated as a purchasing decision." },
+    { type: "mc",
+      q: "Which stage should almost always be built rather than bought, whatever else the team decides?",
+      opts: [
+        "The connectors, because every source system is different",
+        "The evaluation, because it is the instrument used to judge everything else and a vendor's benchmark says nothing about your corpus",
+        "The vector store, because Chapter 30's dimensions are workload-specific",
+        "The reranker, because it owns most of the latency budget"
+      ], a: 1,
+      why: "The decision is per stage, and evaluation is the one with no substitute: a vendor's score on their own benchmark is not evidence about yours. Buying connectors and stores is usually right; buying the instrument you would use to check the purchase is not." },
+    { type: "mc",
+      q: "A corpus is mostly scanned forms and slide decks where the layout carries the meaning. Which multimodal architecture fits and what does it cost?",
+      opts: [
+        "Convert-to-text, because it reuses every existing metric and reranker",
+        "Either, since both produce the same recall on layout-heavy documents",
+        "Convert-to-text with a stronger optical character recognition model, which recovers layout",
+        "Native page-image retrieval, which removes the parsing stage entirely but needs a much larger multi-vector index and a new evaluation set"
+      ], a: 3,
+      why: "Convert-to-text is the right default for most corpora precisely because it reuses everything. It stops working when the layout is the meaning, which is where ColPali's approach of embedding the rendered page earns its index size and its labelling cost." },
+    { type: "mc",
+      q: "What does ColPali's use of late interaction have in common with something earlier in this course?",
+      opts: [
+        "It is ColBERT's MaxSim scoring from the reranking chapter, applied to page images instead of text",
+        "It is the same reciprocal rank fusion used to combine lexical and dense results",
+        "It is the same product quantization used to compress vectors",
+        "It is the cross-encoder cascade with the encoder replaced by a vision model"
+      ], a: 0,
+      why: "Late interaction matches each query token against each document token and keeps the best match per query token. ColPali produces multi-vector page embeddings and scores them exactly that way, which is why its index is multi-vector and large." },
+    { type: "mc",
+      q: "Why is a transcript chunk from an audio file required to carry start and end offsets?",
+      opts: [
+        "Because automatic speech recognition is unreliable and the offsets allow re-transcription",
+        "Because chunk size cannot be computed for audio without them",
+        "So a citation points at a place in the recording, which is Chapter 18's citation requirement in a medium where skipping it is easy",
+        "So the retriever can filter by recording length"
+      ], a: 2,
+      why: "Grounded generation requires that a claim be checkable against its source. For text the chunk identifier is enough; for audio the chunk identifier without an offset points at an hour of recording, which is not a citation." },
+    { type: "blank",
+      q: "The increase in index size, storage and embedding cost caused by duplicating text across chunk boundaries is the overlap ____.",
+      a: ["tax"],
+      why: "Measured over the same 50 pages it was 7% for LangChain's default and 19% for LlamaIndex's, paid on every vector, for a mechanism Chapter 5 could not demonstrate a benefit from on the corpora it tested." },
+    { type: "blank",
+      q: "A vector space in which an image and the text describing it land near each other, so a text query retrieves the image directly, is a ____ embedding space.",
+      a: ["joint", "shared"],
+      why: "CLIP is the origin: 400 million image-text pairs trained on the task of predicting which caption belongs to which image, which is Chapter 7's contrastive objective with a second encoder attached." },
+    { type: "order",
+      q: "Order the build-versus-buy questions, from the one asked first to the one asked last:",
+      items: [
+        "may the data leave your boundary at all",
+        "is retrieval quality your product or your plumbing",
+        "do you have a labelled set and someone to run it",
+        "what does that person cost against the platform"
+      ],
+      why: "Data residency is a hard gate rather than a preference, so it goes first. The labelled-set question comes before cost because it can flip the answer entirely: without evaluation, building is strictly worse than buying however the arithmetic comes out." }
+  ]
+});
+
+/* ======================= CHAPTER 32 =======================
+   First chapter of the PocketRAG capstone. Everything shown here was written
+   for this course, run, and tested. The two implementations live in
+   resources/pocketrag/: ingest.py (Python 3.13 on the author's machine,
+   3.12+ syntax, standard library only) and ingest.ts (Node 22.22, no
+   dependencies: node:sqlite is built in and types are stripped at runtime by
+   --experimental-strip-types). The code blocks in this chapter are extracted
+   from those two files mechanically rather than retyped, so what you read is
+   what ran. Both were run over the same four-document corpus (a generated
+   Markdown policy handbook and runbook, an HTML support queue, and the
+   Essential GraphRAG PDF) and produce byte-identical chunk tables: 200 rows
+   whose SHA-256 over every column matches across the two languages. The
+   token-approximation error was measured against tiktoken's cl100k_base on
+   the 200 chunks the pipeline actually produced. Design decisions follow the
+   Blueprint's Part V plan: recursive chunking at 512 tokens with 64 tokens of
+   overlap (Chapter 5), no semantic chunking (Chapter 5 priced it), SQLite
+   rather than Postgres (Chapter 13 explains what pgvector would add). Node's
+   SQLite module is still marked experimental and prints a warning; the
+   chapter says so rather than hiding it behind a flag. */
+CHAPTERS.push({
+  num: 32, part: 5, title: "PocketRAG: The Ingest Pipeline",
+  blurb: "Thirty-one chapters of mechanism, and now you build one. PocketRAG is a retrieval engine written twice, in Python and TypeScript, with no dependencies in either: SQLite is in both standard libraries and everything else is code you can read. This chapter builds the first layer, the part everyone skips. Loaders for Markdown, HTML and PDF, a chunker that respects the token budget Chapter 5 measured, and an upsert keyed on a content hash so that running ingest twice changes nothing. It ends with a test that proves it, and a confession about the tokenizer.",
+  sections: [
+    { title: "What You Are Building",
+      html: "<p>PocketRAG is a retrieval engine over the Larkspur corpus, built in five layers, one per chapter. It is small enough to read in full and real enough to embarrass a demo. Two rules govern it: every line appears in these chapters, and every layer ends with a test you run.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 270' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>PocketRAG, five layers, five chapters</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='24' y='40' width='712' height='40' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='42' y='58' fill='#3ddc97' font-size='10'>32. INGEST</text><text x='180' y='58' fill='#c9d6ea' font-size='9'>loaders, chunker, content-hash upsert, tombstones</text><text x='620' y='58' fill='#3ddc97' font-size='9'>this chapter</text>" +
+      "<text x='42' y='73' fill='#7d8fb0' font-size='8.5'>documents and chunks land in SQLite, and re-running changes nothing</text>" +
+      "<rect x='24' y='88' width='712' height='34' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='42' y='110' fill='#4f7cff' font-size='10'>33. LEXICAL</text><text x='180' y='110' fill='#c9d6ea' font-size='9'>stemmer, stopwords, postings, BM25 with a heap</text><text x='620' y='110' fill='#7d8fb0' font-size='9'>ch 9</text>" +
+      "<rect x='24' y='130' width='712' height='34' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='42' y='152' fill='#4f7cff' font-size='10'>34. VECTOR</text><text x='180' y='152' fill='#c9d6ea' font-size='9'>embeddings, and an HNSW graph written from the paper</text><text x='620' y='152' fill='#7d8fb0' font-size='9'>ch 7, 11</text>" +
+      "<rect x='24' y='172' width='712' height='34' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='42' y='194' fill='#4f7cff' font-size='10'>35. ANSWER</text><text x='180' y='194' fill='#c9d6ea' font-size='9'>fusion, reranking, context packing, cited generation</text><text x='620' y='194' fill='#7d8fb0' font-size='9'>ch 15-18</text>" +
+      "<rect x='24' y='214' width='712' height='34' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='42' y='236' fill='#4f7cff' font-size='10'>36. JUDGE</text><text x='180' y='236' fill='#c9d6ea' font-size='9'>the gold set, the metrics, and an honest benchmark</text><text x='620' y='236' fill='#7d8fb0' font-size='9'>ch 25, 26</text>" +
+      "<text x='24' y='264' fill='#c9d6ea' font-size='9.5'>each layer only depends on the one above it, so each chapter's test can run alone</text>" +
+      "</svg><div class='fig-cap'>The layer nobody demos is the one at the top, and it is the one that decides what every layer below it can possibly retrieve.</div></div>" +
+      "<p>Two languages, written to be the same program: <strong>Python 3.12</strong> and <strong>TypeScript on Node 22</strong>. Neither has a dependency. Python has <code>sqlite3</code> in its standard library, Node 22 has <code>node:sqlite</code>, and Node 22 runs TypeScript directly by <strong>type stripping</strong>, removing the annotations at load time rather than compiling them, so there is no build step and no <code>package.json</code>. The two files are 214 and 212 non-blank lines.</p>" +
+      "<p>The rule about no hidden helpers is worth stating plainly, because it is what separates a capstone from a tutorial. There is no utility module you are asked to trust. If a line runs, it is printed in one of these five chapters. That constraint costs some elegance, and it buys the thing the course is for: you can hold the whole system in your head, and when something goes wrong there is nowhere for the bug to hide.</p>" +
+      "<p>That parity is not decoration. At the end of this chapter both implementations run over the same four documents and produce chunk tables whose SHA-256 over every column is <em>identical</em>, which means the second implementation is a working test of the first. Any place they disagree is a place one of them is wrong.</p>" +
+      "<div class='callout'><strong>Node's SQLite module is still experimental.</strong> Running the TypeScript prints a warning about it, and the flag to silence it is <code>--disable-warning=ExperimentalWarning</code>. The module's shape may change. That is a real cost of the zero-dependency choice and the alternative is <code>better-sqlite3</code>, which is excellent and needs a compiler toolchain. Named here rather than hidden.</div>" },
+
+    { title: "The Schema, and Three Decisions Out Loud",
+      html: "<p>Two tables. That is the whole storage layer for this chapter, and its shape is the first place a design decision becomes permanent.</p>" +
+      "" +
+      "<pre><code>CREATE TABLE IF NOT EXISTS documents (\n  doc_id       TEXT PRIMARY KEY,\n  content_hash TEXT NOT NULL,\n  n_chunks     INTEGER NOT NULL,\n  ingested_at  TEXT NOT NULL,\n  deleted      INTEGER NOT NULL DEFAULT 0);\nCREATE TABLE IF NOT EXISTS chunks (\n  chunk_id  TEXT PRIMARY KEY,\n  doc_id    TEXT NOT NULL,\n  ord       INTEGER NOT NULL,\n  element   TEXT NOT NULL,\n  heading   TEXT NOT NULL,\n  text      TEXT NOT NULL,\n  n_tokens  INTEGER NOT NULL);\nCREATE INDEX IF NOT EXISTS chunks_by_doc ON chunks(doc_id);</code></pre>" +
+      "" +
+      "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>the schema, and why each column exists</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='24' y='40' width='320' height='150' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='42' y='60' fill='#ffd166' font-size='10'>documents</text>" +
+      "<text x='42' y='82' fill='#c9d6ea' font-size='9'>doc_id        the path, natural key</text>" +
+      "<text x='42' y='100' fill='#3ddc97' font-size='9'>content_hash  sha256 of the BYTES</text>" +
+      "<text x='58' y='114' fill='#7d8fb0' font-size='8'>this one column makes ingest idempotent</text>" +
+      "<text x='42' y='134' fill='#c9d6ea' font-size='9'>n_chunks      what we produced</text>" +
+      "<text x='42' y='152' fill='#c9d6ea' font-size='9'>ingested_at   when, in UTC</text>" +
+      "<text x='42' y='170' fill='#ff5d73' font-size='9'>deleted       the tombstone</text>" +
+      "<rect x='396' y='40' width='340' height='150' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='414' y='60' fill='#4f7cff' font-size='10'>chunks</text>" +
+      "<text x='414' y='82' fill='#c9d6ea' font-size='9'>chunk_id   hash-prefix : ordinal</text>" +
+      "<text x='414' y='100' fill='#c9d6ea' font-size='9'>doc_id     which document</text>" +
+      "<text x='414' y='118' fill='#c9d6ea' font-size='9'>ord        position within it</text>" +
+      "<text x='414' y='136' fill='#3ddc97' font-size='9'>element    heading / para / list / code</text>" +
+      "<text x='414' y='154' fill='#3ddc97' font-size='9'>heading    the section it sits under</text>" +
+      "<text x='414' y='172' fill='#c9d6ea' font-size='9'>text, n_tokens</text>" +
+      "<line x1='344' y1='90' x2='390' y2='90' stroke='#4f7cff' stroke-width='2'/><polygon points='396,90 388,86 388,94' fill='#4f7cff'/>" +
+      "<text x='24' y='210' fill='#c9d6ea' font-size='9.5'>element and heading are metadata Chapter 4 argued for; they cost two columns and pay in Chapter 35</text>" +
+      "</svg><div class='fig-cap'>The chunk_id is derived from the document's content hash, so a changed document produces different chunk ids and an unchanged one produces the same ones.</div></div>" +
+      "<p><strong>Decision one: SQLite, not Postgres.</strong> PocketRAG must run from a clone with nothing installed, and SQLite is a file. What we give up is exactly what Chapter 13 described: pgvector's index types, a query planner that can combine a filter with a vector scan, and concurrent writers. Chapter 34 writes the vector index by hand partly because SQLite will not do it for us, which is the point of a capstone.</p>" +
+      "<p><strong>Decision two: the path is the primary key.</strong> A natural key means re-ingesting the same file finds the same row without a lookup table. It also means moving a file looks like a delete plus an insert, which is wrong and which Chapter 29's re-index discussion would call an avoidable churn. A stable document identifier from the source system is better whenever you have one.</p>" +
+      "<p>What is deliberately absent is as informative. There is no column for a vector, because Chapter 34 adds one and adding it now would be scaffolding for a layer that does not exist. There is no access-control label either, which Chapter 28 says every chunk should carry; exercise 5 puts it in, and leaving it out of the base build is a decision you should disagree with if this were going to production.</p>" +
+      "<p><strong>Decision three: the hash is over the raw bytes, not the extracted text.</strong> Hashing the bytes means a document that was re-saved with no textual change still counts as changed, which does unnecessary work. Hashing the extracted text instead would mean the loader runs on every file every time, which is the expensive half. Bytes are the cheap check, and the cost is some redundant re-chunking.</p>" },
+
+    { title: "Loaders: Three Formats, One Element Stream",
+      html: "<p>A loader's job is to turn a file into an <strong>element stream</strong>: a list of elements, each one a triple of kind, heading and text. Everything downstream sees only that, so adding a format later is adding a function, and the chunker never learns what a file format is.</p>" +
+      "<p>Markdown first, because it is the shape the others are converted into. Note what it does with headings: a heading becomes an element in its own right <em>and</em> becomes the heading carried by every element after it, until the next one.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def load_markdown(src: str) -&gt; list[tuple[str, str, str]]:\n    out, heading, buf, fence = [], \"\", [], False\n    def flush(kind=\"para\"):\n        if buf:\n            out.append((kind, heading, \"\\n\".join(buf).strip()))\n            buf.clear()\n    for line in src.splitlines():\n        if line.startswith(\"```\"):\n            flush(\"code\" if fence else \"para\")\n            fence = not fence\n            continue\n        if fence:\n            buf.append(line)\n        elif line.startswith(\"#\"):\n            flush()\n            heading = line.lstrip(\"#\").strip()\n            out.append((\"heading\", heading, heading))\n        elif re.match(r\"\\s*([-*+]|\\d+\\.)\\s\", line):\n            buf.append(line.strip())\n        elif not line.strip():\n            flush()\n        else:\n            buf.append(line.strip())\n    flush()\n    return out\n</code></pre><pre data-lang='ts' hidden><code>export function loadMarkdown(src: string): Element[] {\n  const out: Element[] = [];\n  let heading = \"\", buf: string[] = [], fence = false;\n  const flush = (kind = \"para\") =&gt; {\n    if (buf.length) out.push({ element: kind, heading, text: buf.join(\"\\n\").trim() });\n    buf = [];\n  };\n  for (const line of src.split(\"\\n\")) {\n    if (line.startsWith(\"```\")) { flush(fence ? \"code\" : \"para\"); fence = !fence; continue; }\n    if (fence) buf.push(line);\n    else if (line.startsWith(\"#\")) {\n      flush();\n      heading = line.replace(/^#+/, \"\").trim();\n      out.push({ element: \"heading\", heading, text: heading });\n    } else if (/^\\s*([-*+]|\\d+\\.)\\s/.test(line)) buf.push(line.trim());\n    else if (!line.trim()) flush();\n    else buf.push(line.trim());\n  }\n  flush();\n  return out;\n}\n</code></pre></div>" +
+      "" +
+      "<p>The HTML loader is the same idea over a block-tag regular expression, mapping <code>p</code> to para, <code>li</code> to list, <code>pre</code> to code and <code>td</code> to table, and stripping <code>script</code> and <code>style</code> before anything else so their contents never reach the index. Parsing HTML with a regular expression is famously wrong in general, and it is adequate here for the same reason Chapter 4 gave: we want block text and headings, not a document tree.</p>" +
+      "<p>Then PDF, which is where the honesty starts.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def load_pdf(raw: bytes) -&gt; list[tuple[str, str, str]]:\n    \"\"\"Minimal extractor: inflate each stream, keep the ones that are text\n    content, and collect the strings the text operators show. Deliberately\n    small; see the chapter for exactly what it cannot do.\"\"\"\n    parts = []\n    for blob in re.findall(rb\"stream\\r?\\n(.*?)\\r?\\nendstream\", raw, re.S):\n        try:\n            content = zlib.decompress(blob)\n        except zlib.error:\n            continue\n        if b\"BT\" not in content:          # not a text-showing content stream\n            continue\n        shown = []\n        for s in SHOW.findall(content):\n            body = s[1:-1]\n            for k, v in UNESC.items():\n                body = body.replace(k, v)\n            shown.append(body.decode(\"latin-1\", \"replace\"))\n        text = \"\".join(shown)\n        if not text:\n            continue\n        printable = sum(1 for c in text if 32 &lt;= ord(c) &lt; 127 or c in \"\\n\\t\")\n        if printable / len(text) &lt; 0.9:   # an image that happened to match\n            continue\n        parts.append(text)\n    if not parts:\n        raise ValueError(\"no extractable text: this PDF draws glyphs as paths \"\n                         \"or is a scan. Run OCR first (ch 31).\")\n    text = re.sub(r\"[ \\t]+\", \" \", \"\\n\".join(parts))\n    return [(\"para\", \"\", p.strip()) for p in text.split(\"\\n\") if p.strip()]\n</code></pre><pre data-lang='ts' hidden><code>export function loadPdf(raw: Buffer): Element[] {\n  const parts: string[] = [];\n  const latin = raw.toString(\"latin1\");\n  const re = /stream\\r?\\n([\\s\\S]*?)\\r?\\nendstream/g;\n  for (const m of latin.matchAll(re)) {\n    let content: string;\n    try { content = inflateSync(Buffer.from(m[1], \"latin1\")).toString(\"latin1\"); }\n    catch { continue; }\n    if (!content.includes(\"BT\")) continue;      // not a text-showing stream\n    const shown = (content.match(/\\((?:\\\\.|[^()\\\\])*\\)/g) ?? []).map((s) =&gt;\n      s.slice(1, -1).replace(/\\\\n/g, \"\\n\").replace(/\\\\r/g, \"\")\n        .replace(/\\\\t/g, \" \").replace(/\\\\([()\\\\])/g, \"$1\"));\n    const text = shown.join(\"\");\n    if (!text) continue;\n    let printable = 0;\n    for (const c of text) if ((c &gt;= \" \" &amp;&amp; c &lt; \"\\x7f\") || c === \"\\n\" || c === \"\\t\") printable++;\n    if (printable / text.length &lt; 0.9) continue;  // an image that happened to match\n    parts.push(text);\n  }\n  if (!parts.length) throw new Error(\n    \"no extractable text: this PDF draws glyphs as paths or is a scan. Run OCR first (ch 31).\");\n  return parts.join(\"\\n\").replace(/[ \\t]+/g, \" \").split(\"\\n\")\n    .map((p) =&gt; p.trim()).filter(Boolean)\n    .map((text) =&gt; ({ element: \"para\", heading: \"\", text }));\n}\n</code></pre></div>" +
+      "" +
+      "<p>That is a real extractor and it is 25 lines. It inflates every stream, keeps the ones that contain a <code>BT</code> text-block operator, pulls the parenthesised strings that each <strong>text-showing operator</strong> takes, and rejects anything whose <strong>printable ratio</strong>, the share of characters that are ordinary printable text, falls below nine tenths. On the Essential GraphRAG PDF it recovers text well enough to chunk: 195 chunks, 75,200 tokens.</p>" +
+      "<div class='callout'><strong>The failure it refuses to hide.</strong> Point it at a PDF whose glyphs are drawn as vector paths rather than set as text, which is what many publisher PDFs and every scan are, and there is no text in the file to find. The loader raises instead of returning the garbage that a permissive version would: an earlier draft of this code, without the printable-ratio check, cheerfully ingested image data as 1,882 chunks of 1.6 million tokens. Silent garbage in the index is worse than a failed ingest, because Chapter 29's six checks will spend a week finding it.</div>" },
+
+    { title: "The Chunker, and the Tokenizer We Do Not Have",
+      html: "<p>Chapter 5 measured a recall knee around 400 tokens and found overlap earning little. Chapter 17 measured what context length costs. PocketRAG takes 512 tokens with 64 of overlap, which is at the upper edge of that knee and a deliberate compromise: large enough that a policy paragraph survives intact, small enough that a chunk is about one idea.</p>" +
+      "<p>To respect a token budget you must count tokens, and counting them properly needs the embedding model's tokenizer, which does not arrive until Chapter 34. So PocketRAG approximates, and the approximation is a decision with a measured error rather than a hope.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>TARGET, OVERLAP = 512, 64          # tokens per chunk, tokens repeated (ch 5)\nPIECE = re.compile(r\"[A-Za-z0-9]+|[^\\sA-Za-z0-9]\")\nFUDGE = 1.05                       # measured against cl100k; see the chapter\n\n\ndef ntokens(text: str) -&gt; int:\n    \"\"\"Approximate the model's tokenizer. Within a few percent; see ch 32.\"\"\"\n    return math.ceil(len(PIECE.findall(text)) * FUDGE)\n</code></pre><pre data-lang='ts' hidden><code>const TARGET = 512, OVERLAP = 64;      // tokens per chunk, tokens repeated (ch 5)\nconst PIECE = /[A-Za-z0-9]+|[^\\sA-Za-z0-9]/g;\nconst FUDGE = 1.05;                    // measured against cl100k; see the chapter\n\nexport type Element = { element: string; heading: string; text: string };\nexport type Chunk = Element &amp; { nTokens: number };\n\nexport function ntokens(text: string): number {\n  return Math.ceil((text.match(PIECE)?.length ?? 0) * FUDGE);\n}\n</code></pre></div>" +
+      "" +
+      "<p>The rule is: count runs of letters and digits, count each punctuation mark, multiply by 1.05. That constant is not a guess. Four candidate heuristics were scored against <code>tiktoken</code>'s cl100k encoding over the Larkspur corpus and forty thousand characters of book text. Splitting on whitespace undercounts by 24%. Dividing characters by four overcounts by 14%. Counting pieces undercounts by 9%, and 1.05 centres it.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>measured: the token approximation against cl100k, on the 200 chunks produced</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9.5'>heuristic</text><text x='330' y='48' fill='#7d8fb0' font-size='9.5'>mean error</text><text x='470' y='48' fill='#7d8fb0' font-size='9.5'>median</text><text x='600' y='48' fill='#7d8fb0' font-size='9.5'>verdict</text>" +
+      "<text x='24' y='74' fill='#c9d6ea' font-size='10'>split on whitespace</text><text x='340' y='74' fill='#ff5d73' font-size='10'>-24.3%</text><text x='480' y='74' fill='#ff5d73' font-size='10'>-24.5%</text><text x='600' y='74' fill='#ff5d73' font-size='9.5'>chunks 30% too big</text>" +
+      "<text x='24' y='96' fill='#c9d6ea' font-size='10'>characters / 4</text><text x='340' y='96' fill='#ffd166' font-size='10'>+14.3%</text><text x='480' y='96' fill='#ffd166' font-size='10'>+13.3%</text><text x='600' y='96' fill='#ffd166' font-size='9.5'>wastes budget</text>" +
+      "<text x='24' y='118' fill='#c9d6ea' font-size='10'>word and punctuation pieces</text><text x='340' y='118' fill='#ffd166' font-size='10'>-9.0%</text><text x='480' y='118' fill='#ffd166' font-size='10'>-7.7%</text><text x='600' y='118' fill='#ffd166' font-size='9.5'>close</text>" +
+      "<text x='24' y='140' fill='#3ddc97' font-size='10'>pieces x 1.05   (chosen)</text><text x='340' y='140' fill='#3ddc97' font-size='10'>-3.1%</text><text x='480' y='140' fill='#3ddc97' font-size='10'>-1.0%</text><text x='600' y='140' fill='#3ddc97' font-size='9.5'>ship it</text>" +
+      "<line x1='24' y1='156' x2='736' y2='156' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='176' fill='#ffd166' font-size='10'>on the chunks actually produced: mean -4.0%, p05 -17.8%, p95 +10.1%</text>" +
+      "<text x='24' y='196' fill='#c9d6ea' font-size='9.5'>so a 512-token target yields a real median of 458 tokens and a real maximum of 779</text>" +
+      "<text x='24' y='212' fill='#7d8fb0' font-size='9'>the tail is PDF text, where spacing is irregular and the heuristic is furthest off</text>" +
+      "</svg><div class='fig-cap'>An approximation with a measured error distribution is engineering. The same approximation with no measurement is the thing this course keeps warning about.</div></div>" +
+      "<p>Now the chunker itself. It packs whole elements up to the target, splits an element that alone exceeds it, and carries a tail of elements forward to create the overlap.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def chunk(elements: list[tuple[str, str, str]]) -&gt; list[dict]:\n    \"\"\"Pack elements up to TARGET tokens, never splitting an element unless it\n    alone exceeds the target, and repeat OVERLAP tokens across the seam.\"\"\"\n    chunks, buf, ntok = [], [], 0\n\n    def emit():\n        if not buf:\n            return\n        text = \"\\n\\n\".join(t for _, _, t in buf)\n        chunks.append({\"element\": buf[0][0], \"heading\": buf[0][1],\n                       \"text\": text, \"n_tokens\": ntokens(text)})\n\n    for el in elements:\n        kind, heading, text = el\n        size = ntokens(text)\n        if size &gt; TARGET:                       # one element too big: split it\n            emit(); buf, ntok = [], 0\n            words = text.split(\" \")\n            step = max(1, int(len(words) * (TARGET - OVERLAP) / size))\n            span = max(1, int(len(words) * TARGET / size))\n            for i in range(0, len(words), step):\n                piece = \" \".join(words[i:i + span])\n                chunks.append({\"element\": kind, \"heading\": heading,\n                               \"text\": piece, \"n_tokens\": ntokens(piece)})\n                if i + span &gt;= len(words):\n                    break\n            continue\n        if ntok + size &gt; TARGET:\n            emit()\n            tail, back = [], 0                  # carry OVERLAP tokens forward\n            for prev in reversed(buf):\n                psize = ntokens(prev[2])\n                if psize &gt; OVERLAP * 2:         # never carry a big element:\n                    break                       # it would blow the next chunk\n                back += psize\n                tail.insert(0, prev)\n                if back &gt;= OVERLAP:\n                    break\n            buf, ntok = tail, back\n        buf.append(el); ntok += size\n    emit()\n    return chunks\n</code></pre><pre data-lang='ts' hidden><code>export function chunk(elements: Element[]): Chunk[] {\n  const chunks: Chunk[] = [];\n  let buf: Element[] = [], ntok = 0;\n  const emit = () =&gt; {\n    if (!buf.length) return;\n    const text = buf.map((e) =&gt; e.text).join(\"\\n\\n\");\n    chunks.push({ element: buf[0].element, heading: buf[0].heading, text, nTokens: ntokens(text) });\n  };\n  for (const el of elements) {\n    const size = ntokens(el.text);\n    if (size &gt; TARGET) {                        // one element too big: split it\n      emit(); buf = []; ntok = 0;\n      const words = el.text.split(\" \");\n      const step = Math.max(1, Math.floor(words.length * (TARGET - OVERLAP) / size));\n      const span = Math.max(1, Math.floor(words.length * TARGET / size));\n      for (let i = 0; i &lt; words.length; i += step) {\n        const text = words.slice(i, i + span).join(\" \");\n        chunks.push({ element: el.element, heading: el.heading, text, nTokens: ntokens(text) });\n        if (i + span &gt;= words.length) break;\n      }\n      continue;\n    }\n    if (ntok + size &gt; TARGET) {\n      emit();\n      const tail: Element[] = []; let back = 0;  // carry OVERLAP tokens forward\n      for (let i = buf.length - 1; i &gt;= 0; i--) {\n        const psize = ntokens(buf[i].text);\n        if (psize &gt; OVERLAP * 2) break;          // never carry a big element:\n        back += psize;                           // it would blow the next chunk\n        tail.unshift(buf[i]);\n        if (back &gt;= OVERLAP) break;\n      }\n      buf = tail; ntok = back;\n    }\n    buf.push(el); ntok += size;\n  }\n  emit();\n  return chunks;\n}\n</code></pre></div>" +
+      "" +
+      "<p>The guard in the middle of the carry loop is there because of a bug this code had. Without it, the overlap tail could pick up a 490-token paragraph, and adding the next element produced a 1,006-token chunk: double the target, from a mechanism meant to add 64. With the guard, the largest chunk over the whole corpus is 560 tokens, which is target plus overlap and exactly what the design predicts.</p>" },
+
+    { title: "Idempotent Upsert, and Tombstones",
+      html: "<p>Here is the function the chapter's test exists to prove. Its contract is one sentence: ingesting a file twice must leave the database exactly as it was after the first time.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def ingest(db: sqlite3.Connection, path: str) -&gt; str:\n    \"\"\"Returns 'unchanged', 'inserted' or 'replaced'. Idempotent by content.\"\"\"\n    raw = open(path, \"rb\").read()\n    digest = hashlib.sha256(raw).hexdigest()\n    row = db.execute(\"SELECT content_hash FROM documents WHERE doc_id=?\",\n                     (path,)).fetchone()\n    if row and row[0] == digest:\n        db.execute(\"UPDATE documents SET deleted=0 WHERE doc_id=?\", (path,))\n        db.commit()\n        return \"unchanged\"\n    pieces = chunk(load(path))\n    with db:                                    # one transaction: all or none\n        db.execute(\"DELETE FROM chunks WHERE doc_id=?\", (path,))\n        db.execute(\n            \"INSERT INTO documents(doc_id,content_hash,n_chunks,ingested_at,deleted)\"\n            \" VALUES(?,?,?,?,0) ON CONFLICT(doc_id) DO UPDATE SET\"\n            \" content_hash=excluded.content_hash, n_chunks=excluded.n_chunks,\"\n            \" ingested_at=excluded.ingested_at, deleted=0\",\n            (path, digest, len(pieces), datetime.now(timezone.utc).isoformat()))\n        db.executemany(\n            \"INSERT INTO chunks(chunk_id,doc_id,ord,element,heading,text,n_tokens)\"\n            \" VALUES(?,?,?,?,?,?,?)\",\n            [(f\"{digest[:12]}:{i}\", path, i, c[\"element\"], c[\"heading\"],\n              c[\"text\"], c[\"n_tokens\"]) for i, c in enumerate(pieces)])\n    return \"replaced\" if row else \"inserted\"\n</code></pre><pre data-lang='ts' hidden><code>export function ingest(db: DatabaseSync, path: string): string {\n  const raw = readFileSync(path);\n  const digest = createHash(\"sha256\").update(raw).digest(\"hex\");\n  const row = db.prepare(\"SELECT content_hash FROM documents WHERE doc_id=?\")\n    .get(path) as { content_hash: string } | undefined;\n  if (row &amp;&amp; row.content_hash === digest) {\n    db.prepare(\"UPDATE documents SET deleted=0 WHERE doc_id=?\").run(path);\n    return \"unchanged\";\n  }\n  const pieces = chunk(load(path));\n  db.exec(\"BEGIN\");                              // one transaction: all or none\n  try {\n    db.prepare(\"DELETE FROM chunks WHERE doc_id=?\").run(path);\n    db.prepare(\n      \"INSERT INTO documents(doc_id,content_hash,n_chunks,ingested_at,deleted)\" +\n      \" VALUES(?,?,?,?,0) ON CONFLICT(doc_id) DO UPDATE SET\" +\n      \" content_hash=excluded.content_hash, n_chunks=excluded.n_chunks,\" +\n      \" ingested_at=excluded.ingested_at, deleted=0\"\n    ).run(path, digest, pieces.length, new Date().toISOString());\n    const ins = db.prepare(\n      \"INSERT INTO chunks(chunk_id,doc_id,ord,element,heading,text,n_tokens)\" +\n      \" VALUES(?,?,?,?,?,?,?)\");\n    pieces.forEach((c, i) =&gt;\n      ins.run(`${digest.slice(0, 12)}:${i}`, path, i, c.element, c.heading, c.text, c.nTokens));\n    db.exec(\"COMMIT\");\n  } catch (e) { db.exec(\"ROLLBACK\"); throw e; }\n  return row ? \"replaced\" : \"inserted\";\n}\n</code></pre></div>" +
+      "" +
+      "<p>Three things carry that contract. The hash comparison returns early on an unchanged file, so the loader and chunker never run and the cost of a no-op ingest is one <code>SELECT</code>. The delete and the inserts sit in one transaction, so a crash halfway leaves the previous version intact rather than half of each. And the <code>chunk_id</code> is built from the content hash, so an unchanged document produces the same identifiers on every run, which is what lets Chapter 34's vector index skip re-embedding.</p>" +
+      "<p>Deletion is the part most ingest pipelines get wrong, because a file that disappears never triggers anything. PocketRAG makes disappearance explicit: the caller passes the set of files it saw, and everything else is tombstoned.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def prune(db: sqlite3.Connection, seen: set[str]) -&gt; int:\n    \"\"\"Tombstone documents that were not in this run and drop their chunks.\"\"\"\n    gone = [r[0] for r in db.execute(\"SELECT doc_id FROM documents WHERE deleted=0\")\n            if r[0] not in seen]\n    with db:\n        for doc in gone:\n            db.execute(\"UPDATE documents SET deleted=1, n_chunks=0 WHERE doc_id=?\", (doc,))\n            db.execute(\"DELETE FROM chunks WHERE doc_id=?\", (doc,))\n    return len(gone)\n</code></pre><pre data-lang='ts' hidden><code>export function prune(db: DatabaseSync, seen: Set&lt;string&gt;): number {\n  const gone = (db.prepare(\"SELECT doc_id FROM documents WHERE deleted=0\")\n    .all() as { doc_id: string }[]).map((r) =&gt; r.doc_id).filter((d) =&gt; !seen.has(d));\n  db.exec(\"BEGIN\");\n  for (const doc of gone) {\n    db.prepare(\"UPDATE documents SET deleted=1, n_chunks=0 WHERE doc_id=?\").run(doc);\n    db.prepare(\"DELETE FROM chunks WHERE doc_id=?\").run(doc);\n  }\n  db.exec(\"COMMIT\");\n  return gone.length;\n}\n</code></pre></div>" +
+      "" +
+      "<p>Note what the tombstone keeps and what it drops. The <code>documents</code> row survives with <code>deleted=1</code>, so a later run that finds the file again can tell the difference between new and returned. Every chunk goes immediately, because a chunk that survives its document is a chunk that can be retrieved and cited, which is Chapter 28's leak in a different costume.</p>" +
+      "<p>The three return values matter more than they look. <code>unchanged</code>, <code>inserted</code> and <code>replaced</code> are what a caller logs, and they are what Chapter 29 builds ingest observability from: a run reporting mostly <code>replaced</code> when you expected mostly <code>unchanged</code> means something upstream is rewriting files, which is a real incident and an invisible one without this string.</p>" +
+      "<div class='callout'><strong>The real option not taken.</strong> Production systems track deletions from the source rather than by comparing sets: a change feed, a webhook, a modification timestamp. Set comparison requires enumerating the entire corpus on every run, which is fine for a folder and quadratic misery for a document management system with millions of files. Chapter 29's re-index discussion is where the grown-up version lives.</div>" },
+
+    { title: "Run It",
+      html: "<p>Two commands, one per language. Point them at the corpus and they build the same database.</p>" +
+      "" +
+      "<pre><code>$ python3 ingest.py pocket.db corpus/*\n inserted  corpus/policies.md\n inserted  corpus/runbook.md\n inserted  corpus/tickets.html\n inserted  corpus/graphrag.pdf\n\n  4 documents, 200 chunks, 76804 tokens\n\n$ node --experimental-strip-types ingest.ts pocket-ts.db corpus/*\n inserted  corpus/policies.md\n inserted  corpus/runbook.md\n inserted  corpus/tickets.html\n inserted  corpus/graphrag.pdf\n\n  4 documents, 200 chunks, 76804 tokens</code></pre>" +
+      "" +
+      "<p>Then run it a second time, unchanged, and read the first column.</p>" +
+      "" +
+      "<pre><code>$ python3 ingest.py pocket.db corpus/*\nunchanged  corpus/policies.md\nunchanged  corpus/runbook.md\nunchanged  corpus/tickets.html\nunchanged  corpus/graphrag.pdf\n\n  4 documents, 200 chunks, 76804 tokens</code></pre>" +
+      "" +
+      "<p>That is the property. Four documents, no work done, no rows changed. Now the test, which asserts it rather than asking you to read it, and adds the two cases a manual run will not reach.</p>" +
+      "" +
+      "<pre><code>PocketRAG ingest, chapter 32\n  PASS  first ingest inserts: 2\n  PASS  second ingest is a no-op: ['unchanged', 'unchanged']\n  PASS  row counts unchanged: (2, 2)\n  PASS  edited doc reports replaced: replaced\n  PASS  untouched doc keeps its chunk ids: ['3b33cf29d02e:0']\n  PASS  pruned doc leaves no chunks: 0\n  PASS  pruned doc keeps a tombstone: 1\n\n  all checks passed</code></pre>" +
+      "" +
+      "<p>Four claims, each one a line of the test: a second ingest reports <code>unchanged</code> for every file and changes no counts; editing one document reports <code>replaced</code> and leaves the <em>other</em> document's chunk identifiers untouched, which is the check that catches an over-broad delete; and a document that disappears leaves zero chunks and one tombstone.</p>" +
+      "<p>The test builds its documents in a temporary directory rather than reading the corpus, which is deliberate: a test that depends on files in the repository fails for the wrong reason the first time somebody edits one. It also runs in about a tenth of a second, so it belongs in whatever runs on every commit rather than in a nightly job.</p>" +
+      "<h3>The two implementations are each other's test</h3>" +
+      "<p>Run both over the same four documents and compare the tables directly. Hashing every column of all 200 rows in each database gives the same digest, which means the loaders, the chunker, the token approximation and the identifier scheme all agree exactly across two languages, two regular expression engines and two SQLite bindings.</p>" +
+      "" +
+      "<pre><code>$ python3 - &lt;&lt;EOF\nimport sqlite3, hashlib\nq = \"SELECT * FROM chunks ORDER BY doc_id, ord\"\nfor db in (\"pocket.db\", \"pocket-ts.db\"):\n    rows = sqlite3.connect(db).execute(q).fetchall()\n    print(db, len(rows), hashlib.sha256(repr(rows).encode()).hexdigest()[:32])\nEOF\npocket.db 200 60b8a689af94424e902405abdbc151a1\npocket-ts.db 200 60b8a689af94424e902405abdbc151a1</code></pre>" +
+      "" +
+      "<p>This is worth more than it looks. A second implementation catches the class of bug a test suite written alongside the first implementation cannot: the assumption you did not know you were making. The module guard in the TypeScript is an example. Written as <code>process.argv[1].endsWith(\"ingest.ts\")</code>, it also matched <code>test_ingest.ts</code>, so importing the module ran its command-line entry point and the test crashed before its first assertion. Python's <code>__name__ == \"__main__\"</code> has no such ambiguity, and the disagreement is what surfaced it.</p>" },
+
+    { title: "The Confession, and What Comes Next",
+      html: "<p>Every simplification in this layer, and the chapter that holds the real machinery.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>what layer 1 simplified, and where the real version lives</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='50' fill='#c9d6ea' font-size='9.5'>token counting is a heuristic, not the model's tokenizer</text><text x='560' y='50' fill='#7d8fb0' font-size='9'>ch 34 brings the real one</text>" +
+      "<text x='24' y='72' fill='#c9d6ea' font-size='9.5'>fixed 512-token chunks for every document type</text><text x='560' y='72' fill='#7d8fb0' font-size='9'>ch 5, and ch 6's small-to-big</text>" +
+      "<text x='24' y='94' fill='#c9d6ea' font-size='9.5'>no semantic chunking: it costs an embedding per sentence</text><text x='560' y='94' fill='#7d8fb0' font-size='9'>ch 5 measured the gain</text>" +
+      "<text x='24' y='116' fill='#c9d6ea' font-size='9.5'>HTML parsed with a regular expression, not a tree</text><text x='560' y='116' fill='#7d8fb0' font-size='9'>ch 4</text>" +
+      "<text x='24' y='138' fill='#c9d6ea' font-size='9.5'>PDF: no layout, no tables, no reading order, no OCR</text><text x='560' y='138' fill='#7d8fb0' font-size='9'>ch 4, ch 31</text>" +
+      "<text x='24' y='160' fill='#c9d6ea' font-size='9.5'>deletion by set comparison, not a change feed</text><text x='560' y='160' fill='#7d8fb0' font-size='9'>ch 29</text>" +
+      "<text x='24' y='182' fill='#c9d6ea' font-size='9.5'>no access-control metadata on chunks yet</text><text x='560' y='182' fill='#ff5d73' font-size='9'>ch 28, and exercise 5</text>" +
+      "<line x1='24' y1='198' x2='736' y2='198' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='220' fill='#3ddc97' font-size='10.5'>this is early, not wrong</text>" +
+      "<text x='24' y='234' fill='#c9d6ea' font-size='9'>every row is a decision with a reason, and every reason has a measurement behind it</text>" +
+      "</svg><div class='fig-cap'>A confession table is not an apology. It is the list of things you would have to argue about before shipping this, written while you still remember them.</div></div>" +
+      "<p>The single most consequential row is the first one. Chapter 34 introduces the embedding model, which arrives with its own tokenizer, and at that moment the 512 in this chapter stops being an approximation and starts being exact. The chunks in your database will have been cut with a ruler that was 4% short. Re-ingesting is cheap because ingest is idempotent, which is the payoff for the work in this chapter arriving one chapter later.</p>" +
+      "<p>The second row deserves an argument rather than an apology. One chunk size for every document type is the first entry on Chapter 29's list of classic mistakes, and PocketRAG commits it knowingly. The defence is that the element stream already carries what is needed to fix it, since a code block and a table arrive tagged as such, so the repair is a branch in one function rather than a redesign. Doing it now would mean tuning a parameter with no way to measure the result, which is what Chapter 25 warns against and what Chapter 36 finally makes possible.</p>" +
+      "<p>Chapter 33 adds the lexical half of retrieval on top of what you built here: a stemmer written out in full, a stopword list, a dictionary and postings in two more SQLite tables, and BM25 with a heap for the top k. It will read the <code>chunks</code> table and nothing else, which is the test of whether this layer's interface was drawn in the right place.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take a Markdown document with a 700-token paragraph followed by three 80-token paragraphs, and work the chunker by hand. Write down how many chunks it emits, which elements land in each, and the token count of each. You should find the long paragraph is split by the word-proportional branch and never merges with its neighbours, and you should be able to say why the guard on the carry loop matters for the chunk that follows it.</li>" +
+      "<li><strong>Trace.</strong> A document is re-saved with no textual change, so its bytes differ and its extracted text does not. Follow <code>ingest</code> line by line and state exactly what work is done and which rows change. Then say what would change if the hash were taken over the extracted text instead, and which of the two is cheaper for a corpus of ten thousand mostly-static files.</li>" +
+      "<li><strong>Investigate.</strong> Run both implementations over your own folder, then compare them as the chapter does, hashing every column of the chunks table in each. If the digests differ, find the first differing row and identify which loader disagreed. You should either get identical digests or learn something specific about regular-expression differences between Python and JavaScript.</li>" +
+      "<li><strong>Investigate.</strong> Point the PDF loader at three PDFs from different sources and record, for each, how many streams inflate, how many contain a text block operator, and how many characters come out. Compare against what a real library extracts from the same files. Report the recovery rate. You should find at least one PDF that yields nothing, and you should be able to say from its structure why.</li>" +
+      "<li><strong>Build.</strong> Add Chapter 28's access control to this layer: a <code>label</code> column on chunks, populated by the loader from a front-matter field or a path prefix, and a retrieval helper that takes a set of permitted labels. Then write the leak test from Chapter 28 against it. It must fail if you remove the filter, and you should confirm that it does before you believe it.</li>" +
+      "<li><strong>Build.</strong> Replace the token heuristic with a real tokenizer in one language, keep the heuristic in the other, and re-run both over the same corpus. Report where the chunk boundaries diverge and by how much. This is Chapter 34's change arriving early, and doing it now tells you what re-ingesting will cost.</li>" +
+      "<li><strong>Build, optional.</strong> Make ingest incremental at the chunk level: instead of deleting every chunk of a changed document, diff the new chunk list against the stored one and touch only what moved. Measure the rows written on a one-paragraph edit to a fifty-chunk document, before and after. You should see a large reduction and you should decide, with the number in front of you, whether the added complexity earns its place.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "element stream", d: "The uniform intermediate a loader produces, a list of kind, heading and text triples, so every downstream stage is independent of the source format." },
+    { t: "content hash", d: "A digest of a document's raw bytes, stored alongside it, which turns a re-ingest into a single comparison and makes the pipeline idempotent." },
+    { t: "idempotent", d: "A property of an operation that leaves the same state however many times it runs, which is what allows an ingest to be retried safely after any failure." },
+    { t: "tombstone", d: "A retained row marking a document as deleted, which distinguishes a document that has gone from one that was never seen while its chunks are removed." },
+    { t: "upsert", d: "An insert that becomes an update when the key already exists, expressed in SQLite as INSERT ... ON CONFLICT DO UPDATE." },
+    { t: "natural key", d: "A primary key taken from the data itself, such as a file path, rather than a generated identifier, which removes a lookup at the cost of breaking when the data moves." },
+    { t: "text-showing operator", d: "The PDF content-stream instruction that draws a string on the page, which is what a minimal extractor looks for rather than trying to parse the document." },
+    { t: "content stream", d: "The part of a PDF holding drawing instructions for one page, usually compressed, and the only place extractable text can be found." },
+    { t: "printable ratio", d: "The share of characters in an extracted string that are ordinary printable text, used as a cheap gate to reject binary data that happened to match a text pattern." },
+    { t: "carry loop", d: "The step that moves trailing elements from a finished chunk into the next one to create overlap, and the place a size guard is needed to stop chunks doubling." },
+    { t: "type stripping", d: "Running TypeScript by removing its type annotations at load time rather than compiling it, which is how PocketRAG's TypeScript half has no build step." },
+    { t: "confession table", d: "The list of simplifications a build makes, each paired with the chapter holding the real mechanism, written while the reasons are still fresh." }
+  ],
+  quiz: [
+    { type: "mc",
+      q: "PocketRAG hashes a document's raw bytes rather than its extracted text. What does that choice cost, and what does it buy?",
+      opts: [
+        "It costs nothing and buys a faster hash",
+        "It costs storage, because raw bytes must be retained to verify the hash",
+        "It costs correctness, because two documents with the same text hash differently",
+        "It costs redundant re-chunking when a file is re-saved without textual change, and it buys skipping the loader entirely on unchanged files"
+      ], a: 3,
+      why: "Hashing extracted text would require running the loader on every file on every run, which is the expensive half of ingest. Hashing bytes is the cheap check, and the price is doing unnecessary work when a file is touched but not changed." },
+    { type: "mc",
+      q: "The chunker's carry loop skips any element larger than twice the overlap. What happens without that guard?",
+      opts: [
+        "A large trailing element is carried forward, and the next chunk reaches roughly double the target",
+        "Chunks become smaller than the target, because the overlap is never applied",
+        "The overlap is duplicated twice, inflating the index",
+        "Nothing changes; the guard is a defensive assertion"
+      ], a: 0,
+      why: "This was a real bug in the code: a 490-token paragraph carried forward plus the next element produced a 1,006-token chunk from a mechanism meant to add 64. With the guard the largest chunk in the corpus is 560, which is target plus overlap." },
+    { type: "mc",
+      q: "The PDF loader raises an error when it finds no extractable text, rather than returning what it did find. Why is that the right behaviour?",
+      opts: [
+        "Because an empty result would break the chunker",
+        "Because PDFs without text are always corrupt",
+        "Because a permissive version ingested image data as 1,882 chunks of garbage, and silent garbage in the index costs a week of debugging later",
+        "Because the caller cannot distinguish an empty document from a missing file"
+      ], a: 2,
+      why: "This is measured, not hypothetical: an earlier draft without the printable-ratio check produced 1.6 million tokens of decoded image data. A failed ingest is visible immediately; a poisoned index is found by Chapter 29's six checks, slowly." },
+    { type: "mc",
+      q: "Four token-counting heuristics were scored against a real tokenizer. Splitting on whitespace was off by -24.3% and characters-over-four by +14.3%. What does a -24% error do to a 512-token chunker?",
+      opts: [
+        "Nothing, because the error is consistent and cancels out",
+        "It produces chunks of the right size but with the wrong overlap",
+        "It produces chunks about 24% smaller, because fewer tokens are counted per chunk",
+        "It produces chunks about 30% larger than intended, because undercounting means more text fits before the budget is reached"
+      ], a: 3,
+      why: "Undercounting means the budget is reached later, so more text goes in. The chosen heuristic, word and punctuation pieces multiplied by 1.05, centres the error at -3.1% and produces a real median of 458 tokens against the 512 target." },
+    { type: "mc",
+      q: "Both implementations produce chunk tables whose SHA-256 over every column is identical. What kind of bug does that catch which a normal test suite does not?",
+      opts: [
+        "Performance regressions, since both must do the same work",
+        "The assumption you did not know you were making, because a test written alongside one implementation shares its assumptions",
+        "Memory leaks, which show up only under two runtimes",
+        "Schema drift, since both write the same tables"
+      ], a: 1,
+      why: "The chapter's example is the TypeScript module guard: endsWith(\"ingest.ts\") also matched test_ingest.ts, so importing the module ran its entry point. Python's __name__ check has no such ambiguity, and the disagreement between the two is what surfaced it." },
+    { type: "mc",
+      q: "When a document is tombstoned, its documents row is kept and all of its chunks are deleted immediately. Why not keep the chunks and filter them at query time?",
+      opts: [
+        "Because a chunk that outlives its document can still be retrieved and cited, which is Chapter 28's leak in a different form",
+        "Because filtering at query time is slower than deleting",
+        "Because SQLite cannot index a boolean column efficiently",
+        "Because the chunk ids would collide when the document returns"
+      ], a: 0,
+      why: "The documents row is kept so a returning file can be told apart from a new one. The chunks go because retrieval reads the chunks table, and a rule enforced only by a query-time filter is a rule waiting to be forgotten by one code path." },
+    { type: "mc",
+      q: "PocketRAG uses SQLite rather than Postgres with pgvector. According to Chapter 13, what is given up?",
+      opts: [
+        "Transactions, which SQLite does not provide",
+        "The ability to store text alongside vectors",
+        "Index types, a planner that can combine a filter with a vector scan, and concurrent writers",
+        "Durability, since SQLite writes are not crash-safe"
+      ], a: 2,
+      why: "SQLite has transactions and durability. What it lacks is the vector index and the planner that decides between a pre-filtered scan and an index scan, which is exactly why Chapter 34 has to write the HNSW graph by hand." },
+    { type: "mc",
+      q: "The delete and the inserts for a changed document run inside one transaction. What specifically does that prevent?",
+      opts: [
+        "Two ingests of the same file running at once",
+        "A crash between the delete and the inserts leaving the document with no chunks at all",
+        "The content hash being written before the chunks",
+        "Chunk ids colliding with those of another document"
+      ], a: 1,
+      why: "Without the transaction, a failure after the delete leaves a document row claiming n_chunks with an empty chunks table, which retrieval sees as a silent corpus gap. All or nothing means the previous version survives any failure." },
+    { type: "mc",
+      q: "The chunk_id is built from the document's content hash plus an ordinal. What does that buy the layers built in later chapters?",
+      opts: [
+        "Globally unique ids without a counter",
+        "Protection against two documents producing identical text",
+        "The ability to sort chunks by recency",
+        "Stable ids across runs for unchanged documents, so a vector index can skip re-embedding chunks it already has"
+      ], a: 3,
+      why: "An unchanged document produces the same hash and therefore the same chunk ids on every run, while a changed one produces entirely new ids. Chapter 34's index uses exactly that to avoid recomputing embeddings it already holds." },
+    { type: "blank",
+      q: "An operation that leaves the same state however many times it runs is called ____.",
+      a: ["idempotent", "idempotency"],
+      why: "It is the property that makes an ingest safe to retry after any failure, and in PocketRAG it comes from one column: the content hash compared before any work is done." },
+    { type: "blank",
+      q: "A retained row marking a document as deleted, kept so a returning file can be distinguished from a new one, is a ____.",
+      a: ["tombstone", "tomb stone"],
+      why: "The row stays and the chunks go. Keeping the chunks and filtering them at query time makes deletion a rule that one forgetful code path can break, which Chapter 28 showed is not a control." },
+    { type: "order",
+      q: "Order the steps ingest takes for a document whose bytes have changed:",
+      items: [
+        "hash the raw bytes and compare against the stored hash",
+        "load the file into an element stream",
+        "pack the elements into chunks under the token budget",
+        "open a transaction and delete the document's existing chunks",
+        "upsert the documents row and insert the new chunks, then commit"
+      ],
+      why: "The hash comparison comes first because it is the cheap check that lets an unchanged file cost one SELECT. The delete sits inside the transaction with the inserts so that a crash cannot leave a document row pointing at no chunks." }
+  ]
+});
+
+/* ======================= CHAPTER 33 =======================
+   Second chapter of the PocketRAG capstone. Everything here was written for
+   this course, run, and tested; the code blocks are extracted mechanically
+   from resources/pocketrag/bm25.py (214 non-blank lines) and bm25.ts (230),
+   so what you read is what ran. The stemmer is Porter's 1980 algorithm,
+   written out rather than imported. The corpus for this chapter is the 56
+   Larkspur passages, one file each, ingested by Chapter 32's pipeline so that
+   one passage is one chunk. Measured on that index: 56 chunks, 473 distinct
+   terms, 987 postings rows, mean document length 19.4 terms; the analyzer
+   takes 564 distinct raw words to 536 after stopwords and 473 after stemming,
+   an 11.8% collapse. Conformance: PocketRAG's Okapi variant is compared
+   against rank_bm25's BM25Okapi (k1=1.2, b=0.75) over 50 queries, maximum
+   absolute score difference 1.78e-15, which is one unit in the last place of
+   a double and far inside the 1e-6 the Blueprint asked for. Reproducing that
+   required implementing rank_bm25's epsilon floor, which replaces a negative
+   IDF with 0.25 times the mean IDF over the whole vocabulary; on this corpus
+   no term has a negative Okapi IDF, so the floor never fires here, and the
+   chapter says so. Cross-language parity was verified separately: identical
+   vocabularies (473 terms), identical stems over all 564 distinct corpus
+   words, and a maximum BM25 score difference of 1.78e-15 across the same 50
+   queries. Chapter 9 supplied the Lucene defaults k1=1.2 and b=0.75 and the
+   IDF form log(1 + (N - df + 0.5)/(df + 0.5)); rank_bm25's BM25Okapi source
+   supplied the Okapi form and the epsilon behaviour. Decisions deferred per
+   the Blueprint: no postings compression and no WAND, both explained in
+   Chapter 9 and left as graduation projects. */
+CHAPTERS.push({
+  num: 33, part: 5, title: "PocketRAG: The Inverted Index and BM25",
+  blurb: "Layer two reads the chunks table and nothing else. You will write an analyzer, including Porter's stemmer in full rather than importing it, build a dictionary and a postings list in two SQLite tables, and score with BM25 and a heap. Then the test that matters: your scores are compared against a reference implementation over fifty queries and must agree to a millionth. They agree to one unit in the last place of a double, and getting there means discovering that BM25 is a family of formulas rather than one, and that the reference implements a different member than Lucene does.",
+  sections: [
+    { title: "The Analyzer Is the Index",
+      html: "<p>An inverted index maps a term to the documents containing it. Everything that decides whether the index is any good happens before that map is built, in the function that turns text into terms, because a term the analyzer never produces can never be searched for.</p>" +
+      "<p>PocketRAG's <strong>analyzer</strong> does three things: lowercase and split on letters and digits, drop stopwords, and stem. Each one throws information away on purpose, and each one is a decision about what two different strings are allowed to mean the same thing.</p>" +
+      "<p>Splitting on letters and digits is the most violent of the three and the least discussed. It discards punctuation entirely, which means <code>INC-2042</code> becomes the two terms <code>inc</code> and <code>2042</code>, and a query for the incident matches any document containing either. Chapter 9 called identifiers the case lexical search should win outright, and this is the analyzer choice that decides whether it does. Keeping hyphenated tokens whole is a two-line change and a different set of tradeoffs.</p>" +
+      "<p>Here are the two knobs and the stopword list, which is deliberately short.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>K1, B = 1.2, 0.75                  # Lucene's defaults, as in chapter 9\nSTOPWORDS = set(\n    \"a an and are as at be but by for if in into is it no not of on or such \"\n    \"that the their then there these they this to was will with\".split())\n</code></pre><pre data-lang='ts' hidden><code>const K1 = 1.2, B = 0.75;              // Lucene's defaults, as in chapter 9\nconst STOPWORDS = new Set(\n  (\"a an and are as at be but by for if in into is it no not of on or such \" +\n   \"that the their then there these they this to was will with\").split(\" \"));\n</code></pre></div>" +
+      "" +
+      "<p>Chapter 9 argued for a small stopword list over a large one, and the measurement here supports it. Over the 56 Larkspur passages the raw text has 564 distinct words. Removing these 28 stopwords takes it to 536, a 5% reduction, and the words removed are the ones that appear in almost every passage and therefore carry almost no IDF anyway. A 300-word stopword list would remove terms that matter: <em>no</em>, <em>not</em> and <em>will</em> are on the boundary already, and dropping <em>not</em> from a policy corpus is how a refusal becomes a permission.</p>" +
+      "<div class='callout'><strong>The rule that catches everyone.</strong> The query must be analyzed by exactly the same function as the documents. Index <code>cellos</code> stemmed to <code>cello</code>, then search for the unstemmed <code>cellos</code>, and the dictionary lookup misses and the result set is empty with no error. In PocketRAG both paths call <code>analyze</code>, which is why it is one function rather than two.</div>" },
+
+    { title: "Porter's Stemmer, Written Out",
+      html: "<p>Stemming collapses inflections so that <em>refund</em>, <em>refunds</em>, <em>refunded</em> and <em>refunding</em> are one term. Martin Porter's 1980 algorithm does it with rules rather than a dictionary, and the whole thing fits on two screens.</p>" +
+      "<p>Everything rests on one idea: the <strong>measure</strong> of a word, the number of vowel-consonant transitions in it, which stands in for how many syllables of stem would survive if you cut a suffix off. A rule fires only when the remaining stem is long enough.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>VOWELS = \"aeiou\"\n\n\ndef _cons(w: str, i: int) -&gt; bool:\n    if w[i] in VOWELS:\n        return False\n    return not (w[i] == \"y\" and i &gt; 0 and not _cons(w, i - 1))\n\n\ndef _m(w: str) -&gt; int:\n    \"\"\"Count vowel-consonant sequences: the 'measure' of a stem.\"\"\"\n    n, i, prev_v = 0, 0, False\n    while i &lt; len(w):\n        v = not _cons(w, i)\n        if prev_v and not v:\n            n += 1\n        prev_v = v\n        i += 1\n    return n\n\n\ndef _vowel(w: str) -&gt; bool:\n    return any(not _cons(w, i) for i in range(len(w)))\n\n\ndef _double(w: str) -&gt; bool:\n    return len(w) &gt; 1 and w[-1] == w[-2] and _cons(w, len(w) - 1)\n\n\ndef _cvc(w: str) -&gt; bool:\n    if len(w) &lt; 3 or not _cons(w, len(w) - 1) or _cons(w, len(w) - 2) or not _cons(w, len(w) - 3):\n        return False\n    return w[-1] not in \"wxy\"\n</code></pre><pre data-lang='ts' hidden><code>const VOWELS = \"aeiou\";\n\nfunction cons(w: string, i: number): boolean {\n  if (VOWELS.includes(w[i])) return false;\n  return !(w[i] === \"y\" &amp;&amp; i &gt; 0 &amp;&amp; !cons(w, i - 1));\n}\n\nfunction m(w: string): number {          // vowel-consonant sequences: 'measure'\n  let n = 0, prevV = false;\n  for (let i = 0; i &lt; w.length; i++) {\n    const v = !cons(w, i);\n    if (prevV &amp;&amp; !v) n++;\n    prevV = v;\n  }\n  return n;\n}\n\nfunction hasVowel(w: string): boolean {\n  for (let i = 0; i &lt; w.length; i++) if (!cons(w, i)) return true;\n  return false;\n}\n\nfunction isDouble(w: string): boolean {\n  return w.length &gt; 1 &amp;&amp; w[w.length - 1] === w[w.length - 2] &amp;&amp; cons(w, w.length - 1);\n}\n\nfunction isCvc(w: string): boolean {\n  if (w.length &lt; 3 || !cons(w, w.length - 1) || cons(w, w.length - 2) ||\n      !cons(w, w.length - 3)) return false;\n  return !\"wxy\".includes(w[w.length - 1]);\n}\n</code></pre></div>" +
+      "" +
+      "<p>Read <code>_cons</code> carefully, because it is where the subtlety lives. A <code>y</code> is a consonant when it follows a vowel and a vowel otherwise, which is why the function recurses. That single rule is what makes <em>happy</em> stem differently from <em>toy</em>.</p>" +
+      "<p>Then the five steps, applied in order, at most one rule per step.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def stem(w: str) -&gt; str:\n    if len(w) &lt;= 2:\n        return w\n    # step 1a: plurals\n    if w.endswith(\"sses\"):\n        w = w[:-2]\n    elif w.endswith(\"ies\"):\n        w = w[:-2]\n    elif w.endswith(\"ss\"):\n        pass\n    elif w.endswith(\"s\"):\n        w = w[:-1]\n    # step 1b: past tense and progressive\n    if w.endswith(\"eed\"):\n        if _m(w[:-3]) &gt; 0:\n            w = w[:-1]\n    else:\n        base = None\n        if w.endswith(\"ed\") and _vowel(w[:-2]):\n            base = w[:-2]\n        elif w.endswith(\"ing\") and _vowel(w[:-3]):\n            base = w[:-3]\n        if base is not None:\n            w = base\n            if w.endswith((\"at\", \"bl\", \"iz\")):\n                w += \"e\"\n            elif _double(w) and w[-1] not in \"lsz\":\n                w = w[:-1]\n            elif _m(w) == 1 and _cvc(w):\n                w += \"e\"\n    # step 1c: y to i\n    if w.endswith(\"y\") and _vowel(w[:-1]):\n        w = w[:-1] + \"i\"\n    for suf, rep in STEP2:                       # step 2\n        if w.endswith(suf) and _m(w[:-len(suf)]) &gt; 0:\n            w = w[:-len(suf)] + rep\n            break\n    for suf, rep in STEP3:                       # step 3\n        if w.endswith(suf) and _m(w[:-len(suf)]) &gt; 0:\n            w = w[:-len(suf)] + rep\n            break\n    for suf in STEP4:                            # step 4\n        if w.endswith(suf):\n            base = w[:-len(suf)]\n            if _m(base) &gt; 1 and (suf != \"ion\" or (base and base[-1] in \"st\")):\n                w = base\n            break\n    if w.endswith(\"e\"):                          # step 5a\n        if _m(w[:-1]) &gt; 1 or (_m(w[:-1]) == 1 and not _cvc(w[:-1])):\n            w = w[:-1]\n    if w.endswith(\"ll\") and _m(w) &gt; 1:           # step 5b\n        w = w[:-1]\n    return w\n</code></pre><pre data-lang='ts' hidden><code>export function stem(w: string): string {\n  if (w.length &lt;= 2) return w;\n  if (w.endsWith(\"sses\")) w = w.slice(0, -2);            // step 1a: plurals\n  else if (w.endsWith(\"ies\")) w = w.slice(0, -2);\n  else if (w.endsWith(\"ss\")) { /* keep */ }\n  else if (w.endsWith(\"s\")) w = w.slice(0, -1);\n  if (w.endsWith(\"eed\")) {                               // step 1b: -ed, -ing\n    if (m(w.slice(0, -3)) &gt; 0) w = w.slice(0, -1);\n  } else {\n    let base: string | null = null;\n    if (w.endsWith(\"ed\") &amp;&amp; hasVowel(w.slice(0, -2))) base = w.slice(0, -2);\n    else if (w.endsWith(\"ing\") &amp;&amp; hasVowel(w.slice(0, -3))) base = w.slice(0, -3);\n    if (base !== null) {\n      w = base;\n      if (w.endsWith(\"at\") || w.endsWith(\"bl\") || w.endsWith(\"iz\")) w += \"e\";\n      else if (isDouble(w) &amp;&amp; !\"lsz\".includes(w[w.length - 1])) w = w.slice(0, -1);\n      else if (m(w) === 1 &amp;&amp; isCvc(w)) w += \"e\";\n    }\n  }\n  if (w.endsWith(\"y\") &amp;&amp; hasVowel(w.slice(0, -1))) w = w.slice(0, -1) + \"i\";  // 1c\n  for (const [suf, rep] of STEP2) {                      // step 2\n    if (w.endsWith(suf) &amp;&amp; m(w.slice(0, -suf.length)) &gt; 0) {\n      w = w.slice(0, -suf.length) + rep; break;\n    }\n  }\n  for (const [suf, rep] of STEP3) {                      // step 3\n    if (w.endsWith(suf) &amp;&amp; m(w.slice(0, -suf.length)) &gt; 0) {\n      w = w.slice(0, -suf.length) + rep; break;\n    }\n  }\n  for (const suf of STEP4) {                             // step 4\n    if (w.endsWith(suf)) {\n      const base = w.slice(0, -suf.length);\n      if (m(base) &gt; 1 &amp;&amp; (suf !== \"ion\" || (base &amp;&amp; \"st\".includes(base[base.length - 1]))))\n        w = base;\n      break;\n    }\n  }\n  if (w.endsWith(\"e\")) {                                 // step 5a\n    const b = w.slice(0, -1);\n    if (m(b) &gt; 1 || (m(b) === 1 &amp;&amp; !isCvc(b))) w = b;\n  }\n  if (w.endsWith(\"ll\") &amp;&amp; m(w) &gt; 1) w = w.slice(0, -1);  // step 5b\n  return w;\n}\n</code></pre></div>" +
+      "" +
+      "<p>Step 1a removes plurals, 1b removes past tense and progressive endings and repairs the damage, and 1c turns a trailing <code>y</code> into <code>i</code> so that later steps see one form. Steps 2 and 3 rewrite derivational suffixes through a table. Step 4 removes them outright when the measure allows, and step 5 tidies a trailing <code>e</code> and a doubled <code>l</code>.</p>" +
+      "<p>Measured on this corpus, stemming takes 536 distinct terms to <strong>473</strong>, an 11.8% collapse. That number is smaller than people expect, and it is the honest one for short policy text where most words appear in a single form. The value is not the size reduction, it is that the one query that says <em>refunded</em> now finds the page that says <em>refunds</em>.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>WORD = re.compile(r\"[a-z0-9]+\")\n\n\ndef analyze(text: str) -&gt; list[tuple[str, int]]:\n    \"\"\"Lowercase, split, drop stopwords, stem. Returns (term, position).\"\"\"\n    out = []\n    for pos, raw in enumerate(WORD.findall(text.lower())):\n        if raw in STOPWORDS:\n            continue\n        out.append((stem(raw), pos))\n    return out\n</code></pre><pre data-lang='ts' hidden><code>const WORD = /[a-z0-9]+/g;\n\nexport function analyze(text: string): [string, number][] {\n  const out: [string, number][] = [];\n  let pos = 0;\n  for (const raw of text.toLowerCase().match(WORD) ?? []) {\n    if (!STOPWORDS.has(raw)) out.push([stem(raw), pos]);\n    pos++;\n  }\n  return out;\n}\n</code></pre></div>" +
+      "" +
+      "<div class='callout'><strong>The real option not taken.</strong> Porter's own successor, Snowball, is better: it fixes known over-stemming cases and exists for a dozen languages. It is also several times this length, and PocketRAG's rule is that everything appears in the chapter. Porter 1980 is the algorithm every search engine started from, it is the one whose behaviour you can predict by hand, and it is a graduation project to replace.</div>" },
+
+    { title: "The Dictionary and the Postings List",
+      html: "<p>Two tables, plus one for document lengths, which BM25 needs and which is cheaper to keep than to recompute.</p>" +
+      "" +
+      "<pre><code>CREATE TABLE IF NOT EXISTS terms (\n  term TEXT PRIMARY KEY,\n  df   INTEGER NOT NULL);\nCREATE TABLE IF NOT EXISTS postings (\n  term      TEXT NOT NULL,\n  chunk_id  TEXT NOT NULL,\n  tf        INTEGER NOT NULL,\n  positions TEXT NOT NULL,\n  PRIMARY KEY (term, chunk_id)) WITHOUT ROWID;\nCREATE TABLE IF NOT EXISTS lengths (\n  chunk_id TEXT PRIMARY KEY,\n  n_terms  INTEGER NOT NULL);</code></pre>" +
+      "" +
+      "<p><code>terms</code> is the dictionary: one row per distinct term with its document frequency. <code>postings</code> is the list: one row per term per document, with the term frequency and the positions. Positions are stored as a JSON array, which is the wrong representation and the right decision for now; the confession section prices it.</p>" +
+      "<p>The <code>WITHOUT ROWID</code> on the postings table is worth a sentence. SQLite normally stores a hidden integer rowid and builds a separate index for a declared primary key, so every lookup is two searches. Declared this way the table <em>is</em> the primary-key index, sorted by term then document, which is exactly the order a postings scan wants.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def build(db: sqlite3.Connection) -&gt; tuple[int, int]:\n    \"\"\"Rebuild the index from the chunks table. Returns (docs, terms).\"\"\"\n    db.executescript(SCHEMA)\n    with db:\n        db.execute(\"DELETE FROM terms\"); db.execute(\"DELETE FROM postings\")\n        db.execute(\"DELETE FROM lengths\")\n        df: dict[str, int] = {}\n        for chunk_id, text in db.execute(\"SELECT chunk_id, text FROM chunks\"):\n            posting: dict[str, list[int]] = {}\n            for term, pos in analyze(text):\n                posting.setdefault(term, []).append(pos)\n            db.execute(\"INSERT INTO lengths VALUES (?,?)\",\n                       (chunk_id, sum(len(p) for p in posting.values())))\n            db.executemany(\"INSERT INTO postings VALUES (?,?,?,?)\",\n                           [(t, chunk_id, len(p), json.dumps(p))\n                            for t, p in posting.items()])\n            for t in posting:\n                df[t] = df.get(t, 0) + 1\n        db.executemany(\"INSERT INTO terms VALUES (?,?)\", list(df.items()))\n    return db.execute(\"SELECT COUNT(*) FROM lengths\").fetchone()[0], len(df)\n</code></pre><pre data-lang='ts' hidden><code>export function build(db: DatabaseSync): [number, number] {\n  db.exec(SCHEMA);\n  db.exec(\"BEGIN\");\n  db.exec(\"DELETE FROM terms\"); db.exec(\"DELETE FROM postings\"); db.exec(\"DELETE FROM lengths\");\n  const df = new Map&lt;string, number&gt;();\n  const insL = db.prepare(\"INSERT INTO lengths VALUES (?,?)\");\n  const insP = db.prepare(\"INSERT INTO postings VALUES (?,?,?,?)\");\n  for (const row of db.prepare(\"SELECT chunk_id, text FROM chunks\").all() as\n       { chunk_id: string; text: string }[]) {\n    const posting = new Map&lt;string, number[]&gt;();\n    for (const [term, pos] of analyze(row.text)) {\n      if (!posting.has(term)) posting.set(term, []);\n      posting.get(term)!.push(pos);\n    }\n    let n = 0;\n    for (const p of posting.values()) n += p.length;\n    insL.run(row.chunk_id, n);\n    for (const [t, p] of posting) {\n      insP.run(t, row.chunk_id, p.length, JSON.stringify(p));\n      df.set(t, (df.get(t) ?? 0) + 1);\n    }\n  }\n  const insT = db.prepare(\"INSERT INTO terms VALUES (?,?)\");\n  for (const [t, n] of df) insT.run(t, n);\n  db.exec(\"COMMIT\");\n  const docs = (db.prepare(\"SELECT COUNT(*) AS n FROM lengths\").get() as { n: number }).n;\n  return [docs, df.size];\n}\n</code></pre></div>" +
+      "" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='24' y='18' fill='#2de2ff' font-size='11'>the two tables, on the Larkspur index: 56 chunks, 473 terms, 987 postings rows</text><line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/><rect x='24' y='42' width='190' height='150' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='40' y='62' fill='#ffd166' font-size='10'>terms   (dictionary)</text><text x='40' y='84' fill='#7d8fb0' font-size='8.5'>term        df</text><text x='40' y='104' fill='#3ddc97' font-size='9.5'>cello        1</text><text x='40' y='124' fill='#c9d6ea' font-size='9.5'>refund      11</text><text x='40' y='144' fill='#c9d6ea' font-size='9.5'>seat         6</text><text x='40' y='164' fill='#c9d6ea' font-size='9.5'>...</text><text x='40' y='184' fill='#7d8fb0' font-size='8.5'>one row per term</text><line x1='214' y1='110' x2='250' y2='110' stroke='#4f7cff' stroke-width='2'/><polygon points='256,110 248,106 248,114' fill='#4f7cff'/><text x='222' y='104' fill='#7d8fb0' font-size='8'>idf</text><rect x='256' y='42' width='300' height='150' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='272' y='62' fill='#4f7cff' font-size='10'>postings   (WITHOUT ROWID)</text><text x='272' y='84' fill='#7d8fb0' font-size='8.5'>term      chunk_id   tf   positions</text><text x='272' y='104' fill='#3ddc97' font-size='9.5'>cello     20ef..:0    1   [2]</text><text x='272' y='124' fill='#c9d6ea' font-size='9.5'>refund    0985..:0    2   [1,14]</text><text x='272' y='144' fill='#c9d6ea' font-size='9.5'>refund    de6f..:0    1   [9]</text><text x='272' y='164' fill='#c9d6ea' font-size='9.5'>...</text><text x='272' y='184' fill='#7d8fb0' font-size='8.5'>sorted by term, then chunk: the scan order</text><rect x='598' y='42' width='138' height='150' rx='8' fill='#111a2e' stroke='#7d8fb0' stroke-width='2'/><text x='614' y='62' fill='#7d8fb0' font-size='10'>lengths</text><text x='614' y='84' fill='#7d8fb0' font-size='8.5'>chunk_id  n_terms</text><text x='614' y='104' fill='#c9d6ea' font-size='9.5'>20ef..:0    22</text><text x='614' y='124' fill='#c9d6ea' font-size='9.5'>0985..:0    19</text><text x='614' y='150' fill='#ffd166' font-size='9'>mean 19.4</text><text x='614' y='170' fill='#7d8fb0' font-size='8.5'>b needs this</text><text x='24' y='216' fill='#c9d6ea' font-size='9.5'>a query reads one dictionary row and one postings run per term, and no chunk text at all until after ranking</text></svg><div class='fig-cap'>The dictionary is small and hot; the postings are large and streamed. Every design decision in a real engine follows from that split.</div></div>" +
+      "<p>The build is one pass over the chunks table. For each chunk it accumulates a term-to-positions map, writes the length, writes one postings row per term, and increments a document-frequency counter held in memory. Document frequency is written once at the end, which is why the whole build is a single transaction: an index that is half-rebuilt is worse than one that is stale, and Chapter 29's re-index discussion is the reason this is all-or-nothing.</p>" +
+      "<p>On the Larkspur corpus that produces <strong>473 terms and 987 postings rows</strong> from 56 chunks whose mean length is 19.4 terms. The postings table is roughly twice the size of the dictionary, which is the shape of a small corpus with little repetition; on a large one the ratio grows without bound, and that is the ratio postings compression exists to attack.</p>" },
+
+    { title: "BM25, and Which BM25",
+      html: "<p>Chapter 9 gave the scoring function: for each query term, its inverse document frequency times a term-frequency factor that saturates, divided by a length normalisation. Writing it is ten lines. Deciding which BM25 you are writing is the interesting part.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def idf(n_docs: int, df: int, variant: str = \"lucene\") -&gt; float:\n    \"\"\"Two BM25 families. See the chapter: they are not interchangeable.\"\"\"\n    if variant == \"okapi\":                       # Robertson/Sparck Jones, raw\n        return math.log(n_docs - df + 0.5) - math.log(df + 0.5)\n    return math.log(1 + (n_docs - df + 0.5) / (df + 0.5))   # Lucene, always &gt; 0\n\n\ndef okapi_floor(db: sqlite3.Connection, n_docs: int, eps: float = 0.25) -&gt; float:\n    \"\"\"Okapi IDF goes negative for terms in over half the corpus. Reference\n    implementations replace those with eps x the MEAN idf over the whole\n    vocabulary, which couples one term's score to every other term.\"\"\"\n    vals = [idf(n_docs, df, \"okapi\") for (df,) in db.execute(\"SELECT df FROM terms\")]\n    return eps * (sum(vals) / len(vals)) if vals else 0.0\n</code></pre><pre data-lang='ts' hidden><code>export function idf(nDocs: number, df: number, variant = \"lucene\"): number {\n  if (variant === \"okapi\")                  // Robertson/Sparck Jones, raw\n    return Math.log(nDocs - df + 0.5) - Math.log(df + 0.5);\n  return Math.log(1 + (nDocs - df + 0.5) / (df + 0.5));   // Lucene, always &gt; 0\n}\n\nexport function okapiFloor(db: DatabaseSync, nDocs: number, eps = 0.25): number {\n  const rows = db.prepare(\"SELECT df FROM terms\").all() as { df: number }[];\n  if (!rows.length) return 0;\n  let sum = 0;\n  for (const r of rows) sum += idf(nDocs, r.df, \"okapi\");\n  return eps * (sum / rows.length);\n}\n</code></pre></div>" +
+      "" +
+      "<p>Those are two different formulas and they are both called BM25. The Robertson and Sparck Jones form is the original, and it goes <em>negative</em> for a term appearing in more than half the corpus, which means a common term actively pushes a document down. Lucene's form wraps the same ratio in <code>log(1 + x)</code>, which is always positive and never punishes.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>computed: the two IDF formulas over a 56-document corpus</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9.5'>document frequency</text><text x='250' y='48' fill='#7d8fb0' font-size='9.5'>Lucene</text><text x='390' y='48' fill='#7d8fb0' font-size='9.5'>Okapi</text><text x='530' y='48' fill='#7d8fb0' font-size='9.5'>what it means</text>" +
+      "<text x='24' y='72' fill='#c9d6ea' font-size='10'>df = 1   (rare)</text><text x='250' y='72' fill='#3ddc97' font-size='10'>+3.638</text><text x='390' y='72' fill='#3ddc97' font-size='10'>+3.611</text><text x='530' y='72' fill='#7d8fb0' font-size='9'>they agree at the top</text>" +
+      "<text x='24' y='94' fill='#c9d6ea' font-size='10'>df = 5</text><text x='250' y='94' fill='#c9d6ea' font-size='10'>+2.338</text><text x='390' y='94' fill='#c9d6ea' font-size='10'>+2.237</text>" +
+      "<text x='24' y='116' fill='#c9d6ea' font-size='10'>df = 14</text><text x='250' y='116' fill='#c9d6ea' font-size='10'>+1.369</text><text x='390' y='116' fill='#ffd166' font-size='10'>+1.075</text><text x='530' y='116' fill='#7d8fb0' font-size='9'>drifting apart</text>" +
+      "<text x='24' y='138' fill='#c9d6ea' font-size='10'>df = 28  (half the corpus)</text><text x='250' y='138' fill='#c9d6ea' font-size='10'>+0.693</text><text x='390' y='138' fill='#ffd166' font-size='10'>+0.000</text><text x='530' y='138' fill='#ffd166' font-size='9'>Okapi hits zero here</text>" +
+      "<text x='24' y='160' fill='#c9d6ea' font-size='10'>df = 40</text><text x='250' y='160' fill='#c9d6ea' font-size='10'>+0.342</text><text x='390' y='160' fill='#ff5d73' font-size='10'>-0.898</text><text x='530' y='160' fill='#ff5d73' font-size='9'>now it SUBTRACTS</text>" +
+      "<text x='24' y='182' fill='#c9d6ea' font-size='10'>df = 50  (in almost everything)</text><text x='250' y='182' fill='#c9d6ea' font-size='10'>+0.121</text><text x='390' y='182' fill='#ff5d73' font-size='10'>-2.050</text><text x='530' y='182' fill='#ff5d73' font-size='9'>a large penalty</text>" +
+      "<line x1='24' y1='198' x2='736' y2='198' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='218' fill='#2de2ff' font-size='10'>same corpus, same query, different rankings: BM25 is a family, not a formula</text>" +
+      "<text x='24' y='234' fill='#c9d6ea' font-size='9.5'>reference implementations paper over the negative branch with an epsilon floor</text>" +
+      "</svg><div class='fig-cap'>The two agree on rare terms, which is most of what matters, and diverge exactly where a term stops being informative. Which one you shipped decides your ranking.</div></div>" +
+      "<p>PocketRAG ships the Lucene form, because Chapter 9 taught it, because a negative contribution is hard to reason about, and because it is what a reader will meet in every production system built on Lucene. The Okapi form is implemented anyway, and the next section explains why that turns out to be necessary rather than decorative.</p>" +
+      "<p>Now the search itself, with the top-k selection Chapter 9 described.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def search(db: sqlite3.Connection, query: str, k: int | None = 10,\n           k1: float = K1, b: float = B, variant: str = \"lucene\") -&gt; list[tuple[str, float]]:\n    n_docs, total = db.execute(\n        \"SELECT COUNT(*), COALESCE(SUM(n_terms),0) FROM lengths\").fetchone()\n    if not n_docs:\n        return []\n    avgdl = total / n_docs\n    scores: dict[str, float] = {}\n    lens = dict(db.execute(\"SELECT chunk_id, n_terms FROM lengths\"))\n    floor = okapi_floor(db, n_docs) if variant == \"okapi\" else 0.0\n    for term in {t for t, _ in analyze(query)}:\n        row = db.execute(\"SELECT df FROM terms WHERE term=?\", (term,)).fetchone()\n        if not row:\n            continue\n        w = idf(n_docs, row[0], variant)\n        if variant == \"okapi\" and w &lt; 0:\n            w = floor\n        for chunk_id, tf in db.execute(\n                \"SELECT chunk_id, tf FROM postings WHERE term=?\", (term,)):\n            dl = lens[chunk_id]\n            scores[chunk_id] = scores.get(chunk_id, 0.0) + w * (\n                tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl)))\n    # top-k with a heap: O(n log k), not a full sort of every scored document\n    if k is None:                                # the conformance test wants all\n        return sorted(scores.items(), key=lambda kv: -kv[1])\n    return heapq.nlargest(k, scores.items(), key=lambda kv: kv[1])\n</code></pre><pre data-lang='ts' hidden><code>export function search(db: DatabaseSync, query: string, k: number | null = 10,\n                       k1 = K1, b = B, variant = \"lucene\"): [string, number][] {\n  const s = db.prepare(\n    \"SELECT COUNT(*) AS n, COALESCE(SUM(n_terms),0) AS t FROM lengths\").get() as\n    { n: number; t: number };\n  if (!s.n) return [];\n  const avgdl = s.t / s.n;\n  const lens = new Map&lt;string, number&gt;();\n  for (const r of db.prepare(\"SELECT chunk_id, n_terms FROM lengths\").all() as\n       { chunk_id: string; n_terms: number }[]) lens.set(r.chunk_id, r.n_terms);\n  const floor = variant === \"okapi\" ? okapiFloor(db, s.n) : 0;\n  const scores = new Map&lt;string, number&gt;();\n  const seen = new Set(analyze(query).map(([t]) =&gt; t));\n  for (const term of seen) {\n    const row = db.prepare(\"SELECT df FROM terms WHERE term=?\").get(term) as\n      { df: number } | undefined;\n    if (!row) continue;\n    let w = idf(s.n, row.df, variant);\n    if (variant === \"okapi\" &amp;&amp; w &lt; 0) w = floor;\n    for (const p of db.prepare(\"SELECT chunk_id, tf FROM postings WHERE term=?\")\n         .all(term) as { chunk_id: string; tf: number }[]) {\n      const dl = lens.get(p.chunk_id)!;\n      scores.set(p.chunk_id, (scores.get(p.chunk_id) ?? 0) +\n        w * (p.tf * (k1 + 1) / (p.tf + k1 * (1 - b + b * dl / avgdl))));\n    }\n  }\n  const all = [...scores.entries()].sort((x, y) =&gt; y[1] - x[1]);\n  return k === null ? all : all.slice(0, k);   // see the chapter on the heap\n}\n</code></pre></div>" +
+      "" +
+      "<p>The scoring loop is term-at-a-time: for each query term, walk its postings list and add into an accumulator keyed by document. That is the shape every real engine uses, and it is why the postings table is sorted by term.</p>" +
+      "<p>The last line is the one worth pausing on. Scoring produces an entry for every document that contains any query term, and the caller wants ten. Sorting all of them is <code>n log n</code>; a heap of size k is <code>n log k</code>. On 56 documents the difference is unmeasurable and the habit is the point, because on a corpus where a common term matches two million documents it is the difference between a query and a timeout.</p>" },
+
+    { title: "Phrases, and Why Positions Are in the Postings",
+      html: "<p>Bag-of-words scoring cannot tell <em>travel credit</em> from <em>credit travel</em>, because it never looks at order. Positions were stored during the build for exactly this, and phrase search is a merge over them.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def phrase(db: sqlite3.Connection, text: str) -&gt; list[str]:\n    \"\"\"Documents containing the terms adjacent and in order, via positions.\"\"\"\n    terms = [t for t, _ in analyze(text)]\n    if not terms:\n        return []\n    lists = []\n    for t in terms:\n        lists.append({cid: json.loads(p) for cid, p in db.execute(\n            \"SELECT chunk_id, positions FROM postings WHERE term=?\", (t,))})\n    hits = []\n    for cid in set(lists[0]).intersection(*(set(l) for l in lists[1:])):\n        for start in lists[0][cid]:\n            if all(start + i in lists[i][cid] for i in range(1, len(terms))):\n                hits.append(cid)\n                break\n    return sorted(hits)\n</code></pre><pre data-lang='ts' hidden><code>export function phrase(db: DatabaseSync, text: string): string[] {\n  const terms = analyze(text).map(([t]) =&gt; t);\n  if (!terms.length) return [];\n  const lists = terms.map((t) =&gt; {\n    const mp = new Map&lt;string, number[]&gt;();\n    for (const r of db.prepare(\"SELECT chunk_id, positions FROM postings WHERE term=?\")\n         .all(t) as { chunk_id: string; positions: string }[])\n      mp.set(r.chunk_id, JSON.parse(r.positions));\n    return mp;\n  });\n  const hits: string[] = [];\n  for (const cid of lists[0].keys()) {\n    if (!lists.every((l) =&gt; l.has(cid))) continue;\n    for (const start of lists[0].get(cid)!) {\n      if (terms.every((_, i) =&gt; i === 0 || lists[i].get(cid)!.includes(start + i))) {\n        hits.push(cid); break;\n      }\n    }\n  }\n  return hits.sort();\n}\n</code></pre></div>" +
+      "" +
+      "<p>Intersect the document sets, then for each surviving document check whether some starting position has every later term at consecutive offsets. It is the classic positional merge, and reading it is the fastest way to understand why an index that stores positions is several times larger than one that does not.</p>" +
+      "" +
+      "<pre><code>$ python3 bm25.py lex.db --phrase \"travel credit\"\n  0985402499a6:0\n  de6f499344e1:0\n    Travel credit terms. A travel credit is held against the booking r\n    Fare rules and cancellation. Tickets in fare classes L, K and T ar\n\nbag of words on the same two terms matches 11 chunks</code></pre>" +
+      "" +
+      "<p>Two documents contain the phrase; eleven contain the two words somewhere. The phrase search is a filter rather than a ranker, which is the right way to use it: narrow with the phrase when a user quotes one, then score what survives.</p>" +
+      "<p>The cost of positions is worth stating plainly, because it is the largest single line item in a lexical index. Without them a postings row is a document identifier and a count; with them it carries a list whose length is the term frequency, so a term appearing fifty times in a document costs fifty integers rather than one. The whole index grows roughly with total token count rather than with distinct term-document pairs, which on a large corpus is the difference between a gigabyte and ten. Engines that do not support phrase queries omit them for exactly this reason.</p>" +
+      "<p>What you buy is a query type nothing else provides. Chapter 15's dense retrieval cannot express adjacency at all, and Chapter 16's reranker sees a chunk as a bag of meaning rather than a sequence, so a user who quotes a phrase because they want that exact wording is served by this table or by nothing.</p>" +
+      "<div class='callout'><strong>The edge: stemming and phrases interact badly.</strong> The positions recorded are positions in the <em>analyzed</em> stream, so a stopword between two terms shifts nothing while a stopword removed from between them closes the gap. Searching for the phrase <em>refund of the fare</em> analyzes to <code>refund fare</code>, which will match <em>refund fare</em> and also <em>refund on any fare</em>. Real engines keep position gaps for removed stopwords to avoid this. PocketRAG does not, and the exercise adds it.</div>" },
+
+    { title: "The Test: Conformance Against a Reference",
+      html: "<p>A ranking function that is subtly wrong still returns plausible results, which is why this layer's test is not \"does it look right\" but \"does it agree with an independent implementation to a millionth\".</p>" +
+      "" +
+      "<pre><code>$ python3 bm25.py lex.db --index\n  indexed 56 chunks, 473 distinct terms\n\n$ python3 bm25.py lex.db \"musical instruments cello\"\n  11.916  Musical instruments. A cello, double bass or guitar may be carried in the cabin if an ex\n\n$ python3 bm25.py lex.db \"can I take my cello on board\"\n   8.638  Support ticket 9210. Hi, I missed my flight and I want a refund please. Can you tell me \n   8.437  Frequently asked questions, money. How do I get my money back? What happens if I cannot \n   7.408  Support ticket 9502. Can I get my money back if I cancel a flight I booked yesterday by \n   6.372  Support ticket 9104. I could not take my flight last week because I was ill. How do I ge</code></pre>" +
+      "" +
+      "<p>The keyword query works. The question-shaped one does not, and that failure is the most important output in this chapter, so read it again: the passage about cellos is not in the top four. It is beaten by support tickets that share <em>can</em>, <em>I</em>, <em>take</em> and <em>my</em>. The one rare word in the query, worth an IDF of 3.638, loses to a pile of common ones. This is Chapter 14's query gap reproduced on your own code, and it is the entire reason Chapters 34 and 35 exist.</p>" +
+      "<p>Now the test.</p>" +
+      "" +
+      "<pre><code>PocketRAG lexical index, chapter 33\n  indexed 56 chunks, 473 distinct terms\n\n  PASS  stemmer collapses inflections (5 groups)\n  PASS  cello query ranks the instruments page first\n  PASS  phrase search is stricter than bag of words (2 of 11)\n  PASS  phrase 'credit travel' finds nothing\n  PASS  scores match rank_bm25 over 50 queries (max delta 1.78e-15 on 'denied boarding compensation')\n\n  all checks passed</code></pre>" +
+      "" +
+      "<p>The last line is the conformance check, and getting it to pass taught the lesson this chapter is built around. Comparing against <code>rank_bm25</code> means matching the variant it implements, which is Okapi rather than Lucene, and also matching a detail its source contains and its documentation does not: negative IDFs are replaced by 0.25 times the <em>mean IDF over the entire vocabulary</em>. One term's score therefore depends on every other term in the corpus.</p>" +
+      "<p>PocketRAG reproduces that floor, and then the honest footnote: on this corpus <strong>no term has a negative Okapi IDF</strong>, so the floor never fires and it is untested by these fifty queries. It is implemented because the reference has it, and it is unexercised. A conformance test tells you that you agree on the cases you ran.</p>" +
+      "<h3>The two implementations, again</h3>" +
+      "<p>As in Chapter 32, the second language is the strongest test available. Both build the same 473-term vocabulary, both produce identical stems for all 564 distinct words in the corpus, and BM25 scores agree to <strong>1.78e-15</strong> across the same fifty queries, which is one unit in the last place of a double and the arithmetic being done in a different order. Any larger disagreement would have been a bug in one of the five steps of the stemmer, which is exactly the kind of code where a transcription error hides forever.</p>" },
+
+    { title: "The Confession, and What Comes Next",
+      html: "<p>What layer two simplified, and where the real machinery lives.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 250' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>what the lexical layer left out, and what it would cost to add</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='50' fill='#c9d6ea' font-size='9.5'>no postings compression: positions are a JSON array of integers</text><text x='560' y='50' fill='#7d8fb0' font-size='9'>ch 9, graduation</text>" +
+      "<text x='44' y='66' fill='#7d8fb0' font-size='8.5'>delta-encode then varint, and the list shrinks several fold at no recall cost</text>" +
+      "<text x='24' y='90' fill='#c9d6ea' font-size='9.5'>no WAND: every posting of every query term is scored</text><text x='560' y='90' fill='#7d8fb0' font-size='9'>ch 9, graduation</text>" +
+      "<text x='44' y='106' fill='#7d8fb0' font-size='8.5'>skipping cannot change the top k, only how many documents you touch to find it</text>" +
+      "<text x='24' y='130' fill='#c9d6ea' font-size='9.5'>Porter 1980, not Snowball; one language, English</text><text x='560' y='130' fill='#7d8fb0' font-size='9'>ch 9</text>" +
+      "<text x='24' y='154' fill='#c9d6ea' font-size='9.5'>no position gaps for removed stopwords</text><text x='560' y='154' fill='#ff5d73' font-size='9'>exercise 4</text>" +
+      "<text x='24' y='178' fill='#c9d6ea' font-size='9.5'>the whole lengths table is read into memory on every query</text><text x='560' y='178' fill='#ffd166' font-size='9'>fine at 56 docs</text>" +
+      "<text x='24' y='202' fill='#c9d6ea' font-size='9.5'>index is rebuilt whole; no incremental update on a changed chunk</text><text x='560' y='202' fill='#7d8fb0' font-size='9'>ch 29, exercise 6</text>" +
+      "<line x1='24' y1='218' x2='736' y2='218' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='240' fill='#3ddc97' font-size='10.5'>this is early, not wrong: the ranking is exact, only the engineering is small</text>" +
+      "</svg><div class='fig-cap'>Every row here is a performance or scale simplification. None of them changes which documents come back, which is the property worth protecting first.</div></div>" +
+      "<p>The distinction in that caption matters. Compression and skipping change how fast you get the top k, never what the top k is, so they are safely deferred and safely benchmarked later. The fifth row is different in kind: reading every document length into memory on each query is a correctness-preserving choice that stops being viable at a size you can predict from Chapter 30's arithmetic, and noticing which of your shortcuts are which is most of what capacity planning is.</p>" +
+      "<p>One row deserves an argument. <strong>term frequency saturation</strong> and length normalisation are both present and both correct, at Lucene's k1 of 1.2 and b of 0.75, and neither was tuned. Chapter 9 showed the saturation curve and Chapter 25 showed how to measure a change to it, and PocketRAG deliberately ships the defaults untouched so that Chapter 36 can tune them against a gold set and report what the tuning was worth. Tuning a parameter before you can measure it is the mistake this course keeps naming.</p>" +
+      "<p>The result to carry forward is the failure, not the success. This layer is exact, conformance-tested, and it cannot answer <em>can I take my cello on board</em>, because the words a person uses are not the words the policy uses. Chapter 34 builds the other half, an embedding index with an HNSW graph written from the paper, and Chapter 35 fuses the two with the reciprocal rank fusion from Chapter 15 and finds that the combination beats either alone on the same fifty queries.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Stem <em>connection</em>, <em>connections</em>, <em>connected</em>, <em>relational</em> and <em>happy</em> by hand, naming the step that fires and the measure of the stem at each decision. You should reach <code>connect</code> for the first three, <code>relat</code> for the fourth, and you should be able to say precisely why <em>happy</em> becomes <code>happi</code> and not <code>happ</code>.</li>" +
+      "<li><strong>Trace.</strong> For a term appearing in 40 of 56 documents, compute both IDF values from the chapter's formulas, then compute a document's total score under each when the term occurs twice in a document of average length. State which ranking changes and by how much. You should find the Okapi contribution is negative and the Lucene one positive, and be able to say which behaviour you would want in a support corpus.</li>" +
+      "<li><strong>Investigate.</strong> Rebuild the index with stemming disabled and re-run the fifty test queries. Report the change in vocabulary size and the number of queries whose top result changes. You should see the vocabulary grow by about an eighth and only a handful of queries move, and you should be able to name the property of this corpus that makes the effect small.</li>" +
+      "<li><strong>Build.</strong> Add position gaps for removed stopwords, so that the analyzer emits the original token position rather than a compacted one. Then confirm that the phrase <em>refund of the fare</em> no longer matches text reading <em>refund on any fare</em>. Report how many phrase results change across a handful of quoted queries.</li>" +
+      "<li><strong>Build.</strong> Replace the JSON positions with a delta-encoded varint blob, and measure the postings table size before and after with <code>SELECT SUM(LENGTH(positions))</code>. Report the ratio and confirm the fifty-query conformance test still passes unchanged. Compression that changes a score is a bug, and this is how you find out.</li>" +
+      "<li><strong>Build.</strong> Make indexing incremental: instead of rebuilding everything, take the set of chunk ids whose document changed and update only their postings and the affected document frequencies. Prove with the conformance test that the incremental index scores identically to a full rebuild. This is harder than it sounds, and the document-frequency bookkeeping is where it goes wrong.</li>" +
+      "<li><strong>Build, optional.</strong> Implement WAND: give each term an upper bound on its contribution, keep a running threshold from the heap, and skip any document that cannot beat it. Measure postings touched, with and against, on the fifty queries, and confirm the top ten are identical every time. You should see a large reduction in work and zero change in results, which is what makes it safe.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "analyzer", d: "The function turning raw text into index terms, applied identically to documents and queries, since a mismatch produces an empty result set rather than an error." },
+    { t: "stopword", d: "A term removed before indexing because it appears in nearly every document and therefore separates none of them." },
+    { t: "measure", d: "In Porter's stemmer, the count of vowel-consonant transitions in a word, used as a proxy for stem length so a suffix rule fires only when enough word remains." },
+    { t: "dictionary", d: "The table mapping each distinct term to its document frequency, which is what an IDF lookup reads." },
+    { t: "postings list", d: "The rows for one term, naming each document containing it with the term frequency and positions, and the structure a scoring loop walks." },
+    { t: "document frequency", d: "The number of documents containing a term, which determines how much evidence its presence provides and so drives the IDF." },
+    { t: "term frequency saturation", d: "The property that additional occurrences of a term in one document add progressively less score, controlled by k1 and bounded above by k1 plus one." },
+    { t: "length normalisation", d: "The division that stops long documents scoring highly merely by containing more words, controlled by b between zero and one." },
+    { t: "epsilon floor", d: "The substitution of a small positive value for a negative IDF in Okapi implementations, which couples one term's weight to the mean IDF of the whole vocabulary." },
+    { t: "term-at-a-time", d: "A scoring loop that walks one term's postings fully before moving to the next, accumulating into a map keyed by document." },
+    { t: "positional merge", d: "The intersection of several postings lists on both document and offset, which is how a phrase query distinguishes word order from word presence." },
+    { t: "conformance test", d: "A test asserting that an implementation agrees numerically with an independent one, which requires matching its exact variant and its undocumented details." },
+    { t: "postings compression", d: "Encoding a postings list as gaps rather than absolute values and packing them into few bytes, which shrinks the index without changing any score." },
+    { t: "WAND", d: "A skipping strategy that bounds each term's maximum contribution and passes over documents that cannot enter the top k, changing the work done rather than the result." }
+  ],
+  quiz: [
+    { type: "mc",
+      q: "A search for the query cellos returns nothing, although a document clearly contains the word. The index was built with stemming on. What is the most likely cause?",
+      opts: [
+        "The document frequency for cellos is too low for it to be scored",
+        "cellos was removed as a stopword at query time",
+        "The query was not passed through the same analyzer as the documents, so the unstemmed term misses the dictionary",
+        "The postings list for cellos was not written during the build"
+      ], a: 2,
+      why: "The dictionary holds cello, and looking up cellos finds no row, so the term contributes nothing and no error is raised. In PocketRAG both paths call the same analyze function for exactly this reason." },
+    { type: "mc",
+      q: "Two BM25 implementations give different rankings on the same corpus and query, and both are correct implementations of BM25. How?",
+      opts: [
+        "One of them normalises scores and the other does not",
+        "One scores term-at-a-time and the other document-at-a-time",
+        "One uses k1 = 1.2 and the other k1 = 1.5",
+        "They implement different IDF formulas: the Okapi form goes negative above half the corpus while the Lucene form stays positive"
+      ], a: 3,
+      why: "Measured over 56 documents, the two agree at df=1 (+3.638 against +3.611) and diverge as df grows: at df=40 Lucene gives +0.342 and Okapi -0.898. A common term helps a document under one formula and hurts it under the other." },
+    { type: "mc",
+      q: "PocketRAG's search selects the top k with a heap rather than sorting all scored documents. On a 56-document corpus this is unmeasurable. Why write it that way?",
+      opts: [
+        "Heaps use less memory than sorting, which matters at any size",
+        "Because scoring touches every document containing any query term, and on a large corpus a common term makes that number enormous: n log k rather than n log n",
+        "Because a heap keeps the results stable across runs",
+        "Because SQLite cannot sort floating-point values efficiently"
+      ], a: 1,
+      why: "The habit is the point. A term matching two million documents makes the difference between n log n and n log k the difference between a query and a timeout, and the code should already be right when the corpus grows." },
+    { type: "mc",
+      q: "Matching rank_bm25's scores to 1e-6 required implementing an epsilon floor. What does that floor actually do?",
+      opts: [
+        "It replaces a negative IDF with 0.25 times the mean IDF over the whole vocabulary, making one term's weight depend on every other term",
+        "It prevents division by zero when a term appears in every document",
+        "It clamps scores into the range zero to one for comparability",
+        "It adds a small constant to every IDF to avoid ties"
+      ], a: 0,
+      why: "It is in the reference's source and not in its documentation, and it is a surprising coupling: add a batch of rare terms to the corpus and the mean IDF moves, which moves the floor, which moves the score of every common term." },
+    { type: "mc",
+      q: "On the Larkspur corpus no term has a negative Okapi IDF, so the epsilon floor never fires. What does that mean for the conformance test?",
+      opts: [
+        "The floor can be removed, since it is provably unnecessary",
+        "The floor should be tested by lowering the epsilon until it fires",
+        "The test is invalid, because an unexercised branch means the implementations differ",
+        "The test passes without exercising that branch, so agreement is established only for the cases actually run"
+      ], a: 3,
+      why: "A conformance test tells you that two implementations agree on the inputs you gave them. An untested branch is untested however green the suite looks, and saying so is the difference between evidence and a claim." },
+    { type: "mc",
+      q: "The query \"can I take my cello on board\" does not return the cello passage in its top four. Is the index broken?",
+      opts: [
+        "Yes: a term with df=1 should always outrank common terms",
+        "Yes: the stopword list should have removed can, I, take and my",
+        "No: the rare term contributes 3.638 while several common terms sum to more, which is Chapter 14's query gap on your own code",
+        "No: the passage is missing from the corpus"
+      ], a: 2,
+      why: "BM25 sums contributions, so a pile of low-IDF matches can beat one high-IDF match, and question-shaped queries retrieve question-shaped documents. This failure is the argument for the vector index in Chapter 34 and the fusion in Chapter 35." },
+    { type: "mc",
+      q: "Why is the postings table declared WITHOUT ROWID?",
+      opts: [
+        "So the table is itself the primary-key index, sorted by term then document, which is the order a postings scan walks",
+        "To save the eight bytes per row a rowid would use",
+        "Because SQLite cannot index a composite primary key otherwise",
+        "To allow duplicate term and document pairs"
+      ], a: 0,
+      why: "A normal SQLite table stores rows by hidden rowid and builds a separate index for the declared key, so a lookup is two searches. Declaring it this way removes the indirection and puts the rows in the order the scan wants." },
+    { type: "mc",
+      q: "Which of these deferred optimisations could change which documents come back, rather than only how fast?",
+      opts: [
+        "Delta-encoding and packing the positions list",
+        "None of postings compression or WAND changes the result; reading all document lengths into memory is the choice that eventually fails at scale",
+        "WAND, because skipping documents means some are never scored",
+        "Both compression and WAND, since both approximate the score"
+      ], a: 1,
+      why: "WAND skips only documents that provably cannot enter the top k, so the result is identical; compression is lossless. Loading the lengths table on every query is correctness-preserving too, but it is the one whose memory cost grows with the corpus." },
+    { type: "mc",
+      q: "Phrase search for \"refund of the fare\" also matches text reading \"refund on any fare\". Why, and what fixes it?",
+      opts: [
+        "The stemmer collapsed of and on; use a larger stopword list",
+        "The positional merge allows a tolerance of two positions by default",
+        "Positions are recorded in the analyzed stream, so removing stopwords closes the gap between terms; record the original positions instead",
+        "JSON positions lose ordering; store them as a sorted blob"
+      ], a: 2,
+      why: "Both phrases analyze to the adjacent pair refund fare because the stopwords between them vanish and the offsets compact. Real engines keep a position gap where a stopword was removed, which is what exercise 4 adds." },
+    { type: "blank",
+      q: "In Porter's stemmer, the count of vowel-consonant transitions in a word, used to decide whether enough stem remains for a suffix rule to fire, is its ____.",
+      a: ["measure", "m"],
+      why: "It stands in for syllable count without a pronunciation dictionary, and it is why the algorithm strips ational from relational but leaves short words alone." },
+    { type: "blank",
+      q: "The property by which the tenth occurrence of a term in one document adds far less to its score than the second, bounded above by k1 plus one, is term frequency ____.",
+      a: ["saturation", "saturating"],
+      why: "Without it a document repeating a query term fifty times would outrank one that uses it twice in a sentence that answers the question, which is what made raw term-frequency weighting exploitable." },
+    { type: "order",
+      q: "Order the steps of a BM25 query in PocketRAG, from first to last:",
+      items: [
+        "analyze the query with the same function used to build the index",
+        "look up each term's document frequency in the dictionary",
+        "walk that term's postings list, accumulating into a per-document score",
+        "select the top k with a heap rather than sorting everything",
+        "fetch the text of only the surviving documents"
+      ],
+      why: "The order is what makes the cost bearable: nothing reads document text until after ranking, so a query touches postings rows and one small heap rather than the corpus." }
+  ]
+});
+
+/* ======================= CHAPTER 34 =======================
+   Third chapter of the PocketRAG capstone. All code was written for this
+   course, run, and tested; blocks are extracted mechanically from
+   resources/pocketrag/embed.py (99 non-blank lines), hnsw.py (201) and
+   hnsw.ts (242). The graph follows Malkov & Yashunin 2018 (IEEE TPAMI,
+   arXiv 1603.09320), algorithms 1, 2, 4 and 5, already taught in Chapter 11.
+   Scale corpus: 20,000 real sentences drawn from three books in resources/
+   (Essential GraphRAG plus two networking texts), one sentence per chunk,
+   embedded with all-MiniLM-L6-v2 at 384 dimensions. Measured on the author's
+   M1: embedding 20,000 chunks took 78.5s at about 300 chunks/s; the pure
+   Python graph build took 1,357.9s (22.6 minutes) at M=16 and
+   ef_construction=200; level occupancy came out 18815/1108/70/6/1, against
+   the paper's predicted exp(-L/mL) with mL=1/ln(16), i.e. 0.05925 observed
+   against 0.0625 predicted at L>=1 and 0.00385 against 0.00391 at L>=2. The
+   graph holds 552,547 directed links, mean out-degree 27.6 against Mmax0=32.
+   Recall@10 against exact brute force over 200 sampled queries: 0.9875 at
+   ef=10 rising to 1.0000 at ef=256, and 0.9980 at the default ef=64, which
+   clears the Blueprint's 0.95 target. Python answers in 18.5 ms/query at
+   ef=64 and TypeScript in 1.4 ms on the same saved graph, a 13x difference
+   attributable to the JIT and Float32Array against CPython's interpreted
+   float loop. The truncation finding was verified directly: for
+   all-MiniLM-L6-v2, sentence-transformers reports max_seq_length 256 and the
+   tokenizer model_max_length 256 while the underlying transformer's
+   max_position_embeddings is 512, and a 972-token chunk embeds to cosine
+   1.000000 with its own first 254 tokens, proving the tail is discarded. On
+   Chapter 32's four-document corpus that means 166 of 200 chunks truncated
+   and 43,993 tokens dropped. Decisions per the Blueprint: float32 in memory,
+   no quantization, no deletes beyond tombstones (Chapters 7, 11 and 12 hold
+   the real machinery). numpy is used only inside the Python test to compute
+   ground truth; the graph itself is standard library. Note the two
+   implementations are NOT bit-identical here, unlike Chapters 32 and 33,
+   because level assignment is randomised and the two runtimes use different
+   generators; the conformance criterion becomes recall rather than equality,
+   and the chapter says so. */
+CHAPTERS.push({
+  num: 34, part: 5, title: "PocketRAG: HNSW From Scratch",
+  blurb: "Layer three is the one people assume you have to buy. You will embed every chunk, then build the hierarchical navigable small world graph from Chapter 11's paper: the level lottery, the beam search, the neighbour heuristic that keeps the graph navigable, and persistence back into SQLite. Then measure it honestly against brute force on twenty thousand real vectors. It clears the target. It also uncovers a bug that has been in your index since Chapter 32, which only the real tokenizer could reveal, and which is quietly discarding a third of your corpus.",
+  sections: [
+    { title: "Vectors First, and the Bug They Reveal",
+      html: "<p>The graph needs vectors, so embedding comes first. This is the one part of PocketRAG that is Python only: the model runs at ingest and both languages read what it wrote. The format is the smallest thing that two runtimes can agree on.</p>" +
+      "" +
+      "<pre><code>def pack(v) -&gt; bytes:\n    \"\"\"float32, little endian, dim floats. The only format both halves know.\"\"\"\n    a = array.array(\"f\", (float(x) for x in v))\n    if sys.byteorder != \"little\":\n        a.byteswap()\n    return a.tobytes()\n\n\ndef unpack(blob: bytes) -&gt; array.array:\n    a = array.array(\"f\")\n    a.frombytes(blob)\n    if sys.byteorder != \"little\":\n        a.byteswap()\n    return a\n</code></pre>" +
+      "" +
+      "<p>Little-endian float32, dimension implied by length. Python writes it with <code>array</code>, TypeScript reads it straight into a <code>Float32Array</code>, and neither needs a serialisation library. At 384 dimensions that is 1,536 bytes per chunk, which is Chapter 30's arithmetic arriving as a row size: 30.7 MB of vectors for the 20,000 chunks this chapter indexes, in a database of 53.5 MB.</p>" +
+      "<p>The byteswap is not decoration either. Every machine this is likely to run on is little-endian, and a format that is silently wrong on the one that is not is a worse bug than a format that is slow, because it produces plausible vectors rather than an error. Two lines is a cheap price for never having to think about it.</p>" +
+      "" +
+      "<pre><code>def embed_all(db: sqlite3.Connection, model=None) -&gt; int:\n    \"\"\"Embed only chunks with no vector yet. Chapter 32's stable chunk ids are\n    what make this incremental: an unchanged document costs nothing.\"\"\"\n    db.executescript(SCHEMA)\n    todo = db.execute(\n        \"SELECT c.chunk_id, c.text FROM chunks c\"\n        \" LEFT JOIN vectors v ON v.chunk_id = c.chunk_id\"\n        \" WHERE v.chunk_id IS NULL\").fetchall()\n    if not todo:\n        return 0\n    if model is None:\n        from sentence_transformers import SentenceTransformer\n        model = SentenceTransformer(MODEL)\n    # The model truncates silently at max_seq_length. Chapter 32 sized chunks\n    # with an approximate tokenizer, so \"512 tokens\" there is not 512 here.\n    # Count the damage before doing any work, and say so out loud.\n    limit = model.max_seq_length\n    tok = model.tokenizer\n    over = [(cid, len(tok.encode(t, add_special_tokens=True)))\n            for cid, t in todo]\n    lost = [(cid, n) for cid, n in over if n &gt; limit]\n    if lost:\n        print(f\"  WARNING  {len(lost)} of {len(todo)} chunks exceed the model's \"\n              f\"{limit}-token limit and will be TRUNCATED\")\n        print(f\"           {sum(n - limit for _, n in lost)} tokens will be \"\n              f\"discarded; longest chunk is {max(n for _, n in lost)} tokens\")\n        print(f\"           lower TARGET in ingest.py and re-ingest; see chapter 34\")\n    t0 = time.perf_counter()\n    for i in range(0, len(todo), BATCH):\n        batch = todo[i:i + BATCH]\n        vecs = model.encode([t for _, t in batch], normalize_embeddings=True,\n                            show_progress_bar=False)\n        with db:\n            db.executemany(\"INSERT INTO vectors VALUES (?,?,?)\",\n                           [(cid, len(v), pack(v)) for (cid, _), v in zip(batch, vecs)])\n        if i and i % (BATCH * 50) == 0:\n            done, rate = i + len(batch), (i + len(batch)) / (time.perf_counter() - t0)\n            print(f\"    {done}/{len(todo)}  {rate:.0f} chunks/s\", flush=True)\n    return len(todo)\n</code></pre>" +
+      "" +
+      "<p>Two things in that function matter more than the embedding call. The first is the <code>LEFT JOIN</code>: only chunks without a vector are embedded, which makes the whole layer incremental. Chapter 32 promised this and here is the payoff, because an unchanged document keeps its chunk identifiers and therefore costs nothing to re-embed.</p>" +
+      "<p>The second is the warning. Every embedding model has a <strong>max sequence length</strong>, a token count past which it stops reading, and the usual behaviour at that boundary is <strong>silent truncation</strong>: the input is cut, a normal vector comes back, and nothing anywhere records that it happened. The check counts the damage before doing any work, and it is there because of what happened the first time this ran.</p>" +
+      "" +
+      "<pre><code>$ python3 embed.py trunc.db     # chapter 32's four-document corpus\n  WARNING  166 of 200 chunks exceed the model's 256-token limit and will be TRUNCATED\n           43993 tokens will be discarded; longest chunk is 974 tokens\n           lower TARGET in ingest.py and re-ingest; see chapter 34\n  embedded 200 new chunks in 15.5s; 200 vectors of dim 384 in the database</code></pre>" +
+      "" +
+      "<div class='callout'><strong>Read that number again.</strong> On Chapter 32's four-document corpus, <strong>166 of 200 chunks</strong> are longer than the model will accept, and <strong>43,993 tokens</strong> are thrown away. Not rejected, not logged: silently dropped, with a vector returned that looks perfectly normal. Chapter 32's confession table said the token count was a heuristic and that Chapter 34 would bring the real one. This is what it brought.</div>" },
+
+    { title: "Two Numbers Called 512",
+      html: "<p>The chunker targets 512 tokens. The model accepts 512 tokens. Those are different numbers, and finding out why is worth more than the graph in the rest of this chapter.</p>" +
+      "<p>Ask the model directly and it reports three limits, not one.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>measured: all-MiniLM-L6-v2 reports three different limits</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='52' fill='#c9d6ea' font-size='9.5'>transformer max_position_embeddings</text><text x='420' y='52' fill='#7d8fb0' font-size='10.5'>512</text><text x='500' y='52' fill='#7d8fb0' font-size='9'>what the architecture could do</text>" +
+      "<text x='24' y='76' fill='#c9d6ea' font-size='9.5'>tokenizer model_max_length</text><text x='420' y='76' fill='#ffd166' font-size='10.5'>256</text><text x='500' y='76' fill='#7d8fb0' font-size='9'>what the tokenizer config says</text>" +
+      "<text x='24' y='100' fill='#3ddc97' font-size='9.5'>sentence-transformers max_seq_length</text><text x='420' y='100' fill='#ff5d73' font-size='11'>256</text><text x='500' y='100' fill='#ff5d73' font-size='9'>what ACTUALLY applies</text>" +
+      "<line x1='24' y1='116' x2='736' y2='116' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='138' fill='#7d8fb0' font-size='9.5'>the proof, on a real chunk from chapter 32's corpus</text>" +
+      "<text x='44' y='162' fill='#c9d6ea' font-size='10'>chunk length</text><text x='300' y='162' fill='#c9d6ea' font-size='10'>972 model tokens</text>" +
+      "<text x='44' y='184' fill='#c9d6ea' font-size='10'>cosine(whole chunk, its first 254 tokens)</text><text x='300' y='184' fill='#ff5d73' font-size='11'>1.000000</text>" +
+      "<text x='44' y='206' fill='#ff5d73' font-size='10'>718 of 972 tokens, 74% of that chunk, contribute NOTHING to its vector</text>" +
+      "<line x1='24' y1='218' x2='736' y2='218' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='236' fill='#2de2ff' font-size='9.5'>the retriever cannot match text the embedder never read, and nothing anywhere says so</text>" +
+      "</svg><div class='fig-cap'>Identical vectors for a chunk and its own opening quarter is not a rounding artefact. It is proof the rest was never processed.</div></div>" +
+      "<p>Three limits, one of which applies. The architecture supports 512 positions, the packaged tokenizer config says 256, and the wrapper that everyone actually calls uses 256. A chunk longer than that is cut, and the cut is invisible: no exception, no return value, a normal-looking unit vector.</p>" +
+      "<p>The proof is the cosine. A 972-token chunk and its own first 254 tokens produce vectors identical to six decimal places. The remaining 718 tokens were not weighted lightly, they were not read.</p>" +
+      "<p>So the failure has two independent halves, and both were needed. Chapter 32's counter undercounts real tokens by about 4%, and the model's tokenizer produces roughly <strong>1.18 times</strong> as many tokens as the estimate on this corpus, because technical prose splits harder in WordPiece than in the encoding Chapter 32 calibrated against. Multiply those and a chunk aimed at 512 arrives at a median of 518 real tokens against a limit of 256.</p>" +
+      "<div class='callout'><strong>The fix, and the order to do it in.</strong> The first repair is not the parameter, it is the silence: the warning above turns invisible data loss into a line of output, and that code is now in the pipeline permanently. The second repair is the parameter, and it is arithmetic rather than taste. At a 95th-percentile ratio of 1.326 real tokens per estimated token, holding chunks under a 256-token limit means a target of about 190. Exercise 1 makes the change and re-ingests, which is cheap because Chapter 32 made ingest idempotent.</div>" },
+
+    { title: "The Level Lottery",
+      html: "<p>Now the graph. Chapter 11 explained the idea: a stack of proximity graphs where each layer holds an exponentially decreasing sample of the nodes, so a search starts in a tiny top layer, descends greedily, and arrives at layer zero already near the answer.</p>" +
+      "<p>Every node draws its own top level once, at insert, from a geometric distribution.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>class HNSW:\n    \"\"\"Vectors are L2-normalised, so cosine distance is 1 - dot product.\"\"\"\n\n    def __init__(self, M: int = M_DEFAULT, ef_construction: int = EF_CONSTRUCTION,\n                 seed: int = 42):\n        self.M, self.Mmax0 = M, M * 2\n        self.ef_construction = ef_construction\n        self.mL = 1.0 / math.log(M)          # the paper's level normaliser\n        self.rng = random.Random(seed)\n        self.vectors: list[array.array] = []\n        self.labels: list[str] = []\n        self.levels: list[int] = []\n        self.edges: list[list[list[int]]] = []   # edges[id][level] -&gt; [ids]\n        self.entry: int | None = None\n        self.max_level = -1\n\n    # ---------------------------------------------------------------- basics\n    def distance(self, a: int, q) -&gt; float:\n        return 1.0 - dot(self.vectors[a], q)\n\n    def _random_level(self) -&gt; int:\n        return int(-math.log(self.rng.random()) * self.mL)\n</code></pre><pre data-lang='ts' hidden><code>export class HNSW {\n  M: number; Mmax0: number; efConstruction: number; mL: number;\n  vectors: Float32Array[] = [];\n  labels: string[] = [];\n  levels: number[] = [];\n  edges: number[][][] = [];\n  entry: number | null = null;\n  maxLevel = -1;\n  private seed: number;\n\n  constructor(M = M_DEFAULT, efConstruction = EF_CONSTRUCTION, seed = 42) {\n    this.M = M; this.Mmax0 = M * 2;\n    this.efConstruction = efConstruction;\n    this.mL = 1 / Math.log(M);\n    this.seed = seed &gt;&gt;&gt; 0;\n  }\n\n  /* mulberry32: a named, portable generator, so the level sequence is\n   * reproducible and does not depend on the runtime's Math.random. */\n  private random(): number {\n    this.seed = (this.seed + 0x6d2b79f5) &gt;&gt;&gt; 0;\n    let t = this.seed;\n    t = Math.imul(t ^ (t &gt;&gt;&gt; 15), t | 1);\n    t ^= t + Math.imul(t ^ (t &gt;&gt;&gt; 7), t | 61);\n    return ((t ^ (t &gt;&gt;&gt; 14)) &gt;&gt;&gt; 0) / 4294967296;\n  }\n\n  distance(a: number, q: Float32Array): number { return 1 - dot(this.vectors[a], q); }\n  private randomLevel(): number { return Math.floor(-Math.log(this.random()) * this.mL); }\n</code></pre></div>" +
+      "" +
+      "<p><code>mL = 1 / ln(M)</code> is the paper's normaliser, and it is chosen so the expected number of layers a search must descend is proportional to the logarithm of the corpus. With M=16 a node reaches level 1 with probability 1/16, level 2 with probability 1/256, and so on.</p>" +
+      "<p>That is a prediction, so check it. Over 20,000 real vectors:</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>measured: level occupancy over 20,000 vectors, M=16</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9.5'>level</text><text x='140' y='48' fill='#7d8fb0' font-size='9.5'>nodes</text><text x='260' y='48' fill='#7d8fb0' font-size='9.5'>observed share</text><text x='420' y='48' fill='#7d8fb0' font-size='9.5'>paper predicts</text><text x='580' y='48' fill='#7d8fb0' font-size='9.5'>exp(-L/mL)</text>" +
+      "<text x='24' y='74' fill='#c9d6ea' font-size='10'>L &gt;= 0</text><text x='140' y='74' fill='#c9d6ea' font-size='10'>20000</text><text x='270' y='74' fill='#c9d6ea' font-size='10'>1.00000</text><text x='430' y='74' fill='#c9d6ea' font-size='10'>1.00000</text>" +
+      "<text x='24' y='98' fill='#c9d6ea' font-size='10'>L &gt;= 1</text><text x='140' y='98' fill='#c9d6ea' font-size='10'>1185</text><text x='270' y='98' fill='#3ddc97' font-size='10'>0.05925</text><text x='430' y='98' fill='#3ddc97' font-size='10'>0.06250</text><text x='580' y='98' fill='#7d8fb0' font-size='9'>1/16</text>" +
+      "<text x='24' y='122' fill='#c9d6ea' font-size='10'>L &gt;= 2</text><text x='140' y='122' fill='#c9d6ea' font-size='10'>77</text><text x='270' y='122' fill='#3ddc97' font-size='10'>0.00385</text><text x='430' y='122' fill='#3ddc97' font-size='10'>0.00391</text><text x='580' y='122' fill='#7d8fb0' font-size='9'>1/256</text>" +
+      "<text x='24' y='146' fill='#c9d6ea' font-size='10'>L &gt;= 3</text><text x='140' y='146' fill='#c9d6ea' font-size='10'>7</text><text x='270' y='146' fill='#ffd166' font-size='10'>0.00035</text><text x='430' y='146' fill='#ffd166' font-size='10'>0.00024</text><text x='580' y='146' fill='#7d8fb0' font-size='9'>1/4096</text>" +
+      "<text x='24' y='170' fill='#c9d6ea' font-size='10'>L &gt;= 4</text><text x='140' y='170' fill='#c9d6ea' font-size='10'>1</text><text x='270' y='170' fill='#ffd166' font-size='10'>0.00005</text><text x='430' y='170' fill='#ffd166' font-size='10'>0.00002</text><text x='580' y='170' fill='#7d8fb0' font-size='9'>1/65536</text>" +
+      "<line x1='24' y1='186' x2='736' y2='186' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='206' fill='#3ddc97' font-size='10'>the top two rows are exact to three decimal places; the bottom two are counting 7 and 1</text>" +
+      "<text x='24' y='222' fill='#c9d6ea' font-size='9.5'>a five-layer graph over twenty thousand points, and the top layer has one node in it</text>" +
+      "</svg><div class='fig-cap'>The prediction holds where there is enough data to test it. Below a handful of nodes the observed share is noise, which is what a sample of seven looks like.</div></div>" +
+      "<p>A graph whose level counts match <code>exp(-L/mL)</code> to three decimals is a graph whose level assignment is right, and that is worth checking because a bug there produces a structure that still works and is slower for reasons nothing else explains. Draw levels uniformly instead of geometrically and the upper layers fill up, the descent stops being cheap, and recall barely moves: the index becomes expensive without becoming wrong, which is the hardest kind of defect to notice.</p>" +
+      "<p>The top layer holding exactly one node is worth a sentence too. That node is the entry point for every query, chosen once and never revisited, and its position in the space is arbitrary. It works because layer 1 has a thousand nodes to spread into, so a single greedy hop from an arbitrary start still lands in the right region. The structure tolerates a bad entry point by design rather than by luck, which is the property the hierarchy is buying.</p>" },
+
+    { title: "Search: A Beam, Descending",
+      html: "<p>One routine does all the searching, at build time and at query time, and it is the paper's algorithm 2: a greedy beam search inside a single layer.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>    # ------------------------------------------------- paper's algorithm 2\n    def _search_layer(self, q, entries: list[int], ef: int, level: int) -&gt; list[tuple[float, int]]:\n        \"\"\"Greedy beam search in one layer. Returns [(distance, id)], nearest first.\"\"\"\n        visited = set(entries)\n        candidates = [(self.distance(e, q), e) for e in entries]\n        heapq.heapify(candidates)                     # min-heap: closest first\n        found = [(-d, i) for d, i in candidates]\n        heapq.heapify(found)                          # max-heap: worst at top\n        while candidates:\n            d, c = heapq.heappop(candidates)\n            if d &gt; -found[0][0] and len(found) &gt;= ef:\n                break                                 # nothing closer remains\n            for peer in self.edges[c][level]:\n                if peer in visited:\n                    continue\n                visited.add(peer)\n                dp = self.distance(peer, q)\n                if len(found) &lt; ef or dp &lt; -found[0][0]:\n                    heapq.heappush(candidates, (dp, peer))\n                    heapq.heappush(found, (-dp, peer))\n                    if len(found) &gt; ef:\n                        heapq.heappop(found)\n        return sorted((-d, i) for d, i in found)\n</code></pre><pre data-lang='ts' hidden><code>  /* --------------------------------------------- paper's algorithm 2 */\n  searchLayer(q: Float32Array, entries: number[], ef: number, level: number): [number, number][] {\n    const visited = new Set(entries);\n    const cand = new Heap(1), found = new Heap(-1);\n    for (const e of entries) { const d = this.distance(e, q); cand.push(d, e); found.push(d, e); }\n    while (cand.size) {\n      const [d, c] = cand.pop();\n      if (d &gt; found.peek()![0] * -1 &amp;&amp; found.size &gt;= ef) break;\n      for (const peer of this.edges[c][level]) {\n        if (visited.has(peer)) continue;\n        visited.add(peer);\n        const dp = this.distance(peer, q);\n        if (found.size &lt; ef || dp &lt; found.peek()![0] * -1) {\n          cand.push(dp, peer); found.push(dp, peer);\n          if (found.size &gt; ef) found.pop();\n        }\n      }\n    }\n    const out: [number, number][] = [];\n    while (found.size) out.push(found.pop());\n    return out.sort((x, y) =&gt; x[0] - y[0]);\n  }\n</code></pre></div>" +
+      "" +
+      "<p>Two heaps and a visited set. The min-heap holds candidates to expand nearest first; the max-heap holds the <code>ef</code> best found so far with the worst on top, so the stopping test is one comparison. The loop ends when the nearest unexpanded candidate is further away than the worst result already held, because every remaining candidate is at least that far and expanding them cannot help.</p>" +
+      "<p><code>ef</code> is the beam width and the only quality knob at query time. It appears twice with different names for a reason: <code>ef_construction</code> during insert decides how good the graph is, permanently, and <code>ef</code> during search decides how hard you look in the graph you have.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>    # ------------------------------------------------- paper's algorithm 5\n    def search(self, q, k: int = 10, ef: int = EF_SEARCH) -&gt; list[tuple[str, float]]:\n        if self.entry is None:\n            return []\n        ep = [self.entry]\n        for lc in range(self.max_level, 0, -1):\n            ep = [self._search_layer(q, ep, 1, lc)[0][1]]\n        found = self._search_layer(q, ep, max(ef, k), 0)\n        return [(self.labels[i], 1.0 - d) for d, i in found[:k]]\n\n    def brute_force(self, q, k: int = 10) -&gt; list[tuple[str, float]]:\n        \"\"\"Ground truth. O(n) and exactly right, which is what makes it useful.\"\"\"\n        scored = [(dot(v, q), self.labels[i]) for i, v in enumerate(self.vectors)]\n        return [(lab, s) for s, lab in heapq.nlargest(k, scored)]\n</code></pre><pre data-lang='ts' hidden><code>  /* --------------------------------------------- paper's algorithm 5 */\n  search(q: Float32Array, k = 10, ef = EF_SEARCH): [string, number][] {\n    if (this.entry === null) return [];\n    let ep = [this.entry];\n    for (let lc = this.maxLevel; lc &gt; 0; lc--) ep = [this.searchLayer(q, ep, 1, lc)[0][1]];\n    return this.searchLayer(q, ep, Math.max(ef, k), 0)\n      .slice(0, k).map(([d, i]) =&gt; [this.labels[i], 1 - d] as [string, number]);\n  }\n\n  bruteForce(q: Float32Array, k = 10): [string, number][] {\n    return this.vectors.map((v, i) =&gt; [this.labels[i], dot(v, q)] as [string, number])\n      .sort((a, b) =&gt; b[1] - a[1]).slice(0, k);\n  }\n</code></pre></div>" +
+      "" +
+      "<p>The full search is the <strong>greedy descent</strong>: width 1 through every layer above zero, which is hill-climbing to get near the answer cheaply, then width <code>ef</code> at layer zero where the answer actually is. Nothing above layer zero is looking for results; it is looking for a good place to start.</p>" +
+      "<p>That asymmetry is the whole reason the hierarchy pays. A flat proximity graph over 20,000 nodes would need a wide beam from a random start merely to escape whatever neighbourhood it began in. The upper layers replace that with four cheap hops, and the cost is one extra edge list per node in one node out of sixteen. Chapter 11 made that argument with a picture; the level table two sections up is the same argument with counts.</p>" +
+      "<div class='callout'><strong>The edge everyone hits.</strong> Setting <code>ef</code> below <code>k</code> cannot work, because the beam holds fewer results than you asked for. The code writes <code>max(ef, k)</code> rather than trusting the caller, which is the kind of line that looks like paranoia until an API user passes ef=10 and k=20 and files a bug about missing results.</div>" },
+
+    { title: "The Heuristic That Keeps the Graph Navigable",
+      html: "<p>Insertion has to choose which of the candidates found become permanent neighbours. Taking the M nearest is the obvious answer and it builds a graph that does not work.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>    # ------------------------------------------------- paper's algorithm 4\n    def _select_neighbours(self, q, candidates: list[tuple[float, int]],\n                           m: int) -&gt; list[int]:\n        \"\"\"Heuristic selection: keep a candidate only if it is closer to the\n        query than to anything already kept. That is what stops every node\n        connecting to the same dense cluster and keeps the graph navigable.\"\"\"\n        kept: list[int] = []\n        for d, c in sorted(candidates):\n            if len(kept) &gt;= m:\n                break\n            if all(1.0 - dot(self.vectors[c], self.vectors[k]) &gt; d for k in kept):\n                kept.append(c)\n        for d, c in sorted(candidates):               # top up if too strict\n            if len(kept) &gt;= m:\n                break\n            if c not in kept:\n                kept.append(c)\n        return kept\n</code></pre><pre data-lang='ts' hidden><code>  /* --------------------------------------------- paper's algorithm 4 */\n  selectNeighbours(q: Float32Array, candidates: [number, number][], m: number): number[] {\n    const kept: number[] = [];\n    const sorted = [...candidates].sort((a, b) =&gt; a[0] - b[0]);\n    for (const [d, c] of sorted) {\n      if (kept.length &gt;= m) break;\n      if (kept.every((k) =&gt; 1 - dot(this.vectors[c], this.vectors[k]) &gt; d)) kept.push(c);\n    }\n    for (const [, c] of sorted) {                 // top up if too strict\n      if (kept.length &gt;= m) break;\n      if (!kept.includes(c)) kept.push(c);\n    }\n    return kept;\n  }\n</code></pre></div>" +
+      "" +
+      "<p>The rule is one condition: keep a candidate only if it is closer to the new node than to any candidate already kept. Take the nearest M instead and every node in a dense cluster links to the same few neighbours, the cluster becomes a clique with no edges leaving it, and a search that lands inside is trapped. The heuristic deliberately keeps a further-away candidate that points in a direction nothing else covers, which is what turns a proximity graph into a navigable one.</p>" +
+      "<p>Now insertion, the paper's algorithm 1, which uses both routines.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>    # ------------------------------------------------- paper's algorithm 1\n    def insert(self, label: str, vec) -&gt; int:\n        node = len(self.vectors)\n        level = self._random_level()\n        self.vectors.append(vec); self.labels.append(label)\n        self.levels.append(level)\n        self.edges.append([[] for _ in range(level + 1)])\n        if self.entry is None:\n            self.entry, self.max_level = node, level\n            return node\n        ep = [self.entry]\n        for lc in range(self.max_level, level, -1):   # descend, greedily\n            ep = [self._search_layer(vec, ep, 1, lc)[0][1]]\n        for lc in range(min(level, self.max_level), -1, -1):\n            found = self._search_layer(vec, ep, self.ef_construction, lc)\n            mmax = self.Mmax0 if lc == 0 else self.M\n            peers = self._select_neighbours(vec, found, self.M)\n            self.edges[node][lc] = list(peers)\n            for p in peers:                           # links are bidirectional\n                self.edges[p][lc].append(node)\n                if len(self.edges[p][lc]) &gt; mmax:     # and must be pruned\n                    cand = [(1.0 - dot(self.vectors[p], self.vectors[x]), x)\n                            for x in self.edges[p][lc]]\n                    self.edges[p][lc] = self._select_neighbours(\n                        self.vectors[p], cand, mmax)\n            ep = [i for _, i in found]\n        if level &gt; self.max_level:\n            self.entry, self.max_level = node, level\n        return node\n</code></pre><pre data-lang='ts' hidden><code>  /* --------------------------------------------- paper's algorithm 1 */\n  insert(label: string, vec: Float32Array): number {\n    const node = this.vectors.length;\n    const level = this.randomLevel();\n    this.vectors.push(vec); this.labels.push(label); this.levels.push(level);\n    this.edges.push(Array.from({ length: level + 1 }, () =&gt; [] as number[]));\n    if (this.entry === null) { this.entry = node; this.maxLevel = level; return node; }\n    let ep = [this.entry];\n    for (let lc = this.maxLevel; lc &gt; level; lc--) ep = [this.searchLayer(vec, ep, 1, lc)[0][1]];\n    for (let lc = Math.min(level, this.maxLevel); lc &gt;= 0; lc--) {\n      const found = this.searchLayer(vec, ep, this.efConstruction, lc);\n      const mmax = lc === 0 ? this.Mmax0 : this.M;\n      const peers = this.selectNeighbours(vec, found, this.M);\n      this.edges[node][lc] = [...peers];\n      for (const p of peers) {                    // links are bidirectional\n        this.edges[p][lc].push(node);\n        if (this.edges[p][lc].length &gt; mmax) {    // and must be pruned\n          const cand: [number, number][] = this.edges[p][lc].map(\n            (x) =&gt; [1 - dot(this.vectors[p], this.vectors[x]), x]);\n          this.edges[p][lc] = this.selectNeighbours(this.vectors[p], cand, mmax);\n        }\n      }\n      ep = found.map(([, i]) =&gt; i);\n    }\n    if (level &gt; this.maxLevel) { this.entry = node; this.maxLevel = level; }\n    return node;\n  }\n</code></pre></div>" +
+      "" +
+      "<p>Descend greedily to the new node's own level, then from there down to zero: search the layer with the construction beam, select neighbours by the heuristic, link both ways, and prune any neighbour that now exceeds its budget using the same heuristic. The bidirectional link is what makes the graph searchable from anywhere, and the pruning is what stops a popular node accumulating thousands of edges.</p>" +
+      "<p>The <strong>out-degree budget</strong> is M above layer zero and twice M at layer zero, and the doubling is deliberate: layer zero holds every node and carries every final search, so it can afford the memory and needs the connectivity. Measured on the finished 20,000-node graph: <strong>552,547 directed links</strong> and a mean out-degree of 27.6 against a layer-zero budget of 32. The budget binds on the popular nodes and not on the rest, which is exactly the shape the pruning rule should produce.</p>" +
+      "<p>One subtlety in the pruning is worth naming, because it looks like a bug. When a neighbour overflows, its edge list is rebuilt with the same heuristic evaluated from <em>its</em> position, not from the new node's. That is correct and it is why the vectors array is indexed rather than a distance passed in: each node's neighbourhood is judged by what that node can see, and a rule applied from the wrong viewpoint quietly builds a worse graph that still returns answers.</p>" },
+
+    { title: "The Test: Recall Against Ground Truth",
+      html: "<p>An approximate index needs a ground truth, and for nearest-neighbour search the ground truth is free to write and expensive to run: score everything, take the top k. That is the honest baseline every recall number in this course is measured against.</p>" +
+      "" +
+      "<pre><code>$ python3 embed.py lex.db\n  embedded 0 new chunks in 0.0s; 56 vectors of dim 384 in the database\n\n$ python3 hnsw.py lex.db --build\n  built 56 nodes in 0.2s  M=16 ef_construction=200\n  levels: L0:51  L1:5\n\n$ python3 hnsw.py lex.db \"can I take my cello on board\"\n  0.605  Musical instruments. A cello, double bass or guitar may be carried in the cabin if a\n  0.169  Sports equipment. Skis, golf bags and bicycles are carried as checked baggage for 45\n  0.169  Dangerous goods. Spare lithium batteries above 100 Wh are carried in the cabin only \n  0.139  Boarding priority. Passengers holding a Larkspur Club card, families with infants an\n  0.132  Denied boarding compensation. Where boarding is denied against a passenger's will on</code></pre>" +
+      "" +
+      "<p>Before the numbers, note the last block. Chapter 33 gave this exact query to BM25 and the cello passage did not reach the top four; here it is first, at 0.605 against 0.169 for the runner-up. The lexical index could not connect <em>cello</em> to a passage about musical instruments through a question full of common words, and the embedding does it without being told anything. Chapter 35 stops choosing between them.</p>" +
+      "<p>Now the scale test: 20,000 sentences from three real books, embedded and indexed.</p>" +
+      "" +
+      "<pre><code>$ python3 hnsw.py big.db --build\n  built 20000 nodes in 1357.9s  M=16 ef_construction=200\n  levels: L0:18815  L1:1108  L2:70  L3:6  L4:1\n\n$ python3 test_hnsw.py big.db 200\nPocketRAG HNSW, chapter 34\n  20000 vectors of dim 384\n\n  PASS  recall@10 at ef=64 clears 0.95 (0.9980, 18.5 ms/query)\n\n    ef    recall@10   ms/query   speedup vs brute force\n     10    0.9875        5.09      62.2x\n     16    0.9905        6.59      48.0x\n     32    0.9955       10.76      29.4x\n     64    0.9980       30.11      10.5x\n    128    0.9995       51.33       6.2x\n    256    1.0000       62.10       5.1x\n  PASS  recall rises with ef\n\n    fuzzer at  500 points: recall@10 1.0000\n    fuzzer at 1000 points: recall@10 1.0000\n  PASS  fuzzer recall never drops below 0.9 (worst 1.0000)\n\n  all checks passed</code></pre>" +
+      "" +
+      "<p><strong>recall at k</strong> is the share of the exact top-k that the approximate search returns, and it is the number every vector index is tuned against. Here it is <strong>0.9980</strong> at k=10 and the default ef=64, against a target of 0.95. The curve is the useful part: ef=10 gives 0.9875 at <strong>62 times</strong> the speed of the exact scan, and ef=256 gives perfect recall at 5.1 times. Between those, every point is a real choice, and Chapter 25's evaluation is how you decide which one your users can tell apart.</p>" +
+      "<p>The fuzzer passes at 1.0000, and that result is worth distrusting rather than celebrating. Random gaussian points in 384 dimensions are nearly equidistant from each other, which is Chapter 10's concentration of measure, and it makes the nearest-neighbour problem trivial. Real embeddings are clustered and score 0.9980, lower than random noise. <em>A fuzzer on uniform random data does not stress a vector index.</em> It catches crashes and broken invariants, which is worth having, and it must not be read as evidence about quality.</p>" +
+      "<h3>Same graph, different runtime</h3>" +
+      "<p>The TypeScript half loads the graph Python built and searches it, which tests the persistence format and the search independently of the build.</p>" +
+      "" +
+      "<pre><code>$ node --experimental-strip-types test_hnsw.ts big.db 200\nPocketRAG HNSW, chapter 34\n  20000 vectors of dim 384\n\n  PASS  recall@10 at ef=64 clears 0.95 (0.9995, 1.4 ms/query)\n\n    ef    recall@10   ms/query\n     10    0.9830        0.36\n     16    0.9935        0.72\n     32    0.9990        0.80\n     64    0.9995        1.32\n    128    0.9995        2.50\n    256    0.9995        4.07\n  PASS  recall rises with ef\n\n    fuzzer at  500 points: recall@10 1.0000\n    fuzzer at 1000 points: recall@10 0.9975\n  PASS  fuzzer recall never drops below 0.9 (worst 0.9975)\n\n  all checks passed</code></pre>" +
+      "" +
+      "<p>The recall agrees, and the timing does not. Python answers in <strong>18.5 ms</strong> per query at ef=64 and TypeScript in <strong>1.4 ms</strong> on the same saved graph: a thirteen-fold difference from nothing but the runtime. The work is a few thousand dot products over 384 floats, which a just-in-time compiler over <code>Float32Array</code> turns into tight machine code and CPython executes as an interpreted loop with a boxed float per element.</p>" +
+      "<p>Take the general lesson rather than the language one. The cost of this index is entirely distance computations, which is why production implementations are C or Rust with explicit vector instructions, and why the same algorithm can be two orders of magnitude apart depending on who wrote the inner loop. It also explains the build time: <strong>22.6 minutes</strong> for 20,000 insertions in Python, which is the same arithmetic done ef_construction times per node.</p>" +
+      "<h3>Why these two are not bit-identical</h3>" +
+      "<p>Chapters 32 and 33 ended by hashing both databases and finding them equal. That test is unavailable here and the reason is instructive: level assignment is randomised, the two runtimes have different generators, and so the two graphs have genuinely different shapes. The Python build put 5 of 56 nodes above layer zero and the TypeScript build put 7.</p>" +
+      "<p>For a randomised algorithm the conformance criterion changes. Equality is the wrong question; the right one is whether both graphs answer with the same recall, which they do at every beam width tested. Anything that only holds for one seed is a coincidence, and the fuzzer exists to say so.</p>" },
+
+    { title: "The Confession, and What Comes Next",
+      html: "<p>What layer three simplified, and where the real machinery lives.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 258' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>what the vector layer left out, and what it costs</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='50' fill='#ff5d73' font-size='9.5'>chunks longer than 256 model tokens are still truncated</text><text x='560' y='50' fill='#ff5d73' font-size='9'>exercise 1 fixes it</text>" +
+      "<text x='44' y='66' fill='#7d8fb0' font-size='8.5'>now loud rather than silent, which was the first and more important repair</text>" +
+      "<text x='24' y='90' fill='#c9d6ea' font-size='9.5'>float32 in memory, no quantization at all</text><text x='560' y='90' fill='#7d8fb0' font-size='9'>ch 12, ch 30</text>" +
+      "<text x='44' y='106' fill='#7d8fb0' font-size='8.5'>30.7 MB of vectors for 20k chunks; int8 would be a quarter of that</text>" +
+      "<text x='24' y='130' fill='#c9d6ea' font-size='9.5'>no deletes: a removed chunk leaves its node in the graph</text><text x='560' y='130' fill='#7d8fb0' font-size='9'>ch 30, ch 32</text>" +
+      "<text x='24' y='154' fill='#c9d6ea' font-size='9.5'>the whole index is held in memory and rebuilt whole</text><text x='560' y='154' fill='#7d8fb0' font-size='9'>ch 30</text>" +
+      "<text x='24' y='178' fill='#c9d6ea' font-size='9.5'>no filtered search: the graph knows nothing about metadata</text><text x='560' y='178' fill='#ffd166' font-size='9'>ch 13, ch 35</text>" +
+      "<text x='24' y='202' fill='#c9d6ea' font-size='9.5'>distance is an interpreted loop, not a vector instruction</text><text x='560' y='202' fill='#7d8fb0' font-size='9'>22.6 min to build</text>" +
+      "<line x1='24' y1='218' x2='736' y2='218' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='240' fill='#3ddc97' font-size='10.5'>this is early, not wrong: recall is 0.998, and every row above is speed or scale</text>" +
+      "<text x='24' y='254' fill='#c9d6ea' font-size='9'>except the first row, which is correctness, which is why it is red and first</text>" +
+      "</svg><div class='fig-cap'>Five of these six rows change how fast or how large. The one at the top changes what the index contains, and that is the difference that decides which gets fixed.</div></div>" +
+      "<p>That distinction is the habit worth taking from this chapter. A slow index is a budget problem you can measure with Chapter 27's stage table. An index built from text the embedder never read is a corpus gap that Chapter 29's six checks will attribute to retrieval, sending you to tune ef for a week while the answer sits in the half of a chunk that was thrown away.</p>" +
+      "<p>Two rows are worth pausing on together, because they interact. The index is held entirely in memory and stores full float32 vectors, so its footprint is the 30.7 MB of vectors plus the graph, and it is rebuilt whole rather than updated. That combination is fine at 20,000 chunks and decides the architecture at ten million: Chapter 30 gave the arithmetic and Chapter 12 gave the quantization that changes it, and PocketRAG takes neither because both would obscure the algorithm this chapter exists to show.</p>" +
+      "<p>The deletion row is the one that surprises people. Chapter 32 tombstones a removed document and drops its chunks, but this graph still holds a node for every vector it was built with, so a deleted chunk remains a routing hop and can still be returned. Nothing in the search knows it should not be. Exercise 6 fixes it and measures how far recall degrades before a rebuild is the cheaper answer, which is the question every store in Chapter 30 answers differently.</p>" +
+      "<p>Chapter 35 stops treating the two indexes as alternatives. It fuses the BM25 list from Chapter 33 with the vector list from this one using the reciprocal rank fusion of Chapter 15, adds the cross-encoder cascade of Chapter 16, packs a context the way Chapter 17 measured, and produces an answer with numbered citations that resolve, plus a refusal when the support is not there.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Build.</strong> Fix the truncation. Lower <code>TARGET</code> in <code>ingest.py</code> until no chunk exceeds the model's limit, re-ingest and re-embed, and confirm the warning no longer fires. Report the target you chose, the chunk count before and after, and the ratio you used to pick it. You should find the arithmetic gives about 190 and that re-embedding is fast because only changed chunks are touched.</li>" +
+      "<li><strong>Trace.</strong> Work the level lottery by hand: with M=16 and mL = 1/ln(16), compute the probability of drawing level 0, 1 and 2, and the expected number of nodes at each level in a 20,000-node graph. Compare to the measured 18815 / 1108 / 70. Then say what happens to search cost and to build cost if M is raised to 48, and which layer's budget changes most.</li>" +
+      "<li><strong>Trace.</strong> Take the neighbour heuristic and four candidates at distances 0.10, 0.12, 0.14 and 0.40, where the first three are mutually within 0.05 and the fourth is far from all of them. Work out which are kept for m=2 under the heuristic and under nearest-M. Say which choice leaves the graph connected and why the trapped case is worse than a slightly longer path.</li>" +
+      "<li><strong>Investigate.</strong> Rebuild the 20,000-vector graph at M=8, M=16 and M=32, holding ef_construction fixed, and record build time, mean out-degree, index size on disk and recall@10 at ef=64. Plot recall against index size. You should find a knee, and you should be able to say which side of it your own corpus sits on.</li>" +
+      "<li><strong>Investigate.</strong> Replace the fuzzer's uniform random points with clustered ones: draw 40 centroids, then sample points around them. Report recall at each checkpoint against the uniform case. You should see it fall, and that gap is the measurement of why Chapter 12 used clustered data for its quantization benchmark.</li>" +
+      "<li><strong>Build.</strong> Add deletion. Mark a node deleted, exclude it from results, and keep it in the graph as a routing hop so connectivity survives. Then measure recall after deleting 10%, 25% and 50% of nodes and say at what point a rebuild is cheaper than the degradation. This is the problem every vector store in Chapter 30 solves differently.</li>" +
+      "<li><strong>Build, optional.</strong> Make the distance computation batched: score all of a node's neighbours in one operation rather than one at a time. Report the change in build time for 20,000 vectors. You should get a large factor for a small diff, and you should then be able to explain why production implementations are written in a language with vector instructions.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "max sequence length", d: "The number of tokens an embedding model actually processes, beyond which input is discarded without error, and which is often smaller than the architecture's stated limit." },
+    { t: "silent truncation", d: "Discarding input past a model's limit while returning a normal-looking result, so the loss is invisible to every downstream stage and every metric." },
+    { t: "level lottery", d: "The per-node draw from a geometric distribution that decides how many layers of the graph a node appears in, giving the hierarchy its exponential thinning." },
+    { t: "mL", d: "The level normaliser 1/ln(M), chosen so the expected number of layers a search descends grows with the logarithm of the corpus size." },
+    { t: "beam width", d: "The number of candidates a layer search keeps alive at once, named ef, and the only quality knob available at query time." },
+    { t: "ef_construction", d: "The beam width used while inserting, which fixes how good the graph is permanently, unlike the search beam which can be changed per query." },
+    { t: "neighbour heuristic", d: "The rule keeping a candidate only if it is nearer the new node than any already kept, which preserves edges out of dense clusters and keeps the graph navigable." },
+    { t: "out-degree budget", d: "The maximum links a node may hold in a layer, M above layer zero and twice that at layer zero, enforced by pruning with the same heuristic." },
+    { t: "greedy descent", d: "Searching the layers above zero with a beam of one, which is hill-climbing to get near the answer cheaply before the real search begins." },
+    { t: "ground truth", d: "The exact top-k found by scoring every vector, which is too slow to serve and is the only honest baseline for measuring an approximate index." },
+    { t: "recall at k", d: "The share of the exact top-k that an approximate search returns, which is the number an index is tuned against and the one vendors quote." },
+    { t: "concentration of measure", d: "The tendency of random points in high dimensions to sit at nearly equal distances, which makes uniformly random data an easy and misleading benchmark." }
+  ],
+  quiz: [
+    { type: "mc",
+      q: "A 972-token chunk and its own first 254 tokens embed to vectors with cosine 1.000000. What does that prove?",
+      opts: [
+        "The embedding model is insensitive to text beyond the opening sentences",
+        "The vectors were normalised, which compresses differences at that length",
+        "The two texts are near-duplicates by the model's similarity measure",
+        "The tokens past the model's limit were never processed, so the rest of the chunk is absent from the vector"
+      ], a: 3,
+      why: "Near-duplicates score high, not exactly 1.000000. Identical vectors mean identical input reached the encoder, which is what truncation does. The retriever then cannot match text the embedder never read." },
+    { type: "mc",
+      q: "all-MiniLM-L6-v2 reports max_position_embeddings 512, model_max_length 256 and max_seq_length 256. Which applies, and what is the practical lesson?",
+      opts: [
+        "512, because the architecture is the real constraint",
+        "The smallest of the three always applies, so checking any one is enough",
+        "256, the value the wrapper you actually call uses, and the lesson is that a model exposes several limits of which one binds",
+        "It depends on the batch size at encode time"
+      ], a: 2,
+      why: "The architecture could handle 512 positions; the packaged config and the sentence-transformers wrapper both cap at 256, and the wrapper is what truncates. Reading only max_position_embeddings gives you a number twice the real one." },
+    { type: "mc",
+      q: "Chapter 32 targeted 512 tokens per chunk and the model's limit is 256, yet the chapter says the failure had two independent halves. What is the second half?",
+      opts: [
+        "The estimator undercounts by about 4%, and the model's tokenizer produces about 1.18 times as many tokens as the estimate on this corpus",
+        "The overlap of 64 tokens pushed chunks over the limit",
+        "PDF extraction inserted extra whitespace tokens",
+        "The chunker occasionally failed to split oversized elements"
+      ], a: 0,
+      why: "Two compounding errors: an estimator calibrated against a different encoding, and WordPiece splitting technical prose harder than that encoding does. The result is a median of 518 real tokens from a target of 512, against a limit of 256." },
+    { type: "mc",
+      q: "Why does the neighbour heuristic keep a further candidate over a nearer one?",
+      opts: [
+        "To spread edges evenly and balance the index",
+        "Because taking the nearest M makes a dense cluster a clique with no edges leaving it, trapping any search that lands inside",
+        "Because nearer candidates are more likely to be pruned later",
+        "To reduce the out-degree and save memory"
+      ], a: 1,
+      why: "The condition is that a candidate must be closer to the new node than to anything already kept, which preserves an edge in a direction nothing else covers. That is the difference between a proximity graph and a navigable one." },
+    { type: "mc",
+      q: "The measured level occupancy over 20,000 vectors is 0.05925 at L>=1 against a predicted 0.06250, but 0.00035 against 0.00024 at L>=3. Why is the second row further off?",
+      opts: [
+        "The level assignment degrades at higher layers as the graph grows",
+        "The normaliser mL is only accurate for the first two layers",
+        "Level 3 counts seven nodes, so the observed share is dominated by sampling noise",
+        "Pruning removes nodes from the upper layers during insertion"
+      ], a: 2,
+      why: "Seven nodes out of twenty thousand cannot resolve a probability of 0.00024. The rows with enough data agree to three decimals, which is the check that matters; the tail is what counting seven things looks like." },
+    { type: "mc",
+      q: "The fuzzer reports recall@10 of 1.0000 on random gaussian points while real embeddings score 0.9980. How should that be read?",
+      opts: [
+        "The index performs better than expected on unseen data",
+        "Real embeddings contain duplicates that confuse the ground truth",
+        "The fuzzer uses a smaller corpus, so recall is naturally higher",
+        "Random high-dimensional points are nearly equidistant, so the problem is easy: the fuzzer catches crashes, not quality"
+      ], a: 3,
+      why: "Concentration of measure makes uniform random data the least demanding nearest-neighbour input. A fuzzer on it is a crash and invariant test, and reading it as evidence about retrieval quality is how a benchmark flatters an index." },
+    { type: "mc",
+      q: "Python answers in 18.5 ms per query and TypeScript in 1.4 ms on the same saved graph. What is the general lesson?",
+      opts: [
+        "The cost is entirely distance computations, so the same algorithm varies by orders of magnitude with the inner loop's implementation",
+        "TypeScript's SQLite bindings read the graph faster",
+        "The Python implementation descends more layers because of its level distribution",
+        "Float32Array uses less memory, so more of the graph stays in cache"
+      ], a: 0,
+      why: "Both run the same algorithm over the same graph. A just-in-time compiler over typed arrays produces tight machine code where CPython interprets a loop over boxed floats, which is also why production implementations are C or Rust with explicit vector instructions." },
+    { type: "mc",
+      q: "Chapters 32 and 33 proved correctness by hashing both databases and finding them identical. Why can Chapter 34 not do that?",
+      opts: [
+        "The vectors are floating point, so rounding differs between runtimes",
+        "The graph is too large to hash in reasonable time",
+        "Level assignment is randomised and the runtimes use different generators, so the graphs genuinely differ in shape",
+        "SQLite stores blobs differently in the two bindings"
+      ], a: 2,
+      why: "The Python build put 5 of 56 nodes above layer zero and the TypeScript build 7. For a randomised algorithm the criterion becomes whether both answer with the same recall, which they do at every beam width tested." },
+    { type: "mc",
+      q: "Which single row of the confession table is a correctness problem rather than a performance one?",
+      opts: [
+        "float32 with no quantization, which costs 30.7 MB for 20,000 vectors",
+        "Chunks longer than the model's limit still being truncated, because the index then lacks text the corpus contains",
+        "No filtered search, since metadata queries return the wrong documents",
+        "The index being rebuilt whole rather than incrementally"
+      ], a: 1,
+      why: "Quantization, memory layout and rebuild strategy change speed and size. Truncation changes what the index contains, so Chapter 29's six checks would report a corpus gap and send you to tune the retriever while the answer sits in discarded text." },
+    { type: "blank",
+      q: "The beam width used while inserting, which fixes the quality of the graph permanently rather than per query, is ____.",
+      a: ["ef_construction", "ef construction", "efconstruction"],
+      why: "The search beam can be raised later on the graph you have; this one cannot, because the edges it produced are already written. It is the parameter to get right before a long build." },
+    { type: "blank",
+      q: "Discarding input past a model's limit while returning a normal-looking vector, so no metric or stage can see the loss, is ____ truncation.",
+      a: ["silent"],
+      why: "The first repair is not the parameter but the silence: counting and printing the affected chunks turns invisible data loss into a line of output, which is what stops it recurring." },
+    { type: "order",
+      q: "Order the steps of inserting one node into the HNSW graph:",
+      items: [
+        "draw the node's top level from the geometric distribution",
+        "descend from the entry point with a beam of one down to that level",
+        "search each layer from there down with the construction beam",
+        "select neighbours with the heuristic and link both ways",
+        "prune any neighbour that now exceeds its out-degree budget"
+      ],
+      why: "The greedy descent is cheap navigation, not search: it exists only to arrive near the right region before the expensive beam begins. Pruning last is what stops popular nodes accumulating unbounded edges." }
+  ]
+});
+
+/* ======================= CHAPTER 35 =======================
+   Fourth chapter of the PocketRAG capstone. All code was written for this
+   course, run, and tested; blocks are extracted mechanically from
+   resources/pocketrag/answer.py (150 non-blank lines) and answer.ts (150).
+   The corpus is the 56 Larkspur passages, one per file, carrying the ACL
+   labels Chapter 28 specified: 40 public, 12 tickets, 4 internal. Two
+   functions call models and are therefore Python only, exactly as in Chapter
+   34: embedding the query (all-MiniLM-L6-v2) and cross-encoding query-passage
+   pairs (ms-marco-MiniLM-L-6-v2). Everything else is retrieval logic and
+   exists in both languages, verified identical on the same inputs: reciprocal
+   rank fusion scores, the rewrite output, the packed order, the extractive
+   answer string, the citation verification results, and the permitted-chunk
+   counts per user (40 / 52 / 56). Measured cross-encoder scores on the five
+   recurring questions, user=staff: Q1 +7.163, Q2 +6.152, Q3 -5.128, Q4
+   +4.140, Q5 +1.117, so a refusal threshold of +2.0 separates them with a
+   margin of 3.023 logits. The Blueprint's test asked for Q1-Q4 answered and
+   Q5 refused; Q3 asks for a count from a table that this corpus does not
+   contain, which Chapter 1 said explicitly, so the correct behaviour is a
+   refusal and the chapter says why it departs from the Blueprint there. The
+   Q2 result is reported as measured and is a failure: with tickets filtered
+   out, the reranker puts a navigation page containing only questions and the
+   sentence "See the linked policy pages for each answer" at +4.696, and puts
+   the page that actually answers the question at -8.248, a gap of nearly 13
+   logits in the wrong direction. No model API is reachable from this machine,
+   so PocketRAG ships a deterministic extractive generator that copies
+   sentences out of the packed passages; build_prompt() shows what would be
+   sent to a model and the chapter is explicit that generation quality is not
+   under test here, only grounding, citation resolution, refusal and the leak
+   test. Decisions per the Blueprint: RRF rather than learned weights (Chapter
+   15), one rewrite strategy (Chapter 14), a refusal threshold taken from the
+   reranker score (Chapter 18). */
+CHAPTERS.push({
+  num: 35, part: 5, title: "PocketRAG: Hybrid, Rerank, and Cited Answers",
+  blurb: "Two indexes, one answer. This chapter fuses the keyword list and the vector list by rank, pushes the permission filter down into the candidate set, cascades fifty candidates through a cross-encoder to eight, packs a context ends-first, and emits an answer whose every sentence carries a citation that is checked rather than trusted. Two of the five recurring questions are refused, correctly and for different reasons. One is answered, cited, verified, and wrong, and finding out why the whole pipeline signed off on it is the most useful thing in this chapter.",
+  sections: [
+    { title: "Fusing Two Rankings Without Comparing Scores",
+      html: "<p>Chapter 33 produced a BM25 list. Chapter 34 produced a vector list. The obvious move is to add the scores, and it is wrong for a reason worth restating: a BM25 score is an unbounded sum of IDF-weighted terms and a cosine is bounded in minus one to one, so adding them means whichever number happens to be larger wins. Chapter 15 measured how fragile that is.</p>" +
+      "<p><strong>reciprocal rank fusion</strong> throws the scores away and keeps only the positions.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code># --------------------------------------------------------------------- fuse\ndef rrf(rankings: list[list[str]], k: int = 60) -&gt; list[tuple[str, float]]:\n    \"\"\"Reciprocal rank fusion: rank position only, never raw scores, because\n    BM25 logits and cosines are not on a common scale (chapter 15).\"\"\"\n    fused: dict[str, float] = {}\n    for ranking in rankings:\n        for pos, cid in enumerate(ranking, 1):\n            fused[cid] = fused.get(cid, 0.0) + 1.0 / (k + pos)\n    return sorted(fused.items(), key=lambda kv: -kv[1])\n</code></pre><pre data-lang='ts' hidden><code>/* ---------------------------------------------------------------- fuse */\nexport function rrf(rankings: string[][], k = 60): [string, number][] {\n  const fused = new Map&lt;string, number&gt;();\n  for (const ranking of rankings)\n    ranking.forEach((cid, i) =&gt; fused.set(cid, (fused.get(cid) ?? 0) + 1 / (k + i + 1)));\n  return [...fused.entries()].sort((a, b) =&gt; b[1] - a[1]);\n}\n</code></pre></div>" +
+      "" +
+      "<p>A document at rank 1 contributes 1/61, at rank 2 contributes 1/62, and a document both retrievers like beats a document one retriever loves. The 60 is the <strong>fusion constant</strong>, Cormack's original value, and its job is to flatten the top: set it to 1 and rank 1 is worth twice rank 2, which turns fusion into a vote for whichever list is more confident rather than a consensus between them.</p>" +
+      "<p>Fusion is the third of six stages, and since the rest of this chapter takes them one at a time, here is the whole shape first. The order is the argument.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 250' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='24' y='18' fill='#2de2ff' font-size='11'>one question, six stages, and the chapter that decided each one</text><line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/><rect x='24' y='40' width='712' height='30' rx='7' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='40' y='60' fill='#4f7cff' font-size='9.5'>1. rewrite</text><text x='190' y='60' fill='#c9d6ea' font-size='9'>the question, plus a statement-shaped form of it</text><text x='640' y='60' fill='#7d8fb0' font-size='9'>ch 14</text><rect x='24' y='76' width='712' height='30' rx='7' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='40' y='96' fill='#3ddc97' font-size='9.5'>2. filter</text><text x='190' y='96' fill='#c9d6ea' font-size='9'>restrict candidates to what this user may read, BEFORE ranking</text><text x='640' y='96' fill='#7d8fb0' font-size='9'>ch 28</text><rect x='24' y='112' width='712' height='30' rx='7' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='40' y='132' fill='#4f7cff' font-size='9.5'>3. retrieve + fuse</text><text x='190' y='132' fill='#c9d6ea' font-size='9'>BM25 and the vector graph, combined by rank</text><text x='640' y='132' fill='#7d8fb0' font-size='9'>ch 9, 11, 15</text><rect x='24' y='148' width='712' height='30' rx='7' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='40' y='168' fill='#ffd166' font-size='9.5'>4. rerank</text><text x='190' y='168' fill='#c9d6ea' font-size='9'>50 candidates to 8, and the top score decides whether to answer at all</text><text x='640' y='168' fill='#7d8fb0' font-size='9'>ch 16, 18</text><rect x='24' y='184' width='712' height='30' rx='7' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='40' y='204' fill='#4f7cff' font-size='9.5'>5. pack + cite</text><text x='190' y='204' fill='#c9d6ea' font-size='9'>ends-first into a token budget, numbered for citation</text><text x='640' y='204' fill='#7d8fb0' font-size='9'>ch 17, 18</text><rect x='24' y='220' width='712' height='26' rx='7' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='40' y='238' fill='#3ddc97' font-size='9.5'>6. verify</text><text x='190' y='238' fill='#c9d6ea' font-size='9'>every citation checked against the passage it names</text><text x='640' y='238' fill='#7d8fb0' font-size='9'>ch 18</text></svg><div class='fig-cap'>Nothing here is new. The chapter is six mechanisms you already understand, wired in the order that makes each one able to do its job.</div></div>" +
+      "<p>Before fusing, the query is rewritten. Chapter 14 measured five strategies and PocketRAG ships one, chosen for being deterministic and free.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code># ------------------------------------------------------------------ rewrite\ndef rewrite(query: str) -&gt; list[str]:\n    \"\"\"Chapter 14 measured five strategies; PocketRAG ships one. A statement\n    shaped like the corpus retrieves better than a question shaped like a\n    user, so search for both and let fusion sort it out.\"\"\"\n    stripped = re.sub(r\"^(can|could|do|does|how|what|when|where|which|who|why|is|are)\\b\\s*\",\n                      \"\", query.strip(), flags=re.I)\n    stripped = re.sub(r\"\\?+$\", \"\", stripped).strip()\n    return [query] if not stripped or stripped.lower() == query.lower() else [query, stripped]\n</code></pre><pre data-lang='ts' hidden><code>/* ------------------------------------------------------------- rewrite */\nexport function rewrite(query: string): string[] {\n  const stripped = query.trim()\n    .replace(/^(can|could|do|does|how|what|when|where|which|who|why|is|are)\\b\\s*/i, \"\")\n    .replace(/\\?+$/, \"\").trim();\n  return !stripped || stripped.toLowerCase() === query.toLowerCase()\n    ? [query] : [query, stripped];\n}\n</code></pre></div>" +
+      "" +
+      "<p>Strip the leading interrogative and the question mark, and you get a statement shaped more like the corpus than like a user. Both shapes are searched and fusion sorts it out, which is the cheap half of Chapter 14's finding. The expensive half, writing a hypothetical answer and searching with that, needs a generative model, and the section on Q2 shows what its absence costs.</p>" },
+
+    { title: "The Filter Goes Down, Not On Top",
+      html: "<p>Chapter 28 measured four places to put an access rule and found only one that is both correct and free. PocketRAG uses that one: the candidate set is restricted before anything is ranked.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def allowed(db: sqlite3.Connection, user: str) -&gt; set[str]:\n    labels = USERS[user]\n    return {cid for cid, lab in db.execute(\"SELECT chunk_id, label FROM chunks\")\n            if lab in labels}\n\n\ndef retrieve(db, query: str, user: str = \"staff\", k: int = K_CANDIDATES,\n             model=None) -&gt; list[str]:\n    \"\"\"Both retrievers, both query shapes, fused. The permission filter is\n    applied to the candidate set before ranking (chapter 28's pre-filter).\"\"\"\n    from bm25 import search as bm25_search\n    from hnsw import HNSW, load_vectors\n    import array\n\n    keep = allowed(db, user)\n    rankings = []\n    vecs = load_vectors(db)\n    graph = HNSW.load(db, vecs)\n    for shape in rewrite(query):\n        lex = [cid for cid, _ in bm25_search(db, shape, k=None) if cid in keep]\n        rankings.append(lex[:k])\n        if model is not None:\n            qv = array.array(\"f\", model.encode([shape], normalize_embeddings=True)[0].tolist())\n            dense = [cid for cid, _ in graph.search(qv, k=k * 2, ef=128) if cid in keep]\n            rankings.append(dense[:k])\n    return [cid for cid, _ in rrf(rankings)][:k]\n</code></pre><pre data-lang='ts' hidden><code>export function allowed(db: DatabaseSync, user: string): Set&lt;string&gt; {\n  const labels = USERS[user];\n  const out = new Set&lt;string&gt;();\n  for (const r of db.prepare(\"SELECT chunk_id, label FROM chunks\").all() as\n       { chunk_id: string; label: string }[])\n    if (labels.has(r.label)) out.add(r.chunk_id);\n  return out;\n}\n\n/* The query vector comes from the Python half; everything else is here. */\nexport function retrieve(db: DatabaseSync, query: string, user: string,\n                         queryVec: Float32Array | null = null,\n                         k = K_CANDIDATES): string[] {\n  const keep = allowed(db, user);\n  const rankings: string[][] = [];\n  const graph = queryVec ? HNSW.load(db, loadVectors(db)) : null;\n  for (const shape of rewrite(query)) {\n    rankings.push(bm25Search(db, shape, null).map(([c]) =&gt; c)\n      .filter((c) =&gt; keep.has(c)).slice(0, k));\n    if (graph &amp;&amp; queryVec)\n      rankings.push(graph.search(queryVec, k * 2, 128).map(([c]) =&gt; c)\n        .filter((c) =&gt; keep.has(c)).slice(0, k));\n  }\n  return rrf(rankings).map(([c]) =&gt; c).slice(0, k);\n}\n</code></pre></div>" +
+      "" +
+      "<p>The <code>keep</code> set is computed once from the chunk labels and applied to each retriever's output before fusion, so a chunk the user may not see never enters a ranking, never reaches the reranker, and cannot be packed. On this corpus that is 40 chunks for a passenger, 52 for a contractor and 56 for staff.</p>" +
+      "<p>This is a post-filter in the strict sense, applied to a full ranked list rather than pushed into the index, and Chapter 13 explains why that is acceptable here and would not be at scale: with 56 chunks the retriever returns everything anyway. A real store pushes the predicate into the scan, which is what Chapter 30's filtering column was about, and the shape of this code is what you would replace.</p>" +
+      "<div class='callout'><strong>The honest limit of the cascade at this size.</strong> The candidate count is 50 and the corpus is 56, so the first stage of the cascade is a formality here: it hands the reranker almost everything. The narrowing is real at 20,000 chunks, where the same code takes 50 of 20,000, and the exercise runs it against Chapter 34's larger index to see the difference. At this size the cross-encoder is doing all of the ranking, which matters enormously for how you read the Q2 result later.</div>" },
+
+    { title: "The Cascade, and the Score That Decides Everything",
+      html: "<p>Chapter 16 built the cascade: a cheap model proposes many candidates and an expensive one orders a few. The implementation is nine lines because all the thinking was done in Chapter 16.</p>" +
+      "" +
+      "<pre><code>def rerank(db, query: str, candidates: list[str], ce, k: int = K_RERANK):\n    \"\"\"The cascade: a cheap retriever proposes many, an expensive model orders\n    a few. Returns [(chunk_id, score)] with the cross-encoder's raw logit,\n    which is also the refusal signal.\"\"\"\n    if not candidates:\n        return []\n    texts = {cid: t for cid, t in db.execute(\n        \"SELECT chunk_id, text FROM chunks WHERE chunk_id IN (%s)\"\n        % \",\".join(\"?\" * len(candidates)), candidates)}\n    scores = ce.predict([(query, texts[c]) for c in candidates])\n    ranked = sorted(zip(candidates, (float(s) for s in scores)), key=lambda p: -p[1])\n    return ranked[:k]\n</code></pre>" +
+      "" +
+      "<p>Fifty candidates in, eight out, one model call with fifty pairs rather than fifty calls, which Chapter 27 measured at twice the throughput of looping. The return value keeps the raw logit rather than a normalised score, and that decision is what makes the next two sections possible: the same number that orders the results also decides whether there are any.</p>" +
+      "<p>Measured on the five recurring questions, as staff, the top score after reranking:</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 246' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>measured: top cross-encoder logit per question, and where the line goes</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='330' y1='40' x2='330' y2='196' stroke='#3ddc97' stroke-width='2' stroke-dasharray='4 4'/>" +
+      "<text x='336' y='190' fill='#3ddc97' font-size='9'>threshold +2.0</text>" +
+      "<text x='24' y='58' fill='#c9d6ea' font-size='9.5'>Q1  cello in the cabin</text><rect x='330' y='48' width='185' height='12' fill='#3ddc97'/><text x='524' y='58' fill='#3ddc97' font-size='10'>+7.163  answer</text>" +
+      "<text x='24' y='84' fill='#c9d6ea' font-size='9.5'>Q2  money back after not flying</text><rect x='330' y='74' width='159' height='12' fill='#ffd166'/><text x='498' y='84' fill='#ffd166' font-size='10'>+6.152  answer, and wrong</text>" +
+      "<text x='24' y='110' fill='#c9d6ea' font-size='9.5'>Q4  policy after INC-2042</text><rect x='330' y='100' width='107' height='12' fill='#3ddc97'/><text x='446' y='110' fill='#3ddc97' font-size='10'>+4.140  answer</text>" +
+      "<text x='24' y='136' fill='#c9d6ea' font-size='9.5'>Q5  emotional support peacock</text><rect x='300' y='126' width='29' height='12' fill='#ff5d73'/><text x='340' y='136' fill='#ff5d73' font-size='10'>+1.117  refused</text>" +
+      "<text x='24' y='162' fill='#c9d6ea' font-size='9.5'>Q3  refund count for March</text><rect x='198' y='152' width='131' height='12' fill='#ff5d73'/><text x='340' y='162' fill='#ff5d73' font-size='10'>-5.128  refused</text>" +
+      "<line x1='24' y1='206' x2='736' y2='206' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='226' fill='#3ddc97' font-size='10'>margin between the lowest answer and the highest refusal: 3.023 logits</text>" +
+      "<text x='24' y='242' fill='#c9d6ea' font-size='9.5'>calibrated on five questions, which Chapter 25 would call a sample, not a measurement</text>" +
+      "</svg><div class='fig-cap'>A clean separation with room on both sides. It is also five data points, and the chapter that measured confidence intervals would want two hundred.</div></div>" +
+      "<p>Reading that chart in the other direction is the useful exercise. Q3, the question about a count in a table, scores <strong>-5.128</strong>, which is the reranker correctly reporting that nothing it was shown answers the question. Q4, the two-hop policy question, scores +4.140, lower than Q1's +7.163 because the passage it found answers the question by implication rather than by restating it. A single scalar is carrying a lot of meaning here, which is both why it works as a refusal signal and why calibrating it on five questions is not enough.</p>" +
+      "<p>Q5 is the interesting refusal. The peacock question retrieves the cabin pets page and scores <strong>+1.117</strong>, positive because a page about animals in the cabin genuinely is relevant to a question about an animal in the cabin. It is relevant and it does not answer. That gap between topical relevance and containing the answer is why the threshold is at +2.0 rather than at zero.</p>" },
+
+    { title: "Packing, Citing, and Refusing",
+      html: "<p>Chapter 17 measured what position does to a long context and found a U: the beginning and the end are read, the middle is where a passage goes to be ignored. PocketRAG packs accordingly.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def pack(db, ranked, budget: int = CONTEXT_TOKENS, k: int = K_CONTEXT):\n    \"\"\"Ends-first ordering: best at the start and the end, weakest buried in\n    the middle, because chapter 17 measured that the middle is where a model\n    stops looking. Returns [(n, chunk_id, text)] numbered for citation.\"\"\"\n    from ingest import ntokens\n    chosen, used = [], 0\n    for cid, _ in ranked[:k]:\n        text = db.execute(\"SELECT text FROM chunks WHERE chunk_id=?\", (cid,)).fetchone()[0]\n        n = ntokens(text)\n        if used + n &gt; budget:\n            break\n        chosen.append((cid, text)); used += n\n    front, back = [], []\n    for i, item in enumerate(chosen):\n        (front if i % 2 == 0 else back).append(item)\n    ordered = front + back[::-1]\n    return [(i + 1, cid, text) for i, (cid, text) in enumerate(ordered)]\n\n\nPROMPT = (\n    \"Answer the question using only the numbered passages. Cite every sentence \"\n    \"with the passage number in square brackets. If the passages do not contain \"\n    \"the answer, reply exactly: NOT IN THE CORPUS.\\n\\n\"\n    \"{passages}\\n\\nQuestion: {question}\\nAnswer:\")\n</code></pre><pre data-lang='ts' hidden><code>export function pack(db: DatabaseSync, ranked: [string, number][],\n                     budget = CONTEXT_TOKENS, k = K_CONTEXT): [number, string, string][] {\n  const chosen: [string, string][] = [];\n  let used = 0;\n  for (const [cid] of ranked.slice(0, k)) {\n    const text = (db.prepare(\"SELECT text FROM chunks WHERE chunk_id=?\")\n      .get(cid) as { text: string }).text;\n    const n = ntokens(text);\n    if (used + n &gt; budget) break;\n    chosen.push([cid, text]); used += n;\n  }\n  // ends-first: best at the start and the end, weakest buried (chapter 17)\n  const front: [string, string][] = [], back: [string, string][] = [];\n  chosen.forEach((item, i) =&gt; (i % 2 === 0 ? front : back).push(item));\n  return [...front, ...back.reverse()].map(([cid, text], i) =&gt;\n    [i + 1, cid, text] as [number, string, string]);\n}\n</code></pre></div>" +
+      "" +
+      "<p>That is <strong>ends-first packing</strong>: take the top few within a token budget, then interleave so the best land at the two ends and the weakest sit in the middle. The numbering is assigned after ordering, so passage <code>[1]</code> is the first thing the model reads rather than the highest scoring, which keeps the citation numbers meaningful to a human reading the output.</p>" +
+      "<p>The prompt is deliberately dull, and the last sentence is the entire refusal mechanism as far as the model is concerned.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>PROMPT = (\n    \"Answer the question using only the numbered passages. Cite every sentence \"\n    \"with the passage number in square brackets. If the passages do not contain \"\n    \"the answer, reply exactly: NOT IN THE CORPUS.\\n\\n\"\n    \"{passages}\\n\\nQuestion: {question}\\nAnswer:\")\n\n\ndef build_prompt(packed, question: str) -&gt; str:\n    body = \"\\n\\n\".join(f\"[{n}] {text}\" for n, _, text in packed)\n    return PROMPT.format(passages=body, question=question)\n</code></pre><pre data-lang='ts' hidden><code>const PROMPT =\n  \"Answer the question using only the numbered passages. Cite every sentence \" +\n  \"with the passage number in square brackets. If the passages do not contain \" +\n  \"the answer, reply exactly: NOT IN THE CORPUS.\\n\\n{passages}\\n\\n\" +\n  \"Question: {question}\\nAnswer:\";\n\nexport function buildPrompt(packed: [number, string, string][], question: string): string {\n  return PROMPT.replace(\"{passages}\",\n    packed.map(([n, , t]) =&gt; `[${n}] ${t}`).join(\"\\n\\n\")).replace(\"{question}\", question);\n}\n</code></pre></div>" +
+      "" +
+      "<p>PocketRAG does not send it. No model API is reachable from the machine these numbers came from, so the shipped generator is extractive: it copies sentences out of the packed passages and appends their numbers.</p>" +
+      "" +
+      "<pre><code>def extractive_answer(packed, ranked) -&gt; str:\n    \"\"\"The generator PocketRAG ships: no model, no API, and every sentence is\n    copied from a passage, so grounding is guaranteed by construction. A real\n    deployment sends build_prompt() to a model; the chapter shows both.\"\"\"\n    best = {cid: s for cid, s in ranked}\n    strong = [p for p in packed if best.get(p[1], 0.0) &gt;= QUOTE_ABOVE]\n    picked = sorted(strong, key=lambda p: -best.get(p[1], 0.0))[:2]\n    out = []\n    for n, _, text in picked:\n        first = re.split(r\"(?&lt;=[.!?])\\s+\", text.strip())\n        sentence = \" \".join(first[1:3]) if len(first) &gt; 2 else first[-1]\n        out.append(f\"{sentence.strip()} [{n}]\")\n    return \" \".join(out)\n\n\ndef answer(db, question: str, user: str = \"staff\", model=None, ce=None) -&gt; dict:\n    cands = retrieve(db, question, user, model=model)\n    ranked = rerank(db, question, cands, ce) if ce else [(c, 0.0) for c in cands[:K_RERANK]]\n    top = ranked[0][1] if ranked else float(\"-inf\")\n    if top &lt; REFUSE_BELOW:\n        return {\"refused\": True, \"top_score\": top, \"citations\": [],\n                \"text\": \"NOT IN THE CORPUS.\", \"packed\": []}\n    packed = pack(db, ranked)\n    return {\"refused\": False, \"top_score\": top, \"packed\": packed,\n            \"text\": extractive_answer(packed, ranked),\n            \"prompt\": build_prompt(packed, question),\n            \"citations\": [n for n, _, _ in packed]}\n</code></pre>" +
+      "" +
+      "<p>That is a real technique rather than a stand-in. An extractive answer is grounded by construction, because every sentence is verbatim from a passage, so it separates the two things a generated answer confuses: whether the retrieval found the right text, and whether the model used it faithfully. This chapter tests the first. Chapter 26's metrics are for the second.</p>" +
+      "<p>The extractive generator also makes the token budget honest. It quotes at most two passages and only those scoring above the quote threshold, so a weak passage can be packed as context without being asserted as an answer. That distinction is worth keeping when you swap in a model: everything packed is evidence the model may use, and only what it cites is a claim the verifier will check.</p>" +
+      "<p>Refusal happens before any of this, on the reranker's top score, and it is one comparison. A system that cannot say no will answer every question, which Chapter 18 showed is the failure that destroys trust fastest, because a refusal is a known unknown and a confident wrong answer is not.</p>" +
+      "<h3>Citations that are checked, not trusted</h3>" +
+      "<p><strong>citation verification</strong> is what separates a reference from a decoration, and it is eleven lines.</p>" +
+      "" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='ts'>TypeScript</button></div><pre data-lang='python'><code>def verify(result: dict) -&gt; list[tuple[int, bool, str]]:\n    \"\"\"Every bracketed number must name a packed passage, and the sentence it\n    marks must actually appear in that passage. A citation nobody checks is\n    decoration (chapter 18).\"\"\"\n    by_n = {n: text for n, _, text in result[\"packed\"]}\n    out = []\n    for sentence in re.split(r\"(?&lt;=\\])\\s+\", result[\"text\"]):\n        nums = [int(x) for x in re.findall(r\"\\[(\\d+)\\]\", sentence)]\n        claim = re.sub(r\"\\s*\\[\\d+\\]\", \"\", sentence).strip()\n        if not nums:\n            out.append((0, False, claim)); continue\n        for n in nums:\n            out.append((n, n in by_n and claim and claim in by_n[n], claim))\n    return out\n</code></pre><pre data-lang='ts' hidden><code>export function verify(r: Result): [number, boolean, string][] {\n  const byN = new Map(r.packed.map(([n, , t]) =&gt; [n, t]));\n  const out: [number, boolean, string][] = [];\n  for (const sentence of r.text.split(/(?&lt;=\\])\\s+/)) {\n    const nums = [...sentence.matchAll(/\\[(\\d+)\\]/g)].map((m) =&gt; Number(m[1]));\n    const claim = sentence.replace(/\\s*\\[\\d+\\]/g, \"\").trim();\n    if (!nums.length) { out.push([0, false, claim]); continue; }\n    for (const n of nums)\n      out.push([n, byN.has(n) &amp;&amp; !!claim &amp;&amp; byN.get(n)!.includes(claim), claim]);\n  }\n  return out;\n}\n</code></pre></div>" +
+      "" +
+      "<p>Split the answer at citation boundaries, pull the bracketed numbers, strip them, and assert the remaining claim appears in the passage that number names. For an extractive generator this must pass, and running it anyway is the point: it is the test that survives swapping the generator for a model, where it stops being trivially true and starts being the thing that catches a fabricated reference.</p>" +
+      "<p>Two failure modes it catches. A number pointing at a passage that was not packed, which happens when a model invents <code>[7]</code> for a five-passage context. And a claim that resolves to a real passage which does not contain it, which is the more dangerous case because the citation looks right until somebody follows it.</p>" +
+      "" +
+      "<pre><code>$ python3 answer.py lex.db \"Can I bring my cello in the cabin?\"\n  user=staff  top rerank score +7.163\n\n  A cello, double bass or guitar may be carried in the cabin if an extra seat is purchased at the applicable adult fare. The instrument must be secured in the seat with the supplied strap. [1]\n\n  [1] resolves: A cello, double bass or guitar may be carried in the cab...\n\n$ python3 answer.py lex.db \"Which baggage policy changed after incident INC-2042?\"\n  user=staff  top rerank score +4.140\n\n  On 14 January a fare-loading error priced Lisbon routes at zero for 40 minutes. Actions: the refund and cancellation policy was amended on 2 February to add the 24-hour cooling-off clause. [1]\n\n  [1] resolves: On 14 January a fare-loading error priced Lisbon routes ...\n\n$ python3 answer.py lex.db \"Can I bring my emotional support peacock in the cabin?\"\n  user=staff  top rerank score +1.117\n  REFUSED: NOT IN THE CORPUS.</code></pre>" +
+      "" +
+      "<p>Q1 and Q4 answered with citations that resolve, Q5 refused. Q4 is the one worth noticing: the answer is assembled from the incident post-mortem, which is an <em>internal</em> chunk, so it appears for staff and would not for a passenger. The permission filter and the answer are the same pipeline.</p>" },
+
+    { title: "The Answer That Is Cited, Verified, and Wrong",
+      html: "<p>Q2 passes every check in this chapter. It scores +6.152, comfortably above the threshold. Its citations resolve. Its sentences are verbatim from the corpus. It is useless, and every layer signed off on it.</p>" +
+      "<p>As staff, the top eight after reranking are all support tickets, which are other customers asking the same question. Filter them out by asking as a passenger, which is what a real deployment would do, and the result gets more instructive rather than less.</p>" +
+      "" +
+      "<pre><code>  Q2: \"I couldn't take my flight, how do I get my money back?\"\n  reranked, user=passenger (tickets filtered out):\n\n  1.   +4.696  Frequently asked questions, money. How do I get my money b &lt;-- ONLY questions, no answer\n  2.   -6.702  Taxes and charges. Air passenger duty and airport charges \n  3.   -7.995  Flexible fares. Tickets in fare classes Y and B may be can\n  4.   -8.248  Fare rules and cancellation. Tickets in fare classes L, K  &lt;-- the page that ANSWERS it\n  5.   -8.471  Travel credit terms. A travel credit is held against the b</code></pre>" +
+      "" +
+      "<p>The winner is a navigation page. Its entire content is three questions and the sentence <em>See the linked policy pages for each answer</em>. It contains no answer at all, by construction, and the cross-encoder scores it <strong>+4.696</strong>.</p>" +
+      "<p>The page that does answer the question, the one saying the fare is issued as a travel credit valid for twelve months, is ranked <strong>fourth at -8.248</strong>. The gap is nearly thirteen logits, in the wrong direction, from a model whose entire job is to tell relevant from irrelevant.</p>" +
+      "<div class='callout'><strong>Why this is not a bug in the reranker.</strong> A cross-encoder is trained to score topical relevance between a query and a passage, and by that definition the FAQ page is an excellent match: it contains the query almost verbatim. Nothing in the training objective distinguishes a page that <em>asks</em> your question from a page that <em>answers</em> it. This is Chapter 14's query gap surviving fusion, reranking and a permission filter, and it is the reason Chapter 26 measures answers rather than rankings.</div>" +
+      "<p>Chapter 14 measured the fix: a hypothetical answer written by a model, searched instead of the question, moved the gold passage from rank 14 to rank 1. PocketRAG's rewrite cannot do that because it has no generative model to write with, and on a 56-passage corpus it would not help anyway, since the retriever already returns everything and the cross-encoder does all the ordering. The fix has to be at the ranking stage, not the retrieval stage, which is a different exercise from the one Chapter 14 set.</p>" +
+      "<p>Keep the shape of this failure rather than the specifics. A pipeline that is individually correct at every stage can be jointly wrong, and none of the checks in this chapter can see it: the refusal threshold sees a confident score, the citation verifier sees resolving references, and the leak test sees no violation. Only an end-to-end measurement against a labelled answer catches it, which is the whole of Chapter 36.</p>" },
+
+    { title: "The Test",
+      html: "<p>Five claims: every question lands on the intended side of the refusal line, the line has margin, every citation resolves, no answer for any user contains a chunk that user may not read, and the cascade actually narrows.</p>" +
+      "" +
+      "<pre><code>PocketRAG answers, chapter 35\n  refusal threshold +2.0, cascade 50 -&gt; 8\n\n    Q1   +7.163  answer  (want answer)\n    Q2   +6.152  answer  (want answer)\n    Q3   -5.128  refuse  (want refuse)\n    Q4   +4.140  answer  (want answer)\n    Q5   +1.117  refuse  (want refuse)\n  PASS  \n  every question lands on the intended side\n  PASS  the refusal threshold has margin (3.023 logits)\n  PASS  every citation resolves to its passage (15 citations)\n  PASS  no permitted-label violation in any answer (3 users x 5 questions)\n  PASS  the cascade narrows (50 candidates -&gt; 8 reranked)\n\n  all checks passed</code></pre>" +
+      "" +
+      "<p>The leak test is the one to keep. It runs the full answering path for three users across five questions and asserts that no packed chunk carries a label the user does not hold, which is Chapter 28's test moved from the retriever to the finished answer. It is the difference between checking that retrieval filters and checking that <em>nothing downstream undoes it</em>, and packing, reranking and citation numbering are all downstream.</p>" +
+      "<h3>A departure from the plan, stated</h3>" +
+      "<p>The course blueprint asked for Q1 through Q4 answered and Q5 refused. PocketRAG refuses Q3 as well, and that is deliberate. Q3 asks how many refund tickets were opened in March, which is a count over a table this corpus does not contain, and Chapter 1 said so when it introduced the five questions. A system that answers it is fabricating. Chapter 22's text-to-SQL is the machinery that would answer it properly, and PocketRAG does not build that, so refusal is the correct output and the test asserts it.</p>" +
+      "<h3>What the second language covers here</h3>" +
+      "<p>Two functions in this layer call models, so they are Python only, as Chapter 34's embedder was. Everything else is retrieval logic and exists in both, and the model-free halves were compared directly on the same inputs: fusion scores, the rewrite output, the packed order, the extractive answer string, the verification results and the permitted-chunk counts per user are all identical. The boundary is a clean one. The models are two calls; the pipeline is everything else.</p>" },
+
+    { title: "The Confession, and What Comes Next",
+      html: "<p>What layer four simplified, and where the real machinery lives.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 262' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>what the answer layer left out, and what it costs</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='50' fill='#ff5d73' font-size='9.5'>the reranker prefers a page of questions to the page with the answer</text><text x='580' y='50' fill='#ff5d73' font-size='9'>ch 26, ch 36</text>" +
+      "<text x='44' y='66' fill='#7d8fb0' font-size='8.5'>measured at +4.696 against -8.248; no check in this chapter can see it</text>" +
+      "<text x='24' y='90' fill='#c9d6ea' font-size='9.5'>the generator is extractive; no model is called</text><text x='580' y='90' fill='#7d8fb0' font-size='9'>ch 18, ch 27</text>" +
+      "<text x='44' y='106' fill='#7d8fb0' font-size='8.5'>grounded by construction, which is why faithfulness is untested rather than perfect</text>" +
+      "<text x='24' y='130' fill='#c9d6ea' font-size='9.5'>the refusal threshold is calibrated on five questions</text><text x='580' y='130' fill='#ffd166' font-size='9'>ch 25, exercise 3</text>" +
+      "<text x='24' y='154' fill='#c9d6ea' font-size='9.5'>the permission filter is a post-filter over a full ranking</text><text x='580' y='154' fill='#7d8fb0' font-size='9'>ch 13, ch 30</text>" +
+      "<text x='24' y='178' fill='#c9d6ea' font-size='9.5'>one rewrite strategy, and it is the cheap one</text><text x='580' y='178' fill='#7d8fb0' font-size='9'>ch 14</text>" +
+      "<text x='24' y='202' fill='#c9d6ea' font-size='9.5'>no multi-turn: every question is asked from a standing start</text><text x='580' y='202' fill='#7d8fb0' font-size='9'>ch 19</text>" +
+      "<text x='24' y='226' fill='#c9d6ea' font-size='9.5'>no caching of any kind, so every question pays in full</text><text x='580' y='226' fill='#7d8fb0' font-size='9'>ch 27</text>" +
+      "<line x1='24' y1='238' x2='736' y2='238' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='258' fill='#3ddc97' font-size='10.5'>this is early, not wrong, with one exception, and it is the row at the top</text>" +
+      "</svg><div class='fig-cap'>Six rows are scope. The first is a quality failure the pipeline cannot detect on its own, which is why the next chapter exists.</div></div>" +
+      "<p>Two of those rows deserve to be read together. The generator is extractive and the refusal threshold is a single reranker score, and both are placeholders for something a model would do better. But they fail in opposite directions: the extractive generator cannot hallucinate and cannot synthesise, so it is safe and limited, while a threshold on one scalar is cheap and brittle. Swapping in a model improves the first and makes the second more important, because a model will happily write a fluent answer from the same passage the threshold let through.</p>" +
+      "<p>PocketRAG now answers questions with checked citations and refuses the ones it should. It also produces at least one answer that is confidently wrong while passing every internal check, and the honest position at the end of this chapter is that you cannot tell which answers are good by looking at the system. You have to look at the answers, against labels, in aggregate.</p>" +
+      "<p>Chapter 36 builds that: a gold set over these questions and more, Chapter 25's retrieval metrics and Chapter 26's answer metrics computed on PocketRAG's own output, a benchmark against a real vector store with the conditions named, and the confession table for the whole build. It is also where Q2 stops being an anecdote and becomes a number that a change can move.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Two rankings, one from BM25 and one from the vector index, share three documents in different positions. Compute the fused score of each document by hand with k=60 and give the final order. Then repeat with k=1 and say which document changes position and why the constant is doing work rather than decoration.</li>" +
+      "<li><strong>Trace.</strong> Follow Q2 through all four layers using the numbers from the Q2 section, and name at each stage what would have had to be different for the right passage to reach the top. Then say which single stage is the cheapest place to fix it on a 56-passage corpus, and why that answer changes at twenty thousand.</li>" +
+      "<li><strong>Investigate.</strong> The refusal threshold is calibrated on five questions. Write twenty more, half answerable from the corpus and half not, and plot the top reranker score for each. Report where you would put the line and how much margin survives. You should find the margin narrower than 3.023 logits and be able to say which question class closes it.</li>" +
+      "<li><strong>Investigate.</strong> Run the pipeline against Chapter 34's twenty-thousand-chunk index instead of the Larkspur corpus, and record how many of the fifty candidates survive to the top eight. Compare with the same measurement on the 56-passage corpus. You should see the cascade doing real work in one case and none in the other, which is the claim the filtering section makes.</li>" +
+      "<li><strong>Build.</strong> Add the check the pipeline cannot currently make: before answering, test whether the top passage contains a declarative sentence at all, and refuse when the best support is a page of questions. Report what it does to Q2 and to the other four. This is a heuristic rather than a solution, and measuring what it breaks is the point.</li>" +
+      "<li><strong>Build.</strong> Replace the extractive generator with a real model call using <code>build_prompt</code>, then run the citation verifier over its output on all five questions. Report how many citations resolve. You should find the verifier stops being trivially true, and any failure it reports is a fabricated reference you would otherwise have shipped.</li>" +
+      "<li><strong>Build, optional.</strong> Add Chapter 19's multi-turn handling: carry the previous question and answer, and rewrite a follow-up like <em>and what about the taxes?</em> into a standalone query before retrieval. Measure how often the rewritten query retrieves the right passage against how often the raw follow-up does.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "reciprocal rank fusion", d: "Combining ranked lists by summing one over a constant plus each position, which needs no score calibration because it discards the scores." },
+    { t: "fusion constant", d: "The k added to each rank before inverting, which flattens the advantage of the top position and stops one confident list dominating." },
+    { t: "cascade", d: "A retrieval shape in which a cheap model proposes many candidates and an expensive one orders a few, buying accuracy at a cost that scales with the second number." },
+    { t: "candidate set", d: "The documents a cheap stage passes to an expensive one, whose size is the only lever on the cascade's total cost." },
+    { t: "ends-first packing", d: "Ordering context so the strongest passages sit at the beginning and the end, because a model reads those positions most reliably." },
+    { t: "token budget", d: "The cap on context length that decides how many passages are packed, traded against cost and against the accuracy loss of a longer prompt." },
+    { t: "refusal threshold", d: "The score below which a system answers that the corpus does not contain the answer, which turns an unanswerable question into a known unknown." },
+    { t: "citation verification", d: "Checking that every reference in an answer names a passage that was packed and contains the claim it marks, rather than trusting the reference." },
+    { t: "extractive generator", d: "An answer built by copying sentences from retrieved passages, which is grounded by construction and so separates retrieval quality from generation quality." },
+    { t: "leak test", d: "An assertion that no answer, for any user, contains a chunk carrying a label that user does not hold, run against the finished answer rather than the retriever." },
+    { t: "topical relevance", d: "The property a reranker is trained to score, which a page repeating the question satisfies perfectly while containing no answer." },
+    { t: "navigation page", d: "A document that lists questions or links without answering anything, which scores highly on relevance and is worthless in a context window." }
+  ],
+  quiz: [
+    { type: "mc",
+      q: "Why does PocketRAG fuse the BM25 and vector lists by rank rather than by adding their scores?",
+      opts: [
+        "Adding scores is slower because both lists must be fully materialised",
+        "Rank fusion produces scores in zero to one, which the reranker requires",
+        "A BM25 score is an unbounded sum and a cosine is bounded, so adding them lets whichever number is larger decide the ranking",
+        "The vector index does not expose scores, only positions"
+      ], a: 2,
+      why: "The two quantities are not on a common scale, so a sum is dominated by whichever retriever happens to produce bigger numbers. Reciprocal rank fusion discards the scores entirely and keeps only positions, which needs no calibration." },
+    { type: "mc",
+      q: "The permission filter is applied to each retriever's output before fusion rather than to the final answer. What does that placement buy?",
+      opts: [
+        "A forbidden chunk never enters a ranking, reaches the reranker, or gets packed, so no later stage can undo the rule",
+        "It is faster, because fewer documents are fused",
+        "It allows the reranker to score forbidden chunks for logging",
+        "It keeps citation numbers contiguous"
+      ], a: 0,
+      why: "Chapter 28 measured that a rule applied late is a rule a later stage can forget. Filtering the candidate set means packing, reranking and citation numbering all operate on permitted chunks only, which is what the leak test then confirms end to end." },
+    { type: "mc",
+      q: "On a 56-passage corpus with a candidate count of 50, what is actually doing the ranking?",
+      opts: [
+        "Reciprocal rank fusion, since it determines which 50 survive",
+        "The vector index, because its scores are better calibrated",
+        "BM25, because it runs first and seeds the fusion",
+        "The cross-encoder, because the first stage passes through almost the whole corpus"
+      ], a: 3,
+      why: "Fifty candidates from fifty-six chunks is not a filter. The cascade's narrowing is real at twenty thousand chunks and a formality here, which is exactly why the Q2 failure must be read as a reranker result rather than a retrieval one." },
+    { type: "mc",
+      q: "Q5, the emotional support peacock, scores +1.117 rather than a large negative. Why, and what does that imply for the threshold?",
+      opts: [
+        "The corpus contains a peacock policy that the reranker found",
+        "The cabin pets page is genuinely topically relevant to an animal-in-the-cabin question, so the threshold must sit above zero rather than at it",
+        "The score is noise, since the cross-encoder is unreliable near zero",
+        "The query was rewritten into a form that matched the pets page exactly"
+      ], a: 1,
+      why: "Relevance and containing the answer are different properties. A page about animals in the cabin scores positively on a question about an animal in the cabin, so a threshold at zero would have answered it. The measured margin puts the line at +2.0." },
+    { type: "mc",
+      q: "For Q2 the reranker scores a page containing only questions at +4.696 and the page containing the answer at -8.248. What is the correct diagnosis?",
+      opts: [
+        "A bug in the cross-encoder's tokenisation of long passages",
+        "The fusion constant buried the answering page too deep to rerank",
+        "The permission filter removed the answering page from the candidate set",
+        "The reranker scores topical relevance, and a page repeating the query matches it perfectly while answering nothing"
+      ], a: 3,
+      why: "The answering page was in the candidate set and was scored; it lost. Nothing in a relevance objective distinguishes a page that asks your question from one that answers it, which is Chapter 14's query gap surviving every later stage." },
+    { type: "mc",
+      q: "Q2's answer passes the refusal check, the citation verifier and the leak test, and is still wrong. What follows?",
+      opts: [
+        "Stage-local checks cannot detect a pipeline that is individually correct and jointly wrong; only end-to-end measurement against labels can",
+        "One of the three checks is implemented incorrectly",
+        "The refusal threshold should be raised until Q2 is refused",
+        "Citation verification should compare meaning rather than substrings"
+      ], a: 0,
+      why: "Each check answers its own question correctly: the score is confident, the citations do resolve, no permission was violated. None of them asks whether the answer is right, which is what Chapter 26's metrics measure and Chapter 36 applies." },
+    { type: "mc",
+      q: "Why does PocketRAG pack the strongest passages at the beginning and end of the context rather than in descending order?",
+      opts: [
+        "So that citation numbers ascend with relevance",
+        "To keep the token budget evenly distributed",
+        "Because Chapter 17 measured a U-shaped position curve: the middle of a long context is where a passage is least reliably read",
+        "Because the reranker's ordering is unreliable below the top two"
+      ], a: 2,
+      why: "The numbering is assigned after ordering precisely so the numbers describe reading position rather than score. The weakest passages go where a model attends least, which is the cheapest use of the ordering information." },
+    { type: "mc",
+      q: "Why is the citation verifier worth running against an extractive generator that cannot fail it?",
+      opts: [
+        "It catches passages that were packed but never cited",
+        "Because it must keep passing when the generator is swapped for a model, where it stops being trivially true and starts catching fabricated references",
+        "It measures how much of each passage the answer used",
+        "It validates that the token budget was respected"
+      ], a: 1,
+      why: "A test written only when it can fail arrives after the failure. Building it against a generator that guarantees success establishes the contract, so replacing the generator is a change the test already covers." },
+    { type: "mc",
+      q: "The chapter refuses Q3, the March ticket count, though the plan called for it to be answered. Why is refusal correct?",
+      opts: [
+        "The count is in an internal chunk the test user cannot read",
+        "The reranker scores numeric questions unreliably",
+        "The answer requires a count over a table this corpus does not contain, so any answer would be fabricated; Chapter 22's text-to-SQL is the machinery for it",
+        "The question is ambiguous about which March"
+      ], a: 2,
+      why: "Chapter 1 introduced Q3 as the question no chunk answers. PocketRAG indexes text and not tables, so the honest output is a refusal, and a test asserting an answer would have been a test asserting a hallucination." },
+    { type: "blank",
+      q: "Combining ranked lists by summing one over a constant plus each position, discarding the underlying scores, is called ____ rank fusion.",
+      a: ["reciprocal"],
+      why: "It needs no calibration between retrievers, which is what makes it the default: a document both lists like beats a document one list loves, without either score being comparable to the other." },
+    { type: "blank",
+      q: "A document listing questions or links without answering anything, which a reranker scores highly and which is worthless in a context window, is a ____ page.",
+      a: ["navigation", "nav"],
+      why: "The measured example scored +4.696 while the page that answered the question scored -8.248, because its entire content was the query restated three times plus a pointer elsewhere." },
+    { type: "order",
+      q: "Order the stages of answering one question in PocketRAG:",
+      items: [
+        "rewrite the question into a second, statement-shaped form",
+        "restrict the candidate set to chunks the user may read",
+        "retrieve with BM25 and the vector index and fuse by rank",
+        "rerank the candidates with the cross-encoder and check the top score against the refusal threshold",
+        "pack the survivors ends-first, number them, and verify every citation"
+      ],
+      why: "The permission filter comes before ranking so nothing downstream can undo it, and the refusal check sits on the reranker's score because that is the first point where the system has an opinion about whether the answer is present at all." }
+  ]
+});
+
+/* ======================= CHAPTER 36 =======================
+   Final chapter of the PocketRAG capstone and of the course. All code was
+   written for this course, run, and tested; blocks are extracted mechanically
+   from resources/pocketrag/gold.py (120 labelled queries), evaluate.py,
+   benchmark.py, agent.py, graph.py and test_final.py.
+
+   The gold set is 120 queries with 146 graded judgments over the 56 Larkspur
+   passages, written by reading the passages rather than PocketRAG's output.
+   Measured retrieval, over the 105 queries carrying judgments: BM25 nDCG@10
+   0.7078, vector 0.7802, RRF 0.7688, rerank 0.8741. Reciprocal rank fusion
+   scores BELOW the vector retriever it contains on nDCG while beating it on
+   recall@1, which is reported as measured. By class, reranked nDCG@10 runs
+   from keyword 0.9974 and numeric 0.9922 down to paraphrase 0.7766 and
+   partial 0.7476.
+
+   The chapter's central finding is that Chapter 35's refusal threshold does
+   not survive 120 queries. Answerable questions score as low as -11.334 and
+   unanswerable ones as high as +2.359, so the two ranges overlap over
+   [-11.334, +2.359], a band holding 39 answerable and all 15 unanswerable
+   queries: no threshold separates them. At the shipped +2.0 the pipeline
+   refuses 38 of 105 answerable questions, and 26 of those 38 already had a
+   judged-relevant passage at rank 1, so retrieval had succeeded and the
+   threshold discarded the result. The AUC of the score as an answerability
+   signal is 0.803, so the signal is real but weak; best balanced accuracy is
+   0.814 at +2.4 against 0.786 at the shipped +2.0.
+
+   Chapter 35's Q5 is shown to be a FALSE REFUSAL. The pets passage, which
+   states that Larkspur does not carry emotional support animals, is ranked
+   first for the peacock question at +1.117 and then thrown away by the
+   threshold. Chapter 1 introduced Q5 as not in the corpus and Chapter 35
+   called the refusal correct; the corpus as built answers it. The chapter
+   reports this as the gold set catching an error the system could not see,
+   which is the chapter's whole argument, and says plainly that it disagrees
+   with the two earlier chapters.
+
+   Answer-level, whole pipeline: 14 of 15 unanswerable refused; the one
+   answered is "Which travel insurance does Larkspur recommend?" at +2.359 on
+   the payment-methods page. 68 answers produced, 82 citations, all 82
+   resolve, NLI faithfulness 0.9389 (cross-encoder/nli-distilroberta-base, the
+   Chapter 26 judge). The regression runner, run with the candidate count cut
+   from 50 to 10, moves the mean nDCG@10 only 0.0537 while flagging 15
+   per-query regressions and one improvement, the worst single query moving a
+   full 1.000.
+
+   Benchmark conditions: single query, single thread, no batching, warm
+   process, recall measured against exact search over the same vectors.
+   pgvector was out of reach (no Postgres on the machine), which the chapter
+   states; the comparison is against hnswlib, faiss-flat and faiss IVF-PQ.
+
+   Agent: three tools, deterministic router and critic, step budget 6. Q3 is
+   answered from the tickets table in one step, 12 refund tickets in the most
+   recent year against 20 across every year, which is Chapter 22's year trap
+   reported rather than hidden. Q4 is answered in two steps. The measured
+   second-hop finding is that the follow-up query must be the extracted phrase
+   ALONE: with the phrase alone the gold passage ranks first at +2.617, and
+   with the phrase concatenated to the original question it falls to rank 3 at
+   -4.029. A real critic misfire is reported in full: the check-in outage
+   question extracts a phrase naming no document, the agent wanders, and the
+   step budget stops it with no answer.
+
+   Graph: 66 entities, 106 mentions, 88 edges from a deterministic extractor;
+   Leiden (leidenalg 0.10 over python-igraph 1.0) at resolution 0.4 gives 20
+   communities at level 0 with sizes [21, 21, 4, 2, 2, 2] plus 14 singletons,
+   and 25 at level 1. Local search answers Q4 through one edge, returning the
+   fare-rules passage first. Global search is reported as a failure: with an
+   extractive map step the community reports cost 1147 tokens against a 1839
+   token corpus, 62 percent, so the summarisation buys nothing at this size,
+   and term overlap between a global question and a report is too weak to
+   rank. Both limits are stated rather than tuned away.
+
+   Departures from the Blueprint, all stated in the chapter: the corpus holds
+   two incident post-mortems, not six, so the graph runs over all 56 passages;
+   pgvector and a hosted store were unavailable; the RAGAS-style judge is the
+   local NLI model Chapter 26 used, not an LLM; and this layer is Python only.
+   */
+CHAPTERS.push({
+  num: 36, part: 5, title: "PocketRAG: Evaluation, the Honest Benchmark, Agents, Graphs, and Graduation",
+  blurb: "Every chapter so far has asked the system how it is doing and believed the answer. This one writes down 120 questions with the right passages attached, before looking at any output, and then measures. The reranker earns its cost. Fusion does not. And the refusal threshold that looked so clean on five questions sits inside a band where answerable and unanswerable questions are thoroughly mixed, refusing more than a third of what this corpus can answer. Then two machines answer what the straight line could not, and the course ends with everything PocketRAG left out.",
+  sections: [
+    { title: "The Labels Come First",
+      html: "<p>PocketRAG can now retrieve two ways, fuse, rerank, filter, pack, cite, verify and refuse. Every one of those stages was justified by a measurement in an earlier chapter, made on somebody else's corpus or on a handful of questions. Not one of them has been measured on this system, on this corpus, at a size where a mean means anything.</p>" +
+      "<p>That is the ordinary condition of a RAG pipeline in its first months, and it is more dangerous than having no pipeline, because a pipeline produces confident output whether or not it is right. Chapter 35 ended with an answer that was cited, verified, permission-checked and wrong, and no check in the system noticed. The only thing that notices is a set of labels made independently of the system.</p>" +
+      "<p>So the first artefact of this chapter is not code. It is a <strong>gold set</strong>: 120 questions over the 56 Larkspur passages, each carrying the passages that answer it, graded the way Chapter 25 defined. A 2 means the passage answers the question. A 1 means it is about the right subject without answering. Anything unlisted is a 0.</p>" +
+      "" +
+      "<pre><code># Query, {passage title: grade}, class.  Empty judgments mean \"refuse\".\nGOLD = [\n    (\"Can I bring my cello in the cabin?\", {\"Musical instruments\": 2}, \"keyword\"),\n    (\"lithium batteries above 100 Wh\", {\"Dangerous goods\": 2}, \"keyword\"),\n\n    # The FAQ page restates this question and answers nothing, so it is not\n    # listed. That absence is what lets a metric see the chapter-35 failure.\n    (\"I couldn't take my flight, how do I get my money back?\",\n     {\"Fare rules and cancellation\": 2, \"No-show policy\": 2,\n      \"Travel credit terms\": 1, \"Taxes and charges\": 1}, \"paraphrase\"),\n\n    (\"Which baggage policy changed after incident INC-2042?\",\n     {\"Incident INC-2042 post-mortem\": 2, \"Fare rules and cancellation\": 2}, \"multihop\"),\n\n    (\"How many refund tickets were opened in March?\", {}, \"unanswerable\"),\n    (\"Who is the ground handler in Porto?\", {}, \"unanswerable\"),\n]\n</code></pre>" +
+      "" +
+      "<p>Two decisions in that fragment carry the whole chapter. The first is that passages are named by their title rather than by chunk id, so the labels survive a reingest that changes every hash. The second is what is <em>missing</em> from the refund question: the FAQ page, the one that asks \"How do I get my money back?\" and answers nothing, is not listed at any grade. Chapter 35 measured that page winning the reranker at +4.696. Until now there was no way to call that wrong. Now there is, because a metric computed against these labels scores it zero.</p>" +
+      "<p>An empty judgment set is not a gap. It means the question is unanswerable and the correct behaviour is a refusal, which makes 15 of the 120 queries a test of the thing Chapter 18 built and Chapter 35 calibrated.</p>" +
+      "<p>The set breaks into eight classes, and the classes are the point: a mean over a set that is all keyword queries will tell you the system is excellent.</p>" +
+      "" +
+      "<pre><code>  120 queries, 146 judgments, 1.2 per query\n  15 unanswerable, 105 with at least one judged passage\n    paraphrase      30\n    keyword         19\n    numeric         18\n    unanswerable    15\n    ticket          14\n    multihop         9\n    partial          8\n    short            7\n  54 of 56 passages are judged relevant to at least one query\n</code></pre>" +
+      "" +
+      "<p>Two passages are judged relevant to nothing. One is the FAQ page, deliberately, because it answers no question anyone would ask. The other is the travel documents page, which no query in the set happens to cover, and that is <strong>pooling bias</strong> arriving on schedule: a hand-built set has holes shaped like its author's imagination, and Chapter 25 showed what those holes do to a system the labels were not built from. This set was written before any of the numbers below existed, which removes one source of bias and not that one.</p>" +
+      "<div class='callout'><strong>Why the order matters so much.</strong> Labels written after reading a system's output are not labels, they are a transcript. The temptation is enormous and it is invisible afterwards: you look at the top result, decide it is reasonable, and mark it relevant. Do that 120 times and you have proved that your system agrees with itself. The 146 judgments here were written from the corpus, one passage at a time, and the first time they met a ranked list was when the harness ran.</div>" },
+
+    { title: "Four Systems, One Table",
+      html: "<p>The harness is Chapter 25's three metrics, and they fit on a page because all the thinking was done there.</p>" +
+      "" +
+      "<pre><code>def recall_at(ranked: list[str], judged: dict[str, int], k: int) -&gt; float:\n    \"\"\"Fraction of the judged-relevant passages that appear in the top k.\n    Graded judgments collapse to binary here, which is the point of having\n    nDCG as well: recall cannot tell a 2 from a 1.\"\"\"\n    rel = {c for c, g in judged.items() if g &gt; 0}\n    if not rel:\n        return float(\"nan\")\n    return len(rel &amp; set(ranked[:k])) / len(rel)\n\n\ndef ndcg_at(ranked: list[str], judged: dict[str, int], k: int = 10) -&gt; float:\n    \"\"\"Graded gain, discounted by log position, over the best achievable order.\n    This is the metric that notices a 1 ranked above a 2.\"\"\"\n    if not judged:\n        return float(\"nan\")\n    dcg = sum(judged.get(cid, 0) / math.log2(pos + 1)\n              for pos, cid in enumerate(ranked[:k], 1))\n    ideal = sorted(judged.values(), reverse=True)[:k]\n    idcg = sum(g / math.log2(pos + 1) for pos, g in enumerate(ideal, 1))\n    return dcg / idcg if idcg else float(\"nan\")\n</code></pre>" +
+      "" +
+      "<p>Four systems go through it: BM25 alone, the vector index alone, their reciprocal rank fusion, and the cross-encoder rerank of the fused candidates. Every system sees the same 105 judged queries and the same 56 passages, as staff, so no permission filter is in play.</p>" +
+      "" +
+      "<pre><code>  120 queries through 4 systems, 50 candidates, in 20.2s\n\n  retrieval, over the 105 queries with judgments\n  system    R@1     R@3     R@5     R@10    MRR@10  nDCG@10\n  bm25      0.567   0.667   0.715   0.778   0.7215  0.7078\n  vector    0.618   0.764   0.798   0.849   0.7966  0.7802\n  rrf       0.637   0.738   0.767   0.822   0.7843  0.7688\n  rerank    0.739   0.836   0.867   0.917   0.9045  0.8741\n</code></pre>" +
+      "" +
+      "<p>The reranker is worth what it costs. It moves nDCG@10 from 0.7688 to 0.8741 over the candidates it is handed, and it moves recall@1 from 0.637 to 0.739, which is the number a user feels, because the top result is the one they read. Chapter 16 argued for the cascade on somebody else's benchmark. This is the same claim on our corpus with our labels, and it holds.</p>" +
+      "<p>Now read the middle two rows, which is where the chapter starts earning its keep. <strong>Fusion scores below the vector retriever it is built from.</strong> RRF gets 0.7688 against the vector index's 0.7802, while beating it at rank 1, 0.637 against 0.618. That is not a contradiction and it is not noise: fusion promotes documents that both retrievers like, which reliably wins the top slot, and in doing so it pushes down the graded-2 passages that only the vector index found. Recall@10 tells the same story, 0.822 for fusion against 0.849 for the vector index alone: fusing with BM25 <em>lost</em> relevant passages from the top ten.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>measured: four systems, 105 judged queries, same corpus and same labels</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='48' fill='#7d8fb0' font-size='9'>nDCG@10</text>" +
+      "<text x='560' y='48' fill='#7d8fb0' font-size='9'>recall@10</text>" +
+      "<text x='24' y='74' fill='#c9d6ea' font-size='9.5'>bm25</text><rect x='104' y='64' width='283' height='13' fill='#4f7cff'/><text x='394' y='74' fill='#4f7cff' font-size='10'>0.708</text><text x='560' y='74' fill='#7d8fb0' font-size='9.5'>0.778</text>" +
+      "<text x='24' y='100' fill='#c9d6ea' font-size='9.5'>vector</text><rect x='104' y='90' width='312' height='13' fill='#3ddc97'/><text x='423' y='100' fill='#3ddc97' font-size='10'>0.780</text><text x='560' y='100' fill='#3ddc97' font-size='9.5'>0.849</text>" +
+      "<text x='24' y='126' fill='#c9d6ea' font-size='9.5'>rrf fusion</text><rect x='104' y='116' width='308' height='13' fill='#ffd166'/><text x='419' y='126' fill='#ffd166' font-size='10'>0.769</text><text x='560' y='126' fill='#ffd166' font-size='9.5'>0.822</text>" +
+      "<text x='24' y='152' fill='#c9d6ea' font-size='9.5'>+ rerank</text><rect x='104' y='142' width='350' height='13' fill='#2de2ff'/><text x='461' y='152' fill='#2de2ff' font-size='10'>0.874</text><text x='560' y='152' fill='#2de2ff' font-size='9.5'>0.917</text>" +
+      "<line x1='24' y1='168' x2='736' y2='168' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='188' fill='#ffd166' font-size='10'>fusion scores BELOW the vector index it contains, on nDCG and on recall@10</text>" +
+      "<text x='24' y='206' fill='#c9d6ea' font-size='9'>it wins only at rank 1 (0.637 against 0.618), which is what fusion is actually for</text>" +
+      "<text x='24' y='226' fill='#3ddc97' font-size='9.5'>the reranker recovers all of it and more, which is why the cascade survives the chapter</text>" +
+      "</svg><div class='fig-cap'>Chapter 15 recommended fusion and this corpus disagrees, on the only labels that apply to it. The reranker downstream hides the loss, which is exactly how a component earns a place it does not deserve.</div></div>" +
+      "<p>If PocketRAG were being tuned rather than taught, the next commit would drop BM25 from the fusion and re-measure. It is left in, because Chapter 33's index is what makes Q1's rare word findable and because a 56-passage corpus is not the place to retire a retriever. The honest statement is narrower than it looks: on this corpus, at this size, with these labels, fusion costs a little nDCG and buys a little precision at rank 1.</p>" +
+      "<h3>The mean was hiding eight different systems</h3>" +
+      "<p>One number for 105 queries is a summary of a summary. Split by class and the pipeline stops looking uniform.</p>" +
+      "" +
+      "<pre><code>  nDCG@10 by query class, best system\n    partial        0.7476\n    paraphrase     0.7766\n    short          0.8267\n    multihop       0.8533\n    ticket         0.8729\n    numeric        0.9922\n    keyword        0.9974\n</code></pre>" +
+      "" +
+      "<p>On keyword and numeric queries PocketRAG is essentially perfect, 0.9974 and 0.9922, because those questions share vocabulary with the passage that answers them and BM25 was built for exactly that. On paraphrases it scores 0.7766, and on partial questions, the ones a passage half-answers, 0.7476. The distance between 0.997 and 0.748 is <strong>the query gap</strong> Chapter 14 named, measured on our own system for the first time.</p>" +
+      "<p>That spread is also the answer to a question every team asks: which chapter should we reread. Not the indexing ones. The pipeline's weakness is entirely on the side where the user's words and the corpus's words differ, which is Chapters 14, 15 and 16 and nothing else.</p>" },
+
+    { title: "The Line That Was Never There",
+      html: "<p>Chapter 35 measured five questions, found that the answerable ones scored between +4.140 and +7.163 and the unanswerable ones between -5.128 and +1.117, put the refusal threshold at +2.0, and reported a margin of 3.023 logits. Everything about that was true. It was also five data points, and the chapter said so.</p>" +
+      "<p>Here are 120.</p>" +
+      "" +
+      "<pre><code>def sweep(runs):\n    \"\"\"What the refusal threshold can and cannot buy. Reported as balanced\n    accuracy because the set is 105 answerable against 15 unanswerable, and\n    plain accuracy on that split rewards a system that never refuses.\n\n    Also the AUC of the score as an answerability signal, which is the\n    question the threshold is really asking: over every (answerable,\n    unanswerable) pair, how often is the answerable one scored higher.\"\"\"\n    ans = [r[\"top_score\"] for r in runs if r[\"judged\"]]\n    un = [r[\"top_score\"] for r in runs if not r[\"judged\"]]\n    rows = []\n    for i in range(-240, 170):\n        t = i / 10\n        tpr = sum(1 for s in ans if s &gt;= t) / len(ans)\n        tnr = sum(1 for s in un if s &lt; t) / len(un)\n        rows.append((t, (tpr + tnr) / 2, tpr, tnr))\n    pairs = [(a, u) for a in ans for u in un]\n    auc = (sum(1 for a, u in pairs if a &gt; u)\n           + 0.5 * sum(1 for a, u in pairs if a == u)) / len(pairs)\n    overlap = (min(ans), max(un))\n    return {\"rows\": rows, \"auc\": auc, \"overlap\": overlap,\n            \"best\": max(rows, key=lambda r: r[1]),\n            \"in_overlap\": (sum(1 for s in ans if s &lt;= overlap[1]),\n                           sum(1 for s in un if s &gt;= overlap[0]))}\n</code></pre>" +
+      "" +
+      "<pre><code>  the refusal threshold, swept\n    answerable scores bottom out at -11.334, unanswerable reach +2.359\n    the ranges overlap over [-11.334, +2.359], holding 39 answerable and 15 unanswerable\n    AUC of the score as an answerability signal: 0.803\n    best balanced accuracy 0.814 at +2.4 (answers 63% of answerable, refuses 100% of unanswerable)\n    shipped threshold +2.0: balanced accuracy 0.786\n</code></pre>" +
+      "" +
+      "<p>There is no margin. The lowest-scoring answerable question sits at -11.334 and the highest-scoring unanswerable one at +2.359, so the overlap band swallows 39 answerable questions and all 15 unanswerable ones. No horizontal line drawn through that picture separates the two groups, because they are not two groups. The 3.023 logits Chapter 35 reported were the gap between five points that happened to fall on either side.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 316' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='24' y='18' fill='#2de2ff' font-size='11'>measured: top reranker score per question, 105 answerable above, 15 unanswerable below</text><line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/><rect x='81' y='36' width='397' height='176' fill='#ff5d73' opacity='0.10'/><rect x='64' y='156' width='54' height='26' fill='#3ddc97'/><text x='91' y='152' fill='#3ddc97' font-size='8.5' text-anchor='middle'>6</text><rect x='64' y='182' width='54' height='4' fill='#ff5d73'/><text x='91' y='196' fill='#ff5d73' font-size='8.5' text-anchor='middle'>1</text><rect x='122' y='178' width='54' height='4' fill='#3ddc97'/><text x='149' y='174' fill='#3ddc97' font-size='8.5' text-anchor='middle'>1</text><rect x='122' y='182' width='54' height='9' fill='#ff5d73'/><text x='149' y='201' fill='#ff5d73' font-size='8.5' text-anchor='middle'>2</text><rect x='180' y='165' width='54' height='17' fill='#3ddc97'/><text x='207' y='161' fill='#3ddc97' font-size='8.5' text-anchor='middle'>4</text><rect x='180' y='182' width='54' height='4' fill='#ff5d73'/><text x='207' y='196' fill='#ff5d73' font-size='8.5' text-anchor='middle'>1</text><rect x='238' y='178' width='54' height='4' fill='#3ddc97'/><text x='265' y='174' fill='#3ddc97' font-size='8.5' text-anchor='middle'>1</text><rect x='238' y='182' width='54' height='9' fill='#ff5d73'/><text x='265' y='201' fill='#ff5d73' font-size='8.5' text-anchor='middle'>2</text><rect x='296' y='160' width='54' height='22' fill='#3ddc97'/><text x='323' y='156' fill='#3ddc97' font-size='8.5' text-anchor='middle'>5</text><rect x='296' y='182' width='54' height='4' fill='#ff5d73'/><text x='323' y='196' fill='#ff5d73' font-size='8.5' text-anchor='middle'>1</text><rect x='354' y='143' width='54' height='39' fill='#3ddc97'/><text x='381' y='139' fill='#3ddc97' font-size='8.5' text-anchor='middle'>9</text><rect x='354' y='182' width='54' height='13' fill='#ff5d73'/><text x='381' y='205' fill='#ff5d73' font-size='8.5' text-anchor='middle'>3</text><rect x='412' y='130' width='54' height='52' fill='#3ddc97'/><text x='439' y='126' fill='#3ddc97' font-size='8.5' text-anchor='middle'>12</text><rect x='412' y='182' width='54' height='17' fill='#ff5d73'/><text x='439' y='209' fill='#ff5d73' font-size='8.5' text-anchor='middle'>4</text><rect x='470' y='143' width='54' height='39' fill='#3ddc97'/><text x='497' y='139' fill='#3ddc97' font-size='8.5' text-anchor='middle'>9</text><rect x='470' y='182' width='54' height='4' fill='#ff5d73'/><text x='497' y='196' fill='#ff5d73' font-size='8.5' text-anchor='middle'>1</text><rect x='528' y='79' width='54' height='103' fill='#3ddc97'/><text x='555' y='75' fill='#3ddc97' font-size='8.5' text-anchor='middle'>24</text><rect x='586' y='83' width='54' height='99' fill='#3ddc97'/><text x='613' y='79' fill='#3ddc97' font-size='8.5' text-anchor='middle'>23</text><rect x='644' y='135' width='54' height='47' fill='#3ddc97'/><text x='671' y='131' fill='#3ddc97' font-size='8.5' text-anchor='middle'>11</text><line x1='62' y1='182' x2='700' y2='182' stroke='#1c2a45' stroke-width='1.5'/><text x='62' y='226' fill='#7d8fb0' font-size='8.5' text-anchor='middle'>-12</text><text x='178' y='226' fill='#7d8fb0' font-size='8.5' text-anchor='middle'>-8</text><text x='294' y='226' fill='#7d8fb0' font-size='8.5' text-anchor='middle'>-4</text><text x='410' y='226' fill='#7d8fb0' font-size='8.5' text-anchor='middle'>+0</text><text x='526' y='226' fill='#7d8fb0' font-size='8.5' text-anchor='middle'>+4</text><text x='642' y='226' fill='#7d8fb0' font-size='8.5' text-anchor='middle'>+8</text><text x='380' y='240' fill='#7d8fb0' font-size='8.5' text-anchor='middle'>top cross-encoder logit</text><line x1='468' y1='36' x2='468' y2='212' stroke='#ffd166' stroke-width='2' stroke-dasharray='4 4'/><text x='474' y='48' fill='#ffd166' font-size='9'>chapter 35's +2.0</text><line x1='24' y1='252' x2='736' y2='252' stroke='#1c2a45' stroke-width='2'/><text x='24' y='272' fill='#ff5d73' font-size='10'>the shaded band is the overlap: 39 answerable and ALL 15 unanswerable questions live inside it</text><text x='24' y='290' fill='#c9d6ea' font-size='9'>at +2.0 the pipeline refuses 38 of 105 answerable questions, 26 of which had the answer at rank 1</text><text x='24' y='308' fill='#3ddc97' font-size='9'>AUC 0.803, so the score is informative and not separating; the ceiling is 0.814 balanced accuracy</text></svg><div class='fig-cap'>Green above the line is answerable, red below is unanswerable. Five questions showed a gap. A hundred and twenty show an overlap that no threshold crosses cleanly.</div></div>" +
+      "<p>At the shipped +2.0 the arithmetic is brutal. The pipeline refuses <strong>38 of the 105 answerable questions</strong>, better than a third of everything this corpus can actually answer, in exchange for catching 14 of the 15 it should refuse.</p>" +
+      "<p>And the refusals are not failures of retrieval. Of those 38, <strong>26 already had a judged-relevant passage at rank 1</strong>. The retriever found the answer, the reranker put it first, and the threshold threw it away.</p>" +
+      "<h3>Q5 was never a correct refusal</h3>" +
+      "<p>Which brings us to the question this course has been calling unanswerable since Chapter 1.</p>" +
+      "" +
+      "<pre><code>  Can I bring my emotional support peacock in the cabin?   top=+1.117\n     gold: ['Pets in the cabin=2']\n     rerank 1. Pets in the cabin                          &lt;-- GOLD\n     rerank 2. Musical instruments\n     rerank 3. Dangerous goods\n</code></pre>" +
+      "" +
+      "<p>The pets passage reads, in full: <em>Cats and small dogs travel in an approved carrier under the seat in front for 55 EUR per sector. Larkspur does not carry emotional support animals; only trained assistance dogs are accepted.</em></p>" +
+      "<p>That answers the question. The answer is no. It is in the corpus, the retriever found it, the reranker ranked it first, and the threshold at +2.0 discarded it and printed NOT IN THE CORPUS. Chapter 1 introduced Q5 as the question whose answer is not in the corpus and Chapter 35 reported its refusal as correct behaviour with the reranker showing good judgement. Both were wrong, and this chapter's labels are what makes that visible.</p>" +
+      "<div class='callout'><strong>This is the argument of the chapter, so it is worth being blunt about it.</strong> The error survived two chapters of careful work by a system that checks its citations, verifies its permissions, and reports its own confidence. It survived because every one of those checks asks a question about the machinery and none of them asks whether the answer is right. It took 120 labels written by hand to catch one question that had been mislabelled by inspection since Chapter 1. That is not an argument for being more careful. It is an argument that inspection does not scale and measurement is not optional.</div>" +
+      "<p>The mirror image is one query in the other direction. <em>Which travel insurance does Larkspur recommend?</em> scores +2.359, clears the threshold, and is answered from the payment methods page. Larkspur sells no insurance and the corpus says nothing about it. That is the only unanswerable question the threshold let through, and it is a confidently wrong answer with a citation that resolves.</p>" +
+      "<h3>What the threshold can be worth</h3>" +
+      "<p>None of this means the score is worthless. Its AUC as an answerability signal is 0.803, where 0.5 would be a coin flip, so an answerable question really is scored above an unanswerable one four times in five. The signal is real. It is simply not separable, and the ceiling is low: the best balanced accuracy any threshold achieves is 0.814, at +2.4, which still refuses 37 percent of answerable questions.</p>" +
+      "<p>So the honest engineering conclusion is not raise it or lower it. It is that a single cross-encoder logit is the wrong instrument for this decision, and the chapters that hold the right ones are 18, on abstention with a second signal, and 26, on judging an answer rather than a ranking. What this chapter provides is the number that any replacement has to beat: 0.814.</p>" +
+      "<h3>The answers, end to end</h3>" +
+      "" +
+      "<pre><code>  answers, whole pipeline\n    refused_correctly                      14\n    unanswerable                           15\n    false_refusals                         38\n    answerable                            105\n    answers_quoting_a_relevant_passage     64\n    answers_produced                       68\n    citations                              82\n    citations_resolved                     82\n    faithfulness                        0.9389\n</code></pre>" +
+      "" +
+      "<p>Every one of the 82 citations resolves, which Chapter 35 predicted and which remains trivially true of an extractive generator. Faithfulness at 0.9389 is an NLI model's entailment probability for each quoted sentence against the passage it cites, using the judge Chapter 26 measured, and it is high for the same structural reason: the sentences are copied. Both numbers are contracts waiting for a real generator, not achievements.</p>" +
+      "<p>The number that is not structural is the third one: of the 68 answers produced, 64 quote a passage the labels call a 2. Four answers were built out of passages that answer nothing.</p>" },
+
+    { title: "Regression, and the Lie of the Mean",
+      html: "<p>An evaluation you run once is a blog post. The thing worth building is the one that runs on every change and tells you what got worse, which needs a stored baseline and a comparison that does not average the interesting part away.</p>" +
+      "" +
+      "<pre><code>def compare(old: dict, new: dict, tol: float = 0.02):\n    \"\"\"A regression is a per-query drop, not a mean that moved.\"\"\"\n    print(\"\\n  system means\")\n    for s, metrics in new[\"systems\"].items():\n        o = old[\"systems\"].get(s, {})\n        d = metrics[\"ndcg@10\"] - o.get(\"ndcg@10\", metrics[\"ndcg@10\"])\n        print(f\"    {s:8s} nDCG@10 {metrics['ndcg@10']:.4f}  ({d:+.4f})\")\n    ups = downs = 0\n    print(\"\\n  per-query changes beyond +-%.2f\" % tol)\n    for q, v in new[\"per_query\"].items():\n        o = old[\"per_query\"].get(q)\n        if o is None or abs(v - o) &lt;= tol:\n            continue\n        (ups := ups + 1) if v &gt; o else (downs := downs + 1)\n        print(f\"    {v - o:+.3f}  {q[:64]}\")\n    print(f\"\\n  {ups} queries improved, {downs} regressed\")\n    return downs\n</code></pre>" +
+      "" +
+      "<p>To see it work, make a change a team would plausibly make for cost reasons: cut the candidate count from 50 to 10, so the cross-encoder scores a fifth as many pairs.</p>" +
+      "" +
+      "<pre><code>$ python3 evaluate.py lex.db --candidates 10 --against base.json\n\n  system means\n    bm25     nDCG@10 0.7078  (+0.0000)\n    vector   nDCG@10 0.7802  (+0.0000)\n    rrf      nDCG@10 0.7688  (+0.0000)\n    rerank   nDCG@10 0.8203  (-0.0537)\n\n  per-query changes beyond +-0.02\n    -0.544  Do I have to pay for a suitcase?\n    -0.500  Is there a plug for my laptop on board?\n    -0.896  A snowstorm cancelled my flight, do I get compensation?\n    -1.000  Can I pay with Bitcoin?\n    -0.613  Can I take a violin on board?\n    ...\n\n  1 queries improved, 15 regressed\n  REGRESSION\n</code></pre>" +
+      "" +
+      "<p>The mean fell by 0.0537. On a dashboard that is a rounding error, the kind of movement a team attributes to noise and ships. Underneath it, fifteen queries got worse and one of them lost <strong>a full point of nDCG</strong>, going from a perfect ranking to nothing relevant in the top ten at all.</p>" +
+      "<p>This is Chapter 25's lie of the mean, reproduced on our own system with one flag. A mean over 105 queries can absorb a catastrophe for four of them, and the only defence is to store and compare the per-query numbers, which costs a few kilobytes of JSON.</p>" +
+      "<p>It also shows what the cascade's candidate count actually buys. The first stage looked like a formality in Chapter 35 because the corpus is 56 passages. Cutting it to 10 says otherwise: the reranker cannot promote a passage the retriever never handed it.</p>" },
+
+    { title: "The Honest Benchmark",
+      html: "<p>PocketRAG's HNSW is a few hundred lines of Python written to be read. The libraries it is standing in for are decades of C++ written to be fast. The point of putting them side by side is not to find out who wins, which is not in doubt, but to find out <em>by how much and on which axis</em>, because that is the number that decides whether the teaching implementation has to be replaced.</p>" +
+      "" +
+      "<pre><code>def timed(fn, queries, repeat: int = 1):\n    \"\"\"p50 and p95 over per-query wall time, in milliseconds. Percentiles, not\n    a mean, because chapter 29's point is that the tail is the user experience.\"\"\"\n    times, results = [], []\n    for q in queries * repeat:\n        t0 = time.perf_counter()\n        results.append(fn(q))\n        times.append((time.perf_counter() - t0) * 1000)\n    times.sort()\n    return {\"p50\": statistics.median(times),\n            \"p95\": times[int(len(times) * 0.95)],\n            \"results\": results[:len(queries)]}\n</code></pre>" +
+      "" +
+      "<div class='callout'><strong>Conditions, stated before the numbers.</strong> Single query, single thread, no batching, warm process, on one laptop. Recall is measured against exact search over the same vectors, so it is recall of the index and not of the embedding model. Published ANN leaderboards report batched, multi-threaded throughput, which is a different and much larger number: do not compare these to those. And one row is missing on purpose. The Blueprint called for pgvector and a hosted store; no Postgres is installed on this machine and no hosted store is reachable from it, so what follows compares three in-process libraries and says nothing about what a client, a server, a query planner and a network hop add. Chapter 13 is where that difference lives, and it is not small.</div>" +
+      "" +
+      "<pre><code>  19800 vectors, 384 dimensions, 200 queries, k=10\n  single query, single thread, no batching, Python 3.13.2 on darwin\n\n  system                 recall@10   p50 ms   p95 ms  build s vectors MB\n  pocketrag ef=16            0.919     7.69    13.02   1851.3       30.4\n  pocketrag ef=32            0.968    11.98    19.26   1851.3       30.4\n  pocketrag ef=64            0.985    21.36    30.93   1851.3       30.4\n  pocketrag ef=128           0.997    37.42    55.38   1851.3       30.4\n  hnswlib ef=16              0.893     0.17     0.43      5.0       30.4\n  hnswlib ef=32              0.957     0.25     0.35      5.0       30.4\n  hnswlib ef=64              0.981     0.39     0.54      5.0       30.4\n  hnswlib ef=128             0.995     0.65     1.04      5.0       30.4\n  faiss-flat                 1.000     0.89     1.40      0.0       30.4\n  faiss-ivfpq np=1           0.363     0.11     0.22      2.5        1.0\n  faiss-ivfpq np=8           0.609     0.70     0.76      2.5        1.0\n  faiss-ivfpq np=32          0.643     1.98     3.02      2.5        1.0\n</code></pre>" +
+      "<p>At every setting of ef, PocketRAG's recall is level with hnswlib and at three of the four it is slightly higher: 0.919 against 0.893 at ef=16, 0.997 against 0.995 at ef=128. The graph Chapter 34 built from the paper, with heuristic neighbour selection and a hand-written greedy search, finds the same neighbours as the reference implementation of the same algorithm. Nothing about the algorithm was lost in being written to be read.</p>" +
+      "<p>Everything else about it was. A query costs 7.69 ms against hnswlib's 0.17, which is 45 times slower, and at ef=128 the gap widens to 58 times. Building the index took <strong>1851 seconds against 5.0</strong>, a factor of 370. That is the price of Python objects and per-element arithmetic where the library has contiguous memory and SIMD, and it is not a factor you close by optimising: it is the reason the C++ library exists.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 254' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='24' y='18' fill='#2de2ff' font-size='11'>measured: 19,800 vectors, 384 dimensions, single query, single thread</text><line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/><text x='24' y='48' fill='#7d8fb0' font-size='9'>bar is recall@10; the figure at the right is p50 latency</text><text x='24' y='74' fill='#c9d6ea' font-size='9.5'>pocketrag ef=128</text><rect x='160' y='64' width='399' height='13' fill='#4f7cff'/><text x='566' y='74' fill='#4f7cff' font-size='9.5'>0.997</text><text x='646' y='74' fill='#ff5d73' font-size='9.5'>37.42 ms</text><text x='24' y='100' fill='#c9d6ea' font-size='9.5'>hnswlib ef=128</text><rect x='160' y='90' width='398' height='13' fill='#3ddc97'/><text x='566' y='100' fill='#3ddc97' font-size='9.5'>0.995</text><text x='646' y='100' fill='#3ddc97' font-size='9.5'>0.65 ms</text><text x='24' y='126' fill='#c9d6ea' font-size='9.5'>faiss-flat (exact)</text><rect x='160' y='116' width='400' height='13' fill='#2de2ff'/><text x='566' y='126' fill='#2de2ff' font-size='9.5'>1.000</text><text x='646' y='126' fill='#2de2ff' font-size='9.5'>0.89 ms</text><text x='24' y='152' fill='#c9d6ea' font-size='9.5'>faiss-ivfpq np=32</text><rect x='160' y='142' width='257' height='13' fill='#ffd166'/><text x='424' y='152' fill='#ffd166' font-size='9.5'>0.643</text><text x='646' y='152' fill='#ffd166' font-size='9.5'>1.98 ms</text><line x1='24' y1='172' x2='736' y2='172' stroke='#1c2a45' stroke-width='2'/><text x='24' y='192' fill='#2de2ff' font-size='10.5'>at twenty thousand vectors, exact search is faster than every graph AND perfectly correct</text><text x='24' y='210' fill='#c9d6ea' font-size='9'>the index earns nothing here: 30 MB of vectors is a matrix multiply, not a search problem</text><text x='24' y='228' fill='#ffd166' font-size='9'>ivfpq trades 30x memory (30.4 MB to 1.0 MB) for a third of the recall, which is the chapter-12 dial</text><text x='24' y='248' fill='#7d8fb0' font-size='9'>build time, not drawn: 1851 s for pocketrag, 5.0 s for hnswlib, 0.0 s for flat</text></svg><div class='fig-cap'>The row that should change your mind is the third one. Everything above it is an approximation being outperformed by the exact answer.</div></div>" +
+      "<p>Because the honest headline of this benchmark is not that Python is slow. It is that <strong>at 19,800 vectors, exact search beats every approximate index on both axes at once</strong>. faiss-flat returns the true top ten, every time, in 0.89 ms, which is faster than PocketRAG at any ef and within a factor of two of hnswlib's most accurate setting. Thirty megabytes of float32 is not a search problem, it is a matrix multiply, and the hardware is very good at those.</p>" +
+      "<p>Chapter 10 made this argument with a calculator and Chapter 11 built the graph anyway, because the graph is what you need at a hundred million vectors. This table is where the argument stops being theoretical: if your corpus is this size, the index is costing you accuracy, build time and a dependency, and buying nothing. The number worth knowing is where that stops being true, and it is much further out than most teams assume.</p>" +
+      "<p>The last three rows are Chapter 12's dial. Product quantization stores each vector as 48 bytes of codebook indices instead of 1536 bytes of float32, and the payload falls from 30.4 MB to 1.0 MB, a factor of 30. Recall falls with it, to 0.643 even at nprobe=32. That is the trade in its rawest form: a corpus that does not fit in memory can be searched at a third of the accuracy, and the rescoring step that recovers most of it is graduation project two.</p>" +
+      "<p>Read the recall column first, because it is the one that decides whether Chapter 34's graph is correct rather than merely slow. It is.</p>" },
+
+    { title: "Two Questions the Line Could Not Answer",
+      html: "<p>Two of the five recurring questions have been refused since Chapter 1, for two different reasons, and neither reason is a bug in retrieval. Q3 wants a count over a table. Q4 wants two hops. A straight pipeline retrieves once, and no amount of reranking turns one retrieval into two.</p>" +
+      "<p>The shape that does is Chapters 20 to 22 put behind one entry point: tools, a router that picks one, a critic that decides whether to stop, and a budget so a loop cannot become a bill.</p>" +
+      "" +
+      "<pre><code>def route(q: str, tried: set[str]) -&gt; str:\n    \"\"\"Which tool to try next. Counting questions go to the table because no\n    chunk holds a count; everything else starts with the two retrievers.\"\"\"\n    low = q.lower()\n    if (\"how many\" in low or \"count\" in low) and \"sql\" not in tried:\n        return \"sql\"\n    if \"keyword\" not in tried:\n        return \"keyword\"\n    if \"vector\" not in tried:\n        return \"vector\"\n    return \"stop\"\n</code></pre>" +
+      "" +
+      "<p>The router and the critic are rules, not a model. A deployed agent asks a model to choose the tool and to judge the result, and gets flexibility this does not have. What it also gets is a control flow nobody can read and a bill that varies per question. Making both deterministic here means the loop is visible, reproducible and free, and the chapter is explicit that this is a substitution and not an equivalence.</p>" +
+      "<h3>Q3: the question that needed a table</h3>" +
+      "<p>Chapter 32's loaders read text, so nothing in PocketRAG has ever put a table in the database. The SQL tool needs one, so the agent builds Chapter 22's Larkspur tables: 20 passengers, 40 bookings, 56 support tickets with an opened date and a category.</p>" +
+      "" +
+      "<pre><code>$ python3 agent.py lex.db \"How many refund tickets were opened in March?\"\n  1. sql   How many refund tickets were opened in March?\n           -&gt; [(12,)]  (no year given: 12 in the most recent year,\n                        20 across every year)   ACCEPT\n\n  answered by sql in 1 steps\n</code></pre>" +
+      "" +
+      "<p>Twelve, in one step. The interesting part is the parenthesis. The question does not name a year and the table holds March 2026 and March 2025, so there are two defensible answers, 12 and 20, and Chapter 22 built that trap deliberately. The tool reports both rather than silently choosing, because a counting question with an unstated range is ambiguous and a system that hides the ambiguity is worse than one that cannot count.</p>" +
+      "<p>What this tool is not is text-to-SQL. It reads the question against the schema's own vocabulary and handles one family of question. Chapter 22 has a model write arbitrary queries against a schema too large to fit in a prompt, and that is the real job. This is the control flow around it.</p>" +
+      "<h3>Q4: the question that needed a second hop</h3>" +
+      "" +
+      "<pre><code>$ python3 agent.py lex.db \"Which baggage policy changed after incident INC-2042?\"\n  1. keyword  Which baggage policy changed after incident IN  7cfee1b3+4.14  98c6bf55-1.19  e8cdb140-7.59   reject\n  1. rewrite  refund and cancellation policy                  critic asked for another hop\n  2. keyword  refund and cancellation policy                  de6f4993+3.30  75a0cf5e+1.99  b7ba078b+1.11   ACCEPT\n\n  answered by keyword in 2 steps\n</code></pre>" +
+      "" +
+      "<p>Hop one finds the INC-2042 post-mortem at +4.14, which would have cleared the refusal threshold and been served as the answer. The critic rejects it anyway, because the passage names <em>the refund and cancellation policy</em>, a document the question did not ask for and that is therefore the thing to look up next. Hop two, with the post-mortem excluded, lands the fare rules passage at +3.30. Two steps against a budget of six.</p>" +
+      "<p>The critic is three rules and two of them are traps discovered by running it.</p>" +
+      "" +
+      "<pre><code>    Two traps sit in that last rule. The trigger noun cannot be part of the\n    comparison, because a question about a policy contains the word 'policy'\n    and would match every time. And a passage that names ITSELF, as the\n    no-show policy does in its own first sentence, is not pointing anywhere:\n    the phrase has to name a document other than the one being read.\n</code></pre>" +
+      "" +
+      "<p>There is a third finding, and it is the one worth carrying away, because it is not obvious and it is measurable. <strong>The follow-up query has to be the extracted phrase alone.</strong> The natural implementation appends the phrase to the original question, keeping the context, and it fails:</p>" +
+      "" +
+      "<pre><code>  hop2, phrase + original question:\n    1. Refund of ancillary services          +0.658\n    2. Incident INC-1987 post-mortem         -1.980\n    3. Fare rules and cancellation           -4.029   &lt;-- the answer, at rank 3\n\n  hop2, phrase alone:\n    1. Fare rules and cancellation           +2.617   &lt;-- the answer, at rank 1\n    2. Refund of ancillary services          +1.515\n    3. No-show policy                         +0.552\n</code></pre>" +
+      "" +
+      "<p>Carrying the original question along keeps dragging the reranker back to the first hop's topic, a gap of more than six logits. The second hop is a new question, and it should be asked as one.</p>" +
+      "<h3>Where the critic misfires</h3>" +
+      "<p>A rule that fires on a phrase naming a document will also fire on a phrase naming nothing.</p>" +
+      "" +
+      "<pre><code>$ python3 agent.py lex.db \"What was fixed after the check-in outage?\"\n  1. keyword  What was fixed after the check-in outage?       98c6bf55+1.30   reject\n  1. rewrite  alert and a manual bag-drop fallback procedure  critic asked for another hop\n  2. keyword  alert and a manual bag-drop fallback procedure  e8cdb140-9.97   reject\n  3. vector   alert and a manual bag-drop fallback procedure  8d58f26c-10.44  reject\n  4. stop     alert and a manual bag-drop fallback procedure  no tool left to try\n\n  no answer by None in 5 steps\n</code></pre>" +
+      "" +
+      "<p>Hop one finds the right passage, the INC-1987 post-mortem, which does contain the answer. The critic sees the phrase <em>manual bag-drop fallback procedure</em>, decides it names a document, and sends the agent looking for a procedure that was never written down. Every subsequent hop scores below -9. The agent gives up with nothing, having thrown away a correct first hop.</p>" +
+      "<p>This is reported rather than fixed because the shape of the failure is the lesson. A heuristic critic converts a good answer into no answer, and the only thing standing between that and an unbounded loop is the <strong>step budget</strong>, which is why the budget is not a performance optimisation but a safety mechanism. Chapter 21 measured what agentic loops cost when nobody caps them.</p>" },
+
+    { title: "The Same Answer Through an Edge",
+      html: "<p>The agent answered Q4 by retrieving twice. Chapter 23's argument is that the link between those two passages is a fact about the corpus, known at ingest, and rediscovering it at query time is work you already did.</p>" +
+      "<p>So the last layer extracts entities into tables beside the chunks and asks Q4 again, with no reranker and no second retrieval.</p>" +
+      "" +
+      "<pre><code>def local_search(db, question: str, hops: int = 1):\n    \"\"\"Q4 the graph way. Match an entity in the question, take the passages\n    that mention it, then take the passages that mention what THOSE passages\n    also mention. The second hop is an edge lookup, not a second retrieval.\"\"\"\n    low = question.lower()\n    # Word-boundary match, not substring: the entity '20' is otherwise found\n    # inside 'INC-2042' and seeds the hop with every passage that names a price.\n    seeds = [(eid, kind, name) for eid, kind, name in\n             db.execute(\"SELECT entity_id, kind, name FROM entities\")\n             if re.search(rf\"(?&lt;![\\w-]){re.escape(name)}(?![\\w-])\", low)]\n</code></pre>" +
+      "" +
+      "<pre><code>  66 entities, 106 mentions, 88 edges\n  level 0: 20 communities, sizes [21, 21, 4, 2, 2, 2, 1, 1, ...]\n  level 1: 25 communities\n    Topic         34\n    Ticket        12\n    Money         11\n    Airport        4\n    Aircraft       2\n    Incident       2\n    Regulation     1\n\n  local: Which baggage policy changed after incident INC-2042?\n    matched entities: ['baggage', 'inc-2042']\n    de6f4993  Fare rules and cancellation\n    e7b9bc0f  Boarding priority\n    98c6bf55  Incident INC-1987 post-mortem\n</code></pre>" +
+      "" +
+      "<p>The fare rules passage comes back first, through one edge, from a question whose words appear nowhere in it. That is Q4 answered a second way, and the mechanism is entirely different from the agent's: no cross-encoder, no threshold, no loop, just a join.</p>" +
+      "<p>Note the comment in the code, which is a real bug that a real run produced. Matching entity names as substrings found the entity <code>20</code>, a price, inside the string <code>INC-2042</code>, and seeded the hop with every passage mentioning twenty euros. Entity resolution is Chapter 23's hardest section and this is its smallest possible instance.</p>" +
+      "<h3>Where the graph does not deliver</h3>" +
+      "<p>Chapter 24's global search reads a summary of every community rather than the top k of anything, so it can answer a question about the whole corpus. PocketRAG builds the communities with real Leiden and writes a report per community, and then global search does not work.</p>" +
+      "" +
+      "<pre><code>  global: What kinds of problems do Larkspur customers actually have?\n    community  3  match 0.12    2 entities   2 passages  8812, voucher\n    community  4  match 0.12    2 entities   1 passages  pets, 55\n    community  9  match 0.12    1 entities   1 passages  special assistance\n</code></pre>" +
+      "" +
+      "<p>Two reasons, both measured, neither fixable by tuning.</p>" +
+      "<p>The first is the map step. Global search works by asking, of every community report, what does this contribute to the question, and that is a reading comprehension task. With no model reachable, the substitute here is term overlap, and a global question shares almost no vocabulary with a report: 0.12 is one term in eight. Everything after that is ranking noise. This is the one place in the whole capstone where removing the model does not degrade a component but removes it.</p>" +
+      "<p>The second is size. The community reports cost <strong>1147 tokens against a corpus of 1839</strong>, which is 62 percent. Summarising 56 short passages into 20 communities saves nothing, because the per-community overhead is most of the budget. Chapter 24's token argument is real and it starts paying at a scale this corpus does not reach; a top-5 window here reads about 164 tokens, or 9 percent, and does it well.</p>" +
+      "<div class='callout'><strong>A departure from the plan, stated.</strong> Chapter 1 described a corpus with six incident post-mortems. The corpus PocketRAG actually ingested has two, INC-2042 and INC-1987. The graph is therefore built over all 56 passages rather than over the post-mortems alone, which is why the entity kinds are dominated by 34 topics and 12 tickets. With two incidents there is no incident community to detect.</div>" },
+
+    { title: "The Whole Confession",
+      html: "<p>Five chapters, one system, and a list of everything it does not do. This is the table the capstone has been building toward, and the only honest way to hand over a teaching implementation.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 396' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='24' y='18' fill='#2de2ff' font-size='11'>what PocketRAG simplified, and the chapter that holds the real machinery</text>" +
+      "<line x1='24' y1='28' x2='736' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='46' fill='#7d8fb0' font-size='9'>ch 32, ingest</text>" +
+      "<text x='40' y='62' fill='#c9d6ea' font-size='9'>no semantic or late chunking; one recursive splitter at 512 tokens</text><text x='620' y='62' fill='#7d8fb0' font-size='9'>ch 5, 6</text>" +
+      "<text x='40' y='78' fill='#c9d6ea' font-size='9'>PDF text only: no tables, no images, no page layout</text><text x='620' y='78' fill='#7d8fb0' font-size='9'>ch 4, 31</text>" +
+      "<text x='24' y='100' fill='#7d8fb0' font-size='9'>ch 33, keyword</text>" +
+      "<text x='40' y='116' fill='#c9d6ea' font-size='9'>postings are uncompressed and unskipped; no WAND, no block-max</text><text x='620' y='116' fill='#7d8fb0' font-size='9'>ch 9</text>" +
+      "<text x='24' y='138' fill='#7d8fb0' font-size='9'>ch 34, vector</text>" +
+      "<text x='40' y='154' fill='#c9d6ea' font-size='9'>float32 in memory: no quantization, no disk-resident graph</text><text x='620' y='154' fill='#7d8fb0' font-size='9'>ch 12</text>" +
+      "<text x='40' y='170' fill='#c9d6ea' font-size='9'>deletes are tombstones; the graph is never repaired</text><text x='620' y='170' fill='#7d8fb0' font-size='9'>ch 11</text>" +
+      "<text x='24' y='192' fill='#7d8fb0' font-size='9'>ch 35, answer</text>" +
+      "<text x='40' y='208' fill='#c9d6ea' font-size='9'>the generator is extractive; no model is ever called</text><text x='620' y='208' fill='#7d8fb0' font-size='9'>ch 18, 27</text>" +
+      "<text x='40' y='224' fill='#c9d6ea' font-size='9'>the permission filter is a post-filter over a full ranking</text><text x='620' y='224' fill='#7d8fb0' font-size='9'>ch 13, 30</text>" +
+      "<text x='40' y='240' fill='#c9d6ea' font-size='9'>no multi-turn, no caching, one rewrite strategy</text><text x='620' y='240' fill='#7d8fb0' font-size='9'>ch 19, 27, 14</text>" +
+      "<text x='24' y='262' fill='#7d8fb0' font-size='9'>ch 36, this one</text>" +
+      "<text x='40' y='278' fill='#c9d6ea' font-size='9'>120 labels by one author in one sitting: no annotator agreement</text><text x='620' y='278' fill='#7d8fb0' font-size='9'>ch 25</text>" +
+      "<text x='40' y='294' fill='#c9d6ea' font-size='9'>faithfulness is a small NLI model, not a purpose-built judge</text><text x='620' y='294' fill='#7d8fb0' font-size='9'>ch 26</text>" +
+      "<text x='40' y='310' fill='#c9d6ea' font-size='9'>no pgvector and no hosted store in the benchmark</text><text x='620' y='310' fill='#7d8fb0' font-size='9'>ch 13, 30</text>" +
+      "<text x='40' y='326' fill='#c9d6ea' font-size='9'>router and critic are rules; global search has no map step</text><text x='620' y='326' fill='#7d8fb0' font-size='9'>ch 21, 24</text>" +
+      "<line x1='24' y1='340' x2='736' y2='340' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='360' fill='#ff5d73' font-size='10'>and one that is not scope: the refusal threshold refuses 38 of 105 answerable questions</text>" +
+      "<text x='24' y='376' fill='#3ddc97' font-size='10.5'>everything above the line is early, not wrong. The line itself is wrong, and now it has a number.</text>" +
+      "<text x='24' y='392' fill='#7d8fb0' font-size='9'>ceiling for any single-score threshold on this corpus: 0.814 balanced accuracy</text>" +
+      "</svg><div class='fig-cap'>Thirteen simplifications with a chapter each, and one defect. The difference between the two categories is the whole point of measuring: scope is a decision, a defect is a discovery.</div></div>" +
+      "<p>There is one more line that belongs in the table and does not fit the format. <strong>This layer is Python only.</strong> Chapters 32 to 35 carried a TypeScript half at line-for-line parity, and it stops here: the evaluation harness calls two models, the graph layer needs Leiden, and neither has a Node equivalent worth pretending about. The SQL tool would port unchanged, and the metrics are twenty lines of arithmetic anyone can rewrite. The parity claim covers the pipeline, which is where it mattered.</p>" +
+      "<p>Read the whole table once more and notice what is absent from it. Nothing in that list is a mistake. Every row is a decision made in the open, with the chapter that would undo it named. That is what a teaching implementation owes you, and it is also, uncomfortably, what most production systems could write about themselves if anyone asked.</p>" },
+
+    { title: "Graduation",
+      html: "<p>Three projects, each a weekend, each one row of the confession table turned back into working code. They are chosen because each one changes a number you can now measure, which is the only reason to do any of them.</p>" +
+      "<h3>1. Compressed postings and WAND</h3>" +
+      "<p>Chapter 33 stores postings as plain rows and Chapter 9 explains what a real index does instead. Add variable-byte or delta encoding to the postings table, then add WAND so that scoring stops early on documents that cannot reach the top k. Measure index size before and after, and query latency at p50 and p95 over the gold set's 120 queries. On 56 passages the compression will win and the WAND will not, because there is nothing to skip; run it against Chapter 34's twenty-thousand-chunk index and the ordering reverses. That reversal is the project.</p>" +
+      "<h3>2. Product quantization with rescoring</h3>" +
+      "<p>Chapter 34 keeps float32 vectors in memory, and the benchmark above shows what IVF-PQ costs and saves. Implement PQ inside PocketRAG: train the codebooks, store one byte per subspace, search on the codes, then rescore the top 100 candidates with the exact float32 vectors you kept on disk. Measure recall@10 against exact search, memory, and p95, and find the rescoring depth where recall returns to the uncompressed number. The answer is smaller than people expect, and that is the finding.</p>" +
+      "<h3>3. Filtered HNSW with ACORN-style edges</h3>" +
+      "<p>The hardest of the three, and the one with the clearest payoff. PocketRAG filters by permission after the graph search, which Chapter 35 admitted is only acceptable because the corpus is tiny. Chapter 13 measured what happens at scale: a selective filter turns a graph search into a graph walk that finds almost nothing. Build the filtered variant, where the search skips nodes failing the predicate and adds edges so the graph stays connected under filtering, and measure recall against the post-filter at selectivities from 90 percent down to 1 percent. The post-filter falls off a cliff. Find the cliff.</p>" +
+      "<h3>And the one this chapter opened</h3>" +
+      "<p>If you do only one thing, replace the refusal threshold. You have the harness, the labels and the number to beat: 0.814 balanced accuracy, from a single cross-encoder logit. Chapter 18's second signal, an entailment check between the question and the top passage, is the obvious first attempt, and the evaluation runs in twenty seconds.</p>" +
+      "<h3>Where this leaves you</h3>" +
+      "<p>PocketRAG is about two thousand lines. It ingests documents idempotently, indexes them two ways, searches a graph it built itself, fuses, reranks, filters by permission, packs, cites, verifies, refuses, calls tools, loops with a budget, and knows a graph from a ranking. It scores 0.874 nDCG@10 on its own corpus and it refuses more than a third of the questions it could answer.</p>" +
+      "<p>Both halves of that sentence are the qualification. Anyone can build the first half from the chapters. What the course was actually for is the second half: knowing that the number exists, knowing how to get it, and being willing to publish it about your own system. Every RAG pipeline in production has a sentence like that one. Most of them have never been measured well enough to write it down.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take the four systems' nDCG@10 and recall@10 from the table and explain, in terms of what reciprocal rank fusion does to positions, how fusion can beat the vector index at rank 1 and lose to it at rank 10. Then predict what would happen to both numbers if BM25 were dropped from the fusion, and say which class of query would lose the most.</li>" +
+      "<li><strong>Trace.</strong> Q5 scores +1.117 with the correct passage at rank 1. Walk the answer through every check PocketRAG performs and name, at each one, what it asked and why it could not detect the false refusal. Then say which single check, added anywhere in the pipeline, would have caught it.</li>" +
+      "<li><strong>Investigate.</strong> Rerun the threshold sweep with the unanswerable queries removed and again with fifteen more added. Report how far the best threshold and the balanced-accuracy ceiling move. You should find the ceiling is stable and the optimum is not, which tells you which of the two numbers to quote in a design document.</li>" +
+      "<li><strong>Investigate.</strong> Write twenty more gold queries against the two passages currently judged relevant to nothing, then rerun the harness. Report how the system means move. Any movement is pooling bias, because the system did not change: you measured a hole in the labels, not a change in the pipeline.</li>" +
+      "<li><strong>Build.</strong> Replace the refusal threshold with the entailment signal from Chapter 18: score the question against the top passage with the NLI model already in the harness, and refuse when nothing entails. Report balanced accuracy against the 0.814 ceiling, and report separately what it does to the 38 false refusals and to the travel insurance question.</li>" +
+      "<li><strong>Build.</strong> The critic misfires on the check-in outage question by extracting a phrase that names no document. Add a cheap test before the hop, that the phrase retrieves anything above some floor, and measure what it does to that question, to Q4, and to the other 118. Report the queries it breaks, because a guard that fires too often costs more than the failure it prevents.</li>" +
+      "<li><strong>Build.</strong> Run the whole harness against Chapter 34's twenty-thousand-chunk index with the same 120 queries, which are now mostly unanswerable because the corpus is different. Report the refusal rate. A system tuned on one corpus and pointed at another is the most common production failure in this course, and this is the cheapest way to see it.</li>" +
+      "<li><strong>Build, optional.</strong> Install Postgres with pgvector, load the same vectors, and add the row this chapter could not measure. Report recall@10, p50 and p95 against the in-process libraries, and separate the network and planner overhead from the index time. State your conditions the way this chapter did.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "gold set", d: "A set of queries with the passages that answer them, graded and written independently of any system, which is the only instrument that can tell a pipeline it got worse." },
+    { t: "graded judgment", d: "A relevance label with more than two values, which lets a metric distinguish a passage that answers a question from one that is merely about the subject." },
+    { t: "pooling bias", d: "The distortion from labels that only cover what some system already retrieved, which flatters that system and penalises any retriever that finds something new." },
+    { t: "nDCG", d: "Discounted cumulative gain over the best achievable ordering, the metric that notices when a partially relevant passage is ranked above a fully relevant one." },
+    { t: "false refusal", d: "Declining to answer a question the corpus does answer, which is invisible to every check a pipeline runs on itself and visible immediately against labels." },
+    { t: "balanced accuracy", d: "The mean of per-class recall, used when one class is much larger, because plain accuracy on a lopsided split rewards a system that always guesses the majority." },
+    { t: "AUC", d: "The probability that a positive example is scored above a negative one, which measures whether a signal is informative separately from where its threshold is placed." },
+    { t: "regression runner", d: "A stored baseline plus a per-query comparison, which catches the changes a mean absorbs and is the difference between an evaluation and a test." },
+    { t: "step budget", d: "A hard cap on an agent's tool calls, which is a safety mechanism rather than an optimisation because a heuristic critic can loop without ever being satisfied." },
+    { t: "critic", d: "The component that decides whether a tool's result is good enough to stop on, and if not, what to look up next, which is where an agent's loop is actually controlled." },
+    { t: "community report", d: "A summary of one cluster of the entity graph, which is what global search reads instead of passages so that it can answer a question about a whole corpus." },
+    { t: "local search", d: "Answering by matching an entity in the question and following graph edges from it, which turns a second retrieval into a join over links found at ingest." }
+  ],
+  quiz: [
+    { type: "mc",
+      q: "Why must a gold set be written before looking at the system's output rather than after?",
+      opts: [
+        "Labels written afterwards take longer, because the output has to be read first",
+        "Labels made by marking a system's top results relevant prove only that the system agrees with itself",
+        "Graded judgments cannot be assigned to a ranked list",
+        "Metrics require the labels to be timestamped earlier than the run"
+      ], a: 1,
+      why: "The temptation is invisible in the finished artefact: you read the top result, find it reasonable, mark it relevant. Repeat that and every metric confirms the ranking it was derived from, which is why the order of work is part of the method." },
+    { type: "mc",
+      q: "Reciprocal rank fusion scored nDCG@10 of 0.7688 against the vector index's 0.7802, while beating it at recall@1. What is the correct reading?",
+      opts: [
+        "The fusion constant was set incorrectly for this corpus",
+        "The measurement is within noise and the two systems are equivalent",
+        "Fusion promotes passages both retrievers like, which wins rank 1 and pushes down relevant passages only the vector index found",
+        "BM25 scores were accidentally added to the cosine scores"
+      ], a: 2,
+      why: "Recall@10 shows the same thing from the other side: 0.822 for fusion against 0.849 for the vector index alone. Fusing lost relevant passages from the top ten in exchange for precision at the very top, which is what consensus does." },
+    { type: "mc",
+      q: "Across 120 queries, answerable questions scored as low as -11.334 and unanswerable ones as high as +2.359. What does that imply about Chapter 35's threshold?",
+      opts: [
+        "The threshold should be moved to +2.4, which eliminates the problem",
+        "The two classes overlap, so no threshold separates them and the reported 3.023-logit margin was an artifact of five data points",
+        "The cross-encoder is broken and its scores should not be used",
+        "The unanswerable queries in the gold set were labelled incorrectly"
+      ], a: 1,
+      why: "The overlap band holds 39 answerable and all 15 unanswerable queries. Moving the line changes which errors you make, not whether you make them: the best balanced accuracy any threshold reaches is 0.814." },
+    { type: "mc",
+      q: "Of the 38 answerable questions the pipeline refused, 26 had a judged-relevant passage at rank 1. What does that number isolate?",
+      opts: [
+        "A retrieval failure, since the remaining 12 queries found nothing",
+        "A labelling failure, since 26 passages were graded too generously",
+        "A ranking failure that reranking would fix with more candidates",
+        "An abstention failure: retrieval and ranking both succeeded, and the threshold discarded the result"
+      ], a: 3,
+      why: "It separates the two things a refusal rate confuses. For 26 of the 38 there was nothing wrong with the retrieval at all, so no amount of work on indexing, fusion or reranking would change the outcome." },
+    { type: "mc",
+      q: "The chapter concludes Chapter 35 was wrong to refuse Q5, the emotional support peacock. On what basis?",
+      opts: [
+        "The reranker score of +1.117 is positive, and any positive score should be answered",
+        "The pets passage states that Larkspur does not carry emotional support animals, so the corpus answers the question and the retriever ranked it first",
+        "Chapter 1 defined Q5 as answerable and Chapter 35 misread it",
+        "A refusal is never correct when a passage is retrieved at rank 1"
+      ], a: 1,
+      why: "The answer is no, and it is written down. Chapter 1 described Q5 as not in the corpus and Chapter 35 treated the refusal as correct behaviour; the corpus as actually built contains the sentence, and only labels made independently of the pipeline could reveal that." },
+    { type: "mc",
+      q: "Cutting the candidate count from 50 to 10 moved the mean nDCG@10 by 0.0537 while one query lost a full 1.000. What is the lesson for a regression runner?",
+      opts: [
+        "The tolerance should be raised until small movements stop being reported",
+        "Means should be computed per class rather than over the whole set",
+        "A mean over 105 queries can absorb a catastrophe on four of them, so per-query numbers must be stored and compared",
+        "nDCG is the wrong metric for regression testing and recall should be used"
+      ], a: 2,
+      why: "A 0.05 movement reads as noise on a dashboard and gets shipped. Underneath it fifteen queries regressed and one went from a perfect ranking to nothing relevant in the top ten, which only a per-query comparison surfaces." },
+    { type: "mc",
+      q: "In the agent's second hop, why must the follow-up query be the extracted phrase alone rather than the phrase plus the original question?",
+      opts: [
+        "The original question has already been embedded and cannot be reused",
+        "Concatenating exceeds the cross-encoder's token limit",
+        "The step budget counts tokens, so shorter queries allow more hops",
+        "Carrying the original question keeps pulling the reranker back to the first hop's topic: measured, the answer falls from rank 1 to rank 3"
+      ], a: 3,
+      why: "With the phrase alone the fare rules passage scores +2.617 at rank 1; with the question appended it scores -4.029 at rank 3, behind a passage about ancillary refunds. A second hop is a new question and should be asked as one." },
+    { type: "mc",
+      q: "The critic turns a correct first hop on the check-in outage question into no answer at all. What does that failure demonstrate about the step budget?",
+      opts: [
+        "It is a safety mechanism rather than an optimisation, because a heuristic critic can reject good results indefinitely",
+        "It should be raised, since six steps was not enough to find the answer",
+        "It is unnecessary when the critic is deterministic rather than a model",
+        "It should be replaced by a timeout, which bounds cost more directly"
+      ], a: 0,
+      why: "The critic extracted a phrase naming a procedure that was never written down, so every later hop scored below -9 and none could ever satisfy it. Nothing in the loop's own logic terminates; the budget is what does." },
+    { type: "mc",
+      q: "PocketRAG's community reports cost 1147 tokens against a 1839-token corpus. Why does that make global search pointless here?",
+      opts: [
+        "The reports are extractive, so they contain no information the passages do not",
+        "Leiden produced too many communities and a lower resolution would fix it",
+        "Summarising into 20 communities costs 62 percent of the corpus, so the compression that makes global search worthwhile has not happened at this size",
+        "Token counts are not comparable between reports and passages"
+      ], a: 2,
+      why: "Per-community overhead is most of the budget when the corpus is 56 short passages. Chapter 24's token argument is real and starts paying at a scale this corpus does not reach, where a top-5 window already reads only 9 percent." },
+    { type: "blank",
+      q: "Declining to answer a question that the corpus does in fact answer is a ____ refusal, and PocketRAG produces 38 of them across the gold set.",
+      a: ["false"],
+      why: "It is invisible to every check the pipeline runs on itself, because those checks ask whether the machinery worked and not whether an answer existed. Twenty-six of the 38 had the right passage at rank 1." },
+    { type: "blank",
+      q: "The mean of per-class recall, used here because 105 answerable queries against 15 unanswerable ones would let a system that never refuses score well on plain accuracy, is called ____ accuracy.",
+      a: ["balanced"],
+      why: "On this split the best any single-score threshold achieves is 0.814, against 0.786 for the shipped +2.0, which is the number any replacement abstention signal has to beat." },
+    { type: "order",
+      q: "Order the steps of measuring a RAG system honestly, as this chapter performs them:",
+      items: [
+        "write queries and grade the passages that answer them, without looking at any system output",
+        "run every retriever over the same queries and score the ranked lists",
+        "score the answers the whole pipeline produces, including the ones it refused to give",
+        "store the per-query numbers as a baseline",
+        "change one thing, rerun, and compare per query rather than on the mean"
+      ],
+      why: "The first step is the one teams skip and the one that determines whether any of the rest means anything. The last is what turns an evaluation into a test that can fail." }
+  ]
+});
