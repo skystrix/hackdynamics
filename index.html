@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HackDynamics — Computer science, from the inside</title>
-<meta name="description" content="HackDynamics builds the best computer science courses on the planet: interactive, depth-first, free. Start with Databases in Depth.">
+<title>HackDynamics — Computer science, down to the moving parts</title>
+<meta name="description" content="HackDynamics builds the best computer science courses on the internet: interactive, depth-first, free. Start with Databases in Depth.">
 <link rel="stylesheet" href="css/tokens.css">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
@@ -258,6 +258,11 @@
     grid-template-columns: repeat(3, 1fr);
     gap: 22px;
   }
+  .all-courses { margin-top: 26px; text-align: center; }
+  .all-courses a {
+    font-size: 15px; font-weight: 500; color: var(--primary); text-decoration: none;
+  }
+  .all-courses a:hover { text-decoration: underline; }
   .course-card {
     background: var(--bg-2);
     border: 1px solid var(--line);
@@ -371,7 +376,7 @@
   <div class="wrap">
     <a class="brand" href="#">HACK<b>DYNAMICS</b></a>
     <nav>
-      <a href="#courses">courses</a>
+      <a href="courses.html">courses</a>
       <a href="#creed">why</a>
       <a href="pricing.html">pricing</a>
       <a id="nav-auth" href="login.html">Log in</a>
@@ -384,11 +389,11 @@
   <canvas id="sky" aria-hidden="true"></canvas>
   <div class="wrap">
     <div class="hero">
-      <div class="kicker">The best CS courses on the planet</div>
-      <h1>Computer science,<br>taught <em>from the inside.</em></h1>
+      <div class="kicker">The best CS courses on the internet</div>
+      <h1>Computer science,<br>down to <em>the moving parts.</em></h1>
       <p>Most courses show you the controls. Ours hand you a screwdriver.
          <strong>Interactive, depth-first courses</strong> that open the machine,
-         let you poke its moving parts, and quiz you until it sticks.</p>
+         let you drive it, and quiz you until it sticks.</p>
       <div class="hero-cta">
         <a class="btn" id="hero-cta" href="databases-in-depth.html">Start the first course <span class="arr">→</span></a>
         <span class="hero-note" id="hero-note"><b>email sign-in</b> · runs in your browser</span>
@@ -442,7 +447,7 @@
 
     <a class="course-featured" href="rag-in-depth.html">
       <div class="cf-body">
-        <span class="tag">NEW — CHAPTERS 1–30 LIVE</span>
+        <span class="tag">NEW — ALL 36 CHAPTERS LIVE</span>
         <h3>RAG In Depth</h3>
         <p class="desc">Everything between a question and a grounded answer. Chunking and
            embeddings, the inverted index and BM25, <strong>HNSW, IVF and product
@@ -450,7 +455,7 @@
            assembly, agentic and graph retrieval — then how to actually measure whether
            any of it works. <strong>Built from the papers,</strong> not from blog posts.</p>
         <div class="stats">
-          <span class="stat">30 chapters</span>
+          <span class="stat">36 chapters</span>
           <span class="stat">262 diagrams</span>
           <span class="stat">329 quiz questions</span>
         </div>
@@ -499,6 +504,8 @@
            text to machine code.</p>
       </div>
     </div>
+
+    <p class="all-courses"><a href="courses.html">See all five courses, search the catalogue →</a></p>
   </section>
 
   <section id="creed" class="reveal">
@@ -616,7 +623,8 @@
     });
 
     if (st.isPremium) {
-      cta.innerHTML = 'Continue your course <span class="arr">→</span>';
+      cta.href = (window.HD_CONFIG && HD_CONFIG.COURSES_URL) || "courses.html";
+      cta.innerHTML = 'Go to your courses <span class="arr">→</span>';
       note.innerHTML = "signed in as <b>" + email.replace(/[&<>]/g, "") + "</b>";
     } else {
       note.innerHTML = "signed in · <b>premium unlocks the course</b>";

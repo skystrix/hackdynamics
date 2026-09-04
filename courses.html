@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Courses — HackDynamics</title>
+<meta name="description" content="Every HackDynamics course: Databases in Depth and RAG In Depth are live, with Operating Systems, Networking and Compilers in the works. Search and filter the full catalogue.">
+<link rel="stylesheet" href="css/tokens.css">
+<script src="js/theme.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  ::selection { background: rgba(0, 117, 222, .15); }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; width: 100%; }
+
+  /* ---------- Header (matches the landing page) ---------- */
+  .topnav { background: var(--bg-2); border-bottom: 1px solid var(--line); }
+  .topnav .wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 14px; padding-bottom: 14px;
+  }
+  .brand {
+    font-weight: 700; font-size: 16px; letter-spacing: -0.125px;
+    color: var(--text); text-decoration: none;
+  }
+  .brand b { color: var(--primary); }
+  nav { display: flex; align-items: center; }
+  nav a {
+    font-size: 15px; font-weight: 500; color: var(--text-dim);
+    text-decoration: none; margin-left: 26px; transition: color .2s;
+  }
+  nav a:hover { color: var(--text); }
+  nav a#nav-auth {
+    border: 1px solid var(--line); border-radius: var(--r-md);
+    padding: 4px 14px; background: var(--bg-2); color: var(--text);
+  }
+  nav a#nav-auth:hover { box-shadow: var(--shadow-1); }
+  .theme-toggle {
+    background: var(--bg-2); border: 1px solid var(--line); color: var(--text-dim);
+    font-size: 15px; width: 36px; height: 36px; border-radius: var(--r-full);
+    cursor: pointer; margin-left: 26px; vertical-align: middle;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .theme-toggle:hover { border-color: var(--text-faint); box-shadow: var(--shadow-1); }
+
+  main { flex: 1; }
+
+  /* ---------- Page head ---------- */
+  .page-head { text-align: center; padding: 64px 0 32px; }
+  .eyebrow {
+    display: inline-block;
+    font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--primary); background: var(--bg-2);
+    border: 1px solid var(--line); border-radius: var(--r-full);
+    padding: 4px 12px; margin-bottom: 20px;
+  }
+  .page-head h1 {
+    font-size: clamp(32px, 5.5vw, 44px); font-weight: 700;
+    letter-spacing: -1.4px; line-height: 1.06; color: var(--text);
+  }
+  .page-head p {
+    margin: 16px auto 0; max-width: 560px; font-size: 17px; color: var(--text-dim);
+  }
+
+  /* ---------- Search + filter ---------- */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    justify-content: space-between; margin: 0 0 8px;
+  }
+  .search { position: relative; flex: 1 1 260px; }
+  .search input {
+    width: 100%; font-family: var(--sans); font-size: 15px; color: var(--text);
+    background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: var(--r-full); padding: 10px 16px 10px 38px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .search input:focus {
+    outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint-primary);
+  }
+  .search::before {
+    content: "⌕"; position: absolute; left: 15px; top: 50%; transform: translateY(-52%);
+    font-size: 18px; color: var(--text-faint); pointer-events: none;
+  }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    font-family: var(--sans); font-size: 13px; font-weight: 500;
+    color: var(--text-dim); background: var(--bg-2);
+    border: 1px solid var(--line); border-radius: var(--r-full);
+    padding: 8px 14px; cursor: pointer; transition: all .15s;
+  }
+  .chip:hover { color: var(--text); border-color: var(--text-faint); }
+  .chip[aria-pressed="true"] {
+    color: var(--on-primary); background: var(--primary); border-color: var(--primary);
+  }
+  .count { font-size: 13px; color: var(--text-faint); margin: 14px 0 18px; }
+
+  /* ---------- Course cards ---------- */
+  .list { display: grid; gap: 18px; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: var(--r-xl); padding: 26px 28px;
+    box-shadow: var(--shadow-1); transition: box-shadow .2s, border-color .2s, transform .2s;
+  }
+  a.card:hover {
+    border-color: var(--primary); box-shadow: var(--shadow-2); transform: translateY(-2px);
+  }
+  .card.soon { background: transparent; box-shadow: none; }
+  .card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .tag {
+    font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
+    border-radius: var(--r-full); padding: 3px 9px;
+    color: var(--green); background: var(--tint-green);
+  }
+  .tag.soon { color: var(--text-dim); background: var(--tint-neutral); }
+  .card h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.25px; }
+  .card p { font-size: 15px; color: var(--text-secondary); margin-bottom: 14px; }
+  .card.soon p { color: var(--text-dim); }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; }
+  .stat {
+    font-size: 12px; color: var(--text-dim); background: var(--bg-3);
+    border-radius: var(--r-full); padding: 4px 11px;
+  }
+  .go { font-size: 13px; font-weight: 600; color: var(--primary); margin-top: 16px; display: inline-block; }
+
+  .empty {
+    text-align: center; padding: 48px 24px; color: var(--text-dim);
+    border: 1px dashed var(--line); border-radius: var(--r-xl);
+  }
+  .empty b { color: var(--text); }
+
+  .under { text-align: center; font-size: 14px; color: var(--text-dim); margin-top: 36px; }
+  .under a { color: var(--primary); text-decoration: none; font-weight: 500; }
+
+  /* ---------- Footer ---------- */
+  footer { border-top: 1px solid var(--line); margin-top: 72px; padding: 34px 0 46px; }
+  footer .wrap {
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: 12px;
+  }
+  footer .fbrand { font-size: 13px; font-weight: 700; letter-spacing: -0.125px; color: var(--text-secondary); }
+  footer .fbrand b { color: var(--primary); }
+  footer .fnote { font-size: 13px; color: var(--text-dim); }
+  footer .fnote em { font-style: italic; }
+
+  @media (max-width: 720px) {
+    .page-head { padding: 44px 0 26px; }
+    /* Stacked, the flex-basis would become a HEIGHT and stretch the search box
+       to 260px — the icon rides its centre, so it must go back to auto. */
+    .controls { flex-direction: column; align-items: stretch; }
+    .search { flex: 0 0 auto; }
+  }
+</style>
+<script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
+</head>
+<body>
+
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="index.html">HACK<b>DYNAMICS</b></a>
+    <nav>
+      <a href="courses.html">courses</a>
+      <a href="pricing.html">pricing</a>
+      <a id="nav-auth" href="login.html">Log in</a>
+      <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <div class="page-head">
+      <span class="eyebrow">The catalogue</span>
+      <h1>Every course, in one place.</h1>
+      <p>Two are live and complete. Three are being built the same way — slowly,
+         and all the way down. One membership opens all of them.</p>
+    </div>
+
+    <div class="controls">
+      <div class="search">
+        <input id="q" type="search" aria-label="Search courses"
+               placeholder="Search — try “B-Tree”, “HNSW”, “Java”…"
+               autocomplete="off" spellcheck="false">
+      </div>
+      <div class="chips" role="group" aria-label="Filter by availability">
+        <button class="chip" data-filter="all" aria-pressed="true">All</button>
+        <button class="chip" data-filter="live" aria-pressed="false">Available now</button>
+        <button class="chip" data-filter="soon" aria-pressed="false">In the works</button>
+      </div>
+    </div>
+
+    <p class="count" id="count" aria-live="polite"></p>
+
+    <!-- Cards are plain HTML, not rendered from JS: the catalogue stays
+         readable to crawlers and to anyone with JS off. The script below only
+         hides and shows what is already here. data-tags carries the words
+         people search for that the visible copy doesn't happen to contain. -->
+    <div class="list" id="list">
+
+      <a class="card" href="databases-in-depth.html" data-status="live"
+         data-tags="sql postgres mysql storage engine b-tree lsm tree wal acid isolation mvcc index query planner sharding paxos raft consensus java capstone pocketdb distributed systems">
+        <div class="card-top">
+          <h2>Databases in Depth</h2>
+          <span class="tag">Available now</span>
+        </div>
+        <p>From bytes on a platter to planet-scale consensus. Storage engines, B-Trees and
+           LSM-Trees, transactions and recovery, replication, Paxos and Raft, and the
+           operator's world of scaling — then you build a real database from scratch in Java.</p>
+        <div class="stats">
+          <span class="stat">32 chapters</span>
+          <span class="stat">28 interactive machines</span>
+          <span class="stat">46 diagrams</span>
+          <span class="stat">160 quiz questions</span>
+        </div>
+        <span class="go">Open the course →</span>
+      </a>
+
+      <a class="card" href="rag-in-depth.html" data-status="live"
+         data-tags="retrieval augmented generation llm ai embeddings vector search chunking bm25 inverted index hnsw ivf product quantization hybrid rerank cross-encoder evaluation agentic graphrag python typescript pocketrag">
+        <div class="card-top">
+          <h2>RAG In Depth</h2>
+          <span class="tag">Available now</span>
+        </div>
+        <p>Everything between a question and a grounded answer. Chunking and embeddings,
+           BM25 and the inverted index, HNSW, IVF and product quantization, hybrid search,
+           reranking, agentic and graph retrieval — then how to measure whether any of it works.</p>
+        <div class="stats">
+          <span class="stat">36 chapters</span>
+          <span class="stat">262 diagrams</span>
+          <span class="stat">329 quiz questions</span>
+        </div>
+        <span class="go">Open the course →</span>
+      </a>
+
+      <div class="card soon" data-status="soon"
+           data-tags="os kernel processes threads scheduler virtual memory paging filesystem syscall linux concurrency">
+        <div class="card-top">
+          <h2>Operating Systems in Depth</h2>
+          <span class="tag soon">In the works</span>
+        </div>
+        <p>Processes, schedulers, virtual memory, filesystems, and the syscall boundary —
+           the machine your machine runs on.</p>
+      </div>
+
+      <div class="card soon" data-status="soon"
+           data-tags="networking tcp ip udp quic http3 dns tls routing bgp congestion control packets sockets">
+        <div class="card-top">
+          <h2>Networking in Depth</h2>
+          <span class="tag soon">In the works</span>
+        </div>
+        <p>From voltage on a wire to HTTP/3 — routing, congestion, TLS, and why the
+           internet works anyway.</p>
+      </div>
+
+      <div class="card soon" data-status="soon"
+           data-tags="compiler lexer parser ast type checker ir ssa optimizer codegen llvm interpreter vm">
+        <div class="card-top">
+          <h2>Compilers in Depth</h2>
+          <span class="tag soon">In the works</span>
+        </div>
+        <p>Lexers, parsers, type checkers, IRs, and optimizers — the road from source
+           text to machine code.</p>
+      </div>
+
+    </div>
+
+    <p class="empty" id="empty" hidden>
+      Nothing matches that. <b>Try a topic</b> — “transactions”, “embeddings”, “TLS” —
+      or clear the search.
+    </p>
+
+    <p class="under" id="under">One membership opens every course. <a href="pricing.html">See pricing</a></p>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="fbrand">HACK<b>DYNAMICS</b></span>
+    <span class="fnote">Built with obsession, <em>for people who ask how.</em></span>
+  </div>
+</footer>
+
+<script>
+/* Search + filter over the cards already in the DOM. No templating, no data
+   array to keep in sync with the markup — the markup IS the data. */
+(function () {
+  "use strict";
+  var cards = [].slice.call(document.querySelectorAll("#list .card"));
+  var input = document.getElementById("q");
+  var chips = [].slice.call(document.querySelectorAll(".chip"));
+  var count = document.getElementById("count");
+  var empty = document.getElementById("empty");
+  var filter = "all";
+
+  // Match against the visible text AND data-tags, so "HNSW" finds RAG even
+  // when a synonym is what's printed on the card.
+  var haystack = cards.map(function (c) {
+    return (c.textContent + " " + (c.dataset.tags || "")).toLowerCase();
+  });
+
+  function apply() {
+    var q = input.value.trim().toLowerCase();
+    var shown = 0;
+    cards.forEach(function (card, i) {
+      var hit = (filter === "all" || card.dataset.status === filter) &&
+                (!q || haystack[i].indexOf(q) !== -1);
+      card.hidden = !hit;
+      if (hit) shown++;
+    });
+    empty.hidden = shown > 0;
+    count.textContent = shown === cards.length
+      ? cards.length + " courses"
+      : shown + " of " + cards.length + " courses";
+  }
+
+  input.addEventListener("input", apply);
+  chips.forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      filter = chip.dataset.filter;
+      chips.forEach(function (c) { c.setAttribute("aria-pressed", String(c === chip)); });
+      apply();
+    });
+  });
+  apply();
+})();
+
+/* Nav mirrors sign-in state, same as the other pages. Cosmetic only. */
+(function () {
+  "use strict";
+  if (!window.HDAuth || !HDAuth.isConfigured()) return;
+  var navAuth = document.getElementById("nav-auth");
+  HDAuth.status().then(function (st) {
+    if (!st.session) return;
+    navAuth.textContent = "Log out";
+    navAuth.href = "#";
+    navAuth.addEventListener("click", function (e) {
+      e.preventDefault();
+      HDAuth.signOut().then(function () { location.reload(); });
+    });
+    if (st.isPremium) {
+      document.getElementById("under").innerHTML =
+        "You're a premium member — every course below is unlocked.";
+    }
+  });
+})();
+</script>
+</body>
+</html>

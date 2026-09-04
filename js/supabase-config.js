@@ -16,6 +16,9 @@ window.HD_CONFIG = {
 
   // Where to send people after they log in, and which page is the paid course.
   COURSE_URL: "databases-in-depth.html",
+  // Where a signed-in member is sent to pick a course (the catalogue), as
+  // opposed to COURSE_URL, which is one specific course page.
+  COURSES_URL: "courses.html",
   LOGIN_URL: "login.html",
   PRICING_URL: "pricing.html",
 
