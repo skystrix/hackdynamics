@@ -57,3 +57,16 @@ supabase/.output/
 
 # Public output
 public/build/
+
+# Python caches from the resources/ measurement scripts
+__pycache__/
+*.pyc
+
+# Source books consulted while authoring (third-party, copyrighted, large)
+pdfs/
+resources/RAG_In_Depth/
+*.pdf
+*.epub
+
+# Local chapter preview scratch files
+_preview*.html
