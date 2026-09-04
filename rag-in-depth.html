@@ -62,9 +62,11 @@ window.HD_COURSE = {
     Function (?course=rag), which returns full chapters to premium members and
     free chapters + locked stubs to everyone else.
 
-    No js/viz*.js here: this course's machines aren't built yet, and app.js
-    skips the interactive frames for machines that aren't registered.
+    Machines: js/viz-rag*.js register this course's interactive frames on
+    window.VIZ. app.js skips the frame for any machine not yet registered, so
+    these files can land one batch at a time.
   -->
+  <script src="js/viz-rag1.js"></script>
   <script src="js/quiz.js"></script>
   <script src="js/app.js?v=2"></script>
   <!-- Paywall: must run after the DOM and HDAuth exist -->

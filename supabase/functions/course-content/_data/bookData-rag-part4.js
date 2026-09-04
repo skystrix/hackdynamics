@@ -3147,7 +3147,7 @@ CHAPTERS.push({
       "<text x='24' y='242' fill='#c9d6ea' font-size='9.5'>calibrated on five questions, which Chapter 25 would call a sample, not a measurement</text>" +
       "</svg><div class='fig-cap'>A clean separation with room on both sides. It is also five data points, and the chapter that measured confidence intervals would want two hundred.</div></div>" +
       "<p>Reading that chart in the other direction is the useful exercise. Q3, the question about a count in a table, scores <strong>-5.128</strong>, which is the reranker correctly reporting that nothing it was shown answers the question. Q4, the two-hop policy question, scores +4.140, lower than Q1's +7.163 because the passage it found answers the question by implication rather than by restating it. A single scalar is carrying a lot of meaning here, which is both why it works as a refusal signal and why calibrating it on five questions is not enough.</p>" +
-      "<p>Q5 is the interesting refusal. The peacock question retrieves the cabin pets page and scores <strong>+1.117</strong>, positive because a page about animals in the cabin genuinely is relevant to a question about an animal in the cabin. It is relevant and it does not answer. That gap between topical relevance and containing the answer is why the threshold is at +2.0 rather than at zero.</p>" },
+      "<p>Q5 is the interesting one. The peacock question retrieves the cabin pets page and scores <strong>+1.117</strong>, which falls below the threshold, so PocketRAG refuses. Read that as a success and you have made the mistake this capstone is about to be punished for.</p><div class='callout'><strong>This refusal is wrong, and Chapter 36 proves it.</strong> The pets page does not merely mention animals; it says <em>Larkspur does not carry emotional support animals; only trained assistance dogs are accepted</em>. That answers the question, and the answer is no. The retriever found it, the reranker ranked it first, and the threshold threw it away. Chapter 1 introduced Q5 as a question the corpus cannot answer and this chapter first reported the refusal as correct; both were reading the pipeline instead of the corpus. Chapter 36 builds a labelled set, catches this as one of 38 false refusals, and shows that no threshold on this single score separates answerable questions from unanswerable ones. The number +1.117 is right. Calling it a good refusal was not.</div>" },
 
     { title: "Packing, Citing, and Refusing",
       html: "<p>Chapter 17 measured what position does to a long context and found a U: the beginning and the end are read, the middle is where a passage goes to be ignored. PocketRAG packs accordingly.</p>" +
@@ -3195,6 +3195,7 @@ CHAPTERS.push({
       "" +
       "<pre><code>PocketRAG answers, chapter 35\n  refusal threshold +2.0, cascade 50 -&gt; 8\n\n    Q1   +7.163  answer  (want answer)\n    Q2   +6.152  answer  (want answer)\n    Q3   -5.128  refuse  (want refuse)\n    Q4   +4.140  answer  (want answer)\n    Q5   +1.117  refuse  (want refuse)\n  PASS  \n  every question lands on the intended side\n  PASS  the refusal threshold has margin (3.023 logits)\n  PASS  every citation resolves to its passage (15 citations)\n  PASS  no permitted-label violation in any answer (3 users x 5 questions)\n  PASS  the cascade narrows (50 candidates -&gt; 8 reranked)\n\n  all checks passed</code></pre>" +
       "" +
+      "<div class='callout'><strong>One of these five expectations is wrong.</strong> The run above is real and the numbers are right, but the test asserts that Q5 <em>should</em> be refused, and it should not: the pets page answers it. Chapter 36 rebuilds this test against 120 labelled queries and finds Q5 is one of 38 answerable questions this threshold refuses. A test written from the same intuition as the code confirms the intuition, which is the failure mode the whole of Part IV was about.</div>" +
       "<p>The leak test is the one to keep. It runs the full answering path for three users across five questions and asserts that no packed chunk carries a label the user does not hold, which is Chapter 28's test moved from the retriever to the finished answer. It is the difference between checking that retrieval filters and checking that <em>nothing downstream undoes it</em>, and packing, reranking and citation numbering are all downstream.</p>" +
       "<h3>A departure from the plan, stated</h3>" +
       "<p>The course blueprint asked for Q1 through Q4 answered and Q5 refused. PocketRAG refuses Q3 as well, and that is deliberate. Q3 asks how many refund tickets were opened in March, which is a count over a table this corpus does not contain, and Chapter 1 said so when it introduced the five questions. A system that answers it is fabricating. Chapter 22's text-to-SQL is the machinery that would answer it properly, and PocketRAG does not build that, so refusal is the correct output and the test asserts it.</p>" +
@@ -3276,14 +3277,14 @@ CHAPTERS.push({
       ], a: 3,
       why: "Fifty candidates from fifty-six chunks is not a filter. The cascade's narrowing is real at twenty thousand chunks and a formality here, which is exactly why the Q2 failure must be read as a reranker result rather than a retrieval one." },
     { type: "mc",
-      q: "Q5, the emotional support peacock, scores +1.117 rather than a large negative. Why, and what does that imply for the threshold?",
+      q: "Q5, the emotional support peacock, scores +1.117 and is refused. What is actually happening?",
       opts: [
-        "The corpus contains a peacock policy that the reranker found",
-        "The cabin pets page is genuinely topically relevant to an animal-in-the-cabin question, so the threshold must sit above zero rather than at it",
+        "The corpus does not answer the question, so the refusal is correct",
         "The score is noise, since the cross-encoder is unreliable near zero",
+        "The pets page answers the question and was ranked first, so this is a false refusal the threshold caused",
         "The query was rewritten into a form that matched the pets page exactly"
-      ], a: 1,
-      why: "Relevance and containing the answer are different properties. A page about animals in the cabin scores positively on a question about an animal in the cabin, so a threshold at zero would have answered it. The measured margin puts the line at +2.0." },
+      ], a: 2,
+      why: "The pets page states that Larkspur does not carry emotional support animals, which answers the question: the answer is no. Retrieval and ranking both succeeded and the threshold discarded the result. Chapter 36 measures 38 such false refusals across 105 answerable questions." },
     { type: "mc",
       q: "For Q2 the reranker scores a page containing only questions at +4.696 and the page containing the answer at -8.248. What is the correct diagnosis?",
       opts: [
