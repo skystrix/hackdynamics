@@ -167,9 +167,10 @@
       });
     },
 
-    /** Is this profile's membership currently active? `premium_until` is null
-        for the one-time plan (never expires) and a period end for the monthly
-        subscription; a past date means it lapsed. Display only — course-content
+    /** Is this profile's membership currently active? `premium_until` is a year
+        out for the one-year plan, a period end for the monthly subscription,
+        and null only for legacy lifetime buyers (never expires); a past date
+        means it lapsed. Display only — course-content
         makes the same call server-side, which is what actually protects it. */
     isActive: function (profile) {
       if (!profile || !profile.is_premium) return false;

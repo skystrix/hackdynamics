@@ -6,9 +6,9 @@
    verifying Razorpay's HMAC signature.
 
    Two products arrive here:
-     payment.captured / order.paid  → the ONE-TIME plan (₹1999). Grants
-       is_premium with premium_until = null, i.e. it never expires.
-     subscription.charged           → the MONTHLY plan (₹299). Fires on the
+     payment.captured / order.paid  → the ONE-YEAR plan (₹2499). Grants
+       is_premium with premium_until one year out.
+     subscription.charged           → the MONTHLY plan (₹499). Fires on the
        first charge AND on every renewal; each time we push premium_until out
        to the new period end. Miss a renewal and access lapses on its own —
        which is exactly what we want, so subscription.cancelled/halted need no
@@ -31,6 +31,10 @@ import { verifySignature } from "./verify.ts";
 const WEBHOOK_SECRET = Deno.env.get("RAZORPAY_WEBHOOK_SECRET") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+// How long one yearly payment buys. Must match YEAR_MS in razorpay-checkout —
+// both paths grant it, whichever arrives first.
+const YEAR_MS = 365 * 86400_000;
 
 // Same 3-day grace as razorpay-checkout: absorbs a retried renewal charge.
 function periodEnd(currentEnd: unknown): string {
@@ -87,13 +91,13 @@ Deno.serve(async (req) => {
   } else if (name === "payment.captured" || name === "order.paid") {
     entity = payload.payment?.entity ?? payload.order?.entity ?? {};
     // A subscription's own charge ALSO emits payment.captured. Granting the
-    // never-expiring one-time plan here would hand a ₹299/month member
-    // lifetime access — so anything billed through an invoice is skipped and
+    // one-year plan here would hand a ₹499/month member twelve months for one
+    // month's money — so anything billed through an invoice is skipped and
     // left to subscription.charged above.
     if (entity.invoice_id || entity.notes?.plan === "monthly") {
       return new Response("subscription payment — handled by subscription.charged", { status: 200 });
     }
-    premiumUntil = null; // one-time plan: never expires
+    premiumUntil = new Date(Date.now() + YEAR_MS).toISOString(); // one-time plan: one year
   } else {
     // Not an event we grant on — ack so Razorpay stops retrying.
     return new Response("ignored", { status: 200 });

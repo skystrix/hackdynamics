@@ -41,8 +41,8 @@ create table public.profiles (
   id            uuid primary key references auth.users (id) on delete cascade,
   email         text,
   is_premium    boolean not null default false,
-  -- When the membership runs out. NULL = never (the ₹1999 one-time plan);
-  -- a timestamp = the end of the current ₹299 subscription period, pushed
+  -- When the membership runs out. A timestamp = a year out for the ₹2499
+  -- one-year plan, or the end of the current ₹499 subscription period, pushed
   -- forward by the subscription.charged webhook on every renewal.
   premium_until timestamptz,
   created_at    timestamptz not null default now()

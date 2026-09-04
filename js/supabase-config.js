@@ -26,21 +26,24 @@ window.HD_CONFIG = {
 
   // The two plans. DISPLAY ONLY — what a member is actually charged comes from
   // the server: the monthly amount lives in the Razorpay Plan you created
-  // (RAZORPAY_PLAN_ID_MONTHLY), the one-time amount in LIFETIME_PAISE in
+  // (RAZORPAY_PLAN_ID_MONTHLY), the one-year amount in YEARLY_PAISE in
   // supabase/functions/razorpay-checkout/index.ts. Editing these labels in
   // devtools changes the wording, never the price. Keep them in sync by hand.
+  // `was` is the anchor price shown struck through — marketing only.
   PLANS: {
     monthly: {
-      label: "₹299 / month",
-      price: "₹299",
+      label: "₹499 / month",
+      price: "₹499",
+      was: "₹999",
       per: "/ month",
       note: "Billed monthly in INR. Cancel anytime."
     },
-    lifetime: {
-      label: "₹1999 one-time",
-      price: "₹1999",
-      per: "one-time",
-      note: "Pay once. Access never expires."
+    yearly: {
+      label: "₹2499 for 1 year",
+      price: "₹2499",
+      was: "₹5988",
+      per: "/ year",
+      note: "One payment in INR. Covers 12 months."
     }
   }
 };

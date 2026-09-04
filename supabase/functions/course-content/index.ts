@@ -23,7 +23,7 @@
    entitlement in one call. No service_role key is used or needed here.
    Premium is one flag for the whole site: it unlocks every course.
 
-   `premium_until` is null for the one-time plan (never expires) and a period
+   `premium_until` is a year out for the one-year plan, a period
    end for the monthly subscription — a past date means the membership lapsed.
    ========================================================================== */
 

@@ -7,14 +7,14 @@
 
    Two plans (the browser picks WHICH, never the price):
      monthly  — a Razorpay SUBSCRIPTION on a plan you create in the dashboard
-                (₹299/month). Access is granted until the period end and
+                (₹499/month). Access is granted until the period end and
                 extended by the subscription.charged webhook on every renewal.
-     lifetime — a one-time Razorpay ORDER for LIFETIME_PAISE (₹1999). Access
-                never expires (premium_until = null).
+     yearly   — a one-time Razorpay ORDER for YEARLY_PAISE (₹2499). Access is
+                granted for one year from the payment; it lapses on its own.
 
    Both require the caller's Supabase access token. That token is what tells us
    WHICH user is paying, so the browser never gets to name the user — or the
-   amount. Monthly's amount lives in the Razorpay plan; lifetime's lives in the
+   amount. Monthly's amount lives in the Razorpay plan; yearly's lives in the
    constant below. A tampered browser can't buy the course for ₹1.
 
    Two independent paths grant premium, and both are safe:
@@ -40,9 +40,12 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 // The one-time price lives HERE, not in the browser. Keep in sync with
-// PLANS.lifetime in js/supabase-config.js (that copy is only for display).
-const LIFETIME_PAISE = 199900; // ₹1999.00
+// PLANS.yearly in js/supabase-config.js (that copy is only for display).
+const YEARLY_PAISE = 249900; // ₹2499.00
 const CURRENCY = "INR";
+// How long one yearly payment buys. Must match the same constant in
+// razorpay-webhook — both paths grant it, whichever arrives first.
+const YEAR_MS = 365 * 86400_000;
 // 120 months ≈ 10 years. Razorpay requires a finite count; the member cancels
 // long before this, and renewals just keep extending premium_until.
 const MONTHLY_TOTAL_COUNT = 120;
@@ -74,9 +77,10 @@ async function currentUser(token: string): Promise<{ id: string; email: string }
   return u?.id ? { id: String(u.id), email: String(u.email ?? "") } : null;
 }
 
-/* premiumUntil: an ISO timestamp for a subscription period, or null for the
-   one-time plan (null = never expires). Readers must treat a past
-   premium_until as "not premium" — see js/auth.js and course-content. */
+/* premiumUntil: an ISO timestamp — the end of a subscription period, or a year
+   out for the one-time yearly plan. (Older lifetime buyers still hold null,
+   which means "never expires".) Readers must treat a past premium_until as
+   "not premium" — see js/auth.js and course-content. */
 async function grantPremium(userId: string, premiumUntil: string | null): Promise<number> {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`,
@@ -111,7 +115,7 @@ async function rzp(path: string, init?: RequestInit) {
 }
 
 async function createOrder(user: { id: string; email: string }) {
-  if (LIFETIME_PAISE < 100) throw new Error("amount below Razorpay minimum (100 paise)");
+  if (YEARLY_PAISE < 100) throw new Error("amount below Razorpay minimum (100 paise)");
 
   // Receipt is capped at 40 chars by Razorpay.
   const receipt = `hd_${user.id.replace(/-/g, "").slice(0, 24)}_${Date.now() % 100000}`;
@@ -119,12 +123,12 @@ async function createOrder(user: { id: string; email: string }) {
   return await rzp("/orders", {
     method: "POST",
     body: JSON.stringify({
-      amount: LIFETIME_PAISE,
+      amount: YEARLY_PAISE,
       currency: CURRENCY,
       receipt,
       // The webhook reads these to know who paid, and that this is the
       // one-time plan, if the browser never returns.
-      notes: { user_id: user.id, email: user.email, plan: "lifetime" },
+      notes: { user_id: user.id, email: user.email, plan: "yearly" },
     }),
   });
 }
@@ -174,7 +178,7 @@ Deno.serve(async (req) => {
   try {
     if (action === "create-order") {
       // The browser picks the PLAN, never the price.
-      const plan = body.plan === "monthly" ? "monthly" : "lifetime";
+      const plan = body.plan === "monthly" ? "monthly" : "yearly";
 
       if (plan === "monthly") {
         const sub = await createSubscription(user);
@@ -201,7 +205,7 @@ Deno.serve(async (req) => {
       }
 
       // Subscription and order checkouts sign DIFFERENT messages — see verify.ts.
-      let premiumUntil: string | null = null;
+      let premiumUntil: string;
       if (subscriptionId) {
         const ok = await verifySubscriptionSignature(
           paymentId, subscriptionId, signature, KEY_SECRET);
@@ -212,6 +216,7 @@ Deno.serve(async (req) => {
         const ok = await verifyPaymentSignature(orderId, paymentId, signature, KEY_SECRET);
         // Signature mismatch → forged or tampered. Never grant.
         if (!ok) return json(400, { error: "Payment signature verification failed" });
+        premiumUntil = new Date(Date.now() + YEAR_MS).toISOString();
       }
 
       const updated = await grantPremium(user.id, premiumUntil);
