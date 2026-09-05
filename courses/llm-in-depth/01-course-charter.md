@@ -46,7 +46,7 @@ The three Hack Dynamics personas from `marketing/PLAN.md`, re-cut for this subje
 | You need | Because | Where to get it if missing |
 |---|---|---|
 | Comfortable programming in Python | Every example and the primary capstone are Python | Any intro course; the official Python tutorial |
-| Willing to read a second systems language (Rust or C) for the serving capstone | §9 of the guide requires two languages; the inference engine is where the memory story becomes visible | The Rust Book chapters 1–10, or K&R chapters 1–6; the capstone teaches what it uses |
+| Willing to read C for two capstone chapters | The inference engine is the one place where the memory story has to be visible rather than described, and Python cannot show it. Roughly 700 lines, and the chapters teach every construct they use | K&R chapters 1–6, or the C track of any systems course; a reader who skips these two chapters still finishes every other outcome |
 | Undergraduate data structures and Big-O | Tokenizer merges, attention cost in n², cache and batching arithmetic | CLRS chapters 1–3; the first weeks of MIT 6.006 |
 | Linear algebra: matrix multiply, dot product, norms, softmax, what a projection is | Attention is three projections and a weighted sum; nothing in this course is harder than that, but nothing is easier either | 3Blue1Brown *Essence of Linear Algebra*; Strang MIT 18.06 lectures 1–3 |
 | Calculus to the level of a partial derivative and the chain rule | Backpropagation, gradient clipping, why loss spikes | Any single-variable calculus course; 3Blue1Brown *Essence of Calculus* |
@@ -195,7 +195,7 @@ Mechanisms are taught vendor-neutrally. Where the learner runs something:
 | Role | Choice | Why |
 |---|---|---|
 | Language for examples and the primary capstone | Python + PyTorch | Where every model in the field is actually written; the reference for numerical verification |
-| Second capstone language | **Rust** (with a C track noted for readers who prefer it) | The serving capstone is about memory and bandwidth; a language without a garbage collector makes that visible. Rust over C for tooling and safety, and because `llama.cpp`-equivalent Rust projects exist to compare against |
+| Second capstone language | **C**, scoped to the two inference-engine chapters only | The engine chapters teach why decode is memory-bandwidth-bound; that claim has to be *measured*, and in Python every matmul disappears into BLAS. C over Rust because the implementations we benchmark against — `llama.cpp` and `ggml` — are C/C++, so the comparison is like for like; because `llama2.c` proves the whole thing fits in ~700 readable lines; and because a chapter about laying out memory by hand should not spend the reader's attention on a borrow checker. Persona A already has C from college |
 | Model family for the from-scratch chapters | GPT-2 small (124M) weights for verification, then a Llama/Qwen-class small model | GPT-2 is the only architecture whose weights everyone can load and check against; the modern model shows what changed and why |
 | Models to fine-tune | A 1B–8B open-weights instruct model (Llama, Qwen or Gemma class), sized so QLoRA completes on a 16 GB GPU or a free Colab tier | The prerequisite hardware line has to stay true |
 | Tokenizers | `tiktoken` and Hugging Face `tokenizers` for comparison; ours from scratch in the capstone | Build the mechanism, then meet the two implementations in the field |
@@ -208,6 +208,10 @@ Mechanisms are taught vendor-neutrally. Where the learner runs something:
 | Hosted APIs | A provider-agnostic thin client; examples run against Claude and against a local model via Ollama | Same policy as *RAG In Depth*; no single-vendor lock-in in course code |
 | Hardware assumption | One consumer GPU or a free notebook tier; CPU-only path for the from-scratch chapters | Persona A and B must be able to run every chapter |
 
+**Deviation from guide §9, declared here rather than in the Blueprint.** §9 asks for the capstone in two languages as tabbed code blocks, equivalent line for line. That model does not fit this subject and the course should not pretend it does: nobody trains, fine-tunes or aligns a model outside Python and PyTorch, so a parallel Rust or Go track through Chapters B1–B7 would teach a second framework's API, not a second view of the machine. The proposal is therefore **Python throughout, plus C for the inference-engine chapters (B8) where the second language is the pedagogy** — the engine is the only layer whose lesson is memory traffic, and it is the only layer where a second implementation says something the first one could not. The honest-benchmark chapter, the confession table and the graduation projects all stay as §9 requires.
+
+Two alternatives considered and rejected as *requirements*: **Triton or CUDA kernels** as the second language — the most honest place of all to see bandwidth, and where FlashAttention actually lives, but it needs an NVIDIA GPU, which breaks the hardware prerequisite for Personas A and B; it belongs as an optional chapter, not a capstone track. And **dropping the second language entirely** — cheapest, but it gives up outcome B8 and with it the course's most distinctive claim, since "why decode is memory-bandwidth-bound" is precisely the thing absent from all five books.
+
 Final choices lock in the Blueprint (Phase 3).
 
 ---
@@ -218,5 +222,6 @@ Final choices lock in the Blueprint (Phase 3).
 - Prerequisites minimal, each with a pointer; no earlier course assumed; the hardware prerequisite is stated in numbers because half the outcomes require running something.
 - Track position stated, and the two-way boundary with the published *RAG In Depth* written out topic by topic so neither course contradicts the other.
 - Primary-literature reliance disclosed per §3.6; tool choices justified per §3.7; the S4/S5 reliability limits carried forward from Phase 0 as a standing constraint.
+- One declared deviation from the guide: §9's line-for-line two-language capstone becomes Python throughout plus C for the inference engine, with the reasoning and the two rejected alternatives written out in §7.
 
 **Gate:** owner approves audience, outcomes, prerequisites, and the track revision (LLM as AI Engineering 01, RAG as 02). Next: **Phase 2 — Topic Universe and Gap Matrix** (merge the Source Map with at least three named university syllabi, two textbook tables of contents, the documentation of the key systems, and two interview banks; decide core / supporting / mentioned / out per row).
