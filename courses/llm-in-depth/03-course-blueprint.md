@@ -3,7 +3,7 @@
 **Status:** Phase 3 complete, awaiting owner approval. On approval, chapter numbers are frozen (the platform keys progress and links on them).
 **Date:** 2026-09-05. Gap Matrix (Phase 2) approved 2026-09-05.
 
-**Shape:** 6 parts · **41 chapters** (34 teaching + 7 capstone) · 46 machines · ~110 static figures · capstone *PocketLM* in Python with the inference engine in C · 3 free chapters (1, 2, 5). Estimated body total ≈ 118,000 words.
+**Shape:** 6 parts · **41 chapters** (34 teaching + 7 capstone) · **81 machines** · ~110 static figures · capstone *PocketLM* in Python with the inference engine in C · 3 free chapters (1, 2, 5). Estimated body total ≈ 118,000 words.
 
 **On the chapter count.** Guide §2 targets 24–36 and *RAG In Depth* shipped 36. Phase 2 measured 108 Core rows and projected 28–34 teaching chapters plus a 5–6 chapter capstone; this lands at 34 teaching and 7 capstone. The seventh capstone chapter (§9 permits 5–8) exists because the evaluation harness cannot share a chapter with the C engine without one of them becoming a summary. Declared here rather than quietly exceeded, same as the 41 outcomes.
 
@@ -562,7 +562,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F21.1 the LoRA decomposition; F21.2 memory: full vs LoRA vs QLoRA; F21.3 NF4 quantization levels; F21.4 adapter merging and serving; F21.5 distillation loss.
 
-**Outcomes.** E15, A4, O3. **Rows.** §3.J rows 5–7, 10, 11, 13 (frameworks). **Prereqs.** 9, 20. **Words.** 4,600.
+**Outcomes.** E15, **E18** (distillation), A4, O3. **Rows.** §3.J rows 5–7, 10, 11, 13 (frameworks). **Prereqs.** 9, 20. **Words.** 4,600.
 
 ---
 
@@ -842,7 +842,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 **Machines.**
 - `llmJudgeBias` · Playground · State: response pairs and a judge · Controls: swap order; pad one response; make the judge the author of one response · Output: the judge's verdict and its flip rate · Discovery: swap the order of two identical-quality answers and find the judge changes its mind more than 20% of the time · Initial note: "Judge a pair. Then swap their order and judge again."
 - `llmBenchmarkCI` · Tuner · State: a benchmark score with n samples · Controls: sample size, model difference, prompt variant · Output: the score, its confidence interval, and a "significant?" verdict · Discovery: find the sample size where a 2-point difference stops being distinguishable from noise · Initial note: "Two models, two points apart. Now look at the interval."
-- `llmContaminationCheck` · Playground · Reused from Chapter 12 with the evaluation framing.
+- `llmContamination` · Playground · reused from Chapter 12 with the evaluation framing — no new machine.
 
 **Figures.** F32.1 the scoring paths for one MMLU question; F32.2 prompt-sensitivity spread; F32.3 contamination pipeline; F32.4 judge bias measurements; F32.5 scores with confidence intervals.
 
@@ -1036,7 +1036,7 @@ Outcome coverage: all 41 Charter outcomes (E1–E26, **E27**, A1–A10, O1–O10
 | Chapters | 24–36 | **41** (34 teaching + 7 capstone) | Declared at the head of this document, with the arithmetic from Phase 2's 108 Core rows |
 | Sections per chapter | 4–8 | 5–11 | Chapters 19, 29, 30, 32, 33 and 41 exceed 8; each is a chapter the subject refuses to split cleanly, and each is flagged for the gate below |
 | Words per chapter | 1,800–3,500; keystone to 5,000 | 2,600–5,000, median 4,000 | 18 keystone chapters |
-| Machines | ≥1 per chapter; keystones 2–3 | **46** across 41 chapters | 5 chapters carry three |
+| Machines | ≥1 per chapter; keystones 2–3 | **81** across 41 chapters | 2.0 per chapter; 9 chapters carry three, the 7 capstone chapters carry one each. This is roughly double *RAG In Depth*'s density (42 across 36) and is the largest single cost in Phase 5 — see the gate note below |
 | Static figures | ≥1 per chapter; 2–4 in mechanism chapters | ~110 | 5 per mechanism chapter |
 | Free chapters | first 3, chosen to show the machines | 1, 2, 5 | Seven machines before the paywall |
 | Capstone | 5–8 chapters, two languages | 7, Python + C | The two-language deviation is declared |
@@ -1046,6 +1046,7 @@ Outcome coverage: all 41 Charter outcomes (E1–E26, **E27**, A1–A10, O1–O10
 **Two things the gate should decide, because both are deviations rather than judgment calls:**
 
 1. **41 chapters against the guide's 24–36.** Phase 2 measured 108 Core rows and projected 28–34 teaching chapters; this is 34 teaching plus 7 capstone. The alternative is cutting Core rows, and the four honest candidates are Chapter 11 (interpretability), Chapter 25 (the model field guide), Chapter 31 (multimodality) and Chapter 17 (parallelism) — dropping all four would land at 37 and lose four things the Charter's outcomes currently promise.
-2. **Six chapters exceed the 4–8 section range** (19, 29, 30, 32, 33, 41). Each could be split into two, which would take the course to 47. My recommendation is to keep them long rather than to fragment a mechanism across a chapter boundary, but this is the owner's call and it is cheaper to make now than after numbering freezes.
+2. **81 machines is a Phase 5 commitment, not a Phase 3 detail.** *RAG In Depth* shipped 42. Every machine here has a stated discovery, so none is decorative, but the honest options are: build all 81; or designate a second tier (roughly 20 of the `Tuner` and `Comparator` machines whose discovery a static figure plus a table could carry) and defer them until after release. My recommendation is to build all of Parts I, II and V — where the machine *is* the pedagogy — and to mark the Part III and IV tuners as tier two.
+3. **Six chapters exceed the 4–8 section range** (19, 29, 30, 32, 33, 41). Each could be split into two, which would take the course to 47. My recommendation is to keep them long rather than to fragment a mechanism across a chapter boundary, but this is the owner's call and it is cheaper to make now than after numbering freezes.
 
 **Gate:** owner approves the parts, the chapter list and the numbering. **On approval, chapter numbers are frozen** — the platform keys progress and links on them. Next: **Phase 4 — chapter production**, one chapter per response, in syllabus order, each against §10 format and the §11.1 checklist.
