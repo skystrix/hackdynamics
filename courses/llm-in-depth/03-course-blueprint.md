@@ -11,7 +11,7 @@
 
 ## Course-wide conventions
 
-- **The reference model: `Corvid-7B`.** Every piece of arithmetic in the course — parameters, FLOPs, activation memory, KV-cache bytes, quantized footprint, tokens per second — is done on one fictional but entirely realistic open-weights model: 32 layers, `d_model` 4096, 32 query heads and 8 KV heads (GQA), `d_ff` 14336 with SwiGLU, vocab 128,256, RoPE, 8,192 context, bf16. `Corvid-70B` (80 layers, `d_model` 8192) appears wherever scale changes the answer. Real models are named whenever their behaviour differs from Corvid's.
+- **The reference model: `Corvid-8B`.** (Renamed from Corvid-7B during Chapter 1 production: the config below actually totals 8.03B parameters, and shipping a model called 7B that counts to 8B would undercut the chapter that teaches the counting.) Every piece of arithmetic in the course — parameters, FLOPs, activation memory, KV-cache bytes, quantized footprint, tokens per second — is done on one fictional but entirely realistic open-weights model: 32 layers, `d_model` 4096, 32 query heads and 8 KV heads (GQA), `d_ff` 14336 with SwiGLU, vocab 128,256, RoPE, 8,192 context, bf16. `Corvid-70B` (80 layers, `d_model` 8192) appears wherever scale changes the answer. Real models are named whenever their behaviour differs from Corvid's.
 - **The 16 GB budget.** One 16 GB GPU and a 16 GB laptop. Every "does it fit?" in the course is answered against that machine, so the answer is checkable by the reader on the hardware the Charter promised.
 - **The recurring corpus: *The Almanac*.** ~50 MB assembled from public-domain sources: English prose, a Python and C source tree, a Hindi and a Tamil subset, a table-heavy statistical appendix, and 2,000 instruction pairs derived from the same text. One corpus serves tokenizer training, pretraining, fine-tuning, preference data and evaluation, so every measurement in the course is comparable with every other.
 - **The five recurring prompts.** **P1** `3478 × 29 = ?` (tokenization and numeracy) · **P2** "Rewrite this refund notice in plain English" (style, SFT) · **P3** "Extract the parties, dates and amounts as JSON" (structured output) · **P4** a needle placed at 5%, 50% and 95% of a 100K-token document (long context) · **P5** a layered jailbreak attempt (safety). Each is traced through every stage of the course, so the reader watches one prompt's fate change as the machine changes.
@@ -44,7 +44,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 #### Chapter 1 — The Machine That Guesses the Next Token *(Orientation, FREE)*
 
-**Blurb.** Everything in this course is machinery around one function: given some text, return a probability for every token that could come next. Chat, code, translation and refusal are all that function called in a loop. You will watch a real model produce a distribution over its whole vocabulary, see the top ten candidates and their probabilities change as you edit the prompt, and learn the three questions that explain most of the subject. You will also meet Corvid-7B, the reference model whose arithmetic runs through every chapter, and find out how this course works: machines beside the text, a quiz per chapter, and a capstone where you build the whole thing.
+**Blurb.** Everything in this course is machinery around one function: given some text, return a probability for every token that could come next. Chat, code, translation and refusal are all that function called in a loop. You will watch a real model produce a distribution over its whole vocabulary, see the top ten candidates and their probabilities change as you edit the prompt, and learn the three questions that explain most of the subject. You will also meet Corvid-8B, the reference model whose arithmetic runs through every chapter, and find out how this course works: machines beside the text, a quiz per chapter, and a capstone where you build the whole thing.
 
 **Sections.**
 1. One function, called in a loop: the next-token distribution, and a document's probability as the chain rule over it.
@@ -59,7 +59,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 - `llmNextToken` · Playground · State: a prompt, the model's top-k distribution · Controls: edit the prompt; toggle the full-vocabulary view · Output: top 10 tokens with probabilities as bars, entropy of the distribution · Discovery: type "The capital of France is" and see one token at 0.94; delete "of France" and watch the distribution flatten — the model's confidence is a property of the context, not of its knowledge · Initial note: "Edit the prompt. Watch which tokens the model thinks could come next, and how sure it is." · Layout: prompt box on top, ranked bar list below, entropy readout at the right.
 - `llmCourseMap` · Inspector · State: the six parts and the pipeline stage each owns · Controls: hover or click a stage · Discovery: the same block diagram appears in training and in serving with different costs attached — the reader sees that Part III and Part V are the same machine run in two directions · Initial note: "Hover a stage to see which chapters open it."
 
-**Figures.** F1.1 the next-token function; F1.2 the three-machine map (pretrain → post-train → serve); F1.3 the token loop; F1.4 the LLM/RAG boundary; F1.5 Corvid-7B's spec card.
+**Figures.** F1.1 the next-token function; F1.2 the three-machine map (pretrain → post-train → serve); F1.3 the token loop; F1.4 the LLM/RAG boundary; F1.5 Corvid-8B's spec card.
 
 **Outcomes.** E1 (full), A10 (intro). **Rows.** §3.A rows 1, 3, 7. **Prereqs.** none. **Words.** 2,800.
 
@@ -242,7 +242,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 #### Chapter 9 — Counting the Machine: Parameters, FLOPs, and Bytes *(Mechanism)*
 
-**Blurb.** Almost every practical question about a model — will it fit, what will it cost to train, how many users can I serve, why did I get an out-of-memory error at batch 9 — is arithmetic you can do on paper in two minutes. This chapter teaches that arithmetic once, carefully, and then the rest of the course uses it constantly. You will count Corvid-7B's parameters block by block until the total matches, compute the FLOPs of one forward pass, work out where activation memory actually goes during training, and then read an unfamiliar `config.json` and say what the model is before downloading a byte of it.
+**Blurb.** Almost every practical question about a model — will it fit, what will it cost to train, how many users can I serve, why did I get an out-of-memory error at batch 9 — is arithmetic you can do on paper in two minutes. This chapter teaches that arithmetic once, carefully, and then the rest of the course uses it constantly. You will count Corvid-8B's parameters block by block until the total matches, compute the FLOPs of one forward pass, work out where activation memory actually goes during training, and then read an unfamiliar `config.json` and say what the model is before downloading a byte of it.
 
 **Sections.**
 1. Counting parameters: embeddings, attention projections, FFN, norms — a table that sums to Corvid's total.
@@ -255,7 +255,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 8. Exercises.
 
 **Machines.**
-- `llmParamCounter` · Builder · State: a model config · Controls: edit layers, `d_model`, heads, KV heads, `d_ff`, vocab · Output: a live parameter breakdown by component, total, and file size at fp32/bf16/int8/4-bit · Discovery: double `d_model` and watch parameters quadruple, not double · Initial note: "Build Corvid-7B. Then try to make a 3B model with the same context."
+- `llmParamCounter` · Builder · State: a model config · Controls: edit layers, `d_model`, heads, KV heads, `d_ff`, vocab · Output: a live parameter breakdown by component, total, and file size at fp32/bf16/int8/4-bit · Discovery: double `d_model` and watch parameters quadruple, not double · Initial note: "Build Corvid-8B. Then try to make a 3B model with the same context."
 - `llmMemoryFit` · Tuner · State: config, batch, sequence length, precision, training or inference · Controls: sliders and a mode switch · Output: a stacked memory bar against the 16 GB line · Discovery: find the batch size where activations, not weights, cause the OOM · Initial note: "Set training mode. Watch what actually fills the card."
 
 **Figures.** F9.1 the parameter table; F9.2 the 6ND derivation; F9.3 stacked inference memory; F9.4 stacked training memory; F9.5 an annotated `config.json`.
