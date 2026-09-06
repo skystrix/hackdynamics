@@ -33,6 +33,17 @@
    token count, every rendered template and the 20-vs-67 mismatch figure in
    section 6 were produced by running those real tokenizers and rendering
    their real Jinja templates, not by recalling their formats.
+
+   Sources consulted for Chapter 4: Mikolov et al. 2013 (word2vec);
+   Pennington et al. 2014 (GloVe); Peters et al. 2018 (ELMo); Devlin et al.
+   2019 (BERT); Press & Wolf 2017 (weight tying); van den Oord et al. 2018
+   (InfoNCE); Reimers & Gurevych 2019 (Sentence-BERT); Karpukhin et al. 2020
+   (DPR); Kusupati et al. 2022 (Matryoshka); Muennighoff et al. 2022 (MTEB).
+   The weight-tying table in section 8 was read from each model's config.json
+   on the Hugging Face Hub on 2026-09-06: GPT-2 (768/50,257), Llama-3-8B
+   (4,096/128,256, untied), Llama-3.2-1B (2,048/128,256, tied), Qwen2.5-7B
+   (3,584/152,064, untied), Qwen2.5-0.5B (896/151,936, tied), Mistral-7B-v0.3
+   (4,096/32,768, untied), Gemma-2-9B (3,584/256,000).
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -737,5 +748,219 @@ CHAPTERS.push({
       why: "The heuristic was derived from English prose and holds roughly there. Chapter 2 measured a Tamil sentence at eleven times its English equivalent under GPT-2's encoding, and this chapter measured GPT-2 spending five tokens on a single indented line of Python. Both blow past a four-characters-per-token estimate, and both are exactly the workloads where an underestimated bill becomes a production incident." },
     { type: "mc", q: "Which of these is NOT explained by tokenization?", opts: ["A model miscounts the letters in a word", "A model's answers degrade after a system prompt is moved to a different position in the context", "A model's answer changes when a trailing space is added", "The same number costs twice as many tokens when written with commas"], a: 1,
       why: "The first, second and fourth are all boundary effects: the model cannot see inside a token, the space changes which token comes next, and separators change the split. Position effects within a long context are a different mechanism entirely, belonging to attention and positional encoding, and they are Chapter 7's subject. Blaming everything on the tokenizer is as wrong as blaming nothing on it." }
+  ]
+});
+
+/* ======================= CHAPTER 4 ======================= */
+CHAPTERS.push({
+  num: 4, part: 1, title: "Embeddings: Meaning as Geometry",
+  blurb: "A token id is a row number. Look it up in a table and it becomes a vector, and from that moment on the model is doing geometry. You will see what that table is, what a row means, and why the same word gets a different vector in a different sentence. Then similarity as arithmetic: dot product, cosine and Euclidean distance, and the case where two of them disagree about which document is closest. The chapter ends where this course hands off to RAG In Depth, and at a design decision you can read off any config file.",
+  sections: [
+    { title: "The Table, and What a Row Is",
+      html: "<p>Chapter 2 ended with an id. Chapter 5 needs a vector. The step between them is the shortest in the whole architecture: index into a matrix.</p>" +
+      "<p>The <strong>embedding table</strong> is a matrix with one row per vocabulary entry and one column per model dimension. For Corvid-8B that is 128,256 rows and 4,096 columns. Token id 4037 means row 4037. There is no computation, no lookup cost worth measuring, and no cleverness. It is an array access.</p>" +
+      "<p>What makes it interesting is that the table is <em>learned</em>. Those 128,256 &#215; 4,096 = 525,336,576 numbers start random and are updated by the same gradient descent that trains everything else. Nobody assigns meaning to a dimension. The table ends up wherever the loss pushed it, and where the loss pushed it turns out to be a space in which geometric relationships correspond to linguistic ones.</p>" +
+      "<p>Two consequences follow immediately, and both matter more than they look.</p>" +
+      "<p>First, <strong>the table is enormous</strong>. At bfloat16, Corvid&#8217;s embedding table alone is 1.05 GB, and that is 6.5% of the model before a single transformer block exists. Chapter 2 promised this number would be checkable; you can now check it.</p>" +
+      "<p>Second, <strong>a row means nothing on its own</strong>. It only means something relative to the other rows, because the loss only ever compared them. That is why you cannot take one model&#8217;s embedding row for a token and put it into another model, and why the vector for a token in an English-trained model has no relationship to the vector for the same token in a different model. The space is arbitrary; only the geometry inside it is meaningful.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 208' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the embedding table: 128,256 rows x 4,096 columns</text>" +
+      "<rect x='20' y='30' width='300' height='150' rx='8' fill='#0e1626' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='50' fill='#7d8fb0' font-size='10'>row 0</text><line x1='90' y1='46' x2='306' y2='46' stroke='#1c2a45' stroke-width='6'/>" +
+      "<text x='34' y='70' fill='#7d8fb0' font-size='10'>row 1</text><line x1='90' y1='66' x2='306' y2='66' stroke='#1c2a45' stroke-width='6'/>" +
+      "<text x='34' y='94' fill='#7d8fb0' font-size='10'>...</text>" +
+      "<text x='34' y='118' fill='#ffd166' font-size='10'>row 4037</text><line x1='90' y1='114' x2='306' y2='114' stroke='#ffd166' stroke-width='7'/>" +
+      "<text x='34' y='142' fill='#7d8fb0' font-size='10'>...</text>" +
+      "<text x='34' y='166' fill='#7d8fb0' font-size='10'>row 128255</text><line x1='104' y1='162' x2='306' y2='162' stroke='#1c2a45' stroke-width='6'/>" +
+      "<line x1='330' y1='114' x2='372' y2='114' stroke='#ffd166' stroke-width='2'/><polygon points='379,114 367,108 367,120' fill='#ffd166'/>" +
+      "<rect x='386' y='100' width='330' height='28' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='551' y='118' text-anchor='middle' fill='#ffd166' font-size='10.5'>[ 0.021, -0.114, 0.307, ... , 0.049 ]</text>" +
+      "<text x='386' y='146' fill='#7d8fb0' font-size='10'>4,096 numbers. This is the token ' token'.</text>" +
+      "<text x='386' y='166' fill='#7d8fb0' font-size='10'>Not because anyone said so, but because</text>" +
+      "<text x='386' y='182' fill='#7d8fb0' font-size='10'>gradient descent put it here.</text>" +
+      "<text x='20' y='200' fill='#7d8fb0' font-size='10'>525,336,576 parameters. 1.05 GB at bfloat16. 6.5% of Corvid-8B, before any block exists.</text>" +
+      "</svg><div class='fig-cap'>The entire mechanism of turning an id into a vector. Everything expensive happens after this point.</div></div>" },
+
+    { title: "The Residual Stream",
+      html: "<p>That vector now begins a journey, and the shape of the journey is the single most useful mental model in this course.</p>" +
+      "<p>Each position in the sequence carries one vector. A transformer block reads it, computes something, and <em>adds</em> the result back to it. The next block does the same. Thirty-two times for Corvid. The vector is never replaced, only added to, which means it accumulates: what arrives at the top is the embedding plus every contribution every block chose to make.</p>" +
+      "<p>That running vector is the <strong>residual stream</strong>, and calling it a stream rather than a value is deliberate. It behaves like a shared channel that every component reads from and writes to. Attention writes information gathered from other positions. The feed-forward network writes whatever it computes from the position itself. Nothing overwrites; everything adds.</p>" +
+      "<p>Hold onto this, because it explains several things that otherwise look arbitrary. It is why the model dimension is constant through the whole stack rather than expanding and contracting like a convolutional network. It is why residual connections make very deep stacks trainable at all, which Chapter 8 derives. It is why you can read intermediate layers as partial predictions, which is Chapter 11. And it is why the final vector at the last position can be multiplied by a matrix to produce a distribution over the vocabulary, which is where Chapter 1 came in.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 196' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one position's vector, travelling up the stack</text>" +
+      "<line x1='60' y1='40' x2='60' y2='168' stroke='#ffd166' stroke-width='8'/>" +
+      "<text x='20' y='44' fill='#7d8fb0' font-size='10'>top</text>" +
+      "<text x='20' y='168' fill='#7d8fb0' font-size='10'>in</text>" +
+      "<rect x='120' y='142' width='190' height='26' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='215' y='159' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>embedding row (Chapter 4)</text>" +
+      "<line x1='116' y1='155' x2='70' y2='155' stroke='#4f7cff' stroke-width='2'/><polygon points='62,155 74,149 74,161' fill='#4f7cff'/>" +
+      "<rect x='120' y='106' width='190' height='26' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='215' y='123' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>attention adds (Chapter 5)</text>" +
+      "<line x1='116' y1='119' x2='70' y2='119' stroke='#4f7cff' stroke-width='2'/><polygon points='62,119 74,113 74,125' fill='#4f7cff'/>" +
+      "<rect x='120' y='70' width='190' height='26' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='215' y='87' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>feed-forward adds (Chapter 8)</text>" +
+      "<line x1='116' y1='83' x2='70' y2='83' stroke='#4f7cff' stroke-width='2'/><polygon points='62,83 74,77 74,89' fill='#4f7cff'/>" +
+      "<text x='120' y='50' fill='#7d8fb0' font-size='10'>... 32 blocks, each adding ...</text>" +
+      "<line x1='340' y1='40' x2='340' y2='176' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='366' y='58' fill='#c9d6ea' font-size='10.5'>Nothing is ever replaced. The stream at</text>" +
+      "<text x='366' y='76' fill='#c9d6ea' font-size='10.5'>layer k is the embedding plus every</text>" +
+      "<text x='366' y='94' fill='#c9d6ea' font-size='10.5'>contribution made so far.</text>" +
+      "<text x='366' y='124' fill='#ffd166' font-size='10.5'>Width stays 4,096 the whole way up.</text>" +
+      "<text x='366' y='150' fill='#7d8fb0' font-size='10'>That constancy is what lets Chapter 11 read</text>" +
+      "<text x='366' y='166' fill='#7d8fb0' font-size='10'>a half-finished prediction out of layer 20.</text>" +
+      "</svg><div class='fig-cap'>The residual stream. Every mechanism in Part II is a thing that reads this channel and adds to it.</div></div>" },
+
+    { title: "One Row, Many Meanings",
+      html: "<p>The table has exactly one row for <code>bank</code>. Yet a model handles <em>the bank of the river</em> and <em>the bank refused the loan</em> without confusion. Where does the second meaning live?</p>" +
+      "<p>Not in the table. The row is the <strong>static embedding</strong>: the same vector every time, independent of context. It is the starting point, and by itself it is closer to a dictionary entry that lists all senses than to a choice between them.</p>" +
+      "<p>The disambiguation happens in the stream. By layer 3 or 4, attention has pulled in information from <code>river</code> or from <code>loan</code>, added it to that position&#8217;s vector, and moved it. The vector at layer 20 for <em>bank</em> in a river sentence is somewhere quite different from the vector at layer 20 for <em>bank</em> in a finance sentence, even though both started at the same row. That layer-20 vector is a <strong>contextual embedding</strong>.</p>" +
+      "<p>This distinction is a decade of research compressed into two paragraphs, and the names are worth knowing because you will meet them constantly. Word2vec in 2013 and GloVe in 2014 produced static embeddings, one vector per word type, and they were a genuine breakthrough. ELMo in 2018 made them contextual by running a recurrent network over the sentence. BERT in 2019 did it with transformers and made contextual embeddings the default. Everything since assumes it.</p>" +
+      "<div class='callout'><strong>The misconception.</strong> People say &#8220;the embedding of a word&#8221; as if it were one thing. In a transformer there are at least two, and usually thirty-three: the table row, and the state of the residual stream at every layer. When someone says they are using embeddings from a model, the useful question is <em>from which layer</em>, and the answer changes what those vectors are good for.</div>" },
+
+    { title: "Similarity Is Arithmetic", viz: "llmEmbeddingSpace", vizTitle: "Add text, switch metric, and watch the ranking change",
+      html: "<p>Once meaning is geometry, &#8220;similar&#8221; has to become a number. Three functions do that job, and knowing when they disagree is what separates using them from cargo-culting them.</p>" +
+      "<p>The <strong>dot product</strong> multiplies matching components and sums: for vectors a and b it is a&#8321;b&#8321; + a&#8322;b&#8322; + ... It rewards both alignment and magnitude. Long vectors score higher against everything.</p>" +
+      "<p><strong>Cosine similarity</strong> is the dot product divided by both lengths, which cancels magnitude entirely and measures only the angle. It runs from &#8722;1 to 1.</p>" +
+      "<p><strong>Euclidean distance</strong> is the straight-line distance between the two points, and unlike the other two it is a distance: smaller means more similar.</p>" +
+      "<h3>Where they disagree</h3>" +
+      "<p>Work it by hand in two dimensions. Query <strong>q</strong> = (1, 0). Two candidates: <strong>d&#8321;</strong> = (0.9, 0.1) and <strong>d&#8322;</strong> = (2.0, 1.5).</p>" +
+      "<pre><code>dot(q, d1) = 1(0.9) + 0(0.1) = 0.90\ndot(q, d2) = 1(2.0) + 0(1.5) = 2.00      -> d2 wins\n\n|d1| = sqrt(0.81 + 0.01) = 0.906\n|d2| = sqrt(4.00 + 2.25) = 2.500\n\ncos(q, d1) = 0.90 / (1 x 0.906) = 0.994\ncos(q, d2) = 2.00 / (1 x 2.500) = 0.800  -> d1 wins</code></pre>" +
+      "<p>The two metrics return <em>opposite</em> rankings on the same pair. Nothing is broken. The dot product prefers d&#8322; because d&#8322; is a longer vector, and cosine prefers d&#8321; because d&#8321; points more nearly the same way. In an embedding space, vector length often tracks something incidental like text length or how confidently the encoder represented the input, so a dot-product ranking can be dominated by a property you did not intend to rank on.</p>" +
+      "<h3>The identity worth memorizing</h3>" +
+      "<p>If every vector is <strong>normalized</strong> to unit length, all three collapse into one. The dot product becomes the cosine, because the denominator is 1. And squared Euclidean distance becomes 2 &#8722; 2cos, because expanding the square gives |a|&#178; + |b|&#178; &#8722; 2a&#183;b = 1 + 1 &#8722; 2cos. Since 2 &#8722; 2cos decreases exactly as cos increases, Euclidean and cosine produce <em>identical</em> rankings on unit vectors.</p>" +
+      "<p>That is why so much retrieval code normalizes and then uses a plain dot product: it is the cheapest of the three and, once normalized, it is the same answer. It is also why the question &#8220;should I use cosine or dot product?&#8221; has the answer &#8220;are your vectors normalized?&#8221; rather than a preference.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<line x1='60' y1='180' x2='400' y2='180' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='60' y1='180' x2='60' y2='30' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='60' y1='180' x2='200' y2='180' stroke='#2de2ff' stroke-width='3'/><polygon points='208,180 196,175 196,185' fill='#2de2ff'/>" +
+      "<text x='214' y='184' fill='#2de2ff' font-size='10.5'>q</text>" +
+      "<line x1='60' y1='180' x2='186' y2='166' stroke='#3ddc97' stroke-width='3'/><polygon points='194,165 182,161 183,171' fill='#3ddc97'/>" +
+      "<text x='202' y='163' fill='#3ddc97' font-size='10.5'>d1</text>" +
+      "<line x1='60' y1='180' x2='340' y2='75' stroke='#ff5d73' stroke-width='3'/><polygon points='348,72 335,70 340,80' fill='#ff5d73'/>" +
+      "<text x='356' y='72' fill='#ff5d73' font-size='10.5'>d2</text>" +
+      "<line x1='430' y1='30' x2='430' y2='200' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='456' y='52' fill='#c9d6ea' font-size='11'>dot product ranks:</text>" +
+      "<text x='476' y='72' fill='#ff5d73' font-size='10.5'>d2 (2.00) &#62; d1 (0.90)</text>" +
+      "<text x='456' y='100' fill='#c9d6ea' font-size='11'>cosine ranks:</text>" +
+      "<text x='476' y='120' fill='#3ddc97' font-size='10.5'>d1 (0.994) &#62; d2 (0.800)</text>" +
+      "<text x='456' y='152' fill='#ffd166' font-size='10.5'>Same vectors. Opposite answers.</text>" +
+      "<text x='456' y='176' fill='#7d8fb0' font-size='10'>Normalize everything and the</text>" +
+      "<text x='456' y='192' fill='#7d8fb0' font-size='10'>disagreement cannot happen.</text>" +
+      "<text x='60' y='210' fill='#2de2ff' font-size='10'>q = (1, 0)</text>" +
+      "<text x='160' y='210' fill='#3ddc97' font-size='10'>d1 = (0.9, 0.1) short, aligned</text>" +
+      "<text x='60' y='228' fill='#ff5d73' font-size='10'>d2 = (2.0, 1.5) long, angled away</text>" +
+      "</svg><div class='fig-cap'>The only case that matters: a long vector pointing the wrong way beats a short vector pointing the right way, if you rank by dot product.</div></div>" +
+      "<p>Use the machine now. Add two sentences that mean the same thing and one that merely shares words with them, then switch the metric and watch the ranking. Then turn normalization off and find a pair where dot and cosine disagree. That pair is the bug that a retrieval system ships when nobody checked whether the encoder normalizes.</p>" },
+
+    { title: "Training a Model to Place Things Well", viz: "llmContrastive", vizTitle: "Step the training and watch positives pull, negatives push",
+      html: "<p>Everything so far concerns the embeddings inside a language model. There is a second, related object: a model whose entire purpose is to produce one vector for a whole piece of text, so that similar texts land near each other. This is an <strong>embedding model</strong>, and it is trained differently from everything else in this course.</p>" +
+      "<p>The architecture is a <strong>bi-encoder</strong>: one network, run separately on each piece of text, producing one vector each. Separately is the important word. The query and the document never see each other, which is what makes the whole thing useful, because you can encode a million documents in advance and only encode the query at request time.</p>" +
+      "<p>The training signal is not next-token prediction. It is <strong>contrastive learning</strong>: given an anchor, a matching positive, and some non-matching negatives, move the positive closer and the negatives further away. The loss that does this is <strong>InfoNCE</strong>, which is a softmax over similarities where the positive should get the mass. Minimizing it is exactly maximizing the probability that the positive beats every negative.</p>" +
+      "<p>Two details decide whether this works.</p>" +
+      "<p><strong>Where the negatives come from.</strong> The cheap trick is in-batch negatives: for each anchor, treat every other document in the batch as a negative. Free, and effective because a large batch supplies many of them. But random negatives are easy; a random document is obviously unrelated, and the model learns to reject it without learning anything subtle. <strong>Hard negatives</strong> are documents that look right and are not, mined by running an earlier version of the model and taking its wrong answers. One good hard negative teaches more than dozens of random ones, and mining them is most of the craft in training a retrieval model.</p>" +
+      "<p><strong>How a sequence of vectors becomes one.</strong> The encoder produces one vector per token; something must reduce them. Mean pooling averages them, which is the common default. CLS pooling takes the vector at a designated first position. Last-token pooling suits decoder-style encoders. The choice is part of the model&#8217;s contract: pool differently at query time than the model was trained with and the vectors are subtly wrong in a way nothing reports.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one contrastive step</text>" +
+      "<circle cx='170' cy='110' r='7' fill='#2de2ff'/><text x='150' y='134' fill='#2de2ff' font-size='10'>anchor</text>" +
+      "<circle cx='250' cy='72' r='7' fill='#3ddc97'/><text x='266' y='70' fill='#3ddc97' font-size='10'>positive</text>" +
+      "<line x1='240' y1='79' x2='196' y2='102' stroke='#3ddc97' stroke-width='2' stroke-dasharray='4 3'/><polygon points='190,106 202,104 197,95' fill='#3ddc97'/>" +
+      "<circle cx='120' cy='54' r='7' fill='#ff5d73'/><text x='60' y='46' fill='#ff5d73' font-size='10'>hard negative</text>" +
+      "<line x1='128' y1='63' x2='104' y2='34' stroke='#ff5d73' stroke-width='2' stroke-dasharray='4 3'/><polygon points='100,28 104,40 112,32' fill='#ff5d73'/>" +
+      "<circle cx='296' cy='158' r='6' fill='#7d8fb0'/><text x='310' y='162' fill='#7d8fb0' font-size='10'>random negative (already far; teaches little)</text>" +
+      "<line x1='430' y1='26' x2='430' y2='190' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='456' y='48' fill='#c9d6ea' font-size='10.5'>InfoNCE: a softmax over similarities</text>" +
+      "<text x='456' y='68' fill='#c9d6ea' font-size='10.5'>in which the positive should take</text>" +
+      "<text x='456' y='88' fill='#c9d6ea' font-size='10.5'>the probability mass.</text>" +
+      "<text x='456' y='118' fill='#ffd166' font-size='10.5'>The gradient does two things at once:</text>" +
+      "<text x='476' y='138' fill='#3ddc97' font-size='10.5'>pull the positive in</text>" +
+      "<text x='476' y='156' fill='#ff5d73' font-size='10.5'>push the negatives out</text>" +
+      "<text x='456' y='182' fill='#7d8fb0' font-size='10'>A negative already far away contributes</text>" +
+      "<text x='456' y='198' fill='#7d8fb0' font-size='10'>almost no gradient. Hence hard negatives.</text>" +
+      "</svg><div class='fig-cap'>Why mining hard negatives is most of the work: an easy negative is already correct, so it produces almost no learning signal.</div></div>" +
+      "<p>Step the machine and watch a batch move. Then drag one negative close to the anchor to make it hard, and watch the gradient it produces grow. That is the discovery, and it is the reason a retrieval model trained on random negatives plateaus.</p>" },
+
+    { title: "Shorter Vectors on Purpose",
+      html: "<p>Two refinements you will meet in every embedding-model card.</p>" +
+      "<p><strong>Normalization</strong> rescales each output vector to unit length. After the previous section you know why: it makes dot product, cosine and Euclidean agree, and it removes text length as an accidental ranking signal. Most modern embedding models normalize by default, and their documentation says so in one line that is easy to miss and expensive to assume.</p>" +
+      "<p><strong>Matryoshka embeddings</strong> attack a different problem. A 4,096-dimensional vector is expensive to store and to compare across millions of documents, but truncating an ordinary embedding to its first 256 dimensions destroys it, because nothing made the early dimensions more important than the late ones. Matryoshka training, introduced by Kusupati and colleagues in 2022, applies the contrastive loss at several prefix lengths at once, so the model is explicitly trained so that the first 64, 128, 256 and 512 dimensions are each a usable embedding on their own. You then choose your storage budget at deployment time by slicing, with no retraining. The name is the Russian nesting doll, and it is the rare piece of jargon that describes the mechanism exactly.</p>" },
+
+    { title: "Choosing One, and Where This Course Stops",
+      html: "<p>Which embedding model should you use? The honest short answer is that this course is not the place that answers it, and saying so precisely is more useful than an answer that goes stale.</p>" +
+      "<p><strong>MTEB</strong>, the Massive Text Embedding Benchmark, is the standard comparison: dozens of tasks across retrieval, classification, clustering and reranking, with a public leaderboard. It is genuinely useful and it has the failure mode every public leaderboard has. Models are tuned against it, the retrieval subset may not resemble your corpus, and a two-point average difference between two models frequently reverses on your own data. Treat it as a shortlist generator, never as a decision.</p>" +
+      "<p>Everything past that point &#8212; building a labelled set from your own corpus, measuring recall@k and nDCG, fine-tuning an encoder on your domain, choosing an index, and deciding whether you needed dense retrieval at all &#8212; belongs to <em>RAG In Depth</em>, which teaches it at the depth this course gives to attention. This is the boundary Chapter 1 drew, arriving exactly where it said it would.</p>" +
+      "<p>What you take forward from here is the mechanism, which does not go stale: an embedding is a learned position in a space, similarity is arithmetic on that position, the arithmetic has a metric choice with a real consequence, and the model that produced the position was trained by pulling matched pairs together and pushing mismatched pairs apart.</p>" },
+
+    { title: "Weight Tying, and What Config Files Confess",
+      html: "<p>One loose end from Chapter 1. The model turns a vector back into a distribution over the vocabulary by multiplying it by a matrix of shape 4,096 &#215; 128,256. That matrix has exactly the dimensions of the embedding table, transposed. Should it be the same matrix?</p>" +
+      "<p>Making it the same is <strong>weight tying</strong>, proposed by Ofir Press and Lior Wolf in 2017. The argument is that both matrices are doing the same job in opposite directions: one maps a token to a place in the space, the other asks which token a place corresponds to. Tying them halves the parameters spent on vocabulary and, in their experiments, improved perplexity rather than hurting it.</p>" +
+      "<p>So why does anyone untie? Because the two jobs are not identical. Reading a token and predicting one are related but distinguishable, and a model with parameters to spare can afford to learn them separately. The decision therefore comes down to what fraction of your parameter budget the vocabulary is eating, and that fraction depends almost entirely on model size. Read from each model&#8217;s own configuration on 6 September 2026:</p>" +
+      "<pre><code>model              d_model   vocab      embedding params   tied?\nQwen2.5-0.5B          896   151,936      136,134,656       yes\nLlama-3.2-1B        2,048   128,256      262,668,288       yes\nMistral-7B-v0.3     4,096    32,768      134,217,728       no\nQwen2.5-7B          3,584   152,064      544,997,376       no\nLlama-3-8B          4,096   128,256      525,336,576       no</code></pre>" +
+      "<p>The pattern is not subtle once you see it. Qwen&#8217;s half-billion-parameter model spends 136 million on its embedding table: more than a quarter of everything it has. Untying would take that past half, spent on a lookup table. It ties. Llama&#8217;s 8B model spends 525 million out of roughly eight billion, about 6.5%, and can afford a second copy for the extra freedom. It unties. Mistral took the other route to the same place, keeping a small 32,768-entry vocabulary so that even at 7B the table costs only 134 million.</p>" +
+      "<p><strong>Small models tie. Large models untie. Vocabulary size decides where the line falls.</strong> That sentence is a complete explanation of a config field, derived from arithmetic you can do, and it is the kind of thing this course exists to make ordinary.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>share of the parameter budget spent on the embedding table</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10.5'>Qwen2.5-0.5B</text>" +
+      "<rect x='150' y='34' width='420' height='16' rx='4' fill='#1c2a45'/><rect x='150' y='34' width='116' height='16' rx='4' fill='#ff5d73'/>" +
+      "<text x='584' y='47' fill='#ff5d73' font-size='10'>136M &#183; 28% &#183; ties</text>" +
+      "<text x='20' y='82' fill='#7d8fb0' font-size='10.5'>Llama-3.2-1B</text>" +
+      "<rect x='150' y='70' width='420' height='16' rx='4' fill='#1c2a45'/><rect x='150' y='70' width='89' height='16' rx='4' fill='#ffd166'/>" +
+      "<text x='584' y='83' fill='#ffd166' font-size='10'>263M &#183; 21% &#183; ties</text>" +
+      "<text x='20' y='118' fill='#7d8fb0' font-size='10.5'>Llama-3-8B</text>" +
+      "<rect x='150' y='106' width='420' height='16' rx='4' fill='#1c2a45'/><rect x='150' y='106' width='27' height='16' rx='4' fill='#3ddc97'/>" +
+      "<text x='584' y='119' fill='#3ddc97' font-size='10'>525M &#183; 6.5% &#183; unties</text>" +
+      "<text x='20' y='154' fill='#7d8fb0' font-size='10.5'>Mistral-7B-v0.3</text>" +
+      "<rect x='150' y='142' width='420' height='16' rx='4' fill='#1c2a45'/><rect x='150' y='142' width='8' height='16' rx='4' fill='#3ddc97'/>" +
+      "<text x='584' y='155' fill='#3ddc97' font-size='10'>134M &#183; 1.9% &#183; unties</text>" +
+      "<line x1='20' y1='176' x2='740' y2='176' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='198' fill='#7d8fb0' font-size='10.5'>The bar is the vocabulary's share. When it is large, a model cannot afford two copies, so it ties.</text>" +
+      "</svg><div class='fig-cap'>A config field with a derivation. Shares are computed against each model&#8217;s nominal size; the embedding counts are exact.</div></div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take q = (1, 0), d&#8321; = (0.9, 0.1) and d&#8322; = (2.0, 1.5) from section 4. Compute the Euclidean distance from q to each. Which candidate wins on Euclidean, and does it agree with dot product or with cosine? Then normalize d&#8321; and d&#8322; to unit length, recompute all three metrics, and confirm that all three now agree. You have just proved the identity in the same section without algebra.</li>" +
+      "<li><strong>Trace.</strong> Corvid-8B has 128,256 vocabulary entries and a model dimension of 4,096. Compute the embedding table's parameters and its size in bytes at bfloat16. Now suppose you tie the output projection. State how many parameters you save, and what percentage of the model's 8.03 billion that is. Then repeat the calculation for a hypothetical 0.5B model with the same vocabulary and a model dimension of 896, and explain in one sentence why the two answers lead to different design decisions.</li>" +
+      "<li><strong>Investigate.</strong> Open the <code>config.json</code> of four open-weights models spanning a wide size range, including at least one under 2B parameters. Record <code>hidden_size</code>, <code>vocab_size</code> and <code>tie_word_embeddings</code> for each, and compute the embedding parameters. Does the pattern in section 8 hold on your four? Find one that breaks it if you can, and work out what the model's designers were optimizing for instead.</li>" +
+      "<li><strong>Investigate.</strong> Pick any embedding model on the Hugging Face Hub and answer three questions from its card and config alone: does it normalize its output, what pooling does it use, and does it support Matryoshka truncation. Then find where its documentation says so. If you cannot determine one of the three in five minutes, that is a real finding about that model's documentation, and it is the sort of thing that produces a silent retrieval bug six months later.</li>" +
+      "<li><strong>Build.</strong> Write a function that takes a list of vectors and a query vector and returns the top-k by each of the three metrics, plus a flag when dot product and cosine disagree on the top result. Feed it random vectors with deliberately varied magnitudes and count how often they disagree. Then normalize the inputs and confirm the disagreement rate falls to zero. Thirty lines, and it is a test you can keep pointing at any retrieval code you inherit.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "embedding table", d: "The learned matrix with one row per vocabulary entry and one column per model dimension; 525 million parameters for Corvid-8B." },
+    { t: "residual stream", d: "The running vector at each position that every block reads from and adds to, never replacing, carrying the accumulated result up the stack." },
+    { t: "static embedding", d: "The table row for a token: the same vector every time, independent of surrounding context." },
+    { t: "contextual embedding", d: "The state of the residual stream at a given layer, which differs for the same token in different sentences." },
+    { t: "dot product", d: "The sum of products of matching components; rewards both alignment and magnitude." },
+    { t: "cosine similarity", d: "The dot product divided by both vector lengths, measuring angle alone and ignoring magnitude." },
+    { t: "Euclidean distance", d: "Straight-line distance between two points; smaller means more similar, and on unit vectors it ranks identically to cosine." },
+    { t: "normalization", d: "Rescaling a vector to unit length, which makes dot product, cosine and Euclidean produce the same ranking." },
+    { t: "embedding model", d: "A model whose purpose is to produce one vector for a whole piece of text so that similar texts land near each other." },
+    { t: "bi-encoder", d: "An architecture that encodes each piece of text separately, so documents can be embedded in advance and only the query is encoded at request time." },
+    { t: "contrastive learning", d: "Training that pulls matched pairs together and pushes mismatched pairs apart, rather than predicting a next token." },
+    { t: "InfoNCE", d: "The contrastive loss used to do that: a softmax over similarities in which the positive should take the probability mass." },
+    { t: "in-batch negatives", d: "Treating every other document in the training batch as a negative for a given anchor; free, and mostly easy." },
+    { t: "hard negative", d: "A document that looks correct and is not, usually mined from an earlier model's mistakes; it produces far more gradient than a random one." },
+    { t: "pooling", d: "Reducing the encoder's per-token vectors to one vector per text, by mean, by a designated position, or by the last token." },
+    { t: "Matryoshka embeddings", d: "Embeddings trained with the loss applied at several prefix lengths, so the vector can be truncated to a shorter one without retraining." },
+    { t: "weight tying", d: "Using the embedding table transposed as the output projection, halving vocabulary parameters; standard in small models and usually dropped in large ones." },
+    { t: "MTEB", d: "The Massive Text Embedding Benchmark, the standard public comparison for embedding models and a shortlist generator rather than a decision." }
+  ],
+  quiz: [
+    { type: "mc", q: "Where does the difference between 'bank' in a river sentence and 'bank' in a finance sentence live?", opts: ["In two separate rows of the embedding table", "In the tokenizer, which emits different ids for different senses", "In the output projection, which disambiguates at the final layer", "In the residual stream, after attention has mixed in nearby context"], a: 3,
+      why: "There is exactly one table row for the token. Both sentences start from it. Attention then pulls information from 'river' or 'loan' into that position and adds it to the stream, so by the middle layers the two vectors are far apart. That is the whole distinction between a static and a contextual embedding, and it is why asking which layer an embedding came from is a meaningful question." },
+    { type: "mc", q: "For q = (1,0), d1 = (0.9,0.1) and d2 = (2.0,1.5), dot product ranks d2 first and cosine ranks d1 first. What causes the disagreement?", opts: ["A rounding error in the cosine denominator", "d2 has a larger magnitude, which the dot product rewards and cosine cancels", "d1 and d2 have different dimensionality", "Cosine is defined only for normalized vectors"], a: 1,
+      why: "The dot product measures alignment multiplied by length, so a long vector scores well against everything. Cosine divides both lengths out and measures the angle alone. In embedding spaces magnitude often tracks something incidental, such as text length or encoder confidence, so ranking by dot product on unnormalized vectors can rank on a property nobody intended." },
+    { type: "mc", q: "Why does so much retrieval code normalize vectors and then use a plain dot product?", opts: ["Normalization improves the quality of the underlying embeddings", "Dot product is the only metric supported by vector indexes", "On unit vectors the dot product equals the cosine, and it is the cheapest of the three to compute", "Euclidean distance is undefined in high dimensions"], a: 2,
+      why: "Once every vector has length 1 the cosine denominator is 1, so the dot product is the cosine. Squared Euclidean becomes 2 minus twice the cosine, which ranks identically. All three agree, so you take the cheapest. This is why 'cosine or dot product?' is really the question 'are your vectors normalized?'." },
+    { type: "mc", q: "In contrastive training, why does a randomly chosen negative teach the model much less than a mined hard negative?", opts: ["The random negative is already far from the anchor, so it produces almost no gradient", "Random negatives are often mislabelled", "Hard negatives are used with a larger learning rate", "Random negatives cannot be used with InfoNCE"], a: 0,
+      why: "The loss only pushes when the model is getting something wrong. A document that is obviously unrelated is already scored low, the loss on it is near zero, and so is its gradient. A document that looks right and is not is exactly where the model is wrong, so it carries the signal. Mining those is most of the craft in training a retrieval encoder." },
+    { type: "blank", q: "The running vector at each position that every block reads from and adds to, never replacing, is called the residual ____.", a: ["stream"],
+      why: "Calling it a stream rather than a value is deliberate: it behaves like a shared channel. Attention writes information from other positions into it, the feed-forward network writes what it computed from this position, and the width stays constant the whole way up, which is what lets Chapter 11 read a half-formed prediction out of a middle layer." },
+    { type: "blank", q: "Training an embedding model so that its first 64, 128 or 256 dimensions are each usable on their own, allowing truncation without retraining, produces ____ embeddings.", a: ["matryoshka", "matryoshka embeddings", "nested"],
+      why: "The loss is applied at several prefix lengths at once, so importance is forced toward the early dimensions rather than spread evenly. Truncating an ordinary embedding destroys it, because nothing made the first 256 dimensions more informative than the last 256. The nesting-doll name describes the mechanism exactly." },
+    { type: "mc", q: "Qwen2.5-0.5B ties its embedding and output matrices; Llama-3-8B does not. What best explains the difference?", opts: ["The smaller model has a larger vocabulary in absolute terms", "Tying is required for models under one billion parameters", "The larger model uses a different tokenizer algorithm", "The vocabulary consumes over a quarter of the small model's budget and only about 6.5% of the large one's"], a: 3,
+      why: "Qwen's 0.5B model spends 136 million parameters on its embedding table, more than a quarter of everything it has, so a second untied copy would push vocabulary past half the model. Llama-3-8B spends 525 million out of roughly eight billion and can afford the extra freedom. Small models tie, large models untie, and vocabulary size decides where the line falls." },
+    { type: "order", q: "Order what happens to one token on its way to a prediction:", items: ["the tokenizer maps text to an id", "the id indexes a row of the embedding table", "blocks add their contributions to the residual stream", "the final vector is multiplied by the output projection"],
+      why: "Four steps, and only the third is expensive. The first is a merge replay, the second is an array access, and the fourth is one matrix multiply per generated token. Everything Part II opens sits inside step three, and everything Part V optimizes is the cost of repeating steps three and four once per token." },
+    { type: "mc", q: "A team picks an embedding model because it leads MTEB by two points, and retrieval quality on their corpus gets worse. What is the most likely explanation?", opts: ["A small average gap on a broad public benchmark frequently reverses on a specific corpus", "They failed to normalize the new model's output", "MTEB scores are not comparable across model sizes", "The new model requires a different similarity metric"], a: 0,
+      why: "MTEB averages dozens of tasks, models are tuned against it, and its retrieval subset may look nothing like your documents. A two-point average difference is well inside the range that reverses on a particular corpus. It is a shortlist generator. Building a labelled set from your own data and measuring on it is the actual decision procedure, and it belongs to RAG In Depth." },
+    { type: "mc", q: "Which statement about the embedding table is true?", opts: ["Its rows are assigned meanings during tokenizer training", "A row is meaningful on its own and can be transferred between models", "Its rows are meaningful only relative to each other, because the loss only ever compared them", "It is computed at inference time from the token's characters"], a: 2,
+      why: "The table starts random and is moved by gradient descent, which only ever expresses preferences between rows. Nothing anchors the space to anything absolute, so a row carries no meaning outside the arrangement it sits in. That is why you cannot lift one model's embedding row into another model, and why the same token in two models has unrelated vectors." }
   ]
 });
