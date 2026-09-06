@@ -25,6 +25,14 @@
    read from each model's config.json on the Hugging Face Hub the same day:
    GPT-2 50,257; Mistral-7B-v0.3 32,768; Llama-3-8B 128,256; Qwen2.5-7B
    152,064; Gemma-2-9B 256,000.
+
+   Sources consulted for Chapter 3: the tokenizer.json and
+   tokenizer_config.json of Meta-Llama-3-8B-Instruct (via the ungated
+   NousResearch mirror) and Qwen2.5-7B-Instruct, downloaded 2026-09-06;
+   tiktoken 0.14.0; the Hugging Face chat-templating documentation. Every
+   token count, every rendered template and the 20-vs-67 mismatch figure in
+   section 6 were produced by running those real tokenizers and rendering
+   their real Jinja templates, not by recalling their formats.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -493,5 +501,241 @@ CHAPTERS.push({
       why: "Billing is per token, not per byte or per second, and the token count is decided entirely by how much of the merge budget was spent on that script. Measured on cl100k_base, the Hindi sentence in this chapter costs 5.1 times the English one. The consequences compound: five times the cost, one fifth of the usable context, and by Chapter 5's n-squared attention cost, far more than five times the work." },
     { type: "mc", q: "An engineer proposes a character-level tokenizer to avoid all subword problems. What is the strongest objection from this chapter?", opts: ["Characters cannot represent emoji or non-Latin scripts", "The vocabulary would be too large to train", "Sequences become roughly four times longer, and attention cost grows with the square of sequence length", "Character-level models cannot be fine-tuned"], a: 2,
       why: "The vocabulary would be small, not large, and Unicode characters can represent anything. The real objection is cost: English runs about four and a half characters per word, so every sequence lengthens by roughly four times, every generation needs four times as many forward passes, and the quadratic term in attention makes the memory and compute roughly sixteen times worse. The idea is not absurd, and byte-level models are researched, but this is the price." }
+  ]
+});
+
+/* ======================= CHAPTER 3 ======================= */
+CHAPTERS.push({
+  num: 3, part: 1, title: "Where Tokenizers Betray You",
+  blurb: "A model that writes a decent sonnet fails at 3478 times 29, argues with your Python indentation, and gives a worse answer when your prompt ends in a space. None of these are reasoning failures. They are tokenization artifacts, and once you can see the boundaries you can predict them before they happen. Then the part that breaks silently in production: special tokens and the chat template, which ruin more fine-tunes than any hyperparameter. Everything here was measured on real tokenizers, and the numbers are reproducible.",
+  sections: [
+    { title: "Numbers, and the Arithmetic That Is Not There", viz: "llmTokenBoundaries", vizTitle: "Type text and watch the boundaries, with traps flagged",
+      html: "<p>Prompt P1 from Chapter 1 is <code>3478 * 29</code>. Models get this class of problem wrong at a rate that seems impossible for a machine that can explain the Riemann hypothesis. The reason is visible the moment you look at the boundaries.</p>" +
+      "<p>Here is <code>3478 * 29</code> through four real tokenizers, measured on 6 September 2026:</p>" +
+      "<pre><code>gpt2        4 tokens   ['34', '78', ' *', ' 29']\ncl100k      5 tokens   ['347', '8', ' *', ' ', '29']\nLlama 3     5 tokens   ['347', '8', ' *', ' ', '29']\nQwen 2.5    8 tokens   ['3', '4', '7', '8', ' *', ' ', '2', '9']</code></pre>" +
+      "<p>Look at what GPT-2 did to 3478. It split it into <code>34</code> and <code>78</code>, two chunks that have nothing to do with the number&#8217;s place value. The model is not being asked to multiply three thousand four hundred and seventy-eight by twenty-nine. It is being asked to predict what tokens follow the symbols <code>34</code>, <code>78</code>, <code> *</code>, <code> 29</code>. To get the right answer it has to internally reconstruct the magnitude from pieces that were cut on frequency, not on arithmetic, and then produce a result in pieces cut the same way.</p>" +
+      "<p>Now look at Llama 3: <code>347</code> then <code>8</code>. A different wrong split. And then Qwen 2.5, which splits every digit into its own token.</p>" +
+      "<h3>Why one of these is deliberate</h3>" +
+      "<p>Qwen&#8217;s <strong>single-digit tokenization</strong> is not an accident of frequency; it is a design decision, and several model families have made the same one. If every digit is its own token, the model sees numbers in a positional form that matches how arithmetic actually works, and the correspondence between a digit and its place is learnable rather than accidental. The cost is length: <code>1234567</code> becomes seven tokens instead of three, and any document heavy with figures becomes proportionally more expensive.</p>" +
+      "<pre><code>                  '1234567'                    tokens\ngpt2         ['123', '45', '67']                  3\ncl100k       ['123', '456', '7']                  3\nLlama 3      ['123', '456', '7']                  3\nQwen 2.5     ['1','2','3','4','5','6','7']        7</code></pre>" +
+      "<p>Then there is the formatting trap. Add the thousands separators a human would write and every tokenizer gets <em>worse</em>, not better:</p>" +
+      "<pre><code>                  '1,234,567'                  tokens\ngpt2         ['1', ',', '234', ',', '5', '67']    6\ncl100k       ['1', ',', '234', ',', '567']        5\nLlama 3      ['1', ',', '234', ',', '567']        5\nQwen 2.5     ['1',',','2','3','4',',','5','6','7'] 9</code></pre>" +
+      "<p>The comma-formatted number costs roughly twice the tokens of the bare one and fragments differently. If you are building anything that feeds a model financial figures, that is a decision you now get to make on purpose.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 208' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the number 3478, cut four ways (measured 2026-09-06)</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10.5'>gpt2</text>" +
+      "<rect x='120' y='34' width='86' height='24' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='163' y='51' text-anchor='middle' fill='#ff5d73' font-size='11'>34</text>" +
+      "<rect x='210' y='34' width='86' height='24' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='253' y='51' text-anchor='middle' fill='#ff5d73' font-size='11'>78</text>" +
+      "<text x='320' y='51' fill='#7d8fb0' font-size='10'>two halves, neither a place value</text>" +
+      "<text x='20' y='92' fill='#7d8fb0' font-size='10.5'>cl100k / Llama 3</text>" +
+      "<rect x='120' y='78' width='130' height='24' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='185' y='95' text-anchor='middle' fill='#ffd166' font-size='11'>347</text>" +
+      "<rect x='254' y='78' width='42' height='24' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='275' y='95' text-anchor='middle' fill='#ffd166' font-size='11'>8</text>" +
+      "<text x='320' y='95' fill='#7d8fb0' font-size='10'>a different wrong split: 347 and 8</text>" +
+      "<text x='20' y='136' fill='#7d8fb0' font-size='10.5'>Qwen 2.5</text>" +
+      "<rect x='120' y='122' width='40' height='24' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='140' y='139' text-anchor='middle' fill='#3ddc97' font-size='11'>3</text>" +
+      "<rect x='164' y='122' width='40' height='24' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='184' y='139' text-anchor='middle' fill='#3ddc97' font-size='11'>4</text>" +
+      "<rect x='208' y='122' width='40' height='24' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='228' y='139' text-anchor='middle' fill='#3ddc97' font-size='11'>7</text>" +
+      "<rect x='252' y='122' width='40' height='24' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='272' y='139' text-anchor='middle' fill='#3ddc97' font-size='11'>8</text>" +
+      "<text x='320' y='139' fill='#3ddc97' font-size='10'>one token per digit: chosen on purpose, costs length</text>" +
+      "<line x1='20' y1='162' x2='740' y2='162' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='184' fill='#7d8fb0' font-size='10.5'>The model never sees 3478. It sees whichever of these four rows its tokenizer produced,</text>" +
+      "<text x='20' y='200' fill='#7d8fb0' font-size='10.5'>and has to rebuild the magnitude from pieces cut on frequency rather than on place value.</text>" +
+      "</svg><div class='fig-cap'>Four tokenizers, one number, four different problems handed to the model. Single-digit splitting is the only row where token boundaries and place value agree.</div></div>" +
+      "<p>Open the machine beside this section and type a large number. Then type it with commas. Then type it as currency. The token count and the boundaries change every time, and the model&#8217;s arithmetic accuracy changes with them. That is the discovery: <strong>the format of a number in your prompt is a modelling decision, not a presentation one.</strong></p>" },
+
+    { title: "Whitespace, Indentation, and Code",
+      html: "<p>The same effect governs code, where it decides how expensive your repository is to send and how reliably a model can produce a language whose syntax is whitespace.</p>" +
+      "<p>Take one indented Python line, <code>    return x</code>, with four leading spaces:</p>" +
+      "<pre><code>gpt2        5 tokens   [' ', ' ', ' ', ' return', ' x']\ncl100k      3 tokens   ['   ', ' return', ' x']\nLlama 3     3 tokens   ['   ', ' return', ' x']\nQwen 2.5    3 tokens   ['   ', ' return', ' x']</code></pre>" +
+      "<p>GPT-2 spends a separate token on each of the first three spaces. Newer tokenizers include multi-space runs in their vocabulary because their training corpora contained a great deal of code, so the same line costs three tokens instead of five. Across a large Python file, at four levels of nesting, that difference alone is tens of percent of the bill.</p>" +
+      "<p>Tabs behave differently again. <code>\\treturn x</code> is three tokens under GPT-2 and <strong>two</strong> under all three modern tokenizers, which merge the tab into the following word: the single token <code>\\treturn</code> exists in their vocabularies. A tab-indented file and a space-indented file of identical content do not cost the same, and neither do they present the model with the same symbols.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 176' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one indented line of Python: '    return x'</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10.5'>gpt2</text>" +
+      "<rect x='96' y='32' width='30' height='22' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='111' y='47' text-anchor='middle' fill='#ff5d73' font-size='10'>&#183;</text>" +
+      "<rect x='130' y='32' width='30' height='22' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='145' y='47' text-anchor='middle' fill='#ff5d73' font-size='10'>&#183;</text>" +
+      "<rect x='164' y='32' width='30' height='22' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='179' y='47' text-anchor='middle' fill='#ff5d73' font-size='10'>&#183;</text>" +
+      "<rect x='198' y='32' width='84' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='240' y='47' text-anchor='middle' fill='#c9d6ea' font-size='10'>&#183;return</text>" +
+      "<rect x='286' y='32' width='44' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='308' y='47' text-anchor='middle' fill='#c9d6ea' font-size='10'>&#183;x</text>" +
+      "<text x='350' y='47' fill='#ff5d73' font-size='10.5'>5 tokens: three of them are a single space each</text>" +
+      "<text x='20' y='90' fill='#7d8fb0' font-size='10.5'>cl100k, Llama 3, Qwen 2.5</text>" +
+      "<rect x='96' y='76' width='98' height='22' rx='5' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='145' y='91' text-anchor='middle' fill='#3ddc97' font-size='10'>&#183;&#183;&#183;</text>" +
+      "<rect x='198' y='76' width='84' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='240' y='91' text-anchor='middle' fill='#c9d6ea' font-size='10'>&#183;return</text>" +
+      "<rect x='286' y='76' width='44' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='308' y='91' text-anchor='middle' fill='#c9d6ea' font-size='10'>&#183;x</text>" +
+      "<text x='350' y='91' fill='#3ddc97' font-size='10.5'>3 tokens: a three-space run is one vocabulary entry</text>" +
+      "<line x1='20' y1='112' x2='740' y2='112' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='134' fill='#c9d6ea' font-size='10.5'>The same line with a tab instead: 3 tokens under gpt2, 2 under the others,</text>" +
+      "<text x='20' y='152' fill='#c9d6ea' font-size='10.5'>because they hold the single token '\\treturn'.</text>" +
+      "<text x='20' y='170' fill='#7d8fb0' font-size='10'>Middle dots mark spaces. Tabs and spaces are different symbols to the model, not just to your linter.</text>" +
+      "</svg><div class='fig-cap'>Indentation is not free and it is not uniform. A tokenizer trained on more code buys whitespace runs their own entries.</div></div>" },
+
+    { title: "The Trailing Space",
+      html: "<p>This is the smallest bug in the chapter and the one that catches the most people, because the symptom is a quality regression with no error anywhere.</p>" +
+      "<p>Chapter 2 established the <strong>leading-space convention</strong>: in byte-level BPE the leading space belongs to the following token. So <code>hello</code> and <code> hello</code> are two different vocabulary entries with two different ids. Measured under cl100k_base: <code>hello</code> is id 15339, <code> hello</code> is id 24748. Not adjacent, not related, two unrelated rows of the embedding table.</p>" +
+      "<p>Now consider two prompts that look identical in a text box:</p>" +
+      "<pre><code>'The capital of France is'      5 tokens, last token ' is'\n'The capital of France is '     6 tokens, last token ' '</code></pre>" +
+      "<p>In the first, the model&#8217;s next token is naturally <code> Paris</code>, complete with its leading space, and that token is common and well trained. In the second, you have already supplied the space. The model must now produce <code>Paris</code> without a leading space, a rarer token in a context where almost all of its training saw the space-prefixed form. You have pushed it slightly off the distribution it knows best, and you did it by pressing the space bar.</p>" +
+      "<p>This is the <strong>trailing-space bug</strong>, and its effect is usually small and occasionally not. It is worst in completion-style prompting, few-shot templates that end with a colon and a space, and any prompt assembled by string concatenation where a trailing space sneaks in from a join. It is one reason completion-style prompts have a reputation for fragility that chat-formatted ones do not.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 220' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one space, two different jobs for the model</text>" +
+      "<rect x='20' y='30' width='352' height='176' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='38' y='52' fill='#3ddc97' font-size='11'>...France is</text>" +
+      "<text x='38' y='72' fill='#7d8fb0' font-size='10'>5 tokens, last one is ' is'</text>" +
+      "<text x='38' y='100' fill='#c9d6ea' font-size='10.5'>next token must be:</text>" +
+      "<rect x='38' y='110' width='120' height='24' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='98' y='127' text-anchor='middle' fill='#3ddc97' font-size='10.5'>&#183;Paris</text>" +
+      "<text x='170' y='127' fill='#7d8fb0' font-size='10'>space-prefixed:</text>" +
+      "<text x='170' y='142' fill='#7d8fb0' font-size='10'>the common form</text>" +
+      "<text x='38' y='176' fill='#7d8fb0' font-size='10'>the form almost all of its</text>" +
+      "<text x='38' y='192' fill='#7d8fb0' font-size='10'>training saw after ordinary text</text>" +
+      "<rect x='388' y='30' width='352' height='176' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='406' y='52' fill='#ff5d73' font-size='11'>...France is&#183;</text>" +
+      "<text x='406' y='72' fill='#7d8fb0' font-size='10'>6 tokens, last one is the bare space</text>" +
+      "<text x='406' y='100' fill='#c9d6ea' font-size='10.5'>next token must be:</text>" +
+      "<rect x='406' y='110' width='120' height='24' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='466' y='127' text-anchor='middle' fill='#ff5d73' font-size='10.5'>Paris</text>" +
+      "<text x='538' y='127' fill='#7d8fb0' font-size='10'>no prefix:</text>" +
+      "<text x='538' y='142' fill='#7d8fb0' font-size='10'>a different, rarer id</text>" +
+      "<text x='406' y='176' fill='#7d8fb0' font-size='10'>you supplied the space, so the model</text>" +
+      "<text x='406' y='192' fill='#7d8fb0' font-size='10'>is pushed off the distribution it knows</text>" +
+      "</svg><div class='fig-cap'>The same split applies to every word: under cl100k_base &#8216; hello&#8217; is id 24748 and &#8216;hello&#8217; is 15339, two unrelated rows of the embedding table. Pressing the space bar chose the right-hand column.</div></div>" +
+      "<div class='callout'><strong>The edge.</strong> The fix is to never end a prompt with whitespace, and to let the model produce the space as part of its first token. If you are building prompts programmatically, strip trailing whitespace at the boundary rather than trusting every call site. A test that asserts your assembled prompt does not end in whitespace costs one line and catches a class of quality regressions that are otherwise invisible.</div>" },
+
+    { title: "Special Tokens, and Where They Come From",
+      html: "<p>Everything so far concerns tokens learned from text. Models also need symbols that could never appear in text, because they mark structure rather than content: where a document begins, where a turn ends, where padding starts. These are <strong>special tokens</strong>, and they are added to the vocabulary after training rather than learned by merging.</p>" +
+      "<p>The usual set:</p>" +
+      "<ul>" +
+      "<li><strong>BOS token</strong>, the beginning of sequence. Llama 3 uses <code>&lt;|begin_of_text|&gt;</code>. Qwen 2.5 has none at all, which is the first thing that surprises people porting code between them.</li>" +
+      "<li><strong>EOS token</strong>, the end of sequence: the token whose generation means stop. Llama 3&#8217;s instruct model uses <code>&lt;|eot_id|&gt;</code>, Qwen uses <code>&lt;|im_end|&gt;</code>.</li>" +
+      "<li><strong>PAD</strong>, the <strong>padding token</strong>, used to make a batch rectangular. Llama 3 defines none, so every training framework picks one for you, and it picking badly is a real source of silent corruption.</li>" +
+      "<li><strong>Role and structure markers</strong>, which are the subject of the next section.</li>" +
+      "</ul>" +
+      "<p>Two facts about special tokens cause most of the trouble. First, they are <em>single</em> tokens: <code>&lt;|eot_id|&gt;</code> is one id, not eleven characters. Second, whether a tokenizer treats a piece of text as a special token or as literal characters depends on a flag, and different libraries default that flag differently. Text that contains <code>&lt;|im_end|&gt;</code> typed by a user is either a control signal or eight tokens of punctuation, and which one you get is a configuration question with security consequences that Chapter 33 returns to.</p>" +
+      "<div class='callout'><strong>The config trap.</strong> Qwen2.5-7B-Instruct&#8217;s tokenizer holds 151,665 entries, but its <code>config.json</code> declares <code>vocab_size</code> 152,064. Both numbers are correct. This is <strong>vocabulary padding</strong>: the embedding table is deliberately grown to a round multiple for hardware efficiency, leaving hundreds of rows that no token will ever index. When you compute parameter counts in Chapter 9, use the config&#8217;s padded number, because that is what occupies memory. When you reason about what the model can express, use the tokenizer&#8217;s.</div>" },
+
+    { title: "The Chat Template Is Part of the Contract", viz: "llmChatTemplate", vizTitle: "Watch a conversation become one flat string, then break it",
+      html: "<p>Here is the fact that surprises people who have only used a chat API: <strong>the model has no concept of a conversation.</strong> It takes one flat sequence of tokens, exactly as in Chapter 1. Roles, turns, system prompts and multi-turn history are a convention rendered into that flat sequence by a template, and the template is chosen by whoever trained the model.</p>" +
+      "<p>Modern tokenizers ship the template with the weights, as a Jinja string in <code>tokenizer_config.json</code>. Here is Llama-3-8B-Instruct&#8217;s, rendered on a two-message conversation:</p>" +
+      "<pre><code>&lt;|begin_of_text|&gt;&lt;|start_header_id|&gt;system&lt;|end_header_id|&gt;\n\nYou are terse.&lt;|eot_id|&gt;&lt;|start_header_id|&gt;user&lt;|end_header_id|&gt;\n\nHi&lt;|eot_id|&gt;&lt;|start_header_id|&gt;assistant&lt;|end_header_id|&gt;\n\n</code></pre>" +
+      "<p>And Qwen2.5-7B-Instruct&#8217;s, on the identical conversation:</p>" +
+      "<pre><code>&lt;|im_start|&gt;system\nYou are terse.&lt;|im_end|&gt;\n&lt;|im_start|&gt;user\nHi&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n</code></pre>" +
+      "<p>Different markers, different newline placement, different notion of where a header ends. Both render to about the same length in tokens, 20 for Llama and 18 for Qwen, because those markers are single tokens in their own vocabularies.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the same two-message conversation, rendered by each model's own template</text>" +
+      "<rect x='16' y='30' width='360' height='192' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='52' fill='#2de2ff' font-size='11'>Llama 3 &#8212; 20 tokens</text>" +
+      "<rect x='34' y='62' width='150' height='20' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='109' y='76' text-anchor='middle' fill='#ffd166' font-size='9.5'>&#60;|begin_of_text|&#62;</text>" +
+      "<rect x='34' y='88' width='150' height='20' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='109' y='102' text-anchor='middle' fill='#ffd166' font-size='9.5'>&#60;|start_header_id|&#62;</text>" +
+      "<rect x='190' y='88' width='58' height='20' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='219' y='102' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>system</text>" +
+      "<rect x='254' y='88' width='108' height='20' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='308' y='102' text-anchor='middle' fill='#ffd166' font-size='9.5'>&#60;|end_header_id|&#62;</text>" +
+      "<text x='34' y='128' fill='#c9d6ea' font-size='10'>You are terse.</text>" +
+      "<rect x='34' y='138' width='70' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='69' y='152' text-anchor='middle' fill='#ff5d73' font-size='9.5'>&#60;|eot_id|&#62;</text>" +
+      "<text x='34' y='180' fill='#7d8fb0' font-size='10'>...user turn...</text>" +
+      "<rect x='34' y='190' width='230' height='20' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='149' y='204' text-anchor='middle' fill='#3ddc97' font-size='9.5'>&#60;|start_header_id|&#62;assistant...</text>" +
+      "<rect x='384' y='30' width='360' height='192' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='402' y='52' fill='#2de2ff' font-size='11'>Qwen 2.5 &#8212; 18 tokens</text>" +
+      "<rect x='402' y='62' width='108' height='20' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='456' y='76' text-anchor='middle' fill='#ffd166' font-size='9.5'>&#60;|im_start|&#62;</text>" +
+      "<rect x='516' y='62' width='58' height='20' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='545' y='76' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>system</text>" +
+      "<text x='402' y='104' fill='#7d8fb0' font-size='10'>no BOS token at all</text>" +
+      "<text x='402' y='128' fill='#c9d6ea' font-size='10'>You are terse.</text>" +
+      "<rect x='402' y='138' width='92' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='448' y='152' text-anchor='middle' fill='#ff5d73' font-size='9.5'>&#60;|im_end|&#62;</text>" +
+      "<text x='402' y='180' fill='#7d8fb0' font-size='10'>...user turn...</text>" +
+      "<rect x='402' y='190' width='196' height='20' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='500' y='204' text-anchor='middle' fill='#3ddc97' font-size='9.5'>&#60;|im_start|&#62;assistant</text>" +
+      "</svg><div class='fig-cap'>Gold marks a structure token, red an end-of-turn token, green the generation prompt. Every one of these is a single id in its own vocabulary and literal punctuation in the other's.</div></div>" +
+      "<p>Notice the last line of each. Both end with the assistant header and nothing after it. That trailing fragment is the <strong>generation prompt</strong>, and it is what puts the model in the position of speaking next. Forget it and the model, quite reasonably, continues writing the user&#8217;s turn.</p>" },
+
+    { title: "What a Wrong Template Does, Measured",
+      html: "<p>The failure mode is not an exception. It is a quality collapse with no signal, and it is worth seeing in numbers.</p>" +
+      "<p>Take the Llama-formatted string from the previous section and hand it to Qwen&#8217;s tokenizer, which is exactly what happens when a serving stack, a fine-tuning script or a hand-rolled prompt builder applies the wrong template. Measured:</p>" +
+      "<pre><code>Llama template through Llama's tokenizer:  20 tokens\nLlama template through Qwen's tokenizer:   67 tokens</code></pre>" +
+      "<p>More than three times the length, for text that has not changed. The reason is visible in the first few tokens Qwen produces:</p>" +
+      "<pre><code>['&lt;', '|', 'begin', '_of', '_text', '|', '&gt;&lt;', '|', 'start',\n '_header', '_id', '|', '&gt;', 'system', '&lt;', '|', 'end', ... ]</code></pre>" +
+      "<p><code>&lt;|begin_of_text|&gt;</code> is one control token to Llama and seven tokens of literal punctuation to Qwen. The structure that was supposed to tell the model where a turn begins has become noise sitting in the middle of the conversation. The model still answers. It answers worse, in ways that look like a capability problem, and no error is raised anywhere in the stack.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the same string, two tokenizers (measured 2026-09-06)</text>" +
+      "<text x='20' y='44' fill='#7d8fb0' font-size='10.5'>right tokenizer</text>" +
+      "<rect x='150' y='30' width='150' height='24' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='225' y='47' text-anchor='middle' fill='#3ddc97' font-size='10.5'>&#60;|begin_of_text|&#62;</text>" +
+      "<text x='314' y='47' fill='#3ddc97' font-size='10.5'>1 token &#8212; a control signal</text>" +
+      "<text x='20' y='88' fill='#7d8fb0' font-size='10.5'>wrong tokenizer</text>" +
+      "<rect x='150' y='74' width='26' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='163' y='91' text-anchor='middle' fill='#ff5d73' font-size='10'>&#60;</text>" +
+      "<rect x='180' y='74' width='26' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='193' y='91' text-anchor='middle' fill='#ff5d73' font-size='10'>|</text>" +
+      "<rect x='210' y='74' width='54' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='237' y='91' text-anchor='middle' fill='#ff5d73' font-size='10'>begin</text>" +
+      "<rect x='268' y='74' width='40' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='288' y='91' text-anchor='middle' fill='#ff5d73' font-size='10'>_of</text>" +
+      "<rect x='312' y='74' width='52' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='338' y='91' text-anchor='middle' fill='#ff5d73' font-size='10'>_text</text>" +
+      "<rect x='368' y='74' width='26' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='381' y='91' text-anchor='middle' fill='#ff5d73' font-size='10'>|</text>" +
+      "<rect x='398' y='74' width='34' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='415' y='91' text-anchor='middle' fill='#ff5d73' font-size='10'>&#62;&#60;</text>" +
+      "<text x='446' y='91' fill='#ff5d73' font-size='10.5'>7 tokens &#8212; punctuation in the text</text>" +
+      "<line x1='20' y1='114' x2='740' y2='114' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='140' fill='#c9d6ea' font-size='11'>whole prompt</text>" +
+      "<rect x='150' y='128' width='100' height='16' rx='4' fill='#3ddc97'/><text x='262' y='141' fill='#3ddc97' font-size='10.5'>20 tokens, correct</text>" +
+      "<rect x='150' y='152' width='335' height='16' rx='4' fill='#ff5d73'/><text x='497' y='165' fill='#ff5d73' font-size='10.5'>67 tokens, structure gone</text>" +
+      "<text x='20' y='194' fill='#7d8fb0' font-size='10.5'>No exception is raised. No log line appears. The model answers, and it answers worse.</text>" +
+      "</svg><div class='fig-cap'>The most expensive silent bug in applied language modelling: a template mismatch reads as a capability problem.</div></div>" +
+      "<p>Use the template machine now. Render a conversation with the correct template, then deliberately apply a different model&#8217;s. Watch the assistant header land inside the user&#8217;s message and the special tokens shatter into punctuation. That is what &#8220;the fine-tune did nothing&#8221; looks like from the inside.</p>" },
+
+    { title: "The Practitioner's Checklist",
+      html: "<p>Every item here traces back to a mechanism in this chapter or the last one. The build exercise turns the first three into a <strong>prompt linter</strong> you run before a prompt ever leaves your process.</p>" +
+      "<h3>Before you ship a prompt</h3>" +
+      "<ul>" +
+      "<li><strong>Assert no trailing whitespace.</strong> One line of code, catches an invisible quality regression. Section 3.</li>" +
+      "<li><strong>Count tokens before you pay for them.</strong> Set a <strong>token budget</strong> per request and enforce it by running your actual prompt through your actual tokenizer, not an estimate of four characters per token. That heuristic is roughly right for English prose and badly wrong for code, numbers and any non-Latin script, where Chapter 2 measured up to eleven times the cost.</li>" +
+      "<li><strong>Decide your number format on purpose.</strong> Bare digits, comma-separated and currency-formatted all tokenize differently. Section 1.</li>" +
+      "</ul>" +
+      "<h3>When a fine-tune appears to have done nothing</h3>" +
+      "<p>Check these three before touching the learning rate, because they are the common causes and they are all free to check.</p>" +
+      "<ul>" +
+      "<li><strong>Is the template the model&#8217;s own?</strong> Render one training example exactly as the trainer will and print the string. Compare it, character for character, to the template in <code>tokenizer_config.json</code>. Section 6.</li>" +
+      "<li><strong>Are the special tokens single tokens?</strong> Encode a rendered example and confirm <code>&lt;|eot_id|&gt;</code> or its equivalent appears as one id and not as a run of punctuation.</li>" +
+      "<li><strong>Is the model learning the answer or the question?</strong> That is loss masking, and Chapter 20 covers it, but it presents identically to a template bug from the outside.</li>" +
+      "</ul>" +
+      "<h3>Try it on your machine</h3>" +
+      "<pre><code>pip install transformers\npython - &lt;&lt;'PY'\nfrom transformers import AutoTokenizer\nt = AutoTokenizer.from_pretrained(\"Qwen/Qwen2.5-7B-Instruct\")\nmsgs = [{\"role\": \"user\", \"content\": \"Hi\"}]\ns = t.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)\nprint(repr(s))\nprint(t.encode(s))\nPY</code></pre>" +
+      "<p>Expect a string ending in the assistant header with nothing after it, and an id list whose first and last entries are the special tokens rather than fragments of punctuation. If either is untrue, you have found your bug before it reached production.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;A team fine-tuned a model, the loss went down, and the deployed model got worse. What do you check first?&#8221; The expected answer is not a hyperparameter. It is whether the template used in training matches the template used in serving, and whether the special tokens survived tokenization as single ids in both. This is the most common real bug in applied fine-tuning, and it is asked because it separates people who have deployed from people who have read.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Predict, before measuring, how many tokens each of these costs under a modern tokenizer: <code>42</code>, <code>4200</code>, <code>4,200</code>, <code>$4,200.00</code>, <code>4.2e3</code>. Write your five predictions down. Then measure. Score yourself. The point is not the score; it is that you now expect the format to matter, which you did not before this chapter.</li>" +
+      "<li><strong>Trace.</strong> A prompt template ends with <code>Answer:</code> followed by a space. Using section 3, explain in two sentences what that space does to the first generated token, and why the effect is larger for a completion-style prompt than for a chat-formatted one.</li>" +
+      "<li><strong>Investigate.</strong> Download the <code>tokenizer_config.json</code> of two instruct models from different families. Extract both chat templates and render the same two-message conversation through each. Then encode each rendered string with the <em>other</em> model&#8217;s tokenizer and record the token counts. You should see something close to the 20-versus-67 result in section 6. Write down the ratio you get, and which special token fragmented worst.</li>" +
+      "<li><strong>Investigate.</strong> Take a real source file from your own work, in a whitespace-sensitive language, and count its tokens under two tokenizers. Then convert the indentation from spaces to tabs and count again. Report the four numbers and say which combination you would choose if you were sending this file to a model a thousand times a day.</li>" +
+      "<li><strong>Build.</strong> Write a prompt-linter: a function that takes an assembled prompt string and returns a list of warnings. Check for trailing whitespace, for special-token markup appearing in user-supplied content, for a token count over a configured budget, and for a number written with thousands separators. Fifty lines, and it belongs in the same module as everything else you build in this course. Chapter 33 adds one more check to it, for a reason you will not like.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "special token", d: "A vocabulary entry added after tokenizer training to mark structure rather than content, such as the beginning of a sequence or the end of a turn." },
+    { t: "BOS token", d: "The beginning-of-sequence marker; Llama 3 uses one and Qwen 2.5 does not, which is a common porting bug." },
+    { t: "EOS token", d: "The end-of-sequence marker whose generation tells the runtime to stop producing tokens." },
+    { t: "padding token", d: "A filler id used to make a batch of unequal sequences rectangular; a model that defines none leaves the choice to the training framework." },
+    { t: "chat template", d: "The Jinja string shipped with a model that renders a list of role-tagged messages into the single flat sequence the model actually reads." },
+    { t: "generation prompt", d: "The trailing fragment of a rendered template, ending with the assistant's header, that puts the model in the position of speaking next." },
+    { t: "template mismatch", d: "Serving or fine-tuning a model with a different template than it was trained on; it raises no error and degrades quality in a way that resembles a capability problem." },
+    { t: "leading-space convention", d: "The rule in byte-level BPE that a space belongs to the token that follows it, making 'hello' and ' hello' different ids." },
+    { t: "trailing-space bug", d: "Ending a prompt with whitespace, which forces the model to produce a rarer unprefixed token and measurably degrades the completion." },
+    { t: "single-digit tokenization", d: "A deliberate design choice, used by Qwen among others, that gives every digit its own token so that token boundaries agree with place value." },
+    { t: "place value", d: "The positional meaning of a digit in a number, which frequency-based token boundaries do not respect and the model must reconstruct." },
+    { t: "vocabulary padding", d: "Declaring a model vocab_size larger than the tokenizer's entry count so the embedding table is a hardware-friendly multiple; the extra rows are never indexed." },
+    { t: "prompt linter", d: "A check run over an assembled prompt before it is sent, catching trailing whitespace, injected markup, budget overruns and formatting traps." },
+    { t: "token budget", d: "The number of tokens a request is allowed to consume, measured with the real tokenizer rather than estimated from character count." }
+  ],
+  quiz: [
+    { type: "mc", q: "GPT-2 tokenizes 3478 as ['34', '78']. Why does this make arithmetic harder for the model?", opts: ["The token boundaries do not align with place value, so magnitude must be reconstructed from pieces cut on frequency", "Two tokens carry less information than four digits", "The model cannot perform multiplication on any tokenized input", "The tokens are rare, so their embeddings are poorly trained"], a: 0,
+      why: "The pieces were chosen because '34' and '78' are frequent character pairs in the training corpus, not because they mean anything numerically. The model must learn that this particular pair of symbols, in this order, denotes a magnitude near three and a half thousand, and it must do that separately for every possible split. Single-digit tokenization exists precisely to remove this problem." },
+    { type: "mc", q: "Under cl100k_base, the string 'hello' is id 15339 and ' hello' is id 24748. What follows from that?", opts: ["The tokenizer stores two copies of every word, doubling the vocabulary", "Spaces are stripped before encoding, so the ids are equivalent", "The embedding table averages the two rows at inference time", "A prompt ending in a space forces the model to produce the rarer unprefixed form of the next word"], a: 3,
+      why: "They are two unrelated rows of the embedding table. Almost all of the model's training saw the space-prefixed form following ordinary text, so supplying the space yourself pushes the next prediction onto a token it has seen far less often. The effect is usually small and occasionally not, and it is invisible because nothing errors." },
+    { type: "mc", q: "A Llama-formatted prompt of 20 tokens becomes 67 tokens under Qwen's tokenizer. What has gone wrong?", opts: ["Qwen has a smaller vocabulary, so everything costs more", "The text was corrupted during transfer between tokenizers", "Qwen's tokenizer does not hold Llama's special tokens, so each one fragments into literal punctuation", "The generation prompt was applied twice"], a: 2,
+      why: "'<|begin_of_text|>' is one control token in Llama's vocabulary and seven tokens of punctuation in Qwen's, because Qwen never added it. The structure that marks where a turn begins has become noise inside the conversation. Qwen's vocabulary is in fact larger than Llama's, which rules out the first option and is a useful reminder that vocabulary size does not predict this failure." },
+    { type: "mc", q: "Qwen 2.5 gives every digit its own token, costing 7 tokens for '1234567' where Llama 3 costs 3. What is the trade being made?", opts: ["Smaller vocabulary in exchange for longer sequences", "Token boundaries that agree with place value, in exchange for longer sequences on numeric text", "Faster encoding in exchange for slower decoding", "Better multilingual coverage in exchange for worse code handling"], a: 1,
+      why: "It is a deliberate design decision, not an artifact. Making each digit its own token means the correspondence between a digit and its position is consistent and learnable rather than dependent on which multi-digit chunks happened to be frequent. The cost is paid in length on every document containing figures, which for a finance or analytics workload is a real bill." },
+    { type: "blank", q: "The trailing fragment of a rendered chat template, ending with the assistant's header and nothing after it, is called the ____ prompt.", a: ["generation", "generation prompt"],
+      why: "It is what puts the model in the position of speaking next. Omit it and the model continues from wherever the string ended, which usually means writing more of the user's turn, because that is what the text in front of it looks like." },
+    { type: "blank", q: "Serving or fine-tuning a model with a different chat template than it was trained on is a template ____.", a: ["mismatch", "mismatch bug"],
+      why: "It is the most common real bug in applied fine-tuning and the hardest to see, because no exception is raised, no log line appears, and the degraded output reads as a capability limitation rather than a formatting error. Rendering one training example and printing the string catches it in seconds." },
+    { type: "mc", q: "Qwen2.5-7B-Instruct's tokenizer holds 151,665 entries but its config declares vocab_size 152,064. Which is correct?", opts: ["The tokenizer file is out of date and should be regenerated", "The config counts special tokens that the tokenizer excludes", "The difference is the number of merges, which are stored separately", "Both: the embedding table is padded to a hardware-friendly multiple, leaving rows no token indexes"], a: 3,
+      why: "Padding the vocabulary to a round multiple makes the matrix multiplies that touch the embedding and output layers land on friendlier shapes. The extra rows exist, occupy memory and are never indexed by any token. Use the config's number when counting parameters in Chapter 9, and the tokenizer's when reasoning about what the model can express." },
+    { type: "order", q: "Order these checks when a fine-tune trained cleanly but the deployed model got worse:", items: ["render one training example exactly as the trainer did and print the string", "confirm the special tokens encode as single ids, not punctuation runs", "confirm the loss was masked to the answer and not the prompt", "start adjusting the learning rate"],
+      why: "The first three are free, take a minute each, and account for most real occurrences of this symptom. Hyperparameters come last because changing them without ruling out a formatting bug means you are tuning around a defect rather than fixing it, and any improvement you find will be fragile." },
+    { type: "mc", q: "Your service estimates cost with the rule 'four characters per token'. For which workload is that estimate most dangerous?", opts: ["Tamil or Hindi user content, and heavily indented source code", "Short English chat messages", "Long English prose documents", "Prompts containing many proper nouns"], a: 0,
+      why: "The heuristic was derived from English prose and holds roughly there. Chapter 2 measured a Tamil sentence at eleven times its English equivalent under GPT-2's encoding, and this chapter measured GPT-2 spending five tokens on a single indented line of Python. Both blow past a four-characters-per-token estimate, and both are exactly the workloads where an underestimated bill becomes a production incident." },
+    { type: "mc", q: "Which of these is NOT explained by tokenization?", opts: ["A model miscounts the letters in a word", "A model's answers degrade after a system prompt is moved to a different position in the context", "A model's answer changes when a trailing space is added", "The same number costs twice as many tokens when written with commas"], a: 1,
+      why: "The first, second and fourth are all boundary effects: the model cannot see inside a token, the space changes which token comes next, and separators change the split. Position effects within a long context are a different mechanism entirely, belonging to attention and positional encoding, and they are Chapter 7's subject. Blaming everything on the tokenizer is as wrong as blaming nothing on it." }
   ]
 });
