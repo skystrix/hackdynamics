@@ -101,6 +101,18 @@
    per token forward under the 2N rule, with attention adding 1.7% at 512
    tokens and 107% at 32,768; 7.227e23 FLOPs to train on 15T tokens; 144.5 GB
    of training state at 18 bytes per parameter.
+
+   Sources consulted for Chapter 10: Shazeer et al. 2017 (sparsely-gated
+   mixture-of-experts); Lepikhin et al. 2020 (GShard, expert capacity);
+   Fedus et al. 2021 (Switch Transformer, top-1 routing); Jiang et al. 2024
+   (Mixtral of Experts); the DeepSeek-V3 technical report (shared and
+   fine-grained experts); Zoph et al. 2022 (ST-MoE, router z-loss). Read from
+   config.json on the Hub on 2026-09-06: Mixtral-8x7B 8 experts with top-2
+   routing and an expert width of 14,336; Qwen3-30B-A3B 128 experts with
+   top-8 and a moe_intermediate_size of 768 against a dense 6,144;
+   DeepSeek-V3 256 routed experts plus 1 shared, top-8, moe_intermediate_size
+   2,048 against a dense 18,432. Mixtral's 46.7B total and 12.9B active were
+   recomputed from its configuration and match the published figures.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -2106,5 +2118,194 @@ CHAPTERS.push({
       why: "Tying is the classic discrepancy, because the vocabulary matrix is often several percent of a model and it is easy to count both the embedding and the output projection when only one exists. Norms are 0.004% and could not produce a 4% gap. Using the tokenizer's smaller vocabulary would make you count too few, not too many, as would shrinking the key and value projections." },
     { type: "mc", q: "Two models have identical parameter counts, but one costs far more to serve. What most likely differs?", opts: ["The number of query heads", "The activation function", "The number of KV heads, the head dimension or the context length, which set the cache", "The vocabulary size"], a: 2,
       why: "Parameter count sets the weight memory and the 2N cost, and says nothing about the KV cache. Chapter 6's formula depends on layers, KV heads, head dimension and precision, none of which is visible in a parameter total. Ranking models by serving cost rather than by size reorders the list, which is the payoff of this chapter's build exercise." }
+  ]
+});
+
+/* ======================= CHAPTER 10 ======================= */
+CHAPTERS.push({
+  num: 10, part: 2, title: "Mixture of Experts: Paying for Part of a Model",
+  blurb: "A mixture-of-experts model can hold 671 billion parameters and do the arithmetic of 37 billion. The trick is a router that sends each token to a few of many feed-forward networks, and almost everything hard about it follows from one consequence: routing is a scheduling problem, and schedulers can be unbalanced. You will route tokens by hand, watch one expert collapse into taking everything, add the loss that prevents it, and then price the result honestly, because active parameters buy you speed while total parameters still have to live in memory.",
+  sections: [
+    { title: "Replace One Network With Many",
+      html: "<p>Chapter 9 established that the feed-forward network is 80.8% of a block. Chapter 15 will establish that more parameters mean lower loss. Put those together and you get an uncomfortable conclusion: the cheapest way to a better model is a wider feed-forward network, and you pay for every parameter of it on every token.</p>" +
+      "<p>Mixture of experts asks whether you have to. The observation is that a given token probably does not need all of that width. Code tokens and poetry tokens may want quite different processing, and a single network has to serve both by being a compromise.</p>" +
+      "<p>So: replace the one feed-forward network with several, called <strong>experts</strong>, and add a small <strong>router</strong> that picks a few per token. Every other part of the block is untouched. Attention still runs over all positions with all its parameters; only the feed-forward half becomes conditional.</p>" +
+      "<p>The consequence is the point of the whole design. A model with 8 experts holds 8 times the feed-forward parameters, but if the router picks 2, each token's arithmetic touches only 2 of them. Capacity grows with the number of experts; compute grows with the number selected. Those are now two different numbers, and separating them is the entire idea.</p>" +
+      "<p>The lineage is older than transformers. Noam Shazeer and colleagues built sparsely-gated mixtures into recurrent networks in 2017, the same year the transformer paper appeared. Google's Switch Transformer made it work at scale in 2021 with the most aggressive possible choice, one expert per token. Mixtral brought it to open weights in 2024, and by 2025 the largest open models were nearly all sparse.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the feed-forward half of a block, dense and sparse</text>" +
+      "<rect x='16' y='30' width='340' height='150' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='186' y='52' text-anchor='middle' fill='#4f7cff' font-size='11'>dense</text>" +
+      "<rect x='140' y='66' width='92' height='84' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='186' y='104' text-anchor='middle' fill='#ff5d73' font-size='10'>one FFN</text>" +
+      "<text x='186' y='122' text-anchor='middle' fill='#7d8fb0' font-size='9'>176M params</text>" +
+      "<text x='40' y='168' fill='#7d8fb0' font-size='9.5'>every token pays for all of it</text>" +
+      "<rect x='388' y='30' width='356' height='150' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='566' y='52' text-anchor='middle' fill='#3ddc97' font-size='11'>sparse: 8 experts, top-2</text>" +
+      "<rect x='406' y='64' width='40' height='30' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='450' y='64' width='40' height='30' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<rect x='494' y='64' width='40' height='30' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='538' y='64' width='40' height='30' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='406' y='100' width='40' height='30' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='450' y='100' width='40' height='30' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='2'/>" +
+      "<rect x='494' y='100' width='40' height='30' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<rect x='538' y='100' width='40' height='30' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='600' y='84' fill='#ffd166' font-size='9.5'>gold: chosen for this</text>" +
+      "<text x='600' y='118' fill='#7d8fb0' font-size='9.5'>grey: held in memory, idle</text>" +
+      "<text x='406' y='152' fill='#3ddc97' font-size='9.5'>1,409M held &#183; 352M used per token</text>" +
+      "<text x='406' y='168' fill='#7d8fb0' font-size='9.5'>capacity from the count, compute from the choice</text>" +
+      "<text x='20' y='202' fill='#c9d6ea' font-size='10.5'>Attention is unchanged. Only the feed-forward half becomes conditional, because that is where the parameters are.</text>" +
+      "</svg><div class='fig-cap'>Measured on Mixtral's configuration: eight experts of 176M each, two selected. The grey boxes are the reason the memory bill does not fall.</div></div>" },
+
+    { title: "The Router", viz: "llmMoeRouter", vizTitle: "Run 200 tokens with balancing off and watch one expert eat the model",
+      html: "<p>The router is smaller than everything it controls. For each token it takes the residual stream vector, multiplies it by one matrix of shape <code>d &#215; num_experts</code>, and gets one score per expert.</p>" +
+      "<pre><code>scores  = x W_router          # 4,096 -> 8\nchosen  = top_k(scores, k=2)\nweights = softmax(scores[chosen])\noutput  = sum( weights[i] * expert_i(x) for i in chosen )</code></pre>" +
+      "<p>Four lines, and the selection step is what names the scheme: <strong>top-k routing</strong>. The router for Mixtral is 4,096 &#215; 8 = 32,768 parameters, controlling 1.4 billion per layer. A rounding error decides where four fifths of the model's capacity gets spent.</p>" +
+      "<p>Two details in those lines matter more than they look.</p>" +
+      "<p><strong>The softmax is over the chosen experts, not all of them.</strong> Selecting first and normalizing second means the weights on the two picked experts sum to one, so the output magnitude does not depend on how many experts existed.</p>" +
+      "<p><strong>The choice is discrete, and discrete choices have no gradient.</strong> Top-k is a hard selection: you cannot differentiate through &#8220;expert 3 was chosen and expert 5 was not&#8221;. What saves it is that the router's weights <em>are</em> in the output as multipliers, so gradient flows to the router through the weight it assigned to each expert it picked. The router learns to raise the weight on experts that helped and lower it on those that did not. It never receives a gradient telling it about an expert it did not choose, and that asymmetry causes the problem in the next section.</p>" },
+
+    { title: "Why Routing Collapses",
+      html: "<p>Here is the failure mode, and it is not a bug in an implementation. It is a property of the objective.</p>" +
+      "<p>Suppose that early in training, by pure chance, expert 3 is slightly better than the others. The router notices and sends it slightly more tokens. More tokens means more gradient updates, so expert 3 improves faster. Being better, it is chosen more often. The other experts, chosen rarely, receive little gradient and stay near their initialization, which makes them worse relative to expert 3, which makes them chosen even less.</p>" +
+      "<p>This is a rich-get-richer loop with nothing opposing it, and it runs to completion quickly. The end state is <strong>routing collapse</strong>: one or two experts handle most traffic and the rest are dead weight. You have paid for eight experts, you are holding eight in memory, and you have trained two.</p>" +
+      "<h3>The fix, and what it costs</h3>" +
+      "<p>The standard remedy is an <strong>auxiliary load-balancing loss</strong> added to the training objective, which is minimized when tokens are spread evenly across experts. It is a second term alongside the cross-entropy of Chapter 13, with a small coefficient, and the coefficient is a real trade: too small and collapse happens anyway, too large and the router is pushed to balance rather than to route well, which costs quality.</p>" +
+      "<p>Note what this means. The model is being explicitly penalized for routing tokens where they would do the most good, in order to keep the parameters it paid for alive. That tension has no clean resolution and it is the central difficulty of training an MoE.</p>" +
+      "<p>A second mechanism, from GShard in 2020, handles the same problem at the batch level. Each expert is given a <strong>capacity</strong>, a maximum number of tokens it may accept in one batch. Tokens routed to an expert that is already full suffer <strong>token dropping</strong>: they skip the feed-forward layer entirely and pass through on the residual connection alone. It bounds the memory and compute per expert, which matters enormously for the distributed implementation in section 5, and it means some tokens genuinely get less processing than others. The capacity factor is a tuning knob, and setting it too tight silently degrades quality on exactly the tokens the router thought were most in need of a particular expert.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 218' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>tokens received by each of 8 experts, after 200 tokens</text>" +
+      "<text x='20' y='44' fill='#ff5d73' font-size='10.5'>no balancing loss</text>" +
+      "<rect x='150' y='32' width='16' height='16' rx='3' fill='#1c2a45'/>" +
+      "<rect x='172' y='32' width='10' height='16' rx='3' fill='#1c2a45'/>" +
+      "<rect x='188' y='32' width='300' height='16' rx='3' fill='#ff5d73'/>" +
+      "<rect x='494' y='32' width='120' height='16' rx='3' fill='#ffd166'/>" +
+      "<rect x='620' y='32' width='8' height='16' rx='3' fill='#1c2a45'/>" +
+      "<rect x='634' y='32' width='6' height='16' rx='3' fill='#1c2a45'/>" +
+      "<rect x='646' y='32' width='5' height='16' rx='3' fill='#1c2a45'/>" +
+      "<rect x='657' y='32' width='4' height='16' rx='3' fill='#1c2a45'/>" +
+      "<text x='150' y='68' fill='#ff5d73' font-size='9.5'>two experts take most of the traffic; six are barely trained</text>" +
+      "<text x='20' y='108' fill='#3ddc97' font-size='10.5'>with balancing loss</text>" +
+      "<rect x='150' y='96' width='62' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='218' y='96' width='66' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='290' y='96' width='60' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='356' y='96' width='68' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='430' y='96' width='58' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='494' y='96' width='64' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='564' y='96' width='62' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='632' y='96' width='60' height='16' rx='3' fill='#3ddc97'/>" +
+      "<text x='150' y='132' fill='#3ddc97' font-size='9.5'>all eight experts stay alive and keep learning</text>" +
+      "<line x1='20' y1='152' x2='740' y2='152' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='176' fill='#c9d6ea' font-size='10.5'>The loop is self-reinforcing: chosen more, trained more, therefore better, therefore chosen more.</text>" +
+      "<text x='20' y='198' fill='#7d8fb0' font-size='10.5'>The balancing loss opposes it by penalizing the router for routing where it wants to.</text>" +
+      "</svg><div class='fig-cap'>Turn the auxiliary loss off in the machine and this is what you get within a couple of hundred tokens.</div></div>" +
+      "<p>Run the router machine with balancing off and watch the bars diverge. Then turn it on and run again. That is the discovery, and it is why the coefficient of a term that appears nowhere in the model's forward pass is one of the more consequential hyperparameters in training an MoE.</p>" },
+
+    { title: "Two Bills", viz: "llmActiveVsTotal", vizTitle: "Match a dense and a sparse model on one axis and watch the other diverge",
+      html: "<p>Now the honest accounting, because this is where MoE is most often mis-sold.</p>" +
+      "<p>Count Mixtral-8x7B from its configuration, using Chapter 9's method. Hidden size 4,096, 32 layers, expert width 14,336, eight experts, top-2 routing, vocabulary 32,000:</p>" +
+      "<pre><code>one expert                        176,160,768\neight experts, per layer        1,409,286,144\n\nTOTAL parameters               46,701,744,128   = 46.7B\nACTIVE parameters per token    12,878,876,672   = 12.9B\nratio                                   3.63x</code></pre>" +
+      "<p>Those totals match the published figures, which is a good check that the method from Chapter 9 works on an architecture it was not derived for.</p>" +
+      "<p>Now convert each into the cost it actually drives:</p>" +
+      "<pre><code>what you must hold in memory:  46.7B x 2 bytes  =  93.4 GB\nwhat you pay per token:        2 x 12.9B        =  25.8 GFLOPs</code></pre>" +
+      "<p>A dense model with the same per-token arithmetic would have 12.9 billion parameters and need 25.8 GB. Mixtral needs <strong>3.6 times the memory for the same speed</strong>. That is the trade, stated plainly: MoE buys quality per FLOP and pays for it in bytes.</p>" +
+      "<p>Which bill matters depends entirely on your situation. If you are compute-bound in training, or latency-bound in serving with plenty of memory, MoE is close to free capacity. If you are memory-bound, which is the normal case on a single card and the reason Chapter 26 exists, MoE is actively the wrong direction: you are holding 93 GB to get the speed of a model that would fit in 26.</p>" +
+      "<div class='callout'><strong>How to read a model name.</strong> Qwen3-30B-A3B says it directly: 30 billion total, 3 billion active. Where a name does not, the config does. Two fields give it away: an expert count (<code>num_local_experts</code>, <code>num_experts</code> or <code>n_routed_experts</code>) and <code>num_experts_per_tok</code>. If both are present, the parameter count in the model's name is the memory bill, not the speed.</div>" },
+
+    { title: "The Serving Problem",
+      html: "<p>A dense model's weights sit on the GPU and every token uses all of them. An MoE's do not fit that pattern, and the difference shows up as a systems problem rather than a modelling one.</p>" +
+      "<p>At frontier scale the experts of a single layer are too large for one device, so they are spread across many. This is <strong>expert parallelism</strong>, and it introduces a communication step that dense models do not have. Each device holds a few experts. A token arriving on device 0 may be routed to an expert on device 5, so before the feed-forward layer every device must send its tokens to wherever their experts live, and afterwards send the results back. That is an <strong>all-to-all</strong> exchange, twice per MoE layer, and it is the dominant cost in a distributed MoE.</p>" +
+      "<p>Three consequences follow.</p>" +
+      "<p><strong>Interconnect quality decides throughput.</strong> On a machine with fast intra-node links, all-to-all is tolerable. Across slower links between nodes it dominates, and an MoE that trains efficiently on one cluster can be badly inefficient on another with the same total FLOPs.</p>" +
+      "<p><strong>Load imbalance costs wall-clock, not just quality.</strong> Every device waits for the slowest. If one expert receives three times its share, its device runs three times as long and everything else idles. This is why expert capacity exists at all: bounding the work per expert bounds the wait.</p>" +
+      "<p><strong>Batching behaves differently.</strong> In a dense model, a larger batch reuses the same weights across more tokens, which Chapter 26 shows is exactly what makes batching profitable. In an MoE, a larger batch spreads across more experts, so each expert's matrix multiplication stays small while more of the model gets touched. The efficiency gain from batching is real but weaker, and it is one reason MoE serving stacks are more specialized than dense ones.</p>" },
+
+    { title: "How the Design Changed",
+      html: "<p>Three generations of MoE are visible in configuration files, and reading them side by side shows what the field learned.</p>" +
+      "<p><strong>Switch Transformer, 2021: fewer choices.</strong> Google went to top-1 routing, one expert per token, on the grounds that it halves the communication and the quality cost is small. It made large MoE training practical and established the auxiliary loss and capacity machinery everything else uses.</p>" +
+      "<p><strong>Mixtral, 2024: full-size experts.</strong> Eight experts per layer, top-2, and each expert is a complete feed-forward network at the model's normal width of 14,336. Simple, and it works. The weakness is granularity: with eight coarse experts, the router's choice is blunt, and two experts must between them cover whatever a token needs.</p>" +
+      "<p><strong>DeepSeek-V3 and Qwen3, 2024 onward: many small experts, plus a shared one.</strong> Two changes at once, both readable in the configs.</p>" +
+      "<p>The first is <strong>fine-grained experts</strong>. DeepSeek-V3 has 256 routed experts with a width of 2,048 against a dense feed-forward width of 18,432; Qwen3-30B-A3B has 128 experts of width 768 against a dense 6,144. The experts are roughly a ninth and an eighth of full size, and eight are selected rather than two. Same active parameters, far more combinations: choosing 8 of 128 gives astronomically more distinct routings than 2 of 8, so specialization can be much finer.</p>" +
+      "<p>The second is a <strong>shared expert</strong>: one network every token passes through, in addition to whichever are routed. DeepSeek-V3 has one. The reasoning is that some processing is useful for every token regardless of type, and without a shared expert each specialist has to learn that common part redundantly. Factoring it out lets the routed experts spend their capacity on what actually differs.</p>" +
+      "<pre><code>                  experts   top-k   expert width   dense width\nMixtral-8x7B            8       2         14,336        14,336\nQwen3-30B-A3B         128       8            768         6,144\nDeepSeek-V3      256 + 1        8          2,048        18,432</code></pre>" +
+      "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>from a few big experts to many small ones (read from configs)</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10'>Mixtral</text>" +
+      "<rect x='120' y='34' width='60' height='18' rx='3' fill='#1c2a45'/><rect x='184' y='34' width='60' height='18' rx='3' fill='#ffd166'/>" +
+      "<rect x='248' y='34' width='60' height='18' rx='3' fill='#1c2a45'/><rect x='312' y='34' width='60' height='18' rx='3' fill='#1c2a45'/>" +
+      "<rect x='376' y='34' width='60' height='18' rx='3' fill='#ffd166'/><rect x='440' y='34' width='60' height='18' rx='3' fill='#1c2a45'/>" +
+      "<rect x='504' y='34' width='60' height='18' rx='3' fill='#1c2a45'/><rect x='568' y='34' width='60' height='18' rx='3' fill='#1c2a45'/>" +
+      "<text x='644' y='47' fill='#7d8fb0' font-size='9.5'>8 experts, pick 2</text>" +
+      "<text x='20' y='100' fill='#7d8fb0' font-size='10'>Qwen3 / DeepSeek</text>" +
+      "<rect x='120' y='86' width='9' height='18' rx='2' fill='#1c2a45'/><rect x='133' y='86' width='9' height='18' rx='2' fill='#ffd166'/>" +
+      "<rect x='146' y='86' width='9' height='18' rx='2' fill='#1c2a45'/><rect x='159' y='86' width='9' height='18' rx='2' fill='#1c2a45'/>" +
+      "<rect x='172' y='86' width='9' height='18' rx='2' fill='#ffd166'/><rect x='185' y='86' width='9' height='18' rx='2' fill='#1c2a45'/>" +
+      "<rect x='198' y='86' width='9' height='18' rx='2' fill='#ffd166'/><rect x='211' y='86' width='9' height='18' rx='2' fill='#1c2a45'/>" +
+      "<rect x='224' y='86' width='9' height='18' rx='2' fill='#1c2a45'/><rect x='237' y='86' width='9' height='18' rx='2' fill='#ffd166'/>" +
+      "<rect x='250' y='86' width='9' height='18' rx='2' fill='#1c2a45'/><rect x='263' y='86' width='9' height='18' rx='2' fill='#1c2a45'/>" +
+      "<rect x='276' y='86' width='9' height='18' rx='2' fill='#ffd166'/><rect x='289' y='86' width='9' height='18' rx='2' fill='#1c2a45'/>" +
+      "<rect x='302' y='86' width='9' height='18' rx='2' fill='#1c2a45'/><rect x='315' y='86' width='9' height='18' rx='2' fill='#ffd166'/>" +
+      "<text x='340' y='99' fill='#7d8fb0' font-size='9.5'>... 128 or 256 of them, pick 8</text>" +
+      "<rect x='120' y='120' width='80' height='18' rx='3' fill='#3ddc97'/>" +
+      "<text x='214' y='133' fill='#3ddc97' font-size='9.5'>plus a shared expert every token passes through (DeepSeek-V3)</text>" +
+      "<line x1='20' y1='156' x2='740' y2='156' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='178' fill='#c9d6ea' font-size='10.5'>Same active parameters either way. Choosing 8 of 128 gives vastly more distinct routings than 2 of 8,</text>" +
+      "<text x='20' y='198' fill='#c9d6ea' font-size='10.5'>so specialization can be finer, and a shared expert stops every specialist relearning the common part.</text>" +
+      "</svg><div class='fig-cap'>The direction of travel is smaller experts, more of them, more selected, plus something always on. All four numbers are in the config files.</div></div>" },
+
+    { title: "When Not To",
+      html: "<p>MoE is not a free upgrade, and four situations argue against it.</p>" +
+      "<p><strong>You are memory-bound.</strong> The most common case, and the one section 4 priced. If your constraint is fitting the model at all, a sparse model is strictly worse than a dense one of the same speed. Chapter 26 shows that single-stream decoding is bandwidth-bound, and an MoE moves more bytes for the same output.</p>" +
+      "<p><strong>You are fine-tuning.</strong> MoE models are harder to fine-tune well. The router was trained on the pretraining distribution and your data is not that distribution, so it may route badly, and a small dataset gives some experts very few examples. Chapter 21's adapters work, but the literature is thinner and the failure modes are less charted.</p>" +
+      "<p><strong>Your serving stack is not built for it.</strong> Expert parallelism, all-to-all, capacity handling and expert-aware batching are real engineering. Chapter 30 covers which engines do it well; if yours does not, measured throughput will not resemble the FLOP count.</p>" +
+      "<p><strong>You are small.</strong> The benefit comes from holding capacity you do not pay for per token, and that is only attractive when total capacity is the binding constraint on quality. Below a few billion parameters it usually is not, and the added complexity buys little.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;A model advertises 671B parameters and 37B active. What does that tell you about deploying it?&#8221; The complete answer separates the two bills: you must hold 671B worth of weights in memory, roughly 1.3 TB at bf16 and so certainly multi-GPU, while each token costs the arithmetic of a 37B model, so throughput resembles a much smaller model. The follow-up is usually about all-to-all communication, and the thing to say is that expert parallelism makes interconnect bandwidth a first-order concern rather than a detail.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A model has 32 layers, hidden size 4,096, 16 experts of width 8,192 with top-2 routing, and attention identical to Corvid's. Compute its total parameters and its active parameters, then the ratio. Compute the memory at bf16 and the FLOPs per token. Then state the size of the dense model that would have the same per-token cost, and how much less memory it would need.</li>" +
+      "<li><strong>Trace.</strong> The router for that model is a single matrix. Compute its parameter count, and express it as a fraction of the expert parameters it controls. Then explain in two sentences why a component that small can determine most of the model's quality, and why it receives no gradient about experts it did not choose.</li>" +
+      "<li><strong>Investigate.</strong> Find three MoE models on the Hub and record the expert count, experts per token, expert width and the dense feed-forward width of a comparable dense model. Compute the ratio of expert width to dense width for each. Order them by release date. You should see the fine-graining trend from section 6 directly in the numbers.</li>" +
+      "<li><strong>Investigate.</strong> Take an MoE model and its dense counterpart of similar active-parameter count. Find published benchmark scores for both, and find their memory requirements. Then answer the question a deployment actually poses: at your memory budget, would you rather have the sparse model or a dense model of the size that budget affords? The answer is not the same for every budget, and finding where it flips is the exercise.</li>" +
+      "<li><strong>Build.</strong> Implement an MoE feed-forward layer in about forty lines: a router matrix, top-k selection, a softmax over the chosen experts, and a weighted sum of their outputs. Add an auxiliary load-balancing loss and a switch to disable it. Run 500 random tokens through it with the loss off and print the per-expert token counts; you should see collapse. Turn it on and repeat. Then add a capacity limit and count dropped tokens. Assert that with k equal to the expert count and balancing off, the layer reproduces a dense layer's output to within numerical tolerance, because that is what it reduces to.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "mixture of experts", d: "An architecture replacing a block's single feed-forward network with several, of which a router selects a few per token." },
+    { t: "expert", d: "One of the parallel feed-forward networks in an MoE layer; full-width in Mixtral, roughly an eighth of full width in current fine-grained designs." },
+    { t: "router", d: "A single small matrix producing one score per expert from the residual stream vector, deciding where each token's computation goes." },
+    { t: "top-k routing", d: "Selecting the k highest-scoring experts for a token; k is 1 in Switch, 2 in Mixtral, 8 in DeepSeek-V3 and Qwen3." },
+    { t: "active parameters", d: "The parameters a single token's forward pass actually touches, which sets the FLOP cost and the speed." },
+    { t: "total parameters", d: "Every parameter the model contains, which sets the memory bill regardless of how few are used per token." },
+    { t: "routing collapse", d: "The self-reinforcing failure in which a few experts receive most tokens, are trained most, become best, and are chosen still more." },
+    { t: "auxiliary load-balancing loss", d: "An extra training term minimized when tokens spread evenly across experts, opposing collapse at some cost to routing quality." },
+    { t: "expert capacity", d: "A per-batch cap on how many tokens one expert may accept, which bounds memory and wait time in a distributed implementation." },
+    { t: "token dropping", d: "What happens to a token routed to an expert already at capacity: it skips the feed-forward layer and passes through on the residual connection alone." },
+    { t: "expert parallelism", d: "Spreading a layer's experts across devices, which requires sending tokens to wherever their expert lives and back again." },
+    { t: "all-to-all", d: "The communication pattern that exchange requires, performed twice per MoE layer and usually the dominant cost in distributed MoE." },
+    { t: "fine-grained experts", d: "Using many narrow experts and selecting more of them, which keeps active parameters constant while multiplying the number of distinct routings." },
+    { t: "shared expert", d: "An expert every token passes through in addition to the routed ones, so specialists need not each relearn the processing common to all tokens." }
+  ],
+  quiz: [
+    { type: "mc", q: "Mixtral-8x7B has 46.7B total parameters and 12.9B active. What does each number govern?", opts: ["Total governs quality, active governs training cost", "Total governs the memory you must hold, active governs the FLOPs per token", "Total is the untrained count, active is the trained count", "Total governs the download size, active governs the KV cache"], a: 1,
+      why: "Every parameter must live in memory whether or not a given token uses it, so total sets the 93.4 GB footprint at bf16. Only the selected experts do arithmetic, so active sets the 25.8 GFLOPs per token. A dense model with the same speed would need 25.8 GB, so Mixtral pays 3.6 times the memory for that speed. The KV cache is set by attention, which MoE does not change." },
+    { type: "mc", q: "Why does routing collapse happen without an explicit countermeasure?", opts: ["The router matrix is too small to distinguish experts", "The softmax over experts is numerically unstable", "Experts are initialized identically and cannot differentiate", "An expert chosen slightly more often is trained more, becomes better, and is therefore chosen more; nothing opposes the loop"], a: 3,
+      why: "It is a property of the objective, not a bug. A small initial advantage compounds through training, and an expert that is rarely chosen receives little gradient and stays near its initialization. The end state is a model that holds eight experts and has trained two. Experts are initialized differently, which is what supplies the initial random advantage in the first place." },
+    { type: "mc", q: "What is uncomfortable about the auxiliary load-balancing loss?", opts: ["It penalizes the router for sending tokens where they would help most, in order to keep paid-for parameters alive", "It is expensive to compute", "It only works with top-1 routing", "It requires a second backward pass"], a: 0,
+      why: "The balancing term is minimized by even spreading, and even spreading is not the same as good routing. The model is explicitly pushed away from its best routing decisions so that the experts it holds do not die. The coefficient is a direct trade between the two, with no clean resolution, which is why it is one of the more consequential hyperparameters in MoE training." },
+    { type: "mc", q: "A token is routed to an expert already at its capacity for this batch. What happens?", opts: ["The batch is rejected and retried", "It is sent to the next-best expert instead", "It skips the feed-forward layer and passes through on the residual connection alone", "Capacity is expanded dynamically"], a: 2,
+      why: "The token is dropped from that layer, which the residual stream makes survivable: it still carries its value forward, having simply received no feed-forward processing at that layer. Capacity exists to bound memory and wait time in a distributed implementation, since every device waits for the slowest. Setting it too tight silently degrades exactly the tokens the router thought most needed a particular expert." },
+    { type: "blank", q: "The communication pattern where every device sends tokens to wherever their chosen experts live, performed twice per MoE layer, is called ____.", a: ["all-to-all", "all to all", "alltoall"],
+      why: "It is the dominant cost in distributed MoE and the reason interconnect bandwidth becomes a first-order concern rather than a detail. A mixture-of-experts model that trains efficiently on a cluster with fast intra-node links can be badly inefficient on one with slower links between nodes, at identical total FLOPs." },
+    { type: "blank", q: "An expert that every token passes through, in addition to whichever experts are routed to it, is called a ____ expert.", a: ["shared"],
+      why: "DeepSeek-V3 uses one. The reasoning is that some processing helps every token regardless of type, and without a shared expert each specialist must learn that common part redundantly. Factoring it out lets the routed experts spend their capacity on what actually differs between tokens." },
+    { type: "order", q: "Order what happens to one token in an MoE layer:", items: ["the router scores every expert from the token's vector", "the top k experts are selected", "a softmax over just those k produces their weights", "the weighted sum of their outputs is added to the residual stream"],
+      why: "Score, select, normalize, combine. Normalizing after selection rather than before is what keeps the output magnitude independent of how many experts exist. The selection itself is discrete and has no gradient, so the router learns only through the weights it assigned to experts it actually chose, which is the asymmetry that causes collapse." },
+    { type: "mc", q: "Qwen3 uses 128 experts of width 768 where Mixtral uses 8 of width 14,336, both at similar active parameter counts. What does the change buy?", opts: ["Lower memory, since the experts are smaller", "Elimination of the need for a balancing loss", "Faster all-to-all communication", "Far more distinct routing combinations, so specialization can be much finer"], a: 3,
+      why: "Total capacity and active parameters are roughly matched, so memory and speed are not the gain. Choosing 8 of 128 gives astronomically more distinct expert combinations than 2 of 8, letting the model specialize at a much finer grain. Balancing remains necessary, and more experts spread across devices generally makes the communication pattern harder rather than easier." },
+    { type: "mc", q: "You are serving on a single 24 GB card and are choosing between a 46.7B MoE with 12.9B active and a dense 13B model. Which consideration dominates?", opts: ["The MoE's better quality per FLOP", "Neither MoE weights nor its cache fit in 24 GB, so the dense model is the only option that runs", "The MoE's router adds unacceptable latency", "The dense model cannot use grouped-query attention"], a: 1,
+      why: "The MoE needs 93.4 GB at bf16 for weights alone, so quality per FLOP is irrelevant: it does not run. This is the memory-bound case from section 7, and it is the most common one on a single card. MoE is attractive when compute is the binding constraint and memory is plentiful, which is the opposite of this situation." },
+    { type: "mc", q: "Which part of a transformer block does mixture-of-experts replace, and why that part?", opts: ["Attention, because it is the most expensive operation", "The normalization, because it is cheapest to duplicate", "The feed-forward network, because it holds about four fifths of the block's parameters", "The residual connection, because it carries the most information"], a: 2,
+      why: "Chapter 9 counted it: the feed-forward network is 80.8% of a block and attention is 19.2%. Making the largest parameter store conditional is where the capacity gain is, and attention must still run over all positions for the mechanism to work at all. The norms are 0.004% of the block, so duplicating them would buy nothing." }
   ]
 });
