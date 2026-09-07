@@ -78,6 +78,18 @@
    factor 32 taking 8,192 to 131,072; Qwen2.5-7B and Mistral-7B-v0.3
    rope_theta 1,000,000. The relative-distance demonstration in section 5 and
    the wavelength table in section 7 were computed the same day.
+
+   Sources consulted for Chapter 8: He et al. 2015 (residual connections);
+   Ba et al. 2016 (layer normalization); Hendrycks & Gimpel 2016 (GELU);
+   Vaswani et al. 2017 (the original post-LN block); Zhang & Sennrich 2019
+   (RMSNorm); Shazeer 2020 (GLU Variants Improve Transformer); Xiong et al.
+   2020 (On Layer Normalization in the Transformer Architecture); Elhage et
+   al. 2021 (the residual stream framing). Feed-forward ratios read from
+   config.json on the Hub on 2026-09-06 and used in section 3: GPT-2 4.000x
+   with GELU and LayerNorm; Llama-2-7B 2.688x; Llama-3-8B 3.500x;
+   Mistral-7B-v0.3 3.500x; Gemma-2-9B 4.000x with GELU; Qwen2.5-7B 5.286x;
+   every model but GPT-2 using RMSNorm. The block composition in section 8
+   was computed from Corvid's configuration the same day.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -1633,5 +1645,240 @@ CHAPTERS.push({
       why: "Needle retrieval is a floor. Finding one planted sentence is a much easier task than aggregating across the context, tracking a variable through it, or answering something with no copyable span. RULER tests those, and models that stay green on needles at their full advertised length routinely fail RULER at a fraction of it." },
     { type: "mc", q: "What does ALiBi trade away in exchange for its good extrapolation?", opts: ["The ability to use a KV cache", "Compatibility with multi-head attention", "The model's freedom to decide that a distant token matters more than a nearby one, since the penalty is fixed and monotonic", "Support for causal masking"], a: 2,
       why: "ALiBi adds a fixed distance penalty to the scores, with a different slope per head. That shape is imposed rather than learned, so a head cannot conclude that a token 400 positions back deserves more weight than one 4 back. RoPE imposes no such shape, which is broadly why the field moved to it while ALiBi remained in specific models such as BLOOM and MPT." }
+  ]
+});
+
+/* ======================= CHAPTER 8 ======================= */
+CHAPTERS.push({
+  num: 8, part: 2, title: "The Block: Residual Stream, Norms, and the Feed-Forward",
+  blurb: "Attention is half a block. The other half is a two-layer network applied to every position independently, and it holds four fifths of the parameters. Around both sits the residual stream, the running vector each sub-layer reads, modifies and writes back. You will assemble the whole block, then work through the three choices that separate a 2017 transformer from a 2026 one: where the normalization goes, which normalization it is, and which activation the feed-forward uses. Each was a real experiment with a real result, and each is a one-line change you will make in the capstone.",
+  sections: [
+    { title: "The Stream Everything Writes To", viz: "llmBlock", vizTitle: "Follow one vector through the block; then remove the residual connections",
+      html: "<p>Chapter 4 introduced the residual stream in a paragraph. It earns a section here, because it is the object every other mechanism in this course operates on.</p>" +
+      "<p>A sub-layer does not transform its input into its output. It computes something <em>from</em> its input and adds it back:</p>" +
+      "<pre><code>x = x + attention(x)\nx = x + feedforward(x)</code></pre>" +
+      "<p>Two lines. That is a transformer block, and everything else is detail about what goes inside those two functions. Because the operation is addition rather than replacement, the vector arriving at layer 32 is the original embedding plus 64 contributions, each written by a sub-layer that chose to write it.</p>" +
+      "<h3>Why addition and not replacement</h3>" +
+      "<p>The naive design replaces: each layer's output is the next layer's input, full stop. Stack 32 of those and training fails, for a reason that is easiest to see from the gradient's point of view.</p>" +
+      "<p>Backpropagation multiplies gradients layer by layer on the way down. Thirty-two multiplications by numbers slightly below one drives the gradient to nothing before it reaches layer 1, so the early layers receive almost no signal and never learn. Slightly above one and it explodes instead. Getting 32 layers to sit exactly on the knife edge is not something you can arrange.</p>" +
+      "<p>The residual connection changes the arithmetic. Because the output is <code>x + f(x)</code>, the derivative with respect to x is <code>1 + f'(x)</code>. There is now a path of constant 1 running from the loss all the way to the embedding, with each sub-layer's contribution added alongside rather than multiplied through. The gradient reaching layer 1 is undiminished by depth.</p>" +
+      "<p>This is Kaiming He and colleagues' 2015 result, invented for image networks and inherited by transformers wholesale. It is the reason deep stacks are trainable at all, and it is why residual connections are the one component in this chapter that has never been revised.</p>" +
+      "<h3>What the framing buys you</h3>" +
+      "<p>Once you see the stream as a shared channel rather than a value being transformed, several later chapters stop being surprising.</p>" +
+      "<ul>" +
+      "<li>The width is constant, 4,096 for Corvid, from embedding to final layer. Nothing expands or contracts, because every sub-layer must write back into the same channel.</li>" +
+      "<li>Sub-layers communicate by writing to it and reading from it, which is how the two-head induction circuit in Chapter 6 works across layers.</li>" +
+      "<li>The stream at layer 20 is a partial answer, and can be projected into vocabulary space to see what the model believes so far. That is Chapter 11.</li>" +
+      "<li>The final vector is the accumulated sum, and multiplying it by the output projection gives Chapter 1's distribution.</li>" +
+      "</ul>" +
+      "<div class='fig'><svg viewBox='0 0 760 218' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>replacement versus addition, seen by the gradient</text>" +
+      "<text x='30' y='44' fill='#ff5d73' font-size='10.5'>replace: x = f(x)</text>" +
+      "<rect x='30' y='54' width='60' height='22' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='60' y='69' text-anchor='middle' fill='#ff5d73' font-size='9.5'>layer 1</text>" +
+      "<rect x='100' y='54' width='60' height='22' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='130' y='69' text-anchor='middle' fill='#ff5d73' font-size='9.5'>layer 2</text>" +
+      "<text x='168' y='69' fill='#7d8fb0' font-size='9.5'>...</text>" +
+      "<rect x='196' y='54' width='68' height='22' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='230' y='69' text-anchor='middle' fill='#ff5d73' font-size='9.5'>layer 32</text>" +
+      "<text x='30' y='98' fill='#7d8fb0' font-size='9.5'>gradient multiplies through all 32:</text>" +
+      "<text x='30' y='114' fill='#ff5d73' font-size='9.5'>0.9^32 = 0.034, and layer 1 learns nothing</text>" +
+      "<text x='400' y='44' fill='#3ddc97' font-size='10.5'>add: x = x + f(x)</text>" +
+      "<line x1='400' y1='65' x2='700' y2='65' stroke='#3ddc97' stroke-width='4'/>" +
+      "<rect x='420' y='54' width='60' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='450' y='69' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>f</text>" +
+      "<rect x='500' y='54' width='60' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='530' y='69' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>f</text>" +
+      "<rect x='600' y='54' width='60' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='630' y='69' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>f</text>" +
+      "<text x='400' y='98' fill='#7d8fb0' font-size='9.5'>derivative is 1 + f'(x): a path of constant 1</text>" +
+      "<text x='400' y='114' fill='#3ddc97' font-size='9.5'>runs from the loss to the embedding, undiminished</text>" +
+      "<line x1='20' y1='134' x2='740' y2='134' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='158' fill='#c9d6ea' font-size='10.5'>The green line is the residual stream. Sub-layers write onto it; they do not replace it.</text>" +
+      "<text x='20' y='180' fill='#c9d6ea' font-size='10.5'>Its width is constant at 4,096 the whole way up, because every sub-layer writes back to the same channel.</text>" +
+      "<text x='20' y='204' fill='#7d8fb0' font-size='10'>He et al. 2015, invented for image networks. It is the one component in this chapter nobody has revised.</text>" +
+      "</svg><div class='fig-cap'>Why 32 layers train at all. Take the green line away and the gradient dies before it reaches the bottom.</div></div>" +
+      "<p>Use the machine and follow one vector up the block, watching its norm grow as contributions accumulate. Then switch the residual connections off and look at the gradient magnitude at layer 1. It falls to roughly nothing, which is the whole argument in one control.</p>" },
+
+    { title: "The Other Half of the Block",
+      html: "<p>Attention moves information <em>between</em> positions. Something has to process the information once it arrives, and that is the <strong>feed-forward network</strong>: a two-layer perceptron applied to each position independently, with no communication between positions at all.</p>" +
+      "<pre><code>h = activation( x W_up )     # 4,096 -> 14,336\ny =             h W_down      # 14,336 -> 4,096</code></pre>" +
+      "<p>Widen, apply a non-linearity, narrow back. That is the whole thing, and it is the same computation at every position, which is why it parallelizes perfectly.</p>" +
+      "<p>Two questions follow immediately.</p>" +
+      "<p><strong>Why widen at all?</strong> Without the expansion the two matrices would collapse: a linear map followed by a linear map is a linear map, so the non-linearity is doing the work, and it needs room. The wider intermediate gives the layer somewhere to compute in. The 2017 paper used four times the model dimension, and that <strong>expansion ratio</strong> stuck for years.</p>" +
+      "<p><strong>Why is it so large?</strong> Count Corvid's block:</p>" +
+      "<pre><code>attention (4 matrices, with GQA)     41,943,040   19.2%\nfeed-forward (3 matrices)           176,160,768   80.8%\nthe two norms                             8,192   0.004%\n                                    -----------\nper block                           218,112,000\nx 32 layers                       6,979,584,000</code></pre>" +
+      "<p>The feed-forward network is <strong>four fifths of every block</strong>. Attention gets the attention, and the FFN gets the parameters. That single fact explains why mixture-of-experts in Chapter 10 replaces the FFN and not the attention, and why quantization in Chapter 29 cares most about these three matrices.</p>" +
+      "<p>The norms, meanwhile, are 0.004% of the block. Everything in sections 4 through 6 concerns components that are numerically free and decide whether the model trains at all.</p>" +
+      "<div class='callout'><strong>What is it doing?</strong> The honest answer is that this is less well understood than attention. The most useful working picture, from the interpretability literature, is a key-value memory: the up-projection's rows act as pattern detectors that fire on particular inputs, and the down-projection's columns are what gets written to the residual stream when they do. Chapter 11 makes this concrete. Treat it as a hypothesis with evidence, not a settled fact.</div>" },
+
+    { title: "Gates, and the Rule That Stopped Applying", viz: "llmActivations", vizTitle: "Compare activations at matched parameter counts",
+      html: "<p>The non-linearity has been revised twice, and the second revision changed the shape of the network.</p>" +
+      "<p><strong>ReLU</strong> zeroes negatives and passes positives. Cheap, and it has a dead zone: a unit whose input is always negative receives zero gradient forever.</p>" +
+      "<p><strong>GELU</strong>, from Dan Hendrycks and Kevin Gimpel in 2016, softens the corner: instead of a hard cut at zero it scales each input by roughly the probability that a standard normal falls below it. Small negatives pass through slightly rather than being annihilated, so there is no dead zone. GPT-2, BERT and GPT-3 use it, and Gemma-2 still does.</p>" +
+      "<p><strong>SwiGLU</strong>, from Noam Shazeer in 2020, is a different shape rather than a different curve. It adds a third matrix and multiplies two projections together:</p>" +
+      "<pre><code>y = ( silu(x W_gate) * (x W_up) ) W_down</code></pre>" +
+      "<p>One branch is a <strong>gate</strong>: its output multiplies the other branch elementwise, so the network can learn to suppress a dimension based on the input rather than by a fixed curve. That multiplicative interaction is what a plain activation cannot express.</p>" +
+      "<h3>The correction, and why it matters</h3>" +
+      "<p>Three matrices instead of two means 50% more parameters at the same width, so a naive comparison of SwiGLU against GELU is not a comparison of activations, it is a comparison of a larger network against a smaller one. Shazeer's paper handles this by shrinking the intermediate width to two thirds, making the parameter counts equal.</p>" +
+      "<p>Check the arithmetic on Corvid's dimension. A two-matrix FFN at 4&#215; costs 2 &#215; 4,096 &#215; 16,384 = 134,217,728 parameters. Matching that with three matrices needs an intermediate of 134,217,728 &#247; (3 &#215; 4,096) = 10,923, which is 2.667&#215; the model dimension. Four times two thirds. That is where the rule comes from, and with it the comparison is fair: SwiGLU wins on equal parameters, which is the result that made it standard.</p>" +
+      "<h3>And then the field stopped following it</h3>" +
+      "<p>Here is where a textbook would stop and a config file disagrees. Feed-forward ratios read from real models on 6 September 2026:</p>" +
+      "<pre><code>model                hidden    FFN     ratio   activation\nGPT-2                   768   3,072   4.000x  GELU\nLlama-2-7B            4,096  11,008   2.688x  SwiGLU\nLlama-3-8B            4,096  14,336   3.500x  SwiGLU\nMistral-7B-v0.3       4,096  14,336   3.500x  SwiGLU\nGemma-2-9B            3,584  14,336   4.000x  GELU\nQwen2.5-7B            3,584  18,944   5.286x  SwiGLU</code></pre>" +
+      "<p>Llama-2 sits at 2.688&#215;, which is the two-thirds rule almost exactly. Llama-3 abandoned it for 3.5&#215;. Qwen2.5 went to 5.286&#215;, nearly double the rule. Gemma-2 kept 4&#215; and kept GELU.</p>" +
+      "<p>The two-thirds correction was a device for making a fair experimental comparison, not a law about how wide an FFN should be. Once SwiGLU had won that comparison, teams went back to choosing the width from their own scaling experiments, and they did not agree. If you carry one thing from this section, carry that distinction: the rule tells you how to run the ablation, not how to build the model.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>feed-forward width as a multiple of model dimension (measured 2026-09-06)</text>" +
+      "<line x1='230' y1='30' x2='230' y2='176' stroke='#ffd166' stroke-width='2' stroke-dasharray='4 4'/>" +
+      "<text x='166' y='196' fill='#ffd166' font-size='9.5'>2.667x: the rule</text>" +
+      "<line x1='394' y1='30' x2='394' y2='176' stroke='#7d8fb0' stroke-width='1.5' stroke-dasharray='3 4'/>" +
+      "<text x='356' y='196' fill='#7d8fb0' font-size='9.5'>4.0x: the 2017 default</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10'>GPT-2</text>" +
+      "<rect x='150' y='36' width='244' height='14' rx='3' fill='#4f7cff'/><text x='404' y='48' fill='#7d8fb0' font-size='9.5'>4.000x  GELU</text>" +
+      "<text x='20' y='76' fill='#7d8fb0' font-size='10'>Llama-2-7B</text>" +
+      "<rect x='150' y='64' width='82' height='14' rx='3' fill='#ffd166'/><text x='404' y='76' fill='#ffd166' font-size='9.5'>2.688x  SwiGLU, on the rule</text>" +
+      "<text x='20' y='104' fill='#7d8fb0' font-size='10'>Llama-3-8B</text>" +
+      "<rect x='150' y='92' width='188' height='14' rx='3' fill='#3ddc97'/><text x='404' y='104' fill='#3ddc97' font-size='9.5'>3.500x  SwiGLU</text>" +
+      "<text x='20' y='132' fill='#7d8fb0' font-size='10'>Gemma-2-9B</text>" +
+      "<rect x='150' y='120' width='244' height='14' rx='3' fill='#4f7cff'/><text x='404' y='132' fill='#7d8fb0' font-size='9.5'>4.000x  GELU</text>" +
+      "<text x='20' y='160' fill='#7d8fb0' font-size='10'>Qwen2.5-7B</text>" +
+      "<rect x='150' y='148' width='330' height='14' rx='3' fill='#ff5d73'/><text x='492' y='160' fill='#ff5d73' font-size='9.5'>5.286x  SwiGLU</text>" +
+      "<text x='20' y='218' fill='#c9d6ea' font-size='10.5'>The two-thirds rule made the ablation fair. It was never a rule about how wide to build.</text>" +
+      "</svg><div class='fig-cap'>Only Llama-2 sits on the textbook ratio. Everything since chose its own width from its own scaling runs, and they disagree by a factor of two.</div></div>" },
+
+    { title: "Normalizing, and Then Normalizing Less",
+      html: "<p>Activations drift. Some dimensions grow large, others shrink, and a layer whose inputs vary wildly in scale trains badly. Normalization fixes the scale, and which fix you choose is one of the three things that changed since 2017.</p>" +
+      "<p><strong>LayerNorm</strong>, from Jimmy Lei Ba and colleagues in 2016, works across the features of a single position. For each position it computes the mean and the variance of that position's 4,096 numbers, subtracts the mean, divides by the standard deviation, then applies a learned scale and a learned shift:</p>" +
+      "<pre><code>y = ( (x - mean(x)) / sqrt(var(x) + eps) ) * gain + bias</code></pre>" +
+      "<p>Note what it does not do: it never looks at other positions or other examples in the batch. That independence is the point. Batch normalization, the older alternative, computes statistics across the batch, which makes the result depend on which other sequences happened to be batched together, and breaks entirely at batch size one. For sequence models with variable lengths, LayerNorm is the only sensible member of the family.</p>" +
+      "<p><strong>RMSNorm</strong>, from Biao Zhang and Rico Sennrich in 2019, asks whether the mean subtraction was doing anything. Their answer, empirically, was no. So it drops the mean and the bias entirely and rescales by the root mean square alone:</p>" +
+      "<pre><code>y = ( x / sqrt(mean(x^2) + eps) ) * gain</code></pre>" +
+      "<p>One pass over the vector instead of two, no subtraction, no bias to store. It is a few percent of end-to-end training time, which sounds trivial until you multiply it by 64 sub-layers and a training run measured in months. Quality was unchanged in their experiments and in everyone else's since.</p>" +
+      "<p>The verdict is unusually clean, and the config table from the last section shows it: every model in it except GPT-2 uses RMSNorm. This is the rare case where the field simply agreed.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 196' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>two normalizations over one position's 4,096 numbers</text>" +
+      "<rect x='16' y='30' width='356' height='134' rx='8' fill='#111a2e' stroke='#7d8fb0' stroke-width='2'/>" +
+      "<text x='194' y='52' text-anchor='middle' fill='#7d8fb0' font-size='11'>LayerNorm (2016)</text>" +
+      "<text x='34' y='78' fill='#c9d6ea' font-size='10'>1. compute the mean</text>" +
+      "<text x='34' y='96' fill='#c9d6ea' font-size='10'>2. subtract it</text>" +
+      "<text x='34' y='114' fill='#c9d6ea' font-size='10'>3. divide by the standard deviation</text>" +
+      "<text x='34' y='132' fill='#c9d6ea' font-size='10'>4. apply a learned gain and bias</text>" +
+      "<text x='34' y='154' fill='#7d8fb0' font-size='9.5'>two passes, two learned vectors</text>" +
+      "<rect x='388' y='30' width='356' height='134' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='566' y='52' text-anchor='middle' fill='#3ddc97' font-size='11'>RMSNorm (2019)</text>" +
+      "<text x='406' y='78' fill='#7d8fb0' font-size='10' text-decoration='line-through'>1. compute the mean</text>" +
+      "<text x='406' y='96' fill='#7d8fb0' font-size='10' text-decoration='line-through'>2. subtract it</text>" +
+      "<text x='406' y='114' fill='#c9d6ea' font-size='10'>3. divide by the root mean square</text>" +
+      "<text x='406' y='132' fill='#c9d6ea' font-size='10'>4. apply a learned gain</text>" +
+      "<text x='406' y='154' fill='#3ddc97' font-size='9.5'>one pass, one learned vector, same quality</text>" +
+      "<text x='20' y='188' fill='#c9d6ea' font-size='10.5'>Every model in this chapter's table except GPT-2 uses RMSNorm. The field agreed, which is rare.</text>" +
+      "</svg><div class='fig-cap'>The centring step turned out to be doing nothing. Removing it costs no quality and saves a pass over 4,096 numbers, 64 times per token.</div></div>" },
+
+    { title: "Where the Norm Goes",
+      html: "<p>Now the choice that mattered most, and it is not which normalization but <em>where</em> it sits relative to the residual connection.</p>" +
+      "<p>The 2017 paper put it after: compute the sub-layer, add to the stream, then normalize the result. This is <strong>post-LN</strong>.</p>" +
+      "<pre><code>post-LN:   x = norm( x + attention(x) )\npre-LN:    x = x +  attention( norm(x) )</code></pre>" +
+      "<p>The difference looks cosmetic and is not. In post-LN, the normalization sits <em>on</em> the residual path, so every backward pass through a layer traverses it. Thirty-two of those in series and the clean gradient highway from section 1 is no longer clean: it has 32 normalizations in the way, each scaling the gradient by something.</p>" +
+      "<p>In pre-LN, the norm is inside the branch. The residual path from the loss to the embedding passes through nothing but additions. The highway stays a highway.</p>" +
+      "<p>The practical consequence was documented by Ruibin Xiong and colleagues in 2020, and anyone who trained a transformer before then had already met it. Post-LN models have very large gradients in the early layers at the start of training, and diverge if you begin at full learning rate. The workaround was a warmup period, ramping the learning rate up over thousands of steps, and it was treated as an unavoidable fact of training transformers. It was not. It was a consequence of where the norm sat.</p>" +
+      "<p>Pre-LN trains stably from step one without warmup. Every model in this course's config table uses it, and warmup survives for different reasons that Chapter 14 explains.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>what the gradient travels through on its way down</text>" +
+      "<text x='20' y='46' fill='#ff5d73' font-size='10.5'>post-LN (2017)</text>" +
+      "<line x1='150' y1='62' x2='700' y2='62' stroke='#ff5d73' stroke-width='3'/>" +
+      "<rect x='200' y='52' width='40' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='220' y='66' text-anchor='middle' fill='#ff5d73' font-size='9'>norm</text>" +
+      "<rect x='320' y='52' width='40' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='340' y='66' text-anchor='middle' fill='#ff5d73' font-size='9'>norm</text>" +
+      "<rect x='440' y='52' width='40' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='460' y='66' text-anchor='middle' fill='#ff5d73' font-size='9'>norm</text>" +
+      "<rect x='560' y='52' width='40' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='580' y='66' text-anchor='middle' fill='#ff5d73' font-size='9'>norm</text>" +
+      "<text x='150' y='92' fill='#ff5d73' font-size='10'>32 normalizations sit on the residual path. Needs warmup or it diverges.</text>" +
+      "<text x='20' y='134' fill='#3ddc97' font-size='10.5'>pre-LN (2020 on)</text>" +
+      "<line x1='150' y1='150' x2='700' y2='150' stroke='#3ddc97' stroke-width='4'/>" +
+      "<path d='M200 150 L200 124 L260 124 L260 150' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+      "<rect x='210' y='114' width='40' height='20' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='230' y='128' text-anchor='middle' fill='#c9d6ea' font-size='9'>norm</text>" +
+      "<path d='M400 150 L400 124 L460 124 L460 150' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+      "<rect x='410' y='114' width='40' height='20' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='430' y='128' text-anchor='middle' fill='#c9d6ea' font-size='9'>norm</text>" +
+      "<path d='M600 150 L600 124 L660 124 L660 150' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+      "<rect x='610' y='114' width='40' height='20' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='630' y='128' text-anchor='middle' fill='#c9d6ea' font-size='9'>norm</text>" +
+      "<text x='150' y='180' fill='#3ddc97' font-size='10'>the norm moved into the branch. The residual path is nothing but additions.</text>" +
+      "<text x='20' y='206' fill='#7d8fb0' font-size='10'>Warmup was treated as a fact about transformers for three years. It was a fact about where the norm sat.</text>" +
+      "</svg><div class='fig-cap'>Two lines of code apart, and the difference between a run that needs careful babysitting and one that does not.</div></div>" },
+
+    { title: "The Component That Left",
+      html: "<p>One deletion worth noting, because its absence surprises people arriving from other areas of deep learning.</p>" +
+      "<p><strong>Dropout</strong> randomly zeroes a fraction of activations during training, forcing the network not to depend on any single unit. It was standard in 2017 and the original transformer used it throughout.</p>" +
+      "<p>Large-scale pretraining largely abandoned it, and the reason is a change in circumstances rather than a discovery about dropout. It is a regularizer, and regularizers exist to prevent overfitting. A model trained on trillions of tokens, seeing most of them once, is not overfitting; it is underfitting, and deliberately damaging its activations only slows learning. Most current pretraining configurations set dropout to zero.</p>" +
+      "<p>It returns during fine-tuning, where the setting is the classic one: a small dataset, many epochs, real overfitting risk. Chapter 20 turns it back on and says why.</p>" },
+
+    { title: "The Block, Assembled",
+      html: "<p>Every piece is now on the table. Corvid's block in full:</p>" +
+      "<pre><code>x = x + attention( rmsnorm(x) )        # 32 query heads, 8 KV heads, RoPE\nx = x + swiglu_ffn( rmsnorm(x) )      # 4,096 -> 14,336 -> 4,096</code></pre>" +
+      "<p>Two lines, four sub-components, repeated 32 times, and one final normalization before the output projection. That is the entire architecture of a modern language model. Everything in Part II has been an explanation of one of those symbols.</p>" +
+      "<p>Read the block against 2017 and the changes are exactly three, each a one-line edit:</p>" +
+      "<ul>" +
+      "<li><strong>Where the norm sits</strong>: inside the branch rather than on the residual path. Fixes the need for warmup.</li>" +
+      "<li><strong>Which norm</strong>: RMSNorm rather than LayerNorm. Same quality, one pass instead of two.</li>" +
+      "<li><strong>Which activation</strong>: a gated SwiGLU rather than a plain GELU, with the width chosen by experiment rather than by the parameter-matching rule.</li>" +
+      "</ul>" +
+      "<p>Positional encoding moved too, from an addition at the input to a rotation inside attention, which was Chapter 7. Four changes in nine years, and the skeleton is untouched.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 238' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one Corvid-8B block, complete</text>" +
+      "<line x1='60' y1='34' x2='60' y2='206' stroke='#ffd166' stroke-width='6'/>" +
+      "<text x='20' y='42' fill='#7d8fb0' font-size='9'>out</text><text x='20' y='206' fill='#7d8fb0' font-size='9'>in</text>" +
+      "<circle cx='60' cy='170' r='9' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='60' y='174' text-anchor='middle' fill='#ffd166' font-size='11'>+</text>" +
+      "<path d='M60 194 L120 194 L120 146 L60 146' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+      "<rect x='130' y='182' width='96' height='24' rx='5' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='178' y='198' text-anchor='middle' fill='#3ddc97' font-size='9.5'>RMSNorm</text>" +
+      "<rect x='240' y='182' width='230' height='24' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='355' y='198' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>attention: 32 q heads, 8 KV, RoPE</text>" +
+      "<text x='486' y='198' fill='#7d8fb0' font-size='9'>41.9M params &#183; 19.2%</text>" +
+      "<circle cx='60' cy='76' r='9' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='60' y='80' text-anchor='middle' fill='#ffd166' font-size='11'>+</text>" +
+      "<path d='M60 100 L120 100 L120 52 L60 52' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+      "<rect x='130' y='88' width='96' height='24' rx='5' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='178' y='104' text-anchor='middle' fill='#3ddc97' font-size='9.5'>RMSNorm</text>" +
+      "<rect x='240' y='88' width='230' height='24' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2.5'/><text x='355' y='104' text-anchor='middle' fill='#ff5d73' font-size='9.5'>SwiGLU: 4,096 - 14,336 - 4,096</text>" +
+      "<text x='486' y='104' fill='#ff5d73' font-size='9'>176.2M params &#183; 80.8%</text>" +
+      "<text x='130' y='140' fill='#7d8fb0' font-size='9.5'>the norms together: 8,192 params, 0.004% of the block</text>" +
+      "<line x1='20' y1='218' x2='740' y2='218' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='234' fill='#c9d6ea' font-size='10.5'>218,112,000 parameters per block, 32 blocks, 6.98 billion before embeddings.</text>" +
+      "</svg><div class='fig-cap'>Gold is the residual stream, green the normalizations that cost nothing and decide everything, red the four fifths of the parameters.</div></div>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;Walk me through a transformer block.&#8221; The answer that lands is two lines of pseudocode, then the three deltas from 2017 with the reason for each: pre-norm because the residual path must stay clean or you need warmup; RMSNorm because centring did nothing; SwiGLU because a multiplicative gate beats a fixed curve at matched parameters. Adding that the feed-forward holds four fifths of the block, and the norms four thousandths, shows you have counted rather than read.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A 32-layer network without residual connections has a gradient multiplied by 0.9 at each layer. Compute what fraction of the gradient reaches layer 1. Repeat for 1.1 per layer. Then state, in one sentence, what <code>x + f(x)</code> changes about that calculation, and why the answer no longer depends on the depth.</li>" +
+      "<li><strong>Trace.</strong> Corvid uses d_model 4,096 and an FFN width of 14,336 with three matrices. Compute the FFN's parameters. Now compute what a two-matrix GELU network at 4&#215; would cost, and what a three-matrix SwiGLU network would need as its width to match that exactly. Confirm you get 2.667&#215;. Then look up one model in section 3's table that ignores this ratio and say by how much.</li>" +
+      "<li><strong>Investigate.</strong> Open the configs of four models and record <code>hidden_size</code>, <code>intermediate_size</code>, <code>hidden_act</code> and whether the norm is RMSNorm. Compute each FFN ratio. You should find no agreement on width and near-total agreement on the norm. Write one sentence on why those two components landed so differently.</li>" +
+      "<li><strong>Investigate.</strong> Find a model that still uses GELU rather than SwiGLU, and one that still uses LayerNorm rather than RMSNorm. For each, find out when it was released. The dates are the argument: these are not live disagreements so much as snapshots of when a design was frozen.</li>" +
+      "<li><strong>Build.</strong> Write a transformer block in about thirty lines, taking the attention you built in Chapter 6: RMSNorm, the attention sub-layer, the residual add, RMSNorm again, a SwiGLU feed-forward, another residual add. Add a config flag switching pre-norm and post-norm, and one switching RMSNorm and LayerNorm. Assert the block preserves its input shape. Then run twenty steps of training on random data at a deliberately high learning rate, once with pre-norm and once with post-norm, and print the loss for each. The post-norm run should misbehave. Keep this code; it is PocketLM's block, and Chapter 38 turns those two flags into a measured ablation.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "residual connection", d: "Adding a sub-layer's output back to its input rather than replacing it, which creates a gradient path of constant 1 from the loss to the embedding." },
+    { t: "residual stream", d: "The running vector at each position that every sub-layer reads from and adds to; constant in width through the whole stack." },
+    { t: "sub-layer", d: "One of the two components inside a block, attention or the feed-forward network, each wrapped in a normalization and a residual add." },
+    { t: "feed-forward network", d: "A two-layer perceptron applied to each position independently, holding roughly four fifths of a block's parameters." },
+    { t: "expansion ratio", d: "The feed-forward width as a multiple of the model dimension; 4x in 2017 and anywhere from 2.7x to 5.3x in current models." },
+    { t: "GELU", d: "An activation that scales each input by roughly the probability a standard normal falls below it, softening ReLU's corner and removing its dead zone." },
+    { t: "SwiGLU", d: "A gated feed-forward variant using three matrices, where one branch multiplies the other elementwise, allowing input-dependent suppression." },
+    { t: "gate", d: "The branch of a gated network whose output multiplies the other branch, expressing a multiplicative interaction a plain activation cannot." },
+    { t: "LayerNorm", d: "Normalizing across the features of a single position by subtracting the mean and dividing by the standard deviation, then applying a learned gain and bias." },
+    { t: "RMSNorm", d: "LayerNorm without the mean subtraction or bias, rescaling by the root mean square alone; same quality, one pass instead of two." },
+    { t: "post-LN", d: "The 2017 arrangement placing normalization after the residual add, which puts 32 normalizations on the gradient path and requires warmup." },
+    { t: "pre-LN", d: "Placing normalization inside the sub-layer branch so the residual path is nothing but additions; trains stably without warmup and is now universal." },
+    { t: "warmup", d: "Ramping the learning rate up over the first thousands of steps, originally a workaround for post-LN instability." },
+    { t: "dropout", d: "Randomly zeroing activations during training to prevent overfitting; largely set to zero in large-scale pretraining, and reinstated for fine-tuning." }
+  ],
+  quiz: [
+    { type: "mc", q: "Why do residual connections make a 32-layer stack trainable?", opts: ["They reduce the number of parameters the gradient must pass through", "They normalize the activations at each layer", "They allow layers to be computed in parallel", "The derivative of x + f(x) is 1 + f'(x), giving a path of constant 1 from the loss to the embedding"], a: 3,
+      why: "Without them the gradient is multiplied layer by layer, and 0.9 raised to the 32nd power is 0.034, so layer 1 receives almost nothing. With them there is an additive path whose derivative is 1, undiminished by depth, and each sub-layer's contribution is added alongside rather than multiplied through. This is He and colleagues' 2015 result, inherited from image networks." },
+    { type: "mc", q: "In a Corvid block, which component holds the most parameters?", opts: ["The attention projections", "The feed-forward network, at about four fifths of the block", "The normalizations", "They are roughly equal"], a: 1,
+      why: "Measured on Corvid's configuration: attention 41.9 million, feed-forward 176.2 million, norms 8,192. That is 19.2%, 80.8% and 0.004%. It explains why mixture-of-experts in Chapter 10 replaces the feed-forward rather than the attention, and why quantization cares most about those three matrices." },
+    { type: "mc", q: "SwiGLU uses three matrices where GELU uses two. Why did Shazeer shrink the intermediate width to two thirds when comparing them?", opts: ["Because three matrices are slower and the width compensates for time", "Because gating requires a narrower intermediate to be stable", "So the two networks have equal parameter counts, making it a comparison of activations rather than of sizes", "To fit the model on the available hardware"], a: 2,
+      why: "Without the correction you are comparing a 50% larger network against a smaller one, and any win is uninterpretable. Four times two thirds is 2.667, and on Corvid's dimension that is an intermediate of 10,923 against the 16,384 a two-matrix network would use. With counts matched, SwiGLU wins, which is the result that made it standard." },
+    { type: "mc", q: "Llama-2-7B has an FFN ratio of 2.688x, Llama-3-8B 3.5x, and Qwen2.5-7B 5.286x. What does that spread show?", opts: ["Qwen2.5 does not use SwiGLU", "The two-thirds rule was a device for a fair ablation, not a prescription for how wide to build", "Larger models need proportionally wider feed-forward networks", "The configs report the combined width of all three matrices"], a: 1,
+      why: "Llama-2 sits almost exactly on the rule; everything since chose its own width from its own scaling experiments and they disagree by nearly a factor of two. Qwen2.5 does use SwiGLU, and the models here are all roughly the same size, so neither of the first two explanations holds. The rule tells you how to run the experiment, not how to build the model." },
+    { type: "blank", q: "Normalizing by the root mean square alone, with no mean subtraction and no bias, is called ____.", a: ["rmsnorm", "rms norm", "rms normalization"],
+      why: "Zhang and Sennrich found in 2019 that the centring step in LayerNorm was doing nothing measurable. Dropping it saves a pass over 4,096 numbers, 64 times per token, for no quality cost. Every model in this chapter's table except GPT-2 uses it, which makes it the rare component the field simply agreed on." },
+    { type: "blank", q: "Placing the normalization inside the sub-layer branch, so the residual path contains only additions, is called ____-LN.", a: ["pre", "pre-ln", "preln"],
+      why: "The 2017 paper did the opposite, putting the norm after the residual add, which stacks 32 normalizations directly on the gradient path. Xiong and colleagues showed in 2020 that this was the cause of the early-training instability everyone had been working around with warmup." },
+    { type: "order", q: "Order the operations in one pre-LN transformer block:", items: ["normalize the residual stream", "compute attention over the normalized vector", "add the attention output back to the stream", "normalize again, run the feed-forward, and add that back too"],
+      why: "Normalize, attend, add, then repeat the pattern for the feed-forward. The order is the whole difference between pre-LN and post-LN: moving the first step to the end of each pair gives you the 2017 block and its warmup requirement back." },
+    { type: "mc", q: "Why is dropout usually set to zero during large-scale pretraining but reinstated for fine-tuning?", opts: ["Dropout is incompatible with the residual stream", "Dropout was found to damage attention specifically", "Modern optimizers make it unnecessary in both settings", "Pretraining underfits on trillions of mostly-unrepeated tokens, so a regularizer only slows learning; fine-tuning on a small set for many epochs genuinely overfits"], a: 3,
+      why: "It is a change in circumstances, not a discovery about dropout. Regularizers prevent overfitting, and a model that sees most of its trillions of tokens once is not overfitting. Deliberately damaging its activations only costs it learning. Fine-tuning is the classic overfitting setting, and Chapter 20 turns dropout back on." },
+    { type: "mc", q: "A team trains a 32-layer transformer that diverges in the first few hundred steps unless they ramp the learning rate up slowly. Which architectural choice would you check first?", opts: ["Whether they are using RMSNorm or LayerNorm", "The feed-forward expansion ratio", "The activation function", "Whether the normalization sits on the residual path rather than inside the branch"], a: 3,
+      why: "This is the exact signature of post-LN. With 32 normalizations on the residual path, early-training gradients in the first layers are very large and a full learning rate diverges. Warmup was the workaround the field used for three years before Xiong and colleagues identified the cause. The choice of which norm, how wide, or which activation does not produce this failure." },
+    { type: "mc", q: "What stayed the same between a 2017 transformer block and Corvid's?", opts: ["The residual connections and the two-sub-layer skeleton", "The normalization function", "The activation function", "The position encoding scheme"], a: 0,
+      why: "Four things changed in nine years: where the norm sits, which norm, which activation, and how position is injected. The skeleton did not. Attention then a feed-forward, each wrapped in a normalization and a residual add, repeated N times, is the same shape it was in the original paper, and residual connections are the one component nobody has revised." }
   ]
 });
