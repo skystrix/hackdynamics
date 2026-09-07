@@ -44,6 +44,16 @@
    (4,096/128,256, untied), Llama-3.2-1B (2,048/128,256, tied), Qwen2.5-7B
    (3,584/152,064, untied), Qwen2.5-0.5B (896/151,936, tied), Mistral-7B-v0.3
    (4,096/32,768, untied), Gemma-2-9B (3,584/256,000).
+
+   Sources consulted for Chapter 5: Vaswani et al. 2017 (Attention Is All You
+   Need, NeurIPS), including its footnote 4 on the scaling factor; Bahdanau et
+   al. 2014 (additive attention for NMT); Luong et al. 2015 (multiplicative
+   attention); Dao et al. 2022 (FlashAttention) for the forward pointer in
+   section 7. The variance measurements, the softmax-collapse comparison, the
+   four-token worked example and the score-matrix memory table in this chapter
+   were all computed on 2026-09-06 rather than quoted: dot products of
+   independent unit-normal vectors were sampled 20,000 times at d_k = 4, 64,
+   128 and 1024, giving variances of 3.9, 63.5, 129.3 and 1025.9.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -962,5 +972,229 @@ CHAPTERS.push({
       why: "MTEB averages dozens of tasks, models are tuned against it, and its retrieval subset may look nothing like your documents. A two-point average difference is well inside the range that reverses on a particular corpus. It is a shortlist generator. Building a labelled set from your own data and measuring on it is the actual decision procedure, and it belongs to RAG In Depth." },
     { type: "mc", q: "Which statement about the embedding table is true?", opts: ["Its rows are assigned meanings during tokenizer training", "A row is meaningful on its own and can be transferred between models", "Its rows are meaningful only relative to each other, because the loss only ever compared them", "It is computed at inference time from the token's characters"], a: 2,
       why: "The table starts random and is moved by gradient descent, which only ever expresses preferences between rows. Nothing anchors the space to anything absolute, so a row carries no meaning outside the arrangement it sits in. That is why you cannot lift one model's embedding row into another model, and why the same token in two models has unrelated vectors." }
+  ]
+});
+
+/* ======================= CHAPTER 5 ======================= */
+CHAPTERS.push({
+  num: 5, part: 2, free: true, title: "Attention: The Weighted Sum That Changed Everything",
+  blurb: "Attention is a weighted average, and every mystery about it dissolves once you see which three projections produce the weights. You will build it from the bottom: a query asking a question, keys advertising what each position offers, values carrying what gets copied, a dot product scoring the match, a softmax turning scores into a distribution, and a mask that stops the model reading its own future. You will derive the square-root divisor rather than accept it, watch the softmax collapse without it, and see exactly why a sequence twice as long costs four times as much.",
+  sections: [
+    { title: "The Problem Attention Solves",
+      html: "<p>Chapter 4 left every position holding its own vector, disambiguated by nothing. <em>Bank</em> in a river sentence and <em>bank</em> in a finance sentence are still the same table row. Something has to let a position look at other positions. This section is about why that turned out to be hard.</p>" +
+      "<p><strong>The naive attempt: count what came before.</strong> An n-gram model predicts the next word from the previous two or three, by counting. It works startlingly well for its size and it hits a wall you can state exactly: the number of possible contexts grows exponentially with the window, so a five-word window is already mostly unseen combinations. You cannot count your way to long context.</p>" +
+      "<p><strong>The better attempt: carry a summary.</strong> Recurrent networks, and then LSTMs, read the sequence one token at a time and maintain a hidden state, a fixed-size vector meant to summarize everything so far. This is a real improvement and it has two problems that killed it. The first is the <strong>bottleneck</strong>: everything the model knows about a 500-word document has to fit in one vector, and information from the beginning is repeatedly overwritten by information from the end. The second is worse for engineering: the computation is inherently sequential. Position 400 cannot be computed until position 399 is done, so you cannot use a machine built to do thousands of things at once.</p>" +
+      "<p><strong>The idea.</strong> Stop summarizing. Let every position look directly at every other position and take what it needs. No compression, no fixed-size state, and no sequential dependency, because every position can do its looking at the same time.</p>" +
+      "<p>Attention as a mechanism arrived in 2014, from Dzmitry Bahdanau and colleagues, as an addition to a recurrent translation model: instead of forcing the decoder to work from one summary vector, let it look back at all the encoder's positions and weight them. Minh-Thang Luong and colleagues simplified the scoring to a dot product in 2015. The 2017 paper by Ashish Vaswani and colleagues took the obvious next step, whose title is the argument: remove the recurrence and keep only the attention.</p>" +
+      "<div class='callout'><strong>What was actually new in 2017.</strong> Not attention, which was three years old. The claim was that attention alone was <em>sufficient</em>, and the payoff was less about accuracy than about hardware: with recurrence gone, an entire sequence trains in parallel. Everything in Part III about training at scale exists because of that one property.</div>" },
+
+    { title: "Three Projections of the Same Vector", viz: "llmAttention", vizTitle: "Click a word to see what it attends to; switch off the scaling",
+      html: "<p>Here is the whole mechanism in one sentence, which will not make sense yet: each position produces a query, every position produces a key and a value, each query is scored against every key, the scores become weights, and the output is the weighted sum of the values.</p>" +
+      "<p>The three names are unfortunate. They come from a database metaphor, and the metaphor is worth exactly one paragraph before we drop it for the arithmetic. A <strong>query</strong> is what this position is looking for. A <strong>key</strong> is what each position advertises about itself. A <strong>value</strong> is what actually gets copied if a position is selected. Unlike a database, nothing matches exactly and nothing is retrieved singly: every position contributes, weighted by how well its key matched.</p>" +
+      "<p>Now the arithmetic, which is simpler than the metaphor. Take the vector x at one position. Multiply it by three learned matrices:</p>" +
+      "<pre><code>q = x W_Q      k = x W_K      v = x W_V</code></pre>" +
+      "<p>That is all a query, key and value are: three different linear projections of the same vector. The vector does not know what it is looking for. The matrix W_Q, learned by gradient descent, decides what part of that vector constitutes a question, W_K decides what part constitutes an advertisement, and W_V decides what part is worth copying. Three views of one thing, and the model learns all three.</p>" +
+      "<h3>Why a dot product, and why project at all</h3>" +
+      "<p>Two design choices are hiding in that line, and both are load-bearing.</p>" +
+      "<p><strong>Why score with a dot product.</strong> Any similarity function would do mathematically. Bahdanau&#8217;s original used a small neural network to score each pair, which is called additive attention and works fine. The dot product won because of what it is on hardware: scoring every query against every key becomes a single matrix multiplication, which is the one operation a GPU does better than anything else. Chapter 16 makes that preference precise. This is a recurring pattern worth naming early: several choices in this architecture were made because they map onto a matrix multiply, not because they were the most expressive option available.</p>" +
+      "<p><strong>Why project instead of dotting the vectors directly.</strong> This one matters more than it looks. If you scored x against x, attention could only ever find positions that are <em>similar</em> to each other. But the useful relationships in language are mostly between things that are not similar at all: a verb wants its subject, a pronoun wants its antecedent, a closing bracket wants its opening one. Because W_Q and W_K are separate learned matrices, the model can project a verb&#8217;s vector and a noun&#8217;s vector into a space where they align, without those two vectors resembling each other anywhere else. The projections are what let attention express &#8220;this kind of thing looks for that kind of thing&#8221;, and a single shared projection could not.</p>" +
+      "<p>For Corvid-8B each of these projections maps 4,096 dimensions down to a <strong>head dimension</strong> of 128, and Chapter 6 explains why 128 and not 4,096. Take 128 as given for now; it is the number the next section needs.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one position's vector becomes three things</text>" +
+      "<rect x='20' y='80' width='120' height='34' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='80' y='102' text-anchor='middle' fill='#ffd166' font-size='11'>x (4,096)</text>" +
+      "<text x='20' y='134' fill='#7d8fb0' font-size='10'>from the residual</text>" +
+      "<text x='20' y='148' fill='#7d8fb0' font-size='10'>stream, Chapter 4</text>" +
+      "<line x1='146' y1='90' x2='196' y2='54' stroke='#4f7cff' stroke-width='2'/><polygon points='203,50 191,50 196,60' fill='#4f7cff'/>" +
+      "<line x1='146' y1='97' x2='196' y2='97' stroke='#4f7cff' stroke-width='2'/><polygon points='203,97 191,91 191,103' fill='#4f7cff'/>" +
+      "<line x1='146' y1='104' x2='196' y2='140' stroke='#4f7cff' stroke-width='2'/><polygon points='203,144 191,144 196,134' fill='#4f7cff'/>" +
+      "<rect x='208' y='36' width='96' height='30' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='256' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>x W_Q</text>" +
+      "<rect x='208' y='82' width='96' height='30' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='256' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>x W_K</text>" +
+      "<rect x='208' y='128' width='96' height='30' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='256' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>x W_V</text>" +
+      "<line x1='310' y1='51' x2='352' y2='51' stroke='#4f7cff' stroke-width='2'/><polygon points='359,51 347,45 347,57' fill='#4f7cff'/>" +
+      "<line x1='310' y1='97' x2='352' y2='97' stroke='#4f7cff' stroke-width='2'/><polygon points='359,97 347,91 347,103' fill='#4f7cff'/>" +
+      "<line x1='310' y1='143' x2='352' y2='143' stroke='#4f7cff' stroke-width='2'/><polygon points='359,143 347,137 347,149' fill='#4f7cff'/>" +
+      "<rect x='364' y='36' width='120' height='30' rx='6' fill='#111a2e' stroke='#2de2ff' stroke-width='2'/><text x='424' y='56' text-anchor='middle' fill='#2de2ff' font-size='10.5'>q (128)</text>" +
+      "<rect x='364' y='82' width='120' height='30' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='424' y='102' text-anchor='middle' fill='#3ddc97' font-size='10.5'>k (128)</text>" +
+      "<rect x='364' y='128' width='120' height='30' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/><text x='424' y='148' text-anchor='middle' fill='#ffd166' font-size='10.5'>v (128)</text>" +
+      "<text x='500' y='56' fill='#2de2ff' font-size='10'>what am I looking for</text>" +
+      "<text x='500' y='102' fill='#3ddc97' font-size='10'>what do I advertise</text>" +
+      "<text x='500' y='148' fill='#ffd166' font-size='10'>what gets copied from me</text>" +
+      "<line x1='20' y1='176' x2='740' y2='176' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='198' fill='#7d8fb0' font-size='10.5'>Nothing distinguishes the three but the learned matrix. The roles are a consequence of training, not of design.</text>" +
+      "</svg><div class='fig-cap'>Query, key and value are three linear projections of one vector. The names describe the jobs the matrices learn, not anything structural.</div></div>" },
+
+    { title: "Score, Normalize, Average", viz: "llmCausalMask", vizTitle: "Step a generation; then remove the mask and watch it cheat",
+      html: "<p>Work it by hand. Four tokens, <em>the cat sat down</em>, and a head dimension of 4 so the numbers fit on a line. These are the projections after the matrices have done their work:</p>" +
+      "<pre><code>          k                  v\nthe     [1,0,1,0]          [1,0,0,0]\ncat     [1,1,0,0]          [0,2,0,0]\nsat     [0,1,1,0]          [0,0,3,0]\ndown    [1,0,0,1]          [0,0,0,4]\n\nquery from 'sat':  q = [1,1,0,1]</code></pre>" +
+      "<p><strong>Step one, score.</strong> Each dot product of one query with one key is an <strong>attention score</strong>. Dot the query against every key. The dot product is high when two vectors point the same way, which is the whole reason it is the scoring function: it asks how much this key looks like what the query wants.</p>" +
+      "<pre><code>q . k_the  = 1(1)+1(0)+0(1)+1(0) = 1\nq . k_cat  = 1(1)+1(1)+0(0)+1(0) = 2\nq . k_sat  = 1(0)+1(1)+0(1)+1(0) = 1\nq . k_down = 1(1)+1(0)+0(0)+1(1) = 2</code></pre>" +
+      "<p><strong>Step two, scale.</strong> Divide every score by the square root of the head dimension, here the square root of 4, which is 2. That divisor is the <strong>scaling factor</strong>. The scores become 0.5, 1.0, 0.5, 1.0. The next section is entirely about why this step exists.</p>" +
+      "<p><strong>Step three, normalize.</strong> Push the scaled scores through a softmax, which exponentiates each and divides by the total, producing numbers that are positive and sum to 1:</p>" +
+      "<pre><code>weights = [0.189, 0.311, 0.189, 0.311]</code></pre>" +
+      "<p>The query attends most to <em>cat</em> and <em>down</em>, which are the two keys it scored 2 against, and less to the other two. Nothing is selected and nothing is discarded; every position contributes something.</p>" +
+      "<p><strong>Step four, average.</strong> Multiply each value vector by its weight and add them up:</p>" +
+      "<pre><code>0.189[1,0,0,0] + 0.311[0,2,0,0] + 0.189[0,0,3,0] + 0.311[0,0,0,4]\n  = [0.189, 0.622, 0.566, 1.245]</code></pre>" +
+      "<p>That vector is the output of attention for the position <em>sat</em>. It gets added back into the residual stream, and the block moves on. <strong>Attention is a weighted average of value vectors, where the weights came from dot products of queries against keys.</strong> Everything else in this chapter is a detail of that sentence.</p>" +
+      "<h3>The mask</h3>" +
+      "<p>One problem. The model is trained to predict the next token, and we just let position 3 attend to position 4. If a position can see its own future, predicting the future is trivial and the model learns nothing.</p>" +
+      "<p>The fix is one line: before the softmax, set every score for a future position to negative infinity. Exponentiating negative infinity gives zero, so those positions receive exactly zero weight and contribute nothing. This is the <strong>causal mask</strong>, and a transformer masked this way throughout is a <strong>decoder-only model</strong>.</p>" +
+      "<p>The mask does something subtler that is easy to miss and worth pausing on. Because every position is masked to its own prefix, one forward pass over a sequence of length n computes n different predictions, each correctly conditioned on only what came before it. Training gets n training examples for the price of one pass. That efficiency is a direct gift of the mask, and Chapter 13 depends on it entirely.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the score matrix, before and after masking</text>" +
+      "<text x='96' y='42' fill='#7d8fb0' font-size='9.5'>the</text><text x='142' y='42' fill='#7d8fb0' font-size='9.5'>cat</text><text x='188' y='42' fill='#7d8fb0' font-size='9.5'>sat</text><text x='230' y='42' fill='#7d8fb0' font-size='9.5'>down</text>" +
+      "<text x='40' y='62' fill='#7d8fb0' font-size='9.5'>the</text>" +
+      "<rect x='90' y='50' width='38' height='16' rx='3' fill='#4f7cff'/><rect x='136' y='50' width='38' height='16' rx='3' fill='#1c2a45'/><rect x='182' y='50' width='38' height='16' rx='3' fill='#1c2a45'/><rect x='228' y='50' width='38' height='16' rx='3' fill='#1c2a45'/>" +
+      "<text x='40' y='84' fill='#7d8fb0' font-size='9.5'>cat</text>" +
+      "<rect x='90' y='72' width='38' height='16' rx='3' fill='#4f7cff'/><rect x='136' y='72' width='38' height='16' rx='3' fill='#4f7cff'/><rect x='182' y='72' width='38' height='16' rx='3' fill='#1c2a45'/><rect x='228' y='72' width='38' height='16' rx='3' fill='#1c2a45'/>" +
+      "<text x='40' y='106' fill='#ffd166' font-size='9.5'>sat</text>" +
+      "<rect x='90' y='94' width='38' height='16' rx='3' fill='#ffd166'/><rect x='136' y='94' width='38' height='16' rx='3' fill='#ffd166'/><rect x='182' y='94' width='38' height='16' rx='3' fill='#ffd166'/><rect x='228' y='94' width='38' height='16' rx='3' fill='#1c2a45'/>" +
+      "<text x='40' y='128' fill='#7d8fb0' font-size='9.5'>down</text>" +
+      "<rect x='90' y='116' width='38' height='16' rx='3' fill='#4f7cff'/><rect x='136' y='116' width='38' height='16' rx='3' fill='#4f7cff'/><rect x='182' y='116' width='38' height='16' rx='3' fill='#4f7cff'/><rect x='228' y='116' width='38' height='16' rx='3' fill='#4f7cff'/>" +
+      "<text x='60' y='152' fill='#7d8fb0' font-size='10'>blue: allowed &#183; dark: masked to -infinity</text>" +
+      "<text x='330' y='42' fill='#2de2ff' font-size='11'>the row for 'sat', after softmax</text>" +
+      "<rect x='330' y='52' width='53' height='16' rx='3' fill='#4f7cff'/><text x='392' y='65' fill='#7d8fb0' font-size='10'>the  0.189</text>" +
+      "<rect x='330' y='74' width='87' height='16' rx='3' fill='#3ddc97'/><text x='426' y='87' fill='#3ddc97' font-size='10'>cat  0.311</text>" +
+      "<rect x='330' y='96' width='53' height='16' rx='3' fill='#4f7cff'/><text x='392' y='109' fill='#7d8fb0' font-size='10'>sat  0.189</text>" +
+      "<rect x='330' y='118' width='87' height='16' rx='3' fill='#3ddc97'/><text x='426' y='131' fill='#3ddc97' font-size='10'>down 0.311  &#8592; masked in training</text>" +
+      "<text x='330' y='156' fill='#7d8fb0' font-size='10'>Every weight is positive and they sum to 1.</text>" +
+      "<line x1='20' y1='176' x2='740' y2='176' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='198' fill='#c9d6ea' font-size='10.5'>The mask is why one forward pass over n tokens yields n separate training examples:</text>" +
+      "<text x='20' y='216' fill='#c9d6ea' font-size='10.5'>each row is a prediction conditioned on exactly its own prefix.</text>" +
+      "</svg><div class='fig-cap'>Row i holds the weights position i places on every other position. Masking the upper triangle is the entire difference between a model that can generate and one that cannot.</div></div>" +
+      "<p>Use the mask machine now. Step a generation with the mask on and watch each position attend only backwards. Then switch the mask off mid-generation and watch the model predict the next token perfectly, because it can read it. That is the discovery, and it is what a subtly broken mask looks like: a training loss that falls beautifully and a model that cannot generate.</p>" },
+
+    { title: "Why the Square Root",
+      html: "<p>Almost every explanation of attention states the divisor and moves on. It is worth two pages, because the argument is short, it is checkable, and it is the classic interview question about this mechanism.</p>" +
+      "<p><strong>The problem.</strong> The scores go into a softmax, and softmax is sensitive to the <em>scale</em> of its inputs, not just their order. Feed it [1, 2, 1, 2] and it returns a gentle spread. Feed it [10, 20, 10, 20] and it returns something almost one-hot: nearly all the mass on the two large entries. Same ranking, different distribution.</p>" +
+      "<p>A near one-hot softmax is a disaster for training, because the gradient of the softmax is proportional to p(1&#8722;p) for each entry. When p is 0.999 or 0.0001, that product is nearly zero, and nearly zero gradient means the weights barely move. The mechanism stops learning while looking perfectly healthy in the forward pass.</p>" +
+      "<p><strong>So how large do the scores get?</strong> A score is a dot product of two d-dimensional vectors. If the components are independent with mean 0 and variance 1, then each product term has mean 0 and variance 1, and the dot product is a sum of d such terms. Variances of independent terms add. So the dot product has variance d, and therefore a standard deviation of the square root of d.</p>" +
+      "<p>That is the whole derivation. Dividing by the square root of d rescales the scores to unit variance, independent of head dimension, which keeps the softmax in the range where it has gradient.</p>" +
+      "<h3>Check it</h3>" +
+      "<p>Sampling 20,000 pairs of independent unit-normal vectors at four head dimensions, on 6 September 2026:</p>" +
+      "<pre><code>d_k      measured variance   measured sd    sqrt(d_k)\n   4                  3.9          1.99         2.00\n  64                 63.5          7.97         8.00\n 128                129.3         11.37        11.31\n1024               1025.9         32.03        32.00</code></pre>" +
+      "<p>The variance tracks d_k. The prediction was not approximate.</p>" +
+      "<p>Now the consequence at Corvid's actual head dimension of 128. Six random keys, one random query, scores computed both ways:</p>" +
+      "<pre><code>raw scores        [-16.65, -16.09, 17.54, 12.38, -7.81, -0.35]\nsoftmax unscaled  [ 0.0000,  0.0000, 0.9942, 0.0058, 0.0000, 0.0000]\nsoftmax scaled    [ 0.0238,  0.0250, 0.4886, 0.3099, 0.0520, 0.1006]</code></pre>" +
+      "<p>Unscaled, one position takes 99.4% of the weight and everything else is numerically zero. This is attention that has collapsed into a hard lookup before training has taught it anything, with almost no gradient to escape. Scaled, the same scores give a distribution that still prefers the same position but leaves the others alive.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the same six scores at d_k = 128, through softmax (measured)</text>" +
+      "<text x='20' y='44' fill='#ff5d73' font-size='10.5'>unscaled</text>" +
+      "<rect x='110' y='32' width='2' height='14' rx='2' fill='#1c2a45'/><rect x='150' y='32' width='2' height='14' rx='2' fill='#1c2a45'/>" +
+      "<rect x='190' y='32' width='298' height='14' rx='3' fill='#ff5d73'/><rect x='494' y='32' width='2' height='14' rx='2' fill='#1c2a45'/>" +
+      "<text x='512' y='44' fill='#ff5d73' font-size='10'>0.9942 on one position</text>" +
+      "<text x='20' y='72' fill='#7d8fb0' font-size='10'>gradient here is proportional to p(1-p) = 0.006</text>" +
+      "<text x='20' y='112' fill='#3ddc97' font-size='10.5'>scaled</text>" +
+      "<rect x='110' y='100' width='14' height='14' rx='3' fill='#4f7cff'/><rect x='150' y='100' width='15' height='14' rx='3' fill='#4f7cff'/>" +
+      "<rect x='190' y='100' width='147' height='14' rx='3' fill='#3ddc97'/><rect x='360' y='100' width='93' height='14' rx='3' fill='#3ddc97'/>" +
+      "<rect x='480' y='100' width='16' height='14' rx='3' fill='#4f7cff'/><rect x='520' y='100' width='30' height='14' rx='3' fill='#4f7cff'/>" +
+      "<text x='560' y='112' fill='#3ddc97' font-size='10'>0.489 / 0.310 / others alive</text>" +
+      "<text x='20' y='140' fill='#7d8fb0' font-size='10'>gradient here is proportional to p(1-p) = 0.250, forty times larger</text>" +
+      "<line x1='20' y1='160' x2='740' y2='160' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='182' fill='#c9d6ea' font-size='10.5'>Measured variance of a dot product: 3.9 at d_k=4, 63.5 at 64, 129.3 at 128, 1025.9 at 1024.</text>" +
+      "<text x='20' y='202' fill='#c9d6ea' font-size='10.5'>Variance equals d_k, so standard deviation is sqrt(d_k), so dividing by sqrt(d_k) gives unit variance.</text>" +
+      "<text x='20' y='220' fill='#7d8fb0' font-size='10'>Same ranking either way. The divisor changes the distribution's sharpness, never its order.</text>" +
+      "</svg><div class='fig-cap'>The divisor is not a fudge factor. It is the one number that makes the softmax's input scale independent of how wide you made the head.</div></div>" +
+      "<p>Now go to the attention machine and switch the scaling off. Watch the selected row collapse onto a single position. Then turn it back on. That is the discovery, and it is the answer to the interview question in a form you will not forget.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;Why divide by the square root of d_k?&#8221; A weak answer says it stabilizes training. A complete answer says: scores are dot products of d-dimensional vectors, so their variance grows as d, so at large d the softmax saturates and its gradient, proportional to p(1&#8722;p), vanishes; dividing by the standard deviation restores unit variance and keeps the gradient alive. The follow-up is usually &#8220;why not divide by d?&#8221; and the answer is that d over-corrects, shrinking the scores toward zero and flattening the distribution until the mechanism cannot express a preference at all.</div>" },
+
+    { title: "What It Costs", viz: "llmAttentionCost", vizTitle: "Find the sequence length where the scores alone exceed the GPU",
+      html: "<p>Every query is scored against every key. That sentence contains the cost of the entire field.</p>" +
+      "<p>For a sequence of n tokens the score matrix has n rows and n columns, so attention performs n&#178; dot products and must hold n&#178; numbers. Double the sequence length and you quadruple both. This is <strong>quadratic cost</strong>, and it is the reason context windows were 512 tokens in 2018 and the reason long context is still expensive in 2026.</p>" +
+      "<p>Put Corvid's numbers on it. One head, one sequence, scores in fp16:</p>" +
+      "<pre><code>     n     scores per head       one head     all 32 heads\n   512             262,144         0.5 MB          0.02 GB\n 2,048           4,194,304         8.4 MB          0.27 GB\n 8,192          67,108,864       134.2 MB          4.29 GB\n32,768       1,073,741,824     2,147.5 MB         68.72 GB</code></pre>" +
+      "<p>Read the third row. At Corvid's full 8,192-token context, the score matrices alone are 4.29 GB, for one sequence, before the weights, the activations, or anything else. On the 16 GB budget this course assumes, attention has taken a quarter of the card just to hold intermediate numbers nobody wants to keep.</p>" +
+      "<p>Read the fourth row and the situation is absurd: 68.72 GB for a 32,768-token sequence, which no single consumer card can hold.</p>" +
+      "<p>And yet models with 128,000-token contexts exist and run on modest hardware. Something in that table is wrong, and what is wrong is the assumption that the score matrix is ever written down at all. Chapter 28 shows the fix, which computes exactly the same output while never materializing the matrix, and the reason it works is a hardware fact from Chapter 16 rather than a mathematical one.</p>" +
+      "<p>Take the cost machine and find the sequence length where the score matrices exceed 16 GB. Then note that number, because Chapter 28 will ask you to compare it with what actually runs.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>score-matrix memory, 32 heads, fp16 (measured arithmetic)</text>" +
+      "<line x1='70' y1='170' x2='700' y2='170' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='40' x2='70' y2='170' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='96' x2='700' y2='96' stroke='#ff5d73' stroke-width='2' stroke-dasharray='5 4'/>" +
+      "<text x='560' y='90' fill='#ff5d73' font-size='10'>the 16 GB budget</text>" +
+      "<rect x='110' y='168' width='40' height='2' rx='1' fill='#3ddc97'/><text x='104' y='186' fill='#7d8fb0' font-size='10'>512</text>" +
+      "<rect x='240' y='166' width='40' height='4' rx='1' fill='#3ddc97'/><text x='230' y='186' fill='#7d8fb0' font-size='10'>2,048</text>" +
+      "<rect x='370' y='131' width='40' height='39' rx='2' fill='#ffd166'/><text x='360' y='186' fill='#ffd166' font-size='10'>8,192</text>" +
+      "<text x='356' y='124' fill='#ffd166' font-size='10'>4.29 GB</text>" +
+      "<rect x='500' y='44' width='40' height='126' rx='2' fill='#ff5d73'/><text x='486' y='186' fill='#ff5d73' font-size='10'>32,768</text>" +
+      "<text x='476' y='38' fill='#ff5d73' font-size='10'>68.72 GB</text>" +
+      "<text x='596' y='130' fill='#7d8fb0' font-size='10'>4x the tokens,</text>" +
+      "<text x='596' y='146' fill='#7d8fb0' font-size='10'>16x the memory</text>" +
+      "<text x='20' y='208' fill='#7d8fb0' font-size='10.5'>Chapter 28 computes the identical output without ever writing this matrix down.</text>" +
+      "</svg><div class='fig-cap'>The quadratic term, in gigabytes. Every long-context technique in this course is a response to this one chart.</div></div>" },
+
+    { title: "What Real Implementations Do Differently",
+      html: "<p>Four gaps between the mechanism you just built and the code that runs in production. Each is named here so the vocabulary is familiar when its chapter arrives.</p>" +
+      "<p><strong>Heads.</strong> Nothing above explains why the projection went from 4,096 down to 128. Real attention runs many of these in parallel, each with its own three matrices, so one position can attend several ways at once. That is Chapter 6, and it is a reshape rather than a loop, which is why it costs nothing extra.</p>" +
+      "<p><strong>Position.</strong> Look again at the worked example and notice something missing: nothing in it referred to the order of the tokens. Permute the input and the same weighted sums come out attached to permuted positions. Attention is blind to order, and every transformer injects position by hand. That is Chapter 7, and the omission here was deliberate.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>attention is blind to order</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10.5'>input</text>" +
+      "<rect x='96' y='32' width='68' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='130' y='49' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>the</text>" +
+      "<rect x='170' y='32' width='68' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='204' y='49' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>cat</text>" +
+      "<rect x='244' y='32' width='68' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='278' y='49' text-anchor='middle' fill='#c9d6ea' font-size='10.5'>sat</text>" +
+      "<text x='20' y='96' fill='#7d8fb0' font-size='10.5'>shuffled</text>" +
+      "<rect x='96' y='82' width='68' height='24' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='130' y='99' text-anchor='middle' fill='#ff5d73' font-size='10.5'>sat</text>" +
+      "<rect x='170' y='82' width='68' height='24' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='204' y='99' text-anchor='middle' fill='#ff5d73' font-size='10.5'>the</text>" +
+      "<rect x='244' y='82' width='68' height='24' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='278' y='99' text-anchor='middle' fill='#ff5d73' font-size='10.5'>cat</text>" +
+      "<line x1='340' y1='68' x2='390' y2='68' stroke='#ffd166' stroke-width='2'/><polygon points='397,68 385,62 385,74' fill='#ffd166'/>" +
+      "<text x='410' y='46' fill='#ffd166' font-size='10.5'>Each token's output is identical.</text>" +
+      "<text x='410' y='66' fill='#ffd166' font-size='10.5'>It simply arrives at a different slot.</text>" +
+      "<text x='410' y='94' fill='#7d8fb0' font-size='10'>Score, scale, softmax and weighted sum</text>" +
+      "<text x='410' y='110' fill='#7d8fb0' font-size='10'>never once refer to an index.</text>" +
+      "<line x1='20' y1='134' x2='740' y2='134' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='158' fill='#c9d6ea' font-size='10.5'>So 'the cat sat' and 'sat the cat' are the same input to this mechanism.</text>" +
+      "<text x='20' y='178' fill='#c9d6ea' font-size='10.5'>Every transformer therefore injects position by hand, which is Chapter 7.</text>" +
+      "</svg><div class='fig-cap'>The gap the worked example left on purpose. Nothing you computed in section 3 used a position index anywhere.</div></div>" +
+      "<p><strong>The cache.</strong> During generation, position 400's keys and values are recomputed on every step even though they have not changed. Real implementations store them. That store is the KV cache, it dominates serving memory, and Chapters 6, 26 and 27 are increasingly about it.</p>" +
+      "<p><strong>The matrix is never written.</strong> As section 5 said, FlashAttention computes the same output tile by tile without materializing n&#178; scores in main memory. It is not an approximation and the output is identical. Chapter 28.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Using the four keys and values from section 3, compute the attention output for the query from <em>down</em>, q = [0,0,1,1]. Do all four steps: score, scale by the square root of 4, softmax, weighted sum. Then apply the causal mask for position 4 and note which entries change. One of them will not change at all, and you should be able to say why before you compute it.</li>" +
+      "<li><strong>Trace.</strong> A model has a head dimension of 64. Its scores have a standard deviation of about 8, as section 4 predicts. Someone proposes dividing by d_k rather than its square root, so by 64. Compute what the six scores from section 4 would become under that divisor, push them through a softmax, and describe the resulting distribution in one sentence. You have just answered the standard follow-up interview question.</li>" +
+      "<li><strong>Investigate.</strong> Find the scaled dot-product attention implementation in any open-source model, in PyTorch or in a C inference engine. Locate the four steps from section 3 in the code, and find where the mask is applied. Confirm it is applied before the softmax and not after, then write down what would break if it were applied after. This is a real bug people ship.</li>" +
+      "<li><strong>Investigate.</strong> Take a model you use and find its context length and head dimension. Compute the score-matrix memory at full context for one sequence, as in section 5. Then find out how much memory the model actually needs to serve one request at that context. The gap between your number and the real one is what Chapter 28 is worth, in gigabytes.</li>" +
+      "<li><strong>Build.</strong> Write scaled dot-product attention in about fifteen lines, with no framework: take Q, K and V as lists of lists, produce the output. Include the scaling and an optional causal mask. Test it against the worked example in section 3, which must produce [0.189, 0.622, 0.566, 1.245] for the query from <em>sat</em>. Then run it twice at head dimension 128 with random inputs, once with scaling and once without, and print the maximum softmax weight in each. You should see roughly 0.49 against 0.99. Keep this code; Chapter 36 turns it into PocketLM's attention.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "attention", d: "A mechanism that lets each position compute a weighted average of information from every position, with weights derived from learned similarity." },
+    { t: "query", d: "A linear projection of a position's vector representing what that position is looking for." },
+    { t: "key", d: "A linear projection representing what a position advertises about itself, scored against queries." },
+    { t: "value", d: "A linear projection carrying what actually gets copied from a position when it is attended to." },
+    { t: "head dimension", d: "The width of the query, key and value projections; 128 for Corvid-8B, and the d_k in the scaling factor." },
+    { t: "attention score", d: "The dot product of one query with one key, before scaling and normalization." },
+    { t: "score matrix", d: "The n by n array of all query-key scores for a sequence; the source of attention's quadratic cost." },
+    { t: "softmax", d: "The function that turns arbitrary real scores into positive weights summing to one, sensitive to the scale of its inputs and not only their order." },
+    { t: "scaling factor", d: "Division by the square root of the head dimension, which restores unit variance to the scores so the softmax retains gradient." },
+    { t: "causal mask", d: "Setting scores for future positions to negative infinity before the softmax, so a position can only attend to itself and earlier positions." },
+    { t: "decoder-only model", d: "A transformer whose attention is causally masked throughout, which is what makes autoregressive generation possible." },
+    { t: "quadratic cost", d: "The n-squared growth in attention's compute and memory with sequence length: twice the tokens, four times the work." },
+    { t: "bottleneck", d: "The failure of recurrent models to carry a long sequence's information through one fixed-size hidden state." },
+    { t: "KV cache", d: "The stored keys and values of earlier positions, kept during generation so they are not recomputed on every step." }
+  ],
+  quiz: [
+    { type: "mc", q: "What are the query, key and value at a given position?", opts: ["Three separate vectors read from three lookup tables", "Three slices of the position's vector, split into thirds", "Three different learned linear projections of the same vector", "The vectors of the previous, current and next positions"], a: 2,
+      why: "One vector x is multiplied by three learned matrices. Nothing structural distinguishes the three; the roles emerge because gradient descent found it useful for W_Q to extract what a position is looking for and W_K to extract what it advertises. The database metaphor names the learned jobs, not any property of the arithmetic." },
+    { type: "mc", q: "Why is the causal mask applied before the softmax rather than after?", opts: ["Applying it before is faster on a GPU", "Zeroing weights after the softmax would leave them not summing to one, and the masked positions would still have influenced the normalization", "The softmax cannot process negative numbers", "It makes no difference; both orders are used in practice"], a: 1,
+      why: "Setting a score to negative infinity before exponentiation makes that term exactly zero and excludes it from the denominator, so the surviving weights renormalize correctly among themselves. Zeroing afterwards leaves a distribution that does not sum to one and that was already shaped by the future tokens you meant to hide. This is a real bug people ship." },
+    { type: "mc", q: "Scores are dot products of d-dimensional vectors with unit-variance components. What is the variance of a score?", opts: ["1, because each component has variance 1", "The square root of d", "d squared", "d, because the variances of d independent product terms add"], a: 3,
+      why: "A dot product is a sum of d products. Each product of two independent unit-variance terms has variance 1, and variances of independent terms add, so the sum has variance d and standard deviation the square root of d. Measured at 20,000 samples: 3.9 at d=4, 63.5 at 64, 129.3 at 128, 1025.9 at 1024. The prediction is not approximate." },
+    { type: "mc", q: "At head dimension 128, an unscaled softmax put 0.9942 of the weight on one position. Why is that bad for training?", opts: ["The gradient of the softmax is proportional to p(1-p), which is near zero at both extremes, so the weights barely move", "The model attends to the wrong position", "The output vector is no longer a valid probability distribution", "Attention becomes non-deterministic"], a: 0,
+      why: "The ranking is unaffected and the distribution is perfectly valid. The damage is to learning: at p near 0.994 or near 0, the product p(1-p) is about 0.006, forty times smaller than the 0.25 the scaled version gives. The mechanism has saturated into a hard lookup before training taught it anything, with almost no gradient to escape." },
+    { type: "blank", q: "Setting the attention scores for future positions to negative infinity before the softmax is called the ____ mask.", a: ["causal", "causal mask"],
+      why: "It is what makes the model decoder-only and what makes generation meaningful. It also buys a large efficiency: because every row is restricted to its own prefix, one forward pass over n tokens produces n correctly conditioned predictions, so training gets n examples for the price of one pass." },
+    { type: "blank", q: "Attention's compute and memory grow with the ____ of the sequence length, which is why doubling context quadruples the cost.", a: ["square", "square of", "n squared", "quadratic"],
+      why: "Every query is scored against every key, so the score matrix is n by n. At Corvid's 8,192-token context that is 4.29 GB of scores across 32 heads in fp16, before weights or activations. Every long-context technique in this course is a response to that number." },
+    { type: "order", q: "Order the four steps of scaled dot-product attention:", items: ["dot each query with every key to get scores", "divide the scores by the square root of the head dimension", "apply softmax to turn scores into weights that sum to one", "sum the value vectors weighted by those weights"], 
+      why: "Score, scale, normalize, average. The causal mask slots between steps two and three, because it must act on scores rather than on weights. Every attention implementation you will ever read is these four steps with the matrix multiplications batched differently." },
+    { type: "mc", q: "What did the 2017 transformer paper actually contribute, given that attention was published in 2014?", opts: ["The dot-product scoring function", "The softmax normalization of attention weights", "The idea of learning separate query and key projections", "The claim that attention alone suffices, which removed recurrence and let a whole sequence train in parallel"], a: 3,
+      why: "Bahdanau and colleagues introduced attention in 2014 as an addition to a recurrent model, and Luong and colleagues simplified the scoring to a dot product in 2015. The 2017 contribution was removing the recurrence entirely. The payoff was less about accuracy than about hardware: without a sequential dependency between positions, an entire sequence trains at once, which is what made scale possible." },
+    { type: "mc", q: "You permute the words of a sentence and the attention output for each word is unchanged apart from following its word. What does that show?", opts: ["The mask was not applied", "The scaling factor was omitted", "Attention has no notion of position, which must be injected separately", "The value projection is degenerate"], a: 2,
+      why: "Nothing in score, scale, softmax or weighted sum refers to where a token sits. Attention is permutation-equivariant by construction, which is why every transformer adds positional information by hand. Chapter 7 covers the four families of ways to do it, and the omission in this chapter was deliberate so you would notice it here." },
+    { type: "mc", q: "The score matrices for a 32,768-token sequence would need 68.72 GB, yet models with far longer contexts run on single cards. What resolves the contradiction?", opts: ["The score matrix is never written to main memory; it is computed in tiles that stay in fast on-chip memory", "The scores are stored in a lower precision than fp16", "Long-context models replace attention with a cheaper approximation", "Those models use fewer attention heads"], a: 0,
+      why: "FlashAttention computes exactly the same output without materializing the n-by-n matrix, by tiling the computation so intermediate scores never leave on-chip memory. It is an input/output optimization, not an approximation, and the output is bit-comparable. It is Chapter 28, and it only makes sense after the hardware facts in Chapter 16." }
   ]
 });
