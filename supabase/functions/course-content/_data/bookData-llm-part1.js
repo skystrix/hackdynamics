@@ -125,6 +125,18 @@
    (Scaling Monosemanticity) on sparse autoencoders. This chapter reports
    qualitative findings from that literature rather than measurements of my
    own, and says so where the field disagrees.
+
+   Sources consulted for Chapter 12: Raffel et al. 2020 (C4); Gao et al. 2020
+   (The Pile); Broder 1997 (MinHash); Lee et al. 2021 (Deduplicating Training
+   Data Makes Language Models Better); Rae et al. 2021 (Gopher, quality
+   heuristics); Penedo et al. 2023 (RefinedWeb) and 2024 (FineWeb and its
+   filter ablations); Soldaini et al. 2024 (Dolma); Shumailov et al. 2024
+   (model collapse, Nature); Carlini et al. 2021 (training-data extraction).
+   Licences read from the Hugging Face dataset pages on 2026-09-06: FineWeb,
+   FineWeb-Edu and Dolma are all ODC-BY. The shingling, MinHash and n-gram
+   contamination figures in sections 4 and 5 were computed on 2026-09-06: a
+   near-duplicate pair scores 0.750 true Jaccard and 0.773 under 128-permutation
+   MinHash, while a genuine paraphrase of the same sentence scores 0.000.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -2484,5 +2496,189 @@ CHAPTERS.push({
       why: "The formation is abrupt rather than gradual, and it lines up with a visible feature of the loss curve and with the model suddenly being able to pick up patterns from its prompt without any weight update. It is the strongest available evidence that few-shot prompting works because gradient descent independently discovered a copying circuit." },
     { type: "mc", q: "Why does a sparse autoencoder use a much wider hidden layer than the activations it reconstructs?", opts: ["Because there are more features in superposition than there are dimensions, so recovering them needs more units than the original width", "To improve reconstruction accuracy through redundancy", "To match the feed-forward expansion ratio of the model", "Because sparsity penalties require overparameterization to converge"], a: 0,
       why: "The premise of superposition is that the model packs more features than dimensions. Recovering them one per unit therefore requires more units than the model has dimensions, and the sparsity penalty is what pushes each unit onto a single feature rather than a mixture. The work is genuinely early: reconstruction is imperfect and feature sets vary between training runs." }
+  ]
+});
+
+/* ======================= CHAPTER 12 ======================= */
+CHAPTERS.push({
+  num: 12, part: 3, title: "What a Model Reads: Building a Pretraining Corpus",
+  blurb: "The most consequential decisions in a model are made before training starts, by whoever chose the data. You will follow a web dump through the pipeline that turns it into a token stream: extraction, language identification, quality filtering, deduplication, and the step nobody notices until a benchmark score is embarrassing. Then the harder questions. What mixture of web, code, books and mathematics, in what order, and what happens when a model trains on text that another model wrote.",
+  sections: [
+    { title: "Where Trillions of Tokens Come From",
+      html: "<p>Chapter 15 will show that a model of Corvid's size wants something like fifteen trillion training tokens. It is worth pausing on how much text that is. Every English book ever published is a small fraction of it. There is exactly one source at that scale, and it is the web.</p>" +
+      "<p><strong>Common Crawl</strong> is the starting point for nearly every open corpus: a non-profit that has crawled the web monthly since 2008 and publishes the results. It is enormous, free, and mostly garbage. Navigation menus, cookie banners, spam, machine translation, template boilerplate repeated across a million pages. The work is not obtaining it but surviving it.</p>" +
+      "<p>Four other sources are added deliberately, each for a specific capability.</p>" +
+      "<ul>" +
+      "<li><strong>Code</strong>, usually from public repositories. It buys more than the ability to write code: code is highly structured, unambiguous and full of long-range dependencies, and models trained with more of it tend to do better at reasoning tasks that involve no code at all.</li>" +
+      "<li><strong>Books</strong>, for long-form coherence. A book sustains an argument across hundreds of pages, which almost nothing on the web does, and it is where a model learns what a sustained structure looks like. This is also the legally hardest category, which section 8 returns to.</li>" +
+      "<li><strong>Mathematics and scientific papers</strong>, for symbolic manipulation and formal argument.</li>" +
+      "<li><strong>Reference and encyclopedic text</strong>, small in volume and heavily upweighted, because its density of factual statements per token is unmatched.</li>" +
+      "</ul>" +
+      "<p>The open corpora worth knowing by name, because you will meet them constantly: <strong>C4</strong>, the cleaned crawl behind T5, which established the heuristic-filtering approach; <strong>The Pile</strong>, 825 gibibytes across 22 deliberately chosen sub-corpora, which established that a curated mixture beats raw web; <strong>RefinedWeb</strong>, which argued that aggressively filtered web alone can match curated mixtures; <strong>Dolma</strong> and <strong>FineWeb</strong>, which are the current large open corpora and, unusually, publish their filtering decisions and the ablations behind them.</p>" +
+      "<p>That last point matters more than it sounds. For most frontier models the data mixture is the least disclosed part of the system. FineWeb and Dolma are valuable partly as datasets and partly as the only public record of what the choices actually cost.</p>" },
+
+    { title: "From HTML to Text", viz: "llmCorpusPipeline", vizTitle: "Step the pipeline and look at what each filter throws away",
+      html: "<p>The first stage is unglamorous and decides more than it should.</p>" +
+      "<p><strong>Extraction</strong> pulls the text out of the markup. A naive strip-the-tags approach yields navigation, footers, cookie notices and the same legal boilerplate on every page of a site. Purpose-built extractors try to find the main content block, and they are imperfect in ways that leak downstream: a page whose article is split across several divs may lose half of it, and a comment section may be kept as if it were the article.</p>" +
+      "<p><strong>Language identification</strong> assigns a language and a confidence to each document. Anything below a threshold is dropped. This is where multilingual capability is quietly decided: a threshold tuned for high-resource languages discards a disproportionate share of the low-resource text it is least able to identify, which compounds the tokenizer inflation Chapter 2 measured.</p>" +
+      "<p><strong>Basic cleaning</strong> then removes documents that are too short to carry anything, that are mostly punctuation or numbers, that have broken encoding, or that consist mostly of a repeated line.</p>" +
+      "<p>None of this is interesting, and all of it is load-bearing. The single most common cause of a bad small model is not the architecture; it is that the corpus was 40% navigation menus.</p>" },
+
+    { title: "Filtering for Quality",
+      html: "<p>What survives extraction is still mostly not worth training on. Two families of filter reduce it, and they make opposite trades.</p>" +
+      "<p><strong>Heuristic filters</strong> are hand-written rules, most of them descended from the Gopher paper's list: a document must have between 50 and 100,000 words; its mean word length must fall in a plausible range; fewer than 90% of lines may start with a bullet; at least 80% of words must contain an alphabetic character; a stop-word check must pass. Each rule targets a specific kind of junk, they are cheap, and they are auditable, which matters when you have to explain what your corpus is.</p>" +
+      "<p><strong>Classifier filters</strong> train a small model to score documents, usually against a reference set treated as high quality. FineWeb-Edu is the best-documented example: a classifier scores each page for educational value and only the high scorers are kept. The result is a much smaller corpus that trains better models per token.</p>" +
+      "<p>The trade is real. Heuristics are transparent and blunt. Classifiers are effective and opaque, and they impose whatever the reference set considered good, which is a value judgement wearing a statistical costume. A classifier trained to prefer textbook prose will quietly discard forum discussions, dialect, and technical writing that does not resemble a textbook, and nothing in the pipeline reports that it did.</p>" +
+      "<p>What FineWeb's published ablations demonstrated is that these decisions are worth more than they look: filtering choices alone moved downstream benchmark scores by margins comparable to substantial changes in model size. Data work is not preparation for the real work. It is the highest-leverage work available.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>what survives each stage (the shape of a real pipeline)</text>" +
+      "<rect x='60' y='32' width='640' height='20' rx='3' fill='#4f7cff'/><text x='60' y='68' fill='#7d8fb0' font-size='9.5'>raw crawl</text>" +
+      "<rect x='60' y='72' width='384' height='20' rx='3' fill='#4f7cff'/><text x='60' y='108' fill='#7d8fb0' font-size='9.5'>after extraction and language ID</text>" +
+      "<rect x='60' y='112' width='230' height='20' rx='3' fill='#ffd166'/><text x='60' y='148' fill='#7d8fb0' font-size='9.5'>after quality filtering</text>" +
+      "<rect x='60' y='152' width='138' height='20' rx='3' fill='#3ddc97'/><text x='60' y='188' fill='#7d8fb0' font-size='9.5'>after deduplication</text>" +
+      "<text x='470' y='47' fill='#7d8fb0' font-size='9.5'>menus, boilerplate, spam</text>" +
+      "<text x='470' y='87' fill='#7d8fb0' font-size='9.5'>wrong language, too short, broken</text>" +
+      "<text x='330' y='127' fill='#ffd166' font-size='9.5'>fails the heuristics or the classifier</text>" +
+      "<text x='240' y='167' fill='#3ddc97' font-size='9.5'>seen before, often hundreds of times</text>" +
+      "<text x='20' y='206' fill='#c9d6ea' font-size='10.5'>Proportions vary by pipeline; the shape does not. Most of the web does not survive, and that is the intent.</text>" +
+      "</svg><div class='fig-cap'>Each bar is what remains. The interesting question at every stage is not what survived but what was discarded, and whether you would agree with the choice.</div></div>" },
+
+    { title: "Removing What You Have Already Read",
+      html: "<p>The web repeats itself relentlessly. The same article is syndicated across fifty sites, the same licence text appears on a million pages, the same product description is generated for every item in a catalogue.</p>" +
+      "<p>Duplication is not a tidiness problem. Katherine Lee and colleagues showed in 2021 that removing duplicates makes models measurably better: they memorize less, they emit training data verbatim less often, and they reach the same loss in fewer steps. Duplicated text is effectively upweighted, so a model trained on an undeduplicated corpus spends its capacity memorizing boilerplate.</p>" +
+      "<p><strong>Exact deduplication</strong> is easy: hash each document, keep one per hash. It catches almost nothing, because near-identical documents differ by a timestamp or a single word.</p>" +
+      "<p><strong>Near-duplicate detection</strong> is the real work. Cut each document into overlapping word sequences called shingles, and measure the Jaccard similarity of the shingle sets, which is the size of their intersection over the size of their union. Comparing every pair is impossible at trillions of documents, so <strong>MinHash</strong>, from Andrei Broder in 1997, estimates that similarity from a short signature: hash the shingles many times, keep the minimum each time, and the fraction of matching signature entries estimates the Jaccard similarity.</p>" +
+      "<h3>Measure it, and find the limit</h3>" +
+      "<p>Three sentences, computed on 6 September 2026. The first is a refund policy. The second is the same sentence with one word changed. The third says the same thing in different words.</p>" +
+      "<pre><code>                        true Jaccard    MinHash-128 estimate\none word changed               0.750                   0.773\na genuine paraphrase           0.000                   0.000\nan unrelated sentence          0.000                   0.000</code></pre>" +
+      "<p>Two things follow, and the second is the one that gets missed.</p>" +
+      "<p>MinHash works: 0.773 against a true 0.750, from a 128-number signature instead of a full comparison. That is the whole reason the technique scales.</p>" +
+      "<p>And near-duplicate detection <strong>cannot see paraphrase at all</strong>. A sentence restating the same content in different words scores exactly zero, indistinguishable from a sentence about railway history. Every deduplication pipeline in production has this property. Your corpus may contain the same fact ten thousand times, in ten thousand phrasings, and the deduplicator will report it as ten thousand distinct documents.</p>" +
+      "<p>The threshold is the other trap. A cutoff of 0.7 removes the one-word variant; a cutoff of 0.8 keeps it. Nothing in the pipeline tells you which side of the line your near-duplicates fell on, and published corpora differ in this choice.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 208' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>similarity to the original sentence (measured 2026-09-06)</text>" +
+      "<line x1='300' y1='30' x2='300' y2='150' stroke='#7d8fb0' stroke-width='2' stroke-dasharray='4 4'/>" +
+      "<text x='252' y='168' fill='#7d8fb0' font-size='9'>0.7 cutoff</text>" +
+      "<line x1='356' y1='30' x2='356' y2='150' stroke='#ffd166' stroke-width='2' stroke-dasharray='4 4'/>" +
+      "<text x='366' y='168' fill='#ffd166' font-size='9'>0.8 cutoff</text>" +
+      "<text x='20' y='52' fill='#7d8fb0' font-size='10'>one word changed</text>" +
+      "<rect x='160' y='40' width='150' height='16' rx='3' fill='#ffd166'/><text x='430' y='53' fill='#ffd166' font-size='9.5'>0.750 &#183; removed at 0.7, kept at 0.8</text>" +
+      "<text x='20' y='88' fill='#7d8fb0' font-size='10'>a paraphrase</text>" +
+      "<rect x='160' y='76' width='2' height='16' rx='1' fill='#ff5d73'/><text x='430' y='89' fill='#ff5d73' font-size='9.5'>0.000 &#183; kept at every threshold</text>" +
+      "<text x='20' y='124' fill='#7d8fb0' font-size='10'>an unrelated sentence</text>" +
+      "<rect x='160' y='112' width='2' height='16' rx='1' fill='#1c2a45'/><text x='430' y='125' fill='#7d8fb0' font-size='9.5'>0.000 &#183; kept, correctly</text>" +
+      "<line x1='20' y1='184' x2='740' y2='184' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='202' fill='#c9d6ea' font-size='10.5'>The paraphrase and the unrelated sentence are indistinguishable on this measure. That is the limit, not a bug.</text>" +
+      "</svg><div class='fig-cap'>MinHash-128 estimated 0.773 against the true 0.750. It is accurate about what it can see, and blind to meaning.</div></div>" },
+
+    { title: "The Step Nobody Notices", viz: "llmContamination", vizTitle: "Set the n-gram size and watch benchmark questions appear in the clean corpus",
+      html: "<p>Now the failure that produces published, confident, wrong results.</p>" +
+      "<p>Benchmarks live on the web. Their questions appear in papers, in blog posts explaining them, in leaderboard repositories, in forum threads where someone pastes the whole set. So a corpus scraped from the web contains the evaluation sets people will use to judge the model trained on it. That is <strong>contamination</strong>, and the resulting score measures memorization rather than capability.</p>" +
+      "<p><strong>Decontamination</strong> is the pass that removes it: take each evaluation set, and drop any training document sharing a long enough n-gram with it. The mechanism is simple. The parameter is not.</p>" +
+      "<h3>The parameter is the whole method</h3>" +
+      "<p>One benchmark-style question, one trivia page that contains it, and three choices of n, computed on 6 September 2026:</p>" +
+      "<pre><code>n-gram size    overlapping n-grams found    verdict\n         8                            8    flagged\n        13                            3    flagged\n        20                            0    missed</code></pre>" +
+      "<p>The contaminated document is identical at every setting. What changes is whether you notice. A 20-gram check on this document returns clean, and a pipeline reporting that result is not lying: it genuinely found no 20-gram overlap. It simply asked a question too specific to catch the thing that was there.</p>" +
+      "<p>Now consider the direction of the incentives. Contamination inflates scores. Decontamination is done by the same team that reports the scores. A looser check finds more contamination and requires discarding more data. Nobody has to act in bad faith for this to go wrong systematically, which is why Chapter 32 treats a benchmark number without a decontamination protocol as an unverified claim.</p>" +
+      "<p>And a real limit: none of this catches paraphrased contamination, for exactly the reason in the last section. A benchmark question reworded in a blog post is invisible to every n-gram check, and it teaches the model the answer just as effectively.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 196' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the same contaminated document, three decontamination settings</text>" +
+      "<text x='20' y='48' fill='#3ddc97' font-size='10'>n = 8</text>" +
+      "<rect x='110' y='36' width='300' height='16' rx='3' fill='#3ddc97'/><text x='424' y='49' fill='#3ddc97' font-size='9.5'>8 overlaps &#183; flagged and removed</text>" +
+      "<text x='20' y='80' fill='#ffd166' font-size='10'>n = 13</text>" +
+      "<rect x='110' y='68' width='113' height='16' rx='3' fill='#ffd166'/><text x='424' y='81' fill='#ffd166' font-size='9.5'>3 overlaps &#183; flagged and removed</text>" +
+      "<text x='20' y='112' fill='#ff5d73' font-size='10'>n = 20</text>" +
+      "<rect x='110' y='100' width='3' height='16' rx='2' fill='#ff5d73'/><text x='424' y='113' fill='#ff5d73' font-size='9.5'>0 overlaps &#183; reported clean</text>" +
+      "<line x1='20' y1='134' x2='740' y2='134' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='158' fill='#c9d6ea' font-size='10.5'>The document did not change. Only the question did. A stricter check reports a cleaner corpus,</text>" +
+      "<text x='20' y='178' fill='#c9d6ea' font-size='10.5'>and the team choosing the check is the team reporting the score.</text>" +
+      "</svg><div class='fig-cap'>Decontamination is not a step that either happens or does not. It is a threshold, chosen by someone with an interest in the answer.</div></div>" },
+
+    { title: "Mixtures and Order",
+      html: "<p>You now have several cleaned pools. How much of each, and in what order?</p>" +
+      "<p><strong>Domain weights</strong> decide the proportions, and they are not the natural proportions. Web text dominates by volume and is downweighted; reference text is a rounding error by volume and heavily upweighted; code is included far above its share of human writing because of what it does for reasoning. The weights are usually tuned by training small models on candidate mixtures and comparing, which is affordable at small scale and is how most published mixtures were found.</p>" +
+      "<p><strong>Order</strong> turns out to matter too, and this is more recent. The naive approach shuffles everything uniformly. The current practice does not: many runs finish with an <strong>annealing</strong> phase, where the last few percent of training uses a much higher proportion of high-quality data, at a decaying learning rate. The reasoning is that late training does refinement rather than bulk learning, so the final tokens should be the best ones you have.</p>" +
+      "<p><strong>Mid-training</strong> is the same idea applied to a capability: a distinct phase between pretraining and fine-tuning that injects a large amount of one domain, such as mathematics or long documents, to install an ability the general mixture would not produce. It is where most long-context capability now comes from, which connects directly to Chapter 7's scaling machinery: extending the position encoding provides the mechanism, and a mid-training phase on long documents provides the ability to use it.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 220' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>natural volume versus mixture weight (the shape, not one model's numbers)</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10'>web</text>" +
+      "<rect x='130' y='34' width='500' height='14' rx='3' fill='#4f7cff'/>" +
+      "<rect x='130' y='52' width='300' height='14' rx='3' fill='#3ddc97'/><text x='646' y='46' fill='#7d8fb0' font-size='9'>downweighted</text>" +
+      "<text x='20' y='94' fill='#7d8fb0' font-size='10'>code</text>" +
+      "<rect x='130' y='82' width='40' height='14' rx='3' fill='#4f7cff'/>" +
+      "<rect x='130' y='100' width='150' height='14' rx='3' fill='#3ddc97'/><text x='300' y='112' fill='#3ddc97' font-size='9'>upweighted for reasoning</text>" +
+      "<text x='20' y='142' fill='#7d8fb0' font-size='10'>books, papers</text>" +
+      "<rect x='130' y='130' width='24' height='14' rx='3' fill='#4f7cff'/>" +
+      "<rect x='130' y='148' width='90' height='14' rx='3' fill='#3ddc97'/><text x='240' y='160' fill='#3ddc97' font-size='9'>upweighted for long-form structure</text>" +
+      "<text x='20' y='190' fill='#7d8fb0' font-size='10'>reference</text>" +
+      "<rect x='130' y='178' width='5' height='14' rx='2' fill='#4f7cff'/>" +
+      "<rect x='130' y='196' width='46' height='14' rx='3' fill='#3ddc97'/><text x='196' y='208' fill='#3ddc97' font-size='9'>heavily upweighted: facts per token</text>" +
+      "<rect x='560' y='176' width='12' height='9' rx='2' fill='#4f7cff'/><text x='578' y='184' fill='#7d8fb0' font-size='9'>share of the raw pool</text>" +
+      "<rect x='560' y='192' width='12' height='9' rx='2' fill='#3ddc97'/><text x='578' y='200' fill='#7d8fb0' font-size='9'>share of training tokens</text>" +
+      "</svg><div class='fig-cap'>The mixture is never the natural proportions. Weights are usually found by training small models on candidate mixtures and comparing.</div></div>" },
+
+    { title: "Text Written by Models",
+      html: "<p>An obvious idea, given how expensive good data is: generate more with a model.</p>" +
+      "<p>It works, in specific and bounded ways. <strong>Synthetic data</strong> is now standard for instruction tuning, where Chapter 20 covers it, and for domains where a verifier exists: generate mathematical problems and keep the ones whose solutions check out, generate code and keep what passes its tests. The verifier is what makes it sound, because it breaks the circularity by supplying information the generator did not have.</p>" +
+      "<p>Without a verifier the picture is worse. Ilia Shumailov and colleagues published a result in Nature in 2024 on <strong>model collapse</strong>: train a model on the output of a previous model, repeat, and the distribution degrades in a specific pattern. The tails go first. Rare constructions, unusual facts and minority phrasings vanish, because a generator samples from the high-probability region and its output under-represents the tails. Trained on that output, the next model's tails are thinner still. After several generations the model produces fluent, plausible, narrow text and has forgotten the long tail of what language contains.</p>" +
+      "<p>The practical consequence is now unavoidable rather than hypothetical: the web after 2023 contains a growing and unlabelled share of model-generated text. Every corpus scraped from it is partly synthetic whether or not its builders intended that, and nobody has a reliable detector. This is one of the genuinely open problems in the field, and any claim to have solved it should be read carefully.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;Can we just generate more training data?&#8221; The answer that lands distinguishes the two cases. With a verifier, yes, and it is standard practice, because the checker adds information the generator lacked. Without one you are resampling your own distribution, which sharpens the head and erodes the tail, and repeating it collapses the model onto its own most probable outputs. The follow-up is what happens when the web is already partly synthetic, and the honest answer is that nobody knows yet.</div>" },
+
+    { title: "Whose Text Is It",
+      html: "<p>Pretraining corpora are assembled from text written by people who were not asked. That is the situation, stated plainly, and it produces three distinct problems that are often muddled together.</p>" +
+      "<p><strong>Copyright.</strong> Whether training on copyrighted work is permitted is unsettled and is being litigated in several jurisdictions with different answers so far. Books are the sharpest case, because they are the most valuable category per token and the most clearly owned. A practical consequence: some widely used corpora contain material whose status is contested, and building on them carries a risk that is neither zero nor quantified.</p>" +
+      "<p><strong>Consent and control.</strong> Separate from ownership. A site may permit copying and still object to being training data, and the mechanisms for expressing that are weak: robots.txt was designed for search crawlers and is honoured inconsistently for training crawls, and no reliable mechanism exists at all for text already collected.</p>" +
+      "<p><strong>Personal data.</strong> Crawled text contains names, addresses, medical details and credentials, and Nicholas Carlini and colleagues showed in 2021 that models can be induced to emit training data verbatim. Deduplication reduces this substantially, which is one of the strongest practical arguments for it, and does not eliminate it.</p>" +
+      "<p>What is checkable is licensing of the corpus itself, and it is worth doing. Read from the Hugging Face dataset pages on 6 September 2026: FineWeb, FineWeb-Edu and Dolma are all published under ODC-BY. That governs the collection, not the underlying documents, and the distinction is the thing to be precise about when someone asks whether a corpus is safe to use.</p>" +
+      "<p>Model cards are where this is supposed to be disclosed. Most say very little. When a card describes a corpus as &#8220;a diverse mixture of publicly available data&#8221;, that sentence carries no information, and reading it as reassurance is a mistake.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take two sentences that differ by one word, and compute their 5-word shingle sets by hand, then their Jaccard similarity. Then rewrite one sentence as a paraphrase with no shared 5-word run and compute again. State what score a near-duplicate pipeline assigns to each, and what that implies about how much genuinely redundant content survives deduplication.</li>" +
+      "<li><strong>Trace.</strong> A team reports that their corpus is decontaminated against a benchmark using 20-gram matching. Using section 5, write three sentences on what that guarantees and what it does not, and name two ways a benchmark question could still be in the corpus.</li>" +
+      "<li><strong>Investigate.</strong> Open the FineWeb or Dolma documentation and find the filter list. Pick three filters and, for each, write down what junk it targets and what legitimate text it would also remove. Then find whether the publishers report an ablation for it. Most pipelines do not, and knowing which decisions are evidence-backed and which are inherited convention is the point.</li>" +
+      "<li><strong>Investigate.</strong> Take three model cards from different organizations and record exactly what each says about training data: sources, sizes, filtering, decontamination, licences. Rank them by how much a reader could act on. Then check whether the least informative card belongs to the strongest model, which will tell you something about the relationship between disclosure and capability.</li>" +
+      "<li><strong>Build.</strong> Write a miniature corpus pipeline in about eighty lines over a few thousand documents: strip markup, drop documents outside a length range, apply two heuristic quality rules, then deduplicate with 5-word shingles and MinHash. Report survival rate at each stage and print twenty documents each stage removed. Then add an n-gram decontamination pass against a small evaluation set of your own, run it at n = 8, 13 and 20, and report how many documents each setting removes. You should reproduce the shape of both measured tables in this chapter.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "Common Crawl", d: "The non-profit monthly web crawl that is the starting point for nearly every open pretraining corpus." },
+    { t: "extraction", d: "Recovering the main text from a web page's markup, discarding navigation, footers and boilerplate; imperfect in ways that leak downstream." },
+    { t: "language identification", d: "Assigning a language and confidence to each document; the threshold quietly decides how multilingual the model will be." },
+    { t: "heuristic filter", d: "A hand-written rule about length, word statistics or line structure, cheap and auditable, most of them descended from the Gopher paper's list." },
+    { t: "classifier filter", d: "A small model scoring documents against a reference set treated as high quality; effective, opaque, and a value judgement in statistical form." },
+    { t: "shingle", d: "An overlapping fixed-length word sequence cut from a document, used as the unit of near-duplicate comparison." },
+    { t: "Jaccard similarity", d: "The size of the intersection over the size of the union of two shingle sets; the standard near-duplicate measure." },
+    { t: "MinHash", d: "Estimating Jaccard similarity from a short signature of minimum hash values, which is what makes deduplication feasible at web scale." },
+    { t: "near-duplicate detection", d: "Removing documents that are almost identical; it catches word-level copies and scores a genuine paraphrase at zero." },
+    { t: "contamination", d: "Evaluation data present in the training corpus, which turns a benchmark score into a measurement of memorization." },
+    { t: "decontamination", d: "Removing training documents that share a long enough n-gram with an evaluation set; the choice of n determines what is found." },
+    { t: "domain weights", d: "The proportions of each source in the final mixture, deliberately different from their natural volumes and usually tuned on small models." },
+    { t: "annealing", d: "Finishing a training run with a high proportion of high-quality data at a decaying learning rate, on the reasoning that late training refines." },
+    { t: "mid-training", d: "A distinct phase between pretraining and fine-tuning that injects one domain heavily to install a capability, and where most long-context ability now comes from." },
+    { t: "synthetic data", d: "Training text generated by a model; sound where a verifier can check it, and circular where none exists." },
+    { t: "model collapse", d: "The degradation from repeatedly training on model output, in which the distribution's tails thin first and rare constructions disappear." }
+  ],
+  quiz: [
+    { type: "mc", q: "Why does deduplication make a model better rather than merely smaller?", opts: ["It removes low-quality documents, which are usually the duplicated ones", "Duplicated text is effectively upweighted, so the model spends capacity memorizing boilerplate and emits training data verbatim more often", "It improves the tokenizer's merge table", "It reduces the vocabulary size needed"], a: 1,
+      why: "Lee and colleagues measured it in 2021: deduplicated models memorize less, reproduce training text less often, and reach the same loss in fewer steps. A document appearing five hundred times is five hundred gradient updates toward reproducing it, regardless of its quality. Deduplication is also one of the strongest practical mitigations for training-data extraction." },
+    { type: "mc", q: "A near-duplicate pipeline scores a one-word-changed sentence at 0.750 Jaccard and a genuine paraphrase at 0.000. What follows?", opts: ["The paraphrase detector needs a lower threshold", "MinHash is estimating the similarity incorrectly", "Deduplication removes copies, not restatements, so semantically redundant content survives in unknown quantity", "The shingle length should be increased"], a: 2,
+      why: "Zero is the true Jaccard similarity, not an estimation error: the paraphrase shares no 5-word run with the original, so it is formally as different as a sentence about railway history. No threshold can distinguish it from unrelated text on this measure. Every production deduplication pipeline has this property, and it means a corpus may contain the same fact ten thousand times in ten thousand phrasings and report ten thousand distinct documents." },
+    { type: "mc", q: "The same contaminated document is flagged at n=8 and n=13 but reported clean at n=20. What does that show?", opts: ["The document was only partially contaminated", "20-gram matching is more accurate and the earlier flags were false positives", "The evaluation set was too short to match", "The choice of n determines what is found, and a stricter check reports a cleaner corpus without the corpus being cleaner"], a: 3,
+      why: "The document did not change; only the question did. A pipeline reporting no 20-gram overlap is not lying, it asked something too specific to catch what was there. Since contamination inflates scores and the team choosing n is the team reporting the scores, the incentives point one way without anyone acting in bad faith, which is why Chapter 32 treats a benchmark number without a stated protocol as unverified." },
+    { type: "mc", q: "Why is code included in pretraining mixtures far above its share of human writing?", opts: ["Because it is structured, unambiguous and full of long-range dependencies, and models trained with more of it do better on reasoning tasks involving no code", "Because most model users are programmers", "Because it is cheaper to obtain than books", "Because it tokenizes more efficiently"], a: 0,
+      why: "The benefit is not confined to coding ability. Code enforces exact structure over long spans in a way prose rarely does, and the effect on general reasoning is why mixtures upweight it. Chapter 3 showed code tokenizes worse than prose, not better, so efficiency is an argument against including it rather than for." },
+    { type: "blank", q: "Estimating the similarity of two documents from short signatures of minimum hash values, rather than comparing them directly, is called ____.", a: ["minhash", "min-hash", "min hash"],
+      why: "Comparing every pair of documents at web scale is impossible, so Broder's 1997 technique estimates Jaccard similarity from a fixed-size signature. Measured here: a 128-permutation signature estimated 0.773 against a true similarity of 0.750, from 128 numbers rather than a full set comparison. That efficiency is what makes deduplication feasible at trillions of documents." },
+    { type: "blank", q: "Finishing a training run with a much higher proportion of high-quality data at a decaying learning rate is called ____.", a: ["annealing"],
+      why: "The reasoning is that late training refines rather than learns in bulk, so the last tokens a model sees should be the best available. It replaced the older assumption that the corpus should simply be shuffled uniformly, and it is closely related to mid-training, which applies the same idea to install a specific capability." },
+    { type: "order", q: "Order the stages of a pretraining data pipeline:", items: ["extract text from markup and identify the language", "apply heuristic and classifier quality filters", "deduplicate near-identical documents", "remove documents overlapping the evaluation sets"],
+      why: "Extract, filter, deduplicate, decontaminate. Decontamination comes last because it is the most expensive per document and there is no point running it against text you are going to discard anyway. Each stage removes a large fraction, and at every one the interesting question is what was thrown away rather than what survived." },
+    { type: "mc", q: "What distinguishes synthetic data that works from synthetic data that causes model collapse?", opts: ["The size of the generating model", "Whether the data is labelled as synthetic", "The temperature used during generation", "Whether a verifier can check the generated output, supplying information the generator did not have"], a: 3,
+      why: "Generating mathematical problems and keeping those whose solutions check out, or code that passes its tests, adds real information because the checker knows something the generator did not. Without a verifier you are resampling your own distribution: the head sharpens, the tails thin, and repeating it erodes exactly the rare constructions that made the original corpus valuable." },
+    { type: "mc", q: "A model card describes its training data as 'a diverse mixture of publicly available sources'. What should you conclude?", opts: ["The corpus is primarily Common Crawl", "The data is licensed for commercial use", "Nothing; the sentence carries no actionable information", "The team followed standard filtering practice"], a: 2,
+      why: "It names no source, no size, no filter, no decontamination protocol and no licence. Reading it as reassurance is the mistake. For most frontier models the data mixture is the least disclosed part of the system, which is part of why the open corpora that do publish their filtering decisions and ablations are valuable beyond the data itself." },
+    { type: "mc", q: "A team's classifier filter keeps only text scoring highly for educational value. What is the cost they may not have measured?", opts: ["It discards forum discussion, dialect and technical writing that does not resemble a textbook, and nothing reports that it did", "The corpus becomes too small to train on", "Slower pipeline throughput", "It biases the tokenizer's merge table"], a: 0,
+      why: "A classifier imposes whatever its reference set treated as good, which is a value judgement expressed statistically. The filtering is effective, which is why it is used, and it is opaque about what it removes. Heuristic filters make the opposite trade: blunt, but you can read the rule and predict what it will catch." }
   ]
 });
