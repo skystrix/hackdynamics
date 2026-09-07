@@ -113,6 +113,18 @@
    DeepSeek-V3 256 routed experts plus 1 shared, top-8, moe_intermediate_size
    2,048 against a dense 18,432. Mixtral's 46.7B total and 12.9B active were
    recomputed from its configuration and match the published figures.
+
+   Sources consulted for Chapter 11: nostalgebraist 2020 (the logit lens);
+   Belrose et al. 2023 (Eliciting Latent Predictions with the Tuned Lens, and
+   its finding that the logit lens fails on some model families); Elhage et
+   al. 2021 (A Mathematical Framework for Transformer Circuits); Olsson et al.
+   2022 (In-context Learning and Induction Heads); Alain & Bengio 2016
+   (linear classifier probes); Hewitt & Liang 2019 (control tasks, on why a
+   probe needs a baseline); Elhage et al. 2022 (Toy Models of Superposition);
+   Bricken et al. 2023 (Towards Monosemanticity) and Templeton et al. 2024
+   (Scaling Monosemanticity) on sparse autoencoders. This chapter reports
+   qualitative findings from that literature rather than measurements of my
+   own, and says so where the field disagrees.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -2307,5 +2319,170 @@ CHAPTERS.push({
       why: "The MoE needs 93.4 GB at bf16 for weights alone, so quality per FLOP is irrelevant: it does not run. This is the memory-bound case from section 7, and it is the most common one on a single card. MoE is attractive when compute is the binding constraint and memory is plentiful, which is the opposite of this situation." },
     { type: "mc", q: "Which part of a transformer block does mixture-of-experts replace, and why that part?", opts: ["Attention, because it is the most expensive operation", "The normalization, because it is cheapest to duplicate", "The feed-forward network, because it holds about four fifths of the block's parameters", "The residual connection, because it carries the most information"], a: 2,
       why: "Chapter 9 counted it: the feed-forward network is 80.8% of a block and attention is 19.2%. Making the largest parameter store conditional is where the capacity gain is, and attention must still run over all positions for the mechanism to work at all. The norms are 0.004% of the block, so duplicating them would buy nothing." }
+  ]
+});
+
+/* ======================= CHAPTER 11 ======================= */
+CHAPTERS.push({
+  num: 11, part: 2, title: "Reading the Machine: What the Layers Learned",
+  blurb: "You have built the block. Now look at what a trained one contains. Interpretability is in this course for a practical reason rather than a philosophical one: when a model behaves strangely, the residual stream is the only place the evidence lives. You will project intermediate layers straight into vocabulary space and watch a prediction form, trace the two-head circuit that copies a repeated pattern, probe for a concept with a linear classifier, and meet the reason a single neuron almost never means one thing.",
+  sections: [
+    { title: "Asking a Middle Layer What It Thinks", viz: "llmLogitLens", vizTitle: "Step up the layers and watch the model change its mind",
+      html: "<p>Chapter 8 established that the residual stream has constant width, 4,096 for Corvid, from the embedding to the final layer. Chapter 4 established that the output projection turns a 4,096-dimensional vector into a distribution over the vocabulary.</p>" +
+      "<p>Put those two facts together and something becomes available that is not obvious: the output projection can be applied to the stream at <em>any</em> layer, not just the last. Nothing stops you. The shapes match.</p>" +
+      "<p>That is the <strong>logit lens</strong>, described by the pseudonymous researcher nostalgebraist in 2020, and it is the cheapest interpretability tool that exists. Take the stream at layer 12, normalize it, multiply by the output matrix, read the top few tokens. You are asking the model what it would predict if it had to answer now.</p>" +
+      "<p>The reported pattern is consistent enough to be worth expecting. Early layers produce near-noise, or tokens related to the input rather than to any answer. Somewhere in the middle the correct answer appears in the top few candidates but not first. Around two thirds of the way up it takes the lead, and the remaining layers sharpen the distribution rather than change its winner.</p>" +
+      "<p>The useful consequence is that a prediction is not made at the end. It is assembled gradually, and by the time the last few layers run, the answer is usually settled and they are adjusting confidence.</p>" +
+      "<div class='callout'><strong>Sources differ.</strong> The logit lens does not work equally well everywhere. Nora Belrose and colleagues showed in 2023 that on several model families it produces near-nonsense at intermediate layers, because those models' residual streams are not in a basis the final output projection can read until late. Their fix, the tuned lens, learns a small per-layer transformation first. Treat a clean logit-lens result as informative and a messy one as inconclusive rather than as evidence about the model.</div>" +
+      "<div class='fig'><svg viewBox='0 0 760 218' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>top prediction at each layer, for a prompt whose answer is 'Paris'</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10'>layer 4</text>" +
+      "<rect x='110' y='34' width='120' height='16' rx='3' fill='#1c2a45'/><text x='240' y='47' fill='#7d8fb0' font-size='9.5'>fragments of the prompt; no answer yet</text>" +
+      "<text x='20' y='78' fill='#7d8fb0' font-size='10'>layer 12</text>" +
+      "<rect x='110' y='66' width='120' height='16' rx='3' fill='#1c2a45'/><text x='240' y='79' fill='#7d8fb0' font-size='9.5'>'France', 'the', 'a' &#8212; topic, not answer</text>" +
+      "<text x='20' y='110' fill='#ffd166' font-size='10'>layer 20</text>" +
+      "<rect x='110' y='98' width='120' height='16' rx='3' fill='#ffd166'/><text x='240' y='111' fill='#ffd166' font-size='9.5'>'Paris' enters the top five, ranked third</text>" +
+      "<text x='20' y='142' fill='#3ddc97' font-size='10'>layer 24</text>" +
+      "<rect x='110' y='130' width='120' height='16' rx='3' fill='#3ddc97'/><text x='240' y='143' fill='#3ddc97' font-size='9.5'>'Paris' takes the lead &#8212; about two thirds up</text>" +
+      "<text x='20' y='174' fill='#3ddc97' font-size='10'>layer 32</text>" +
+      "<rect x='110' y='162' width='120' height='16' rx='3' fill='#3ddc97'/><text x='240' y='175' fill='#3ddc97' font-size='9.5'>same answer, now at 0.94 &#8212; confidence, not choice</text>" +
+      "<text x='20' y='206' fill='#c9d6ea' font-size='10.5'>The prediction is assembled gradually. The last layers mostly sharpen a decision already made.</text>" +
+      "</svg><div class='fig-cap'>The shape to expect, not a specific measurement. Where the crossover sits varies by model and prompt, and on some families the lens is unreadable at all.</div></div>" +
+      "<p>Step the machine up the layers on a factual prompt and find the layer where the correct token overtakes the plausible-but-wrong one. Then try a prompt the model gets wrong, and look at whether the right answer was ever in the running. Sometimes it was, and lost, which is a different kind of failure from never having been considered.</p>" },
+
+    { title: "A Circuit Built From Two Heads", viz: "llmInductionHead", vizTitle: "Find the head that fires only on a repeated token",
+      html: "<p>Chapter 6 named induction heads and showed what they do. Here is how the mechanism actually works, because it is the best-understood circuit in a language model and it is built from parts you have already assembled.</p>" +
+      "<p>The behaviour to explain: given <code>... Ada Lovelace ... Ada</code>, predict <code>Lovelace</code>. Copy what followed the previous occurrence.</p>" +
+      "<p>One attention head cannot do this. To find the earlier <code>Ada</code>, a head would have to match the current token against previous tokens, which it can do. But then it needs the token <em>after</em> that match, and attention returns the value at the position it attended to, not the one following it. The information is one position off.</p>" +
+      "<p>The solution the model finds uses two heads in different layers, and it is genuinely clever.</p>" +
+      "<p><strong>The previous-token head</strong>, in an early layer, does something dull: at every position it attends one step back and writes the previous token's identity into the residual stream. After it runs, every position's vector carries a note saying what came immediately before it.</p>" +
+      "<p><strong>The induction head</strong>, in a later layer, reads that note. Its query, formed at the second <code>Ada</code>, is matched against keys that were built from those notes, so it attends to the position whose <em>predecessor</em> was <code>Ada</code>. That position is <code>Lovelace</code>. It copies it.</p>" +
+      "<p>Notice what made this possible: the first head wrote into the shared channel and the second head read it. That is the residual stream from Chapter 8 acting as a communication bus between layers, and it is why the framing matters rather than being decoration.</p>" +
+      "<h3>The phase change</h3>" +
+      "<p>Catherine Olsson and colleagues reported something in 2022 that makes this more than a curiosity. Induction heads do not appear gradually. They form in a narrow window during training, and that window coincides with a visible bump in the loss curve and with the model's sudden acquisition of in-context learning, the ability to pick up a pattern from the prompt with no weight update.</p>" +
+      "<p>Few-shot prompting works, at least substantially, because gradient descent independently discovered a copying circuit and built it out of two attention heads. Nobody designed it, and Chapter 13 will show you the loss-curve bump where it happened.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 222' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the induction circuit: two heads, two layers, one shared channel</text>" +
+      "<rect x='60' y='34' width='60' height='22' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='90' y='49' text-anchor='middle' fill='#ff5d73' font-size='9.5'>Ada</text>" +
+      "<rect x='126' y='34' width='84' height='22' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='168' y='49' text-anchor='middle' fill='#3ddc97' font-size='9.5'>Lovelace</text>" +
+      "<text x='224' y='49' fill='#7d8fb0' font-size='9.5'>... wrote the first algorithm ...</text>" +
+      "<rect x='470' y='34' width='60' height='22' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='500' y='49' text-anchor='middle' fill='#ff5d73' font-size='9.5'>Ada</text>" +
+      "<rect x='536' y='34' width='60' height='22' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='2' stroke-dasharray='4 3'/><text x='566' y='49' text-anchor='middle' fill='#7d8fb0' font-size='9.5'>?</text>" +
+      "<text x='20' y='96' fill='#ff5d73' font-size='10'>early layer</text>" +
+      "<text x='120' y='96' fill='#c9d6ea' font-size='10'>previous-token head: every position notes what came before it</text>" +
+      "<path d='M168 60 L168 74 L96 74 L96 60' fill='none' stroke='#ff5d73' stroke-width='2'/><polygon points='90,58 96,70 102,70' fill='#ff5d73'/>" +
+      "<text x='120' y='114' fill='#7d8fb0' font-size='9.5'>so 'Lovelace' now carries a note: my predecessor was 'Ada'</text>" +
+      "<text x='20' y='150' fill='#2de2ff' font-size='10'>later layer</text>" +
+      "<text x='120' y='150' fill='#c9d6ea' font-size='10'>induction head: attends to whichever position's note says 'Ada'</text>" +
+      "<path d='M500 62 Q340 20 176 32' fill='none' stroke='#2de2ff' stroke-width='2'/><polygon points='170,34 180,26 180,38' fill='#2de2ff'/>" +
+      "<text x='120' y='168' fill='#3ddc97' font-size='9.5'>and copies it: the prediction is 'Lovelace'</text>" +
+      "<line x1='20' y1='186' x2='740' y2='186' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='210' fill='#c9d6ea' font-size='10.5'>Head one wrote into the residual stream; head two read it. That is the stream working as a bus between layers.</text>" +
+      "</svg><div class='fig-cap'>Neither head can do this alone: attention returns the value at the position it attended to, not the one after it. The note is what closes the gap.</div></div>" },
+
+    { title: "Asking Whether a Concept Is There",
+      html: "<p>A different question: does the model represent some property at all? Not which token it will predict, but whether the information is present somewhere in the stream.</p>" +
+      "<p>The standard tool is a <strong>probe</strong>, and it is deliberately unimpressive. Collect the residual stream vectors at some layer for many inputs, label each input with the property you care about, and train a linear classifier to predict the label from the vector. If it succeeds well above the label's base rate, the information was linearly available at that layer.</p>" +
+      "<p>Probes have found a great deal: part of speech, syntactic depth, sentiment, whether a statement is true, the colour of an object under discussion. Running the same probe at every layer gives an accuracy curve, and the layer where accuracy rises tells you where the model computed it.</p>" +
+      "<h3>What a probe does not prove</h3>" +
+      "<p>Two failures are worth naming, because the technique is easy to over-read.</p>" +
+      "<p><strong>A successful probe does not show the model uses the information.</strong> It shows the information is decodable. Those are different claims, and the second does not follow. The property may be an incidental correlate that no downstream component reads.</p>" +
+      "<p><strong>A sufficiently powerful probe can find anything.</strong> John Hewitt and Percy Liang made this precise in 2019 with control tasks: take your probe, apply it to <em>random</em> labels, and see how well it does. A probe that can fit random labels is memorizing rather than reading, and its success on your real labels means nothing. The remedy is to keep the probe as weak as possible, usually linear, and to report the control-task baseline alongside the result.</p>" +
+      "<p>The general rule is one to carry beyond this chapter: a method that can find structure in noise has not found structure.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>probe accuracy by layer, with its control-task baseline</text>" +
+      "<line x1='70' y1='150' x2='700' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='36' x2='70' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='30' y='42' fill='#7d8fb0' font-size='9'>100%</text><text x='34' y='154' fill='#7d8fb0' font-size='9'>50%</text>" +
+      "<path d='M90 138 L200 130 L310 96 L420 58 L530 50 L640 52' fill='none' stroke='#3ddc97' stroke-width='3'/>" +
+      "<text x='560' y='40' fill='#3ddc97' font-size='9.5'>the probe</text>" +
+      "<path d='M90 146 L200 145 L310 144 L420 145 L530 143 L640 145' fill='none' stroke='#ff5d73' stroke-width='2.5' stroke-dasharray='5 4'/>" +
+      "<text x='430' y='138' fill='#ff5d73' font-size='9.5'>the same probe, random labels</text>" +
+      "<text x='84' y='166' fill='#7d8fb0' font-size='9'>layer 4</text><text x='300' y='166' fill='#7d8fb0' font-size='9'>layer 16</text>" +
+      "<text x='612' y='166' fill='#7d8fb0' font-size='9'>layer 32</text>" +
+      "<text x='20' y='192' fill='#c9d6ea' font-size='10.5'>The gap between the lines is the result. Without the red line, the green one is uninterpretable.</text>" +
+      "</svg><div class='fig-cap'>Where accuracy rises tells you where the model computed the property. A control line that also rises means your probe is memorizing.</div></div>" },
+
+    { title: "Why a Neuron Means Several Things",
+      html: "<p>The obvious way to understand a network is to look at individual neurons. Find the dimension that fires on French text, and you have found the French dimension.</p>" +
+      "<p>It does not work. Inspect neurons in a real model and most fire on collections of things with no evident relationship: a neuron responds to legal citations, to a species of bird, and to a particular punctuation pattern. This is <strong>polysemanticity</strong>, and for years it was treated as a nuisance.</p> " +
+      "<p>The explanation, developed by Nelson Elhage and colleagues in 2022, is a counting argument. A model has 4,096 dimensions per position and needs to represent far more than 4,096 distinct things about language. If features had to be orthogonal, 4,096 would be the hard ceiling.</p>" +
+      "<p>They do not have to be orthogonal, only <em>nearly</em> so. In a high-dimensional space you can pack far more than d almost-orthogonal directions, and the interference between them is small enough to tolerate, especially since only a few features are active at once. So the model stores more features than it has dimensions, at the cost of slight crosstalk. That is <strong>superposition</strong>, and once you see it, polysemantic neurons stop being a puzzle: a neuron is not a feature, it is a coordinate that several features happen to project onto.</p>" +
+      "<h3>Undoing it</h3>" +
+      "<p>If features are directions in a space rather than individual neurons, the task is to recover the directions. The current approach is a <strong>sparse autoencoder</strong>: train a small network to reconstruct the residual stream through a much wider intermediate layer with a strong sparsity penalty, so only a few of its units may be active for any input. Those units, being forced to be sparse, tend to land on individual interpretable features rather than mixtures.</p>" +
+      "<p>The work here has been striking, with millions of interpretable features recovered from production models, and it is genuinely early. Reconstruction is imperfect, features vary with the training run, and how much of the model any feature set explains is an open question. Treat it as an active research direction rather than a solved tool.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 196' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>more features than dimensions, drawn in 2-D</text>" +
+      "<line x1='40' y1='150' x2='240' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='140' y1='50' x2='140' y2='170' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='140' y1='150' x2='220' y2='150' stroke='#3ddc97' stroke-width='3'/>" +
+      "<line x1='140' y1='150' x2='140' y2='70' stroke='#3ddc97' stroke-width='3'/>" +
+      "<text x='40' y='184' fill='#3ddc97' font-size='9.5'>2 orthogonal directions: the hard limit</text>" +
+      "<line x1='420' y1='150' x2='620' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='520' y1='50' x2='520' y2='170' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='520' y1='150' x2='600' y2='150' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<line x1='520' y1='150' x2='590' y2='112' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<line x1='520' y1='150' x2='560' y2='82' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<line x1='520' y1='150' x2='520' y2='70' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<line x1='520' y1='150' x2='478' y2='82' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<line x1='520' y1='150' x2='450' y2='112' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='420' y='184' fill='#ffd166' font-size='9.5'>6 nearly-orthogonal: small interference</text>" +
+      "<text x='300' y='104' fill='#7d8fb0' font-size='10'>a neuron is a</text>" +
+      "<text x='300' y='120' fill='#7d8fb0' font-size='10'>coordinate axis,</text>" +
+      "<text x='300' y='136' fill='#7d8fb0' font-size='10'>not a feature</text>" +
+      "</svg><div class='fig-cap'>Only a few features are active at once, so the crosstalk between overlapping directions rarely matters. Polysemantic neurons are the visible symptom of this packing.</div></div>" },
+
+    { title: "What This Buys You on a Tuesday",
+      html: "<p>None of this is required to ship a product, and most of it is a research field rather than a toolkit. Three things from it are directly useful when something is wrong, and they share a premise: the residual stream is the only place the evidence lives.</p>" +
+      "<p><strong>Did the model ever consider the right answer?</strong> The logit lens separates two failures that look identical from outside. If the correct token was ranked highly at layer 20 and lost by layer 32, something later in the stack suppressed it, and prompt changes or a decoding change may recover it. If it never appeared at any layer, the model does not have the knowledge and no amount of prompting will conjure it. That is a retrieval or fine-tuning problem, and the distinction decides which chapter you go to next.</p>" +
+      "<p><strong>Is the model copying or reasoning?</strong> Induction heads copy from context. When a model gets a few-shot task right, checking whether attention at the answer position is dominated by the matching example tells you whether you have taught it a pattern or merely handed it something to copy. The two behave very differently when the input drifts away from the examples.</p>" +
+      "<p><strong>Is the information present but unused?</strong> A probe that succeeds where behaviour fails means the model encoded what you need and the later layers did not act on it. That is a promising fine-tuning target, because you are teaching the model to use something it already computes rather than to compute something new, and the first is much cheaper than the second.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;How would you find out why a model gives a wrong answer?&#8221; Most candidates describe prompt variations. A stronger answer adds evidence from inside: apply the output projection at intermediate layers to see whether the correct token was ever a candidate, and check what the final position attends to. It separates &#8220;knew and lost it&#8221; from &#8220;never knew&#8221;, which are different bugs with different fixes.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Explain, in four sentences, why a single attention head cannot implement induction. Say precisely what it can find, what it needs next, and why attention's output makes the second unavailable. Then state what the previous-token head writes into the residual stream that closes the gap.</li>" +
+      "<li><strong>Trace.</strong> A model has 4,096 dimensions. Someone claims it can represent at most 4,096 distinct features. State the assumption behind that claim, say why it fails, and give the two conditions that make superposition workable. Then explain what a polysemantic neuron is, in terms of coordinates and directions.</li>" +
+      "<li><strong>Investigate.</strong> Take any open model you can run and implement the logit lens: hook the residual stream at each layer, apply the final normalization and the output projection, and print the top five tokens per layer for a factual prompt. Find the layer where the correct answer first enters the top five and the layer where it takes the lead. Then repeat on a prompt the model gets wrong, and record whether the correct token ever appeared.</li>" +
+      "<li><strong>Investigate.</strong> Train a linear probe on that model's layer-16 activations for a binary property of your choosing, using a few hundred labelled examples. Report its accuracy. Then run the identical probe against randomly shuffled labels and report that accuracy too. If the second number is not near the base rate, your probe is too powerful and the first number means nothing.</li>" +
+      "<li><strong>Build.</strong> Write a residual-stream inspector in about sixty lines: given a model and a prompt, return per layer the top five logit-lens tokens, the norm of the stream, and the attention pattern of a chosen head at the final position. Use it on three prompts, one the model answers well, one it answers wrongly, and one that is ambiguous. Write down what differs between them. This is the debugging tool section 5 describes, and it is worth having before you need it.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "interpretability", d: "The study of what a trained network computes internally, as opposed to what it outputs." },
+    { t: "logit lens", d: "Applying the model's output projection to the residual stream at an intermediate layer, to see what it would predict if it had to answer there." },
+    { t: "tuned lens", d: "A refinement that learns a small per-layer transformation first, for models whose intermediate streams the raw logit lens cannot read." },
+    { t: "previous-token head", d: "An early-layer head that attends one position back and writes the preceding token's identity into the residual stream." },
+    { t: "induction head", d: "A later-layer head that reads those notes to find where the current token appeared before, and copies what followed it." },
+    { t: "circuit", d: "A set of components across layers that together implement one behaviour, communicating through the residual stream." },
+    { t: "phase change", d: "The abrupt formation of induction heads during a narrow window of training, coinciding with a bump in the loss curve and the arrival of in-context learning." },
+    { t: "probe", d: "A small classifier trained on intermediate activations to test whether some property is linearly decodable at that layer." },
+    { t: "control task", d: "Running the same probe against random labels to check it is reading rather than memorizing; a probe that fits noise proves nothing on real labels." },
+    { t: "polysemanticity", d: "The observation that a single neuron typically fires on several unrelated things rather than one coherent concept." },
+    { t: "superposition", d: "Storing more features than there are dimensions by using nearly-orthogonal directions, accepting slight interference because few features are active at once." },
+    { t: "feature", d: "A direction in activation space corresponding to a concept, which is generally not aligned with any single neuron." },
+    { t: "sparse autoencoder", d: "A wide, heavily sparsity-penalized network trained to reconstruct activations, whose units tend to land on individual interpretable features." }
+  ],
+  quiz: [
+    { type: "mc", q: "What makes the logit lens possible at all?", opts: ["Intermediate layers are trained with an auxiliary output loss", "The residual stream has constant width, so the output projection's shapes match at every layer", "Each layer keeps a copy of the final layer's weights", "The model normalizes activations identically at every depth"], a: 1,
+      why: "Chapter 8's constant-width residual stream is what makes it work: the output projection expects a 4,096-dimensional vector and every layer's stream is one. No auxiliary training is involved, and nothing about the model was designed to permit this. It is a consequence of the architecture that happens to be useful." },
+    { type: "mc", q: "Why can a single attention head not implement induction?", opts: ["A single head lacks enough parameters", "The causal mask prevents attending to earlier positions", "Softmax cannot represent exact matching", "It can find the earlier occurrence of the current token, but attention returns the value at the attended position rather than the one after it"], a: 3,
+      why: "Finding the earlier 'Ada' is straightforward. The problem is that the useful token is the one after it, and attention hands back the value at the position it attended to. The previous-token head closes the gap by writing each position's predecessor into the residual stream, so the induction head can attend to whichever position's note says 'Ada' and land on 'Lovelace'." },
+    { type: "mc", q: "A probe achieves 92% accuracy predicting a property from layer-16 activations. What have you shown?", opts: ["The property is linearly decodable at layer 16, which does not establish that anything downstream reads it", "The model uses that property when producing its output", "The property is computed at layer 16 specifically", "The model would fail at its task without that property"], a: 0,
+      why: "Decodable and used are different claims, and the second does not follow from the first. The property might be an incidental correlate no later component consults. Running the probe at every layer tells you where it becomes decodable, and only an intervention, such as removing the direction and observing the behaviour change, supports a claim about use." },
+    { type: "mc", q: "Why must a probe be reported alongside a control task?", opts: ["To measure the probe's inference latency", "To establish statistical significance of the accuracy figure", "Because a sufficiently powerful probe can fit random labels, in which case its success on real labels means nothing", "Because activations differ between training and inference"], a: 2,
+      why: "Hewitt and Liang's 2019 point: take the identical probe, give it randomly shuffled labels, and see how well it does. If it can fit noise it is memorizing rather than reading the representation, and its performance on your real labels carries no information about the model. Keeping the probe linear and reporting the control baseline is the standard remedy." },
+    { type: "blank", q: "Storing more features than there are dimensions, using nearly-orthogonal directions and tolerating slight interference, is called ____.", a: ["superposition"],
+      why: "A model has 4,096 dimensions and far more than 4,096 things to represent. Strict orthogonality would cap it at 4,096, but near-orthogonality does not, and because only a few features are active at once the crosstalk rarely matters. This is why individual neurons are polysemantic: a neuron is a coordinate axis that several feature directions project onto." },
+    { type: "blank", q: "Applying the model's output projection to the residual stream at an intermediate layer is called the logit ____.", a: ["lens"],
+      why: "Described by nostalgebraist in 2020, and the cheapest interpretability tool there is. It shows that a prediction is assembled gradually rather than decided at the end: the correct token typically takes the lead around two thirds of the way up, and the remaining layers sharpen confidence rather than change the winner." },
+    { type: "order", q: "Order the steps of the induction circuit:", items: ["an early head attends one position back and writes each token's predecessor into the stream", "a later head forms a query at the repeated token", "that query matches the position whose recorded predecessor is the repeated token", "the value at that position, the continuation, is copied"],
+      why: "Write the note, form the query, match on the note, copy the continuation. The circuit only works because the first head's output travels to the second through the residual stream, which is Chapter 8's shared channel being used as a bus between layers rather than as a metaphor." },
+    { type: "mc", q: "A model answers a factual question wrongly. The logit lens shows the correct token ranked second at layer 22 and absent from the top ten at layer 32. What does that suggest?", opts: ["The model lacks the knowledge and needs fine-tuning or retrieval", "The tokenizer split the answer badly", "The probe was too powerful", "The model had the answer and something in the later layers suppressed it"], a: 3,
+      why: "The correct token was a live candidate mid-stack and lost afterwards, which is a different failure from never having appeared. It suggests a prompt change or a decoding change might recover it. Had the token been absent at every layer, the diagnosis would be the opposite and no amount of prompting would help. Separating these two is the main practical value of the technique." },
+    { type: "mc", q: "What did Olsson and colleagues find about when induction heads form?", opts: ["They are present from initialization and merely sharpen", "They form gradually across the whole training run", "They form in a narrow window that coincides with a bump in the loss curve and the arrival of in-context learning", "They only form during fine-tuning"], a: 2,
+      why: "The formation is abrupt rather than gradual, and it lines up with a visible feature of the loss curve and with the model suddenly being able to pick up patterns from its prompt without any weight update. It is the strongest available evidence that few-shot prompting works because gradient descent independently discovered a copying circuit." },
+    { type: "mc", q: "Why does a sparse autoencoder use a much wider hidden layer than the activations it reconstructs?", opts: ["Because there are more features in superposition than there are dimensions, so recovering them needs more units than the original width", "To improve reconstruction accuracy through redundancy", "To match the feed-forward expansion ratio of the model", "Because sparsity penalties require overparameterization to converge"], a: 0,
+      why: "The premise of superposition is that the model packs more features than dimensions. Recovering them one per unit therefore requires more units than the model has dimensions, and the sparsity penalty is what pushes each unit onto a single feature rather than a mixture. The work is genuinely early: reconstruction is imperfect and feature sets vary between training runs." }
   ]
 });
