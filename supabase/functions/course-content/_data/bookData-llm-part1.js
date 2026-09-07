@@ -149,6 +149,19 @@
    ln(128,256) = 11.762 nats, or 16.97 bits per token, with a perplexity
    equal to its vocabulary size; the worked position scores 1.5923; and a
    confidently wrong prediction at p = 1e-6 scores 13.8155.
+
+   Sources consulted for Chapter 14: Kingma & Ba 2014 (Adam); Loshchilov &
+   Hutter 2017 (decoupled weight decay, AdamW); Micikevicius et al. 2017
+   (mixed precision and loss scaling); Chen et al. 2016 (activation
+   checkpointing); Pascanu et al. 2013 (gradient clipping); McCandlish et al.
+   2018 (critical batch size); Hu et al. 2024 (the warmup-stable-decay
+   schedule); Chowdhery et al. 2022 (PaLM) and Zhang et al. 2022 (OPT) on loss
+   spikes, z-loss and restart discipline; Gupta et al. 2018 (Shampoo) and
+   Jordan et al. 2024 (Muon). Float-format figures computed on 2026-09-06 from
+   the bit layouts: fp32 1+8+23 with about 6.9 decimal digits, fp16 1+5+10
+   with 3.0 digits and a maximum of 65,504, bf16 1+8+7 with 2.1 digits and
+   fp32's full exponent range. bf16's relative resolution near 1.0 is 2^-8 =
+   0.0039, which is why an update of 1e-4 is lost without master weights.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -2879,5 +2892,187 @@ CHAPTERS.push({
       why: "A model seeing trillions of mostly-unique tokens should not be able to overfit, so the classic overfitting signature during pretraining usually means the run is not seeing what you think it is. A corpus a hundred times smaller than intended, or a validation split drawn from the same documents, both produce this shape. Chapter 12's deduplication and decontamination work is what prevents the second." },
     { type: "mc", q: "A brief bump interrupts an otherwise healthy loss curve early in training, then the curve resumes falling. What is one documented cause?", opts: ["The learning-rate warmup ending", "A corrupted data shard", "Gradient clipping engaging for the first time", "Induction heads forming, which reorganizes the circuit and briefly worsens the loss"], a: 3,
       why: "Olsson and colleagues showed the formation of induction heads is abrupt, coincides with a visible feature of the loss curve, and is when the model acquires in-context learning. It is the one shape in the gallery that is a discovery about the model rather than about the run. A corrupted shard produces a spike rather than a bump, and warmup ending produces a smooth transition." }
+  ]
+});
+
+/* ======================= CHAPTER 14 ======================= */
+CHAPTERS.push({
+  num: 14, part: 3, title: "Making It Converge: Optimizers, Schedules, and Precision",
+  blurb: "Every knob in a training config exists because a specific run failed without it. You will meet them in that order: the optimizer that adapts per-parameter step sizes, the warmup that stops the first hundred steps destroying the model, the decay that squeezes out the last of the loss, the clip that survives a bad batch, and the precision choice that halves memory while introducing a new way to get NaN. By the end you can read a training configuration and say what each line is defending against.",
+  sections: [
+    { title: "From One Step Size to Eight Billion", viz: "llmOptimizer", vizTitle: "Raise the learning rate until it diverges, then turn warmup on",
+      html: "<p>Chapter 13 ended with <code>optimizer.step()</code>. Everything in this section is what hides behind it.</p>" +
+      "<p><strong>Plain gradient descent</strong> subtracts the gradient scaled by a learning rate. One number governs every parameter. That is the problem: in a transformer, gradients for embedding rows of rare tokens are tiny and gradients for attention projections can be large, and a single step size cannot suit both. Too large and the large-gradient parameters diverge; too small and the small-gradient ones never move.</p>" +
+      "<p><strong>Momentum</strong> accumulates a running average of past gradients and steps along that instead. It damps oscillation across a narrow valley and accelerates along its floor. Useful, and it still uses one global step size.</p>" +
+      "<p><strong>Adam</strong>, from Diederik Kingma and Jimmy Ba in 2014, gives every parameter its own effective step size. It keeps two running averages per parameter: the first moment, an average of the gradient, and the second moment, an average of the gradient squared. The update divides the first by the square root of the second.</p>" +
+      "<pre><code>m = b1*m + (1-b1)*g          # first moment: direction\nv = b2*v + (1-b2)*g*g        # second moment: recent magnitude\nupdate = lr * m / (sqrt(v) + eps)</code></pre>" +
+      "<p>The division is the whole idea. A parameter whose gradients have been consistently large gets a large second moment and therefore a small step; one whose gradients are tiny gets a large step. The step size becomes <em>relative</em> to each parameter's own gradient history, which is what makes a single learning rate workable across eight billion parameters with wildly different scales.</p>" +
+      "<p>This is also where Chapter 9's memory arithmetic comes from. Two running averages per parameter, in fp32, is eight bytes per parameter that exist purely so the optimizer can adapt. On Corvid that is 64 GB of the 144.5 GB training state.</p>" +
+      "<h3>The W in AdamW</h3>" +
+      "<p><strong>Weight decay</strong> shrinks parameters slightly toward zero each step, a regularizer that discourages large weights. The standard way to implement it was to add a term to the gradient, and Ilya Loshchilov and Frank Hutter pointed out in 2017 that this is wrong when combined with Adam.</p>" +
+      "<p>The reason follows directly from the division above. A decay term added to the gradient also passes through the division by the square root of the second moment, so parameters with large gradient histories get less decay than parameters with small ones. The regularization strength ends up depending on gradient magnitude, which nobody intended and which makes the hyperparameter mean different things for different parameters.</p>" +
+      "<p><strong>AdamW</strong> applies <strong>decoupled weight decay</strong>: run Adam's update, then shrink the weights separately, untouched by the second moment. It is a small change to a few lines, it made weight decay behave as documented, and it is now the default for essentially every language model. It is a good example of a bug that lived for years inside a widely used implementation because the results were merely worse rather than broken.</p>" +
+      "<p>Work continues past AdamW. <strong>Shampoo</strong> and <strong>Muon</strong> use richer curvature information and have shown real speedups on some runs at the cost of more computation and memory per step. Neither has displaced AdamW as the default, and reading a config that specifies one tells you the team was optimizing training throughput deliberately.</p>" },
+
+    { title: "The Learning Rate Is Not a Constant",
+      html: "<p>A single learning rate for a whole run is wrong at both ends, for different reasons.</p>" +
+      "<p><strong>At the start</strong>, the parameters are random and the gradients are large and uninformative. A full-size step here moves the model somewhere arbitrary, and Adam makes it worse: its second moments are estimated from almost no data, so the division is unreliable exactly when the steps are most damaging. The fix is <strong>warmup</strong>, raising the learning rate linearly from near zero over the first few hundred to few thousand steps.</p>" +
+      "<p>Chapter 8 gave the historical version of this: with post-LN, warmup was not optional, because the gradient profile made the first steps genuinely explosive. Pre-LN removed that specific need, and warmup survived because Adam's moment estimates still need time to become meaningful. The knob outlived its original justification and acquired a second one, which is worth knowing when someone tells you warmup is a relic.</p>" +
+      "<p><strong>At the end</strong>, you want small steps to settle into a minimum rather than bouncing around it. <strong>Cosine decay</strong> takes the rate smoothly down to near zero following a cosine curve, and it has been the default for years.</p>" +
+      "<p>It has one real drawback: the schedule is defined by its endpoint, so you must decide the total number of steps before you start. Stop early and you stop at a high learning rate, at a point the schedule never intended as a destination, and the resulting model is measurably worse than one that reached the same step count with a schedule sized for it.</p>" +
+      "<p><strong>Warmup-stable-decay</strong> answers that. Warm up, then hold a constant rate for as long as you like, then decay quickly over the last small fraction. The stable phase can be extended or truncated freely, and you decay whenever you choose to stop. It also makes intermediate checkpoints genuinely usable: decay briefly from any point in the stable phase and you have a finished model. This matters more than a scheduling convenience, because it interacts with Chapter 12's annealing: the decay phase is exactly where you feed your highest-quality data.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>learning rate over a run</text>" +
+      "<line x1='60' y1='150' x2='700' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='60' y1='36' x2='60' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<path d='M60 150 L110 50 L200 62 L320 88 L460 120 L600 143 L680 148' fill='none' stroke='#4f7cff' stroke-width='2.5'/>" +
+      "<text x='330' y='76' fill='#4f7cff' font-size='9.5'>warmup then cosine decay</text>" +
+      "<path d='M60 150 L110 50 L560 50 L620 120 L680 148' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='240' y='42' fill='#3ddc97' font-size='9.5'>warmup, stable, then a short decay</text>" +
+      "<line x1='110' y1='36' x2='110' y2='158' stroke='#7d8fb0' stroke-width='1.5' stroke-dasharray='3 3'/>" +
+      "<text x='84' y='172' fill='#7d8fb0' font-size='9'>warmup ends</text>" +
+      "<line x1='560' y1='36' x2='560' y2='158' stroke='#3ddc97' stroke-width='1.5' stroke-dasharray='3 3'/>" +
+      "<text x='520' y='172' fill='#3ddc97' font-size='9'>decay begins</text>" +
+      "<text x='20' y='196' fill='#c9d6ea' font-size='10.5'>Cosine must know the finish line in advance. The stable phase can be cut or extended, and every point in it</text>" +
+      "<text x='20' y='214' fill='#c9d6ea' font-size='10.5'>is a checkpoint you can decay from.</text>" +
+      "</svg><div class='fig-cap'>The green schedule is why current runs can stop at a step count nobody planned and still ship a finished model.</div></div>" +
+      "<p>Take the machine and raise the learning rate until the run diverges. Note the value. Then turn warmup on and raise it again. The divergence point moves substantially, which is the discovery: warmup is not a small refinement, it changes what learning rates are usable at all.</p>" },
+
+    { title: "Surviving One Bad Batch",
+      html: "<p>Chapter 13 established that a single corrupted sequence produces a large loss, a large gradient, and an update applied to every parameter at once. <strong>Gradient clipping</strong> is the defence, and it is two lines.</p>" +
+      "<p>Compute the norm of the entire gradient, treating all parameters as one long vector. If it exceeds a threshold, usually 1.0, scale the whole gradient down so its norm equals the threshold. Direction preserved, magnitude capped.</p>" +
+      "<pre><code>total = sqrt( sum of squares of every gradient )\nif total &gt; 1.0:  scale every gradient by 1.0 / total</code></pre>" +
+      "<p>Scaling everything by the same factor rather than clipping each parameter individually is the important detail. Per-parameter clipping would change the direction of the update, which is information the backward pass computed correctly and you do not want to discard. Global norm clipping says the step is too big, not that it points the wrong way.</p>" +
+      "<p>The effect on a loss curve is exactly Chapter 13's spike-that-recovers: the loss jumps because the batch was hard, the gradient is clipped, the update stays bounded, and the run continues. Without it the same batch can produce a spike that never recovers, which is the shape that costs you a checkpoint restore.</p>" +
+      "<p>Clipping is close to free and essentially universal. A config without it is either very small-scale or a mistake.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 190' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the same hard batch, with and without clipping</text>" +
+      "<text x='30' y='42' fill='#3ddc97' font-size='9.5'>clip at 1.0</text>" +
+      "<path d='M40 120 L120 96 L200 88 L236 60 L250 86 L320 84 L360 82' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='40' y='146' fill='#7d8fb0' font-size='9'>spike, then straight back to the trend</text>" +
+      "<text x='420' y='42' fill='#ff5d73' font-size='9.5'>no clip</text>" +
+      "<path d='M430 120 L510 96 L590 88 L620 34 L640 44 L680 46 L720 45' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='430' y='146' fill='#7d8fb0' font-size='9'>one update moved the parameters somewhere useless</text>" +
+      "<line x1='20' y1='162' x2='740' y2='162' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='182' fill='#c9d6ea' font-size='10.5'>Two lines of code decide which of these two curves you get from an identical batch.</text>" +
+      "</svg><div class='fig-cap'>The direction of the update is preserved either way. Clipping only says the step was too large.</div></div>" },
+
+    { title: "Half the Bytes", viz: "llmPrecision", vizTitle: "Push values up and watch fp16 overflow before bf16 loses precision",
+      html: "<p>Chapter 9 counted 18 bytes per parameter for training. <strong>Mixed precision</strong>, running the forward and backward passes in 16 bits while keeping higher precision where it matters, is where several of those bytes come from, and where the most confusing failure mode in training lives.</p>" +
+      "<p>Computed from the bit layouts on 6 September 2026:</p>" +
+      "<pre><code>format   bits            max value    min normal    decimal digits\nfp32     1+8+23           3.40e+38      1.18e-38              6.9\nfp16     1+5+10          65,504         6.10e-05              3.0\nbf16     1+8+ 7           3.39e+38      1.18e-38              2.1</code></pre>" +
+      "<p>Read the exponent column and the trade is obvious. <strong>bf16 keeps fp32's exponent and spends the saved bits on nothing</strong>: it has the same enormous range and fewer significant digits than fp16. fp16 does the opposite, buying precision by shrinking the range to a maximum of 65,504.</p>" +
+      "<h3>Why fp16 needed a workaround and bf16 did not</h3>" +
+      "<p>fp16's narrow range breaks at both ends during training. Activations in a large model can exceed 65,504 and become infinity. More insidiously, gradients are often extremely small, and anything below about 6e-8 underflows to exactly zero, so the parameter receives no update and you are not told.</p>" +
+      "<p>Measured: a gradient of 1e-8 becomes zero in fp16. Multiply the loss by 1,024 before the backward pass and that gradient becomes 1.02e-5, comfortably representable; divide the gradients by 1,024 before the optimizer step and the mathematics is unchanged. That is <strong>loss scaling</strong>, and dynamic implementations adjust the factor automatically, backing off when they detect an overflow.</p>" +
+      "<p>bf16 needs none of this, because its range is fp32's. Training frameworks moved to it as soon as hardware supported it, accepting fewer significant digits in exchange for deleting an entire class of failure. That is the trade the field made, and it was the right one.</p>" +
+      "<h3>Why fp32 master weights still exist</h3>" +
+      "<p>bf16's cost is precision, and there is one place it bites. Near a value of 1.0, bf16's seven mantissa bits give a relative resolution of 2 to the power of &#8722;8, which is 0.0039. So adding an update of 1e-4 to a weight of 1.0 produces exactly 1.0 again. <strong>The update is not small. It is gone.</strong></p>" +
+      "<p>Late in training, when the learning rate has decayed, most updates are this size. A run in pure bf16 would silently stop learning while the loss curve looked stable. Keeping an fp32 copy of the weights for the update, and casting down to bf16 for the forward pass, is what prevents it. That is the 4 bytes per parameter of master weights from Chapter 9, and its justification is a single arithmetic fact.</p>" +
+      "<p><strong>fp8</strong> is where this is heading, with 8-bit formats for parts of the forward and backward pass and higher precision retained where it matters. It is in production at frontier labs and requires careful per-tensor scaling; it is not yet something you enable and forget.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 218' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>range and precision (computed from the bit layouts)</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10'>fp32</text>" +
+      "<rect x='100' y='36' width='420' height='14' rx='3' fill='#4f7cff'/><text x='530' y='48' fill='#7d8fb0' font-size='9'>range 1e-38 to 3.4e38</text>" +
+      "<rect x='100' y='54' width='276' height='10' rx='3' fill='#3ddc97'/><text x='386' y='63' fill='#3ddc97' font-size='9'>6.9 digits</text>" +
+      "<text x='20' y='102' fill='#7d8fb0' font-size='10'>fp16</text>" +
+      "<rect x='100' y='90' width='96' height='14' rx='3' fill='#ff5d73'/><text x='206' y='102' fill='#ff5d73' font-size='9'>range 6e-5 to 65,504 &#183; needs loss scaling</text>" +
+      "<rect x='100' y='108' width='120' height='10' rx='3' fill='#3ddc97'/><text x='230' y='117' fill='#3ddc97' font-size='9'>3.0 digits</text>" +
+      "<text x='20' y='156' fill='#7d8fb0' font-size='10'>bf16</text>" +
+      "<rect x='100' y='144' width='420' height='14' rx='3' fill='#4f7cff'/><text x='530' y='156' fill='#4f7cff' font-size='9'>same range as fp32</text>" +
+      "<rect x='100' y='162' width='84' height='10' rx='3' fill='#ffd166'/><text x='194' y='171' fill='#ffd166' font-size='9'>2.1 digits &#183; why master weights exist</text>" +
+      "<line x1='20' y1='188' x2='740' y2='188' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='210' fill='#c9d6ea' font-size='10.5'>Blue is range, green and gold precision. bf16 gave up digits to delete a class of failure, and it was right.</text>" +
+      "</svg><div class='fig-cap'>An update of 1e-4 added to a weight of 1.0 vanishes in bf16, because its resolution there is 0.0039. That single fact is the whole argument for fp32 master weights.</div></div>" },
+
+    { title: "Bigger Batches Than Fit", viz: "llmMemoryLevers", vizTitle: "Fit a run that did not fit, and pay for it in wall-clock",
+      html: "<p>Two techniques buy memory with time, and both are standard.</p>" +
+      "<p><strong>Gradient accumulation</strong> uses the behaviour Chapter 13 warned about deliberately. Run several small forward and backward passes without zeroing the gradients between them, then step once. The gradients add up, so the optimizer sees the average of all of them, and the result is mathematically identical to one large batch.</p>" +
+      "<pre><code>micro-batch 4 x accumulate 8 x 1 device   = effective batch 32\nmicro-batch 4 x accumulate 8 x 64 devices = effective batch 2,048</code></pre>" +
+      "<p>What it does not buy is time. Eight accumulation steps do eight forward and backward passes, so the step takes eight times as long. It converts a memory constraint into a wall-clock cost, which is often exactly the trade you want.</p>" +
+      "<p><strong>Activation checkpointing</strong> attacks the other memory consumer. Chapter 13 explained that every intermediate value is kept until its backward pass needs it. Checkpointing keeps only a few, at block boundaries, and recomputes the rest during the backward pass. Tian Qi Chen and colleagues published the technique in 2016; the memory saving is large and the cost is roughly a 30% increase in step time, since the forward pass is partly done twice.</p>" +
+      "<p>Together these are what let a run happen on hardware that cannot hold it. They do not make it faster. Nothing in this section makes anything faster.</p>" +
+      "<h3>How large should the batch be</h3>" +
+      "<p>Larger batches give less noisy gradient estimates, so you can take larger steps. But the noise falls with the square root of the batch size while the cost rises linearly, so the benefit saturates. Sam McCandlish and colleagues formalized this in 2018 as the <strong>critical batch size</strong>: below it, doubling the batch nearly halves the steps needed; above it, doubling mostly wastes compute.</p>" +
+      "<p>The useful part is that it grows during training. Early on, gradients agree and a small batch suffices; later, the remaining signal is subtle and larger batches pay off. Some runs increase batch size over the course of training for exactly this reason.</p>" +
+      "<p>What you actually report is <strong>tokens per step</strong>, which is what makes runs comparable:</p>" +
+      "<pre><code>effective batch    32 at 8,192 sequence  =    262,144 tokens per step\neffective batch   512                    =  4,194,304 tokens per step\neffective batch 2,048                    = 16,777,216 tokens per step</code></pre>" +
+      "<div class='fig'><svg viewBox='0 0 760 196' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>two levers that buy memory with time</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10'>baseline</text>" +
+      "<rect x='150' y='36' width='300' height='14' rx='3' fill='#ff5d73'/><rect x='454' y='36' width='120' height='14' rx='3' fill='#4f7cff'/>" +
+      "<text x='586' y='48' fill='#ff5d73' font-size='9'>does not fit</text>" +
+      "<text x='20' y='86' fill='#7d8fb0' font-size='10'>+ accumulation</text>" +
+      "<rect x='150' y='74' width='38' height='14' rx='3' fill='#ff5d73'/><rect x='192' y='74' width='120' height='14' rx='3' fill='#4f7cff'/>" +
+      "<text x='330' y='86' fill='#3ddc97' font-size='9'>same effective batch &#183; 8x the step time</text>" +
+      "<text x='20' y='124' fill='#7d8fb0' font-size='10'>+ checkpointing</text>" +
+      "<rect x='150' y='112' width='10' height='14' rx='3' fill='#ff5d73'/><rect x='164' y='112' width='120' height='14' rx='3' fill='#4f7cff'/>" +
+      "<text x='300' y='124' fill='#3ddc97' font-size='9'>activations recomputed &#183; 30% more time again</text>" +
+      "<rect x='150' y='142' width='12' height='9' rx='2' fill='#ff5d73'/><text x='170' y='150' fill='#7d8fb0' font-size='9'>activations</text>" +
+      "<rect x='290' y='142' width='12' height='9' rx='2' fill='#4f7cff'/><text x='310' y='150' fill='#7d8fb0' font-size='9'>weights, gradients, optimizer state</text>" +
+      "<text x='20' y='184' fill='#c9d6ea' font-size='10.5'>Neither makes anything faster. Both convert a memory constraint into wall-clock.</text>" +
+      "</svg><div class='fig-cap'>The blue block is fixed by Chapter 9's arithmetic. Only the red block responds to these two levers.</div></div>" },
+
+    { title: "When It Breaks at Scale",
+      html: "<p>Everything above assumes the run proceeds. At frontier scale it frequently does not, and the honest accounts are useful because they show that instability is routine engineering rather than a sign of incompetence.</p>" +
+      "<p><strong>Loss spikes</strong> are the common event. Both the PaLM and OPT teams documented them extensively, along with what they did: restore the last checkpoint, skip the batches that preceded the spike, and continue. The OPT logbook in particular records this happening repeatedly across a single run. The discipline that makes it survivable is frequent checkpointing and enough logging to identify which batches were involved.</p>" +
+      "<p><strong>The z-loss</strong> addresses a specific numerical drift. The softmax over 128,256 logits is unchanged if you add a constant to every logit, so nothing in the loss constrains their absolute magnitude, and over a long run they can drift far from zero. Large logits are numerically unpleasant in reduced precision. The z-loss adds a small penalty on the log of the softmax normalizer, which pins the scale without changing the distribution. It is a term that exists purely to keep the arithmetic well-behaved.</p>" +
+      "<p><strong>Divergence signatures</strong> worth recognizing. A gradient norm that trends upward over thousands of steps predicts trouble well before the loss shows it, which is why the gradient norm belongs on your dashboard next to the loss. Attention logits growing steadily is another. Both are visible long before anything goes wrong, and both are actionable while the run is still healthy.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;Your training run diverged at step 40,000. What do you do?&#8221; The answer is a procedure, not a hyperparameter. Restore the most recent good checkpoint. Identify and skip the batches around the divergence, because bad data is the most common single cause. Check whether the gradient norm was trending up beforehand, which distinguishes a bad batch from a run that was becoming unstable anyway. Only then consider lowering the learning rate, and say that you would rather not, because it costs quality across the whole remaining run to fix a local event.</div>" },
+
+    { title: "Reading a Training Config",
+      html: "<p>Everything assembled. A representative configuration, with what each line defends against:</p>" +
+      "<pre><code>optimizer: adamw            # per-parameter step sizes; decoupled decay\n  betas: [0.9, 0.95]        # 0.95 not 0.999: shorter memory, standard for LLMs\n  weight_decay: 0.1         # regularization, applied outside the Adam update\n  eps: 1.0e-8               # stops division by zero for dead parameters\n\nlr: 3.0e-4                  # peak, reached at the end of warmup\nwarmup_steps: 2000          # Adam's moments need data before they are trusted\nschedule: cosine            # or wsd, if you want to stop anywhere\nmin_lr: 3.0e-5              # decay floor, usually a tenth of peak\n\ngrad_clip: 1.0              # survive one bad batch\ndtype: bfloat16             # fp32's range, no loss scaling needed\nmaster_weights: fp32        # or updates of 1e-4 vanish\n\nmicro_batch: 4              # what fits on one device\ngrad_accum: 8               # effective batch without the memory\nactivation_checkpointing: true   # 30% slower, much less memory</code></pre>" +
+      "<p>One line deserves comment because it looks like a typo. Adam's default second-moment coefficient is 0.999, and language models almost universally use 0.95. A lower value means a shorter memory of past gradient magnitudes, so the optimizer responds faster when the scale of gradients changes. In runs where the loss landscape shifts as capabilities form, that responsiveness is worth more than the smoother estimate.</p>" +
+      "<p>Nothing in that file is arbitrary. Each line is a fix for a failure someone hit, and you can now name all of them.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A weight has the value 1.0 and the optimizer computes an update of 3e-4. Using bf16's relative resolution of 0.0039 near 1.0, state what the new weight is if it is stored in bf16, and what it is with an fp32 master copy. Then state what a loss curve would look like for a run in pure bf16 late in training, and why it would be hard to diagnose.</li>" +
+      "<li><strong>Trace.</strong> A run uses micro-batch 8, gradient accumulation 4, on 32 devices, at a sequence length of 4,096. Compute the effective batch size and the tokens per optimizer step. Then state how the step time and the memory change if you double the accumulation and halve the micro-batch, keeping the effective batch the same.</li>" +
+      "<li><strong>Investigate.</strong> Find the training configuration of an open model release. Locate the optimizer, betas, learning rate, warmup, schedule, clipping and precision. For each, say what failure it defends against. Then find one setting you cannot explain, and work out what it is for; there is usually at least one, and it is usually the most interesting line in the file.</li>" +
+      "<li><strong>Investigate.</strong> Find a published account of a training run that suffered loss spikes, such as the OPT logbook or the PaLM report. Record how many spikes occurred, what the team did each time, and whether they changed hyperparameters or restarted from a checkpoint. Then write one sentence on what that implies about how much of frontier training is planning versus recovery.</li>" +
+      "<li><strong>Build.</strong> Extend your Chapter 13 loop with AdamW, linear warmup, cosine decay and gradient clipping. Then run a small ablation and log the loss for each: no warmup at your best learning rate; warmup on; and warmup on at double the learning rate. Report the three curves. Then add a switch for pure bf16 weights versus fp32 master weights, train for enough steps that the learning rate has decayed substantially, and compare final losses. The second experiment is the one that will surprise you.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "AdamW", d: "The standard optimizer for language models: per-parameter step sizes from two running moments, with weight decay applied outside the adaptive update." },
+    { t: "first moment", d: "Adam's running average of the gradient, which supplies the direction of the update." },
+    { t: "second moment", d: "Adam's running average of the squared gradient, whose square root divides the step so each parameter's rate is relative to its own history." },
+    { t: "decoupled weight decay", d: "Applying weight decay separately from the gradient, so its strength does not depend on a parameter's gradient magnitude." },
+    { t: "warmup", d: "Raising the learning rate from near zero over the first steps, originally for post-LN stability and now because Adam's moments need data before they can be trusted." },
+    { t: "cosine decay", d: "Reducing the learning rate along a cosine curve to near zero, which requires committing to a total step count in advance." },
+    { t: "warmup-stable-decay", d: "A schedule with a constant middle phase that can be cut or extended, and a short decay from any point, making intermediate checkpoints usable." },
+    { t: "gradient clipping", d: "Scaling the whole gradient down when its global norm exceeds a threshold, capping the step size while preserving its direction." },
+    { t: "mixed precision", d: "Running the forward and backward passes in 16-bit while keeping higher precision where it matters." },
+    { t: "loss scaling", d: "Multiplying the loss before backpropagation and dividing the gradients afterwards, so small gradients do not underflow in fp16." },
+    { t: "master weights", d: "An fp32 copy of the parameters used for the update, without which an update of 1e-4 on a weight of 1.0 vanishes in bf16." },
+    { t: "gradient accumulation", d: "Summing gradients over several micro-batches before stepping, giving a large effective batch at small memory and proportionally more time." },
+    { t: "activation checkpointing", d: "Keeping only a few intermediate values and recomputing the rest in the backward pass; large memory saving for about 30% more step time." },
+    { t: "critical batch size", d: "The point beyond which increasing the batch stops buying proportionally fewer steps; it grows over the course of training." },
+    { t: "tokens per step", d: "Effective batch times sequence length, the figure that makes runs on different hardware comparable." },
+    { t: "z-loss", d: "A small penalty on the softmax normalizer that pins the absolute scale of the logits, which the loss otherwise leaves unconstrained." }
+  ],
+  quiz: [
+    { type: "mc", q: "What does dividing by the square root of Adam's second moment accomplish?", opts: ["It makes each parameter's step size relative to its own gradient history, so one learning rate works across parameters of wildly different scales", "It normalizes the loss across batch sizes", "It prevents gradient explosion by capping the norm", "It compensates for reduced precision in bf16"], a: 0,
+      why: "A parameter with consistently large gradients accumulates a large second moment and therefore takes small steps; one with tiny gradients takes large ones. Without that, a single global learning rate cannot suit both a rare token's embedding row and an attention projection. Capping the norm is gradient clipping, which is a different mechanism for a different failure." },
+    { type: "mc", q: "Why was coupling weight decay into the gradient wrong for Adam?", opts: ["It doubled the memory needed for optimizer state", "It made the decay apply only to large weights", "The decay term passed through the division by the second moment, so regularization strength depended on gradient magnitude", "It conflicted with gradient clipping"], a: 2,
+      why: "Anything added to the gradient goes through Adam's adaptive division, so parameters with large gradient histories received less decay than those with small ones. The hyperparameter therefore meant different things for different parameters, which nobody intended. AdamW applies the shrinkage separately, after the adaptive update, and it is now universal." },
+    { type: "mc", q: "An update of 1e-4 is added to a weight of 1.0 stored in bf16. What happens?", opts: ["The weight becomes 1.0001", "The weight overflows", "The update is applied at reduced precision, giving about 1.00008", "The update is lost entirely, because bf16's relative resolution near 1.0 is about 0.0039"], a: 3,
+      why: "Seven mantissa bits give a relative resolution of 2 to the minus 8, which is 0.0039 near 1.0, so 1.0 plus 1e-4 rounds back to exactly 1.0. Late in training, once the learning rate has decayed, most updates are this size, so a run in pure bf16 would silently stop learning while the loss curve looked stable. That is the entire justification for fp32 master weights." },
+    { type: "mc", q: "Why does bf16 not need loss scaling when fp16 does?", opts: ["bf16 has more mantissa bits, so small values are represented more precisely", "bf16 keeps fp32's exponent range, so gradients do not underflow to zero", "bf16 is computed on dedicated hardware that handles underflow", "Loss scaling is needed for bf16 too, but is applied automatically"], a: 1,
+      why: "bf16 has fewer mantissa bits than fp16, not more: 2.1 decimal digits against 3.0. What it has is the same exponent range as fp32, so a gradient of 1e-8 is representable rather than flushing to zero as it does in fp16 below about 6e-8. The trade was giving up precision to delete a class of failure, and the field took it as soon as hardware allowed." },
+    { type: "blank", q: "Scaling the whole gradient down when its global norm exceeds a threshold, preserving direction while capping magnitude, is called gradient ____.", a: ["clipping", "clip"],
+      why: "Scaling everything by one factor rather than clipping each parameter separately is the important detail: per-parameter clipping would change the update's direction, which the backward pass computed correctly. Global norm clipping says the step is too large, not that it points the wrong way, and it is what turns an unrecoverable spike into a recoverable one." },
+    { type: "blank", q: "Summing gradients across several micro-batches before taking one optimizer step is called gradient ____.", a: ["accumulation"],
+      why: "It is mathematically identical to one large batch and uses no extra memory for activations, because each micro-batch's are freed before the next. What it does not buy is time: eight accumulation steps run eight forward and backward passes, so the step takes eight times as long. It converts a memory constraint into a wall-clock cost." },
+    { type: "order", q: "Order the operations in one optimizer step:", items: ["accumulate gradients over the micro-batches", "clip the global gradient norm", "apply the AdamW update using the fp32 master weights", "cast the updated weights back to bf16 for the next forward pass"],
+      why: "Accumulate, clip, update, cast. Clipping must come after all accumulation, since it acts on the total gradient the optimizer will actually use. The update happens in fp32 because that is the only place a 1e-4 change to a 1.0 weight survives, and the cast down is what the forward pass consumes." },
+    { type: "mc", q: "Why do language-model configs typically set Adam's second beta to 0.95 rather than the default 0.999?", opts: ["For a shorter memory of gradient magnitudes, so the optimizer responds faster when the scale of gradients shifts", "To reduce optimizer memory", "Because 0.999 is numerically unstable in bf16", "To compensate for gradient accumulation"], a: 0,
+      why: "A lower beta discounts older squared gradients faster, so the adaptive step size tracks changes in gradient scale more closely. In runs where the loss landscape shifts as capabilities form, that responsiveness is worth more than a smoother estimate. Memory is unaffected, since both moments are stored regardless of the coefficient." },
+    { type: "mc", q: "Cosine decay's main practical drawback is that:", opts: ["It decays too quickly at the start of training", "It is incompatible with warmup", "The schedule is defined by its endpoint, so stopping early leaves you at a high learning rate at a point the schedule never targeted", "It requires more optimizer memory than a constant rate"], a: 2,
+      why: "You must commit to a total step count before starting. Stop at half the planned steps and the rate is still high, giving a model measurably worse than one whose schedule was sized for that length. Warmup-stable-decay removes the constraint: hold a constant rate as long as you like, decay briefly whenever you decide to stop, and every point in the stable phase is a usable checkpoint." },
+    { type: "mc", q: "Your run's loss is falling normally, but the gradient norm has trended upward over several thousand steps. What does this suggest?", opts: ["Nothing; the gradient norm is expected to grow as the model learns", "The learning rate schedule has a bug", "Gradient clipping is misconfigured", "The run may be becoming unstable, and the signal appears well before the loss shows it"], a: 3,
+      why: "A steadily rising gradient norm is a recognized divergence signature that precedes trouble in the loss by a long way, which is why it belongs on the dashboard beside the loss. It is also what distinguishes a run becoming unstable from a single bad batch: the first has a trend, the second does not, and the two call for different responses." }
   ]
 });
