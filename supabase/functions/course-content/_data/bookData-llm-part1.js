@@ -54,6 +54,18 @@
    were all computed on 2026-09-06 rather than quoted: dot products of
    independent unit-normal vectors were sampled 20,000 times at d_k = 4, 64,
    128 and 1024, giving variances of 3.9, 63.5, 129.3 and 1025.9.
+
+   Sources consulted for Chapter 6: Vaswani et al. 2017 (multi-head
+   attention); Shazeer 2019 (multi-query attention); Ainslie et al. 2023
+   (grouped-query attention); Beltagy et al. 2020 (Longformer, sliding
+   window); Xiao et al. 2023 (StreamingLLM, attention sinks); Olsson et al.
+   2022 (induction heads); Elhage et al. 2021 (a mathematical framework for
+   transformer circuits). Head configurations read from config.json on the Hub
+   on 2026-09-06: Llama-3-8B 32 query / 8 KV heads, head_dim 128, 32 layers;
+   Qwen2.5-7B 28 / 4, head_dim 128, 28 layers; Mistral-7B-v0.3 32 / 8;
+   Gemma-2-9B 16 / 8 with head_dim 256 and a 4,096-token sliding window;
+   Llama-3.2-1B 32 / 8, head_dim 64. All KV-cache figures in this chapter were
+   computed from those values rather than quoted.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -1196,5 +1208,221 @@ CHAPTERS.push({
       why: "Nothing in score, scale, softmax or weighted sum refers to where a token sits. Attention is permutation-equivariant by construction, which is why every transformer adds positional information by hand. Chapter 7 covers the four families of ways to do it, and the omission in this chapter was deliberate so you would notice it here." },
     { type: "mc", q: "The score matrices for a 32,768-token sequence would need 68.72 GB, yet models with far longer contexts run on single cards. What resolves the contradiction?", opts: ["The score matrix is never written to main memory; it is computed in tiles that stay in fast on-chip memory", "The scores are stored in a lower precision than fp16", "Long-context models replace attention with a cheaper approximation", "Those models use fewer attention heads"], a: 0,
       why: "FlashAttention computes exactly the same output without materializing the n-by-n matrix, by tiling the computation so intermediate scores never leave on-chip memory. It is an input/output optimization, not an approximation, and the output is bit-comparable. It is Chapter 28, and it only makes sense after the hardware facts in Chapter 16." }
+  ]
+});
+
+/* ======================= CHAPTER 6 ======================= */
+CHAPTERS.push({
+  num: 6, part: 2, title: "Many Heads, and Making Them Cheap",
+  blurb: "One head can only average one way at a time. Multi-head attention runs several in parallel, and it is a reshape rather than a loop, which is why it costs nothing extra. You will see what different heads specialize in, then follow the pressure that reshaped them: the KV cache. Once keys and values must be stored for every position, every layer and every head, the head count becomes a memory bill, and grouped-query attention is the field's answer. This is where architecture starts being decided by serving cost rather than by accuracy.",
+  sections: [
+    { title: "One Head Is Not Enough", viz: "llmMultiHead", vizTitle: "Click through the heads; two of them are doing something obvious",
+      html: "<p>Chapter 5's attention produces one weighted average per position. That is one relationship, computed once. But a position usually needs several things at once: the verb wants its subject, the pronoun wants its antecedent, and the closing bracket wants its opening one, all at the same position, in the same layer.</p>" +
+      "<p>With one head you cannot have all three. The softmax produces a single distribution, and spending weight on the subject means not spending it on the bracket. The mechanism is forced to compromise.</p>" +
+      "<p><strong>The fix is to run several attentions in parallel</strong>, each with its own W_Q, W_K and W_V, and let each learn a different relationship. These are <strong>heads</strong>. Corvid-8B has 32 of them in every layer.</p>" +
+      "<h3>Why this is free</h3>" +
+      "<p>The obvious objection is that 32 heads should cost 32 times as much. They do not, and the reason is the one design decision that made the idea practical: <strong>the head dimension shrinks to match.</strong></p>" +
+      "<p>Corvid's model dimension is 4,096. Rather than 32 heads each projecting to 4,096, each head projects to 4,096 &#247; 32 = 128, the head dimension you met in Chapter 5. The total width across all heads is 32 &#215; 128 = 4,096, exactly what one full-width head would have used.</p>" +
+      "<p>So multi-head attention is not a loop over 32 attentions. It is <em>one</em> projection to 4,096 dimensions, reinterpreted as 32 separate 128-dimensional vectors, with the attention arithmetic run on the last axis. In code it is a reshape and a transpose. The matrix multiplications are the same size they would have been with a single head, which is why a model can have 32 heads and pay for one.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 212' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>multi-head attention is a reshape, not a loop</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10.5'>one projection</text>" +
+      "<rect x='140' y='34' width='560' height='24' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='420' y='51' text-anchor='middle' fill='#ffd166' font-size='10.5'>q for this position: 4,096 numbers</text>" +
+      "<line x1='420' y1='62' x2='420' y2='78' stroke='#7d8fb0' stroke-width='2'/><polygon points='420,85 414,73 426,73' fill='#7d8fb0'/>" +
+      "<text x='20' y='108' fill='#7d8fb0' font-size='10.5'>read as 32</text>" +
+      "<rect x='140' y='94' width='64' height='24' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='172' y='111' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>head 0</text>" +
+      "<rect x='208' y='94' width='64' height='24' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='240' y='111' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>head 1</text>" +
+      "<rect x='276' y='94' width='64' height='24' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='308' y='111' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>head 2</text>" +
+      "<rect x='344' y='94' width='64' height='24' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='376' y='111' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>head 3</text>" +
+      "<text x='424' y='111' fill='#7d8fb0' font-size='10'>. . .</text>" +
+      "<rect x='636' y='94' width='64' height='24' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='668' y='111' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>head 31</text>" +
+      "<text x='140' y='134' fill='#7d8fb0' font-size='10'>128 numbers each &#183; 32 x 128 = 4,096</text>" +
+      "<line x1='20' y1='152' x2='740' y2='152' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='174' fill='#c9d6ea' font-size='10.5'>The same numbers, grouped differently. No extra multiplication happens.</text>" +
+      "<text x='20' y='196' fill='#7d8fb0' font-size='10.5'>Each head then runs Chapter 5's four steps on its own 128-wide slice, independently and in parallel.</text>" +
+      "</svg><div class='fig-cap'>Why 32 heads cost what one head costs: the width was divided, not multiplied.</div></div>" },
+
+    { title: "What Heads Learn",
+      html: "<p>Nothing tells head 7 to track quotation marks. Heads differentiate because they start at different random values and gradient descent has no reason to make them redundant. What they settle into is remarkably legible, and three kinds show up in almost every model people have examined.</p>" +
+      "<p><strong>Positional heads.</strong> The simplest: a head that attends to the previous token, or the one two back, almost regardless of content. Dull, and clearly useful, because a great deal of language structure is local.</p>" +
+      "<p><strong>Delimiter and syntactic heads.</strong> Heads that attend to sentence boundaries, to the matching opening bracket, to the opening quotation mark. These are the ones that look most like parsing, and finding one is the fastest way to convince yourself the model is doing something structured.</p>" +
+      "<p><strong>Induction heads.</strong> The interesting case, described by Catherine Olsson and colleagues in 2022. The pattern is: if the sequence contains <code>...A B ... A</code>, attend from the second A to the token that followed the first A, and predict B. That is copying from context, and it is a circuit built from <em>two</em> heads in different layers working together: one head writes information about the previous token into the stream, and a second head reads it to find the match. It is the clearest known mechanism behind in-context learning, which is the ability to pick up a pattern from the prompt without any weight update.</p>" +
+      "<p>That last point is worth sitting with. Few-shot prompting works, at least in part, because gradient descent independently discovered a copying circuit and built it out of two attention heads. Nobody designed it.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 194' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>three heads, one sentence: where each one looks</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10'>head A</text><text x='84' y='46' fill='#7d8fb0' font-size='10'>previous token</text>" +
+      "<rect x='210' y='32' width='60' height='20' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='240' y='46' text-anchor='middle' fill='#7d8fb0' font-size='9.5'>she</text>" +
+      "<rect x='276' y='32' width='60' height='20' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/><text x='306' y='46' text-anchor='middle' fill='#3ddc97' font-size='9.5'>said</text>" +
+      "<rect x='342' y='32' width='72' height='20' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/><text x='378' y='46' text-anchor='middle' fill='#ffd166' font-size='9.5'>&#8220;</text>" +
+      "<rect x='420' y='32' width='60' height='20' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='450' y='46' text-anchor='middle' fill='#7d8fb0' font-size='9.5'>wait</text>" +
+      "<rect x='486' y='32' width='72' height='20' rx='4' fill='#111a2e' stroke='#2de2ff' stroke-width='2.5'/><text x='522' y='46' text-anchor='middle' fill='#2de2ff' font-size='9.5'>&#8221;</text>" +
+      "<path d='M522 56 Q450 78 382 56' fill='none' stroke='#ffd166' stroke-width='2'/><polygon points='378,52 388,60 384,49' fill='#ffd166'/>" +
+      "<text x='576' y='46' fill='#7d8fb0' font-size='10'>the sentence</text>" +
+      "<text x='20' y='86' fill='#7d8fb0' font-size='10'>head B</text><text x='84' y='86' fill='#ffd166' font-size='10'>matching quotation mark (the gold arc)</text>" +
+      "<text x='20' y='118' fill='#7d8fb0' font-size='10'>head C</text><text x='84' y='118' fill='#7d8fb0' font-size='10'>induction: ... A B ... A -&#62; predict B</text>" +
+      "<rect x='210' y='104' width='44' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='232' y='118' text-anchor='middle' fill='#ff5d73' font-size='9.5'>Ada</text>" +
+      "<rect x='260' y='104' width='60' height='20' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='290' y='118' text-anchor='middle' fill='#3ddc97' font-size='9.5'>Lovelace</text>" +
+      "<text x='330' y='118' fill='#7d8fb0' font-size='9.5'>... wrote ...</text>" +
+      "<rect x='420' y='104' width='44' height='20' rx='4' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/><text x='442' y='118' text-anchor='middle' fill='#ff5d73' font-size='9.5'>Ada</text>" +
+      "<rect x='470' y='104' width='60' height='20' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5' stroke-dasharray='4 3'/><text x='500' y='118' text-anchor='middle' fill='#7d8fb0' font-size='9.5'>?</text>" +
+      "<path d='M442 102 Q350 84 262 102' fill='none' stroke='#ff5d73' stroke-width='2'/><polygon points='258,106 268,98 264,109' fill='#ff5d73'/>" +
+      "<text x='548' y='118' fill='#3ddc97' font-size='10'>copy 'Lovelace'</text>" +
+      "<line x1='20' y1='142' x2='740' y2='142' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='164' fill='#c9d6ea' font-size='10.5'>Head C is a two-head circuit spanning layers, and it is the clearest known mechanism</text>" +
+      "<text x='20' y='184' fill='#c9d6ea' font-size='10.5'>behind in-context learning: few-shot prompting works partly because this circuit exists.</text>" +
+      "</svg><div class='fig-cap'>Nobody specified any of these. Heads differentiate because they start at different random values and redundancy is not rewarded.</div></div>" +
+      "<p>Open the machine and click through the heads on a sentence. At least two will be obvious within a minute: one looking steadily one token back, one locking onto punctuation. Then paste text containing a repeated name and hunt for the head that fires only on the second occurrence. That is an induction head, and finding one yourself is worth more than reading three papers about them.</p>" },
+
+    { title: "Putting the Heads Back Together",
+      html: "<p>Thirty-two heads produce 32 output vectors of 128 dimensions each. The residual stream expects one vector of 4,096. Concatenating gives 4,096 numbers, so it looks like the job is done.</p>" +
+      "<p>It is not, and the reason is worth stating precisely. A bare concatenation would write head 0's output into dimensions 0 to 127 of the residual stream, head 1's into 128 to 255, and so on, permanently. Each head would own a fixed, private slice of the stream, and no head's output could ever be combined with another's. The layer could not produce anything that depends on two heads at once.</p> " +
+      "<p>So concatenation is followed by a fourth learned matrix, W_O, mapping 4,096 back to 4,096. This is the <strong>output projection</strong>, and it is what lets the layer mix heads: any output dimension can be a combination of all 32 heads' results. The induction circuit from the last section needs exactly this, because it depends on two heads composing.</p>" +
+      "<p>Counting the four matrices per layer, at 4,096 &#215; 4,096 each, gives 67.1 million parameters of attention per layer for a model with full-size keys and values. Chapter 9 does this arithmetic properly, including what changes when the key and value projections shrink, which is the next section.</p>" },
+
+    { title: "The Cache That Changes Everything",
+      html: "<p>Now the part that reshaped the architecture, and it comes from generation rather than from training.</p>" +
+      "<p>Chapter 1 established that generating text means running the model once per token. Consider what happens at step 400. The model computes a query for position 400, and scores it against the keys of positions 1 through 400. But positions 1 through 399 have not changed since the last step. Their keys and values are exactly what they were. Recomputing them is pure waste, and it makes each generation step cost more than the last.</p>" +
+      "<p>So implementations store them. That store is the <strong>KV cache</strong>, and it converts generation from quadratic work to linear: each new token computes one query, one key and one value, appends the key and value to the cache, and attends over everything stored.</p>" +
+      "<p>It is a clear win and it has a price, which is memory, and the price is larger than people expect. What must be stored, per token:</p>" +
+      "<pre><code>2 (a key and a value)\n  x  number of layers\n  x  number of KV heads\n  x  head dimension\n  x  bytes per number</code></pre>" +
+      "<p>Corvid-8B has 32 layers and a head dimension of 128, in bfloat16. If every one of its 32 heads had its own keys and values, that is:</p>" +
+      "<pre><code>2 x 32 x 32 x 128 x 2 bytes = 524,288 bytes = 512 KB per token</code></pre>" +
+      "<p>Half a megabyte per token. At Corvid's full 8,192-token context that is <strong>4.29 GB for a single request</strong>, and it is per request: ten concurrent users need ten of them. The cache is not a small optimization detail. For a serving system it is frequently larger than the model weights.</p>" +
+      "<div class='callout'><strong>Where the 16 GB budget breaks.</strong> Corvid-8B at bfloat16 is 8.03 billion parameters &#215; 2 bytes = 16.06 GB of weights, which does not fit the 16 GB budget before a single token is cached. This is not a flaw in the example; it is the situation every engineer running a model of this size on consumer hardware is actually in, and it is why Chapter 29 on quantization is not optional. At 4-bit the weights are 4.01 GB, leaving 11.98 GB for cache, and the rest of this chapter uses that as its budget.</div>" },
+
+    { title: "Sharing Keys and Values", viz: "llmKvBudget", vizTitle: "Switch MHA to GQA and watch how many users fit",
+      html: "<p>Look again at the cache formula and ask which term to attack. Layers and head dimension are fixed by the architecture. Precision is Chapter 29's business. That leaves the number of KV heads, and here is the observation that made the field move: <strong>there is no rule that the number of key-value heads must equal the number of query heads.</strong></p>" +
+      "<p>Noam Shazeer proposed the extreme version in 2019: <strong>multi-query attention</strong>, in which all 32 query heads share a single set of keys and values. The cache falls by a factor of 32. Each head still asks its own question, because each has its own W_Q, but they all consult the same advertisement.</p>" +
+      "<p>It works, and it degrades quality slightly, and the degradation gets worse as models grow. So in 2023 Joshua Ainslie and colleagues published the compromise that is now standard: <strong>grouped-query attention</strong>, where query heads are divided into groups and each group shares one set of keys and values. Corvid uses 32 query heads and 8 KV heads, so four query heads share each KV head.</p>" +
+      "<p>Priced on Corvid, per token and at full context:</p>" +
+      "<pre><code>scheme   KV heads   bytes/token   at 8,192 ctx   full-context requests\n                                                in 11.98 GB\nMHA            32       512.0 KB       4.295 GB          3\nGQA             8       128.0 KB       1.074 GB         11\nMQA             1        16.0 KB       0.134 GB         89</code></pre>" +
+      "<p>Read the last column. Moving from full multi-head attention to Corvid's 4:1 grouping takes a card from serving three concurrent full-context requests to eleven, on identical hardware, for a quality cost that is small enough that every major model family accepted it. That is not a tuning improvement. It is the difference between a deployment being viable and not.</p>" +
+      "<p>The pattern is universal in current models. Read from their configurations: Llama-3-8B uses 32 query heads and 8 KV heads. Mistral-7B-v0.3 uses 32 and 8. Qwen2.5-7B uses 28 and 4, a 7:1 ratio, more aggressive than Corvid. Gemma-2-9B uses 16 and 8, only 2:1, but with a head dimension of 256 rather than 128, which is a different trade in the same equation.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>who shares keys and values</text>" +
+      "<text x='30' y='42' fill='#c9d6ea' font-size='10.5'>MHA</text>" +
+      "<rect x='30' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='60' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='90' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='120' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='30' y='78' width='26' height='18' rx='3' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<rect x='60' y='78' width='26' height='18' rx='3' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<rect x='90' y='78' width='26' height='18' rx='3' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<rect x='120' y='78' width='26' height='18' rx='3' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='30' y='114' fill='#ff5d73' font-size='9.5'>4 queries, 4 KV</text>" +
+      "<text x='270' y='42' fill='#c9d6ea' font-size='10.5'>GQA</text>" +
+      "<rect x='270' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='300' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='330' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='360' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='285' y='78' width='26' height='18' rx='3' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<rect x='345' y='78' width='26' height='18' rx='3' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<line x1='283' y1='70' x2='296' y2='78' stroke='#7d8fb0' stroke-width='1.5'/><line x1='313' y1='70' x2='300' y2='78' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='343' y1='70' x2='356' y2='78' stroke='#7d8fb0' stroke-width='1.5'/><line x1='373' y1='70' x2='360' y2='78' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='270' y='114' fill='#ffd166' font-size='9.5'>4 queries, 2 KV</text>" +
+      "<text x='510' y='42' fill='#c9d6ea' font-size='10.5'>MQA</text>" +
+      "<rect x='510' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='540' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='570' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='600' y='50' width='26' height='18' rx='3' fill='#111a2e' stroke='#2de2ff' stroke-width='1.5'/>" +
+      "<rect x='555' y='78' width='26' height='18' rx='3' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<line x1='523' y1='70' x2='566' y2='78' stroke='#7d8fb0' stroke-width='1.5'/><line x1='553' y1='70' x2='568' y2='78' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='583' y1='70' x2='570' y2='78' stroke='#7d8fb0' stroke-width='1.5'/><line x1='613' y1='70' x2='574' y2='78' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='510' y='114' fill='#3ddc97' font-size='9.5'>4 queries, 1 KV</text>" +
+      "<text x='20' y='146' fill='#2de2ff' font-size='11'>cache per token on Corvid-8B, and requests that fit in 11.98 GB</text>" +
+      "<text x='30' y='172' fill='#7d8fb0' font-size='10'>MHA</text>" +
+      "<rect x='110' y='160' width='400' height='14' rx='3' fill='#ff5d73'/><text x='524' y='172' fill='#ff5d73' font-size='10'>512 KB/token &#183; 3 requests</text>" +
+      "<text x='30' y='198' fill='#7d8fb0' font-size='10'>GQA 4:1</text>" +
+      "<rect x='110' y='186' width='100' height='14' rx='3' fill='#ffd166'/><text x='524' y='198' fill='#ffd166' font-size='10'>128 KB/token &#183; 11 requests</text>" +
+      "<text x='30' y='224' fill='#7d8fb0' font-size='10'>MQA</text>" +
+      "<rect x='110' y='212' width='13' height='14' rx='3' fill='#3ddc97'/><text x='524' y='224' fill='#3ddc97' font-size='10'>16 KB/token &#183; 89 requests</text>" +
+      "</svg><div class='fig-cap'>Blue is a query head, coloured boxes are the keys and values it consults. The bars are the same architecture priced per token at 8,192 context.</div></div>" +
+      "<p>Set the machine to MHA and note the concurrent capacity. Switch to GQA at 4:1 and watch it roughly quadruple with no change to the query heads and no change to what the model can express per head. That is the discovery, and it explains a config field you will now find in every model you open.</p>" },
+
+    { title: "Not Attending to Everything",
+      html: "<p>A second way to shrink the cache: stop keeping all of it.</p> " +
+      "<p><strong>Sliding-window attention</strong> restricts each position to the last w tokens rather than the whole prefix. The cache then holds w tokens instead of n, so its size stops growing with the conversation. Gemma-2-9B uses a 4,096-token window, and it alternates: some layers see the window, others see everything. Information still travels further than w, because a position at the top of a stack of 42 layers has been influenced by positions influenced by positions, so the effective receptive field grows with depth even though each individual layer looks locally.</p>" +
+      "<p>The cost is real. Anything that genuinely requires attending to a specific token 30,000 positions back, in a windowed layer, cannot. Mistral shipped a 4,096-token window in v0.1 and removed it by v0.3, which is a useful piece of evidence about how the trade landed in practice.</p>" +
+      "<p><strong>Attention sinks</strong> are the strangest result in this chapter. Guangxuan Xiao and colleagues found in 2023 that if you simply evict the oldest tokens from a full cache, quality collapses immediately, far worse than the lost information could explain. The cause turned out to be the first few tokens of the sequence. Models place a large share of attention weight on them almost regardless of content, apparently using them as a place to dump weight when a head has nothing it wants: softmax must sum to one, so a head that wants nothing has to put its mass somewhere. Remove those tokens and every head's distribution is disturbed.</p>" +
+      "<p>The fix is almost comically cheap. Keep the first four tokens forever, evict from the middle, and quality holds over sequences far longer than the model was trained on. Four tokens.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 186' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>what a position can attend to</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10'>full causal</text>" +
+      "<rect x='120' y='34' width='500' height='16' rx='3' fill='#4f7cff'/>" +
+      "<rect x='624' y='34' width='24' height='16' rx='3' fill='#ffd166'/>" +
+      "<text x='660' y='47' fill='#7d8fb0' font-size='10'>grows forever</text>" +
+      "<text x='20' y='84' fill='#7d8fb0' font-size='10'>sliding window</text>" +
+      "<rect x='120' y='72' width='380' height='16' rx='3' fill='#1c2a45'/>" +
+      "<rect x='504' y='72' width='116' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='624' y='72' width='24' height='16' rx='3' fill='#ffd166'/>" +
+      "<text x='660' y='85' fill='#3ddc97' font-size='10'>capped at w</text>" +
+      "<text x='20' y='122' fill='#7d8fb0' font-size='10'>window + sinks</text>" +
+      "<rect x='120' y='110' width='30' height='16' rx='3' fill='#ff5d73'/>" +
+      "<rect x='154' y='110' width='346' height='16' rx='3' fill='#1c2a45'/>" +
+      "<rect x='504' y='110' width='116' height='16' rx='3' fill='#3ddc97'/>" +
+      "<rect x='624' y='110' width='24' height='16' rx='3' fill='#ffd166'/>" +
+      "<text x='660' y='123' fill='#ff5d73' font-size='10'>keep first 4</text>" +
+      "<text x='120' y='146' fill='#7d8fb0' font-size='9.5'>oldest</text><text x='596' y='146' fill='#7d8fb0' font-size='9.5'>current</text>" +
+      "<text x='20' y='176' fill='#c9d6ea' font-size='10.5'>Evicting the first few tokens collapses quality: heads park unwanted attention weight there.</text>" +
+      "</svg><div class='fig-cap'>Gold is the position doing the attending. The four red tokens cost almost nothing and are the difference between a windowed cache working and not.</div></div>" },
+
+    { title: "Choosing a Configuration",
+      html: "<p>You can now read the attention half of any model card, and make the decision yourself. The procedure, in order, because the order is what makes it a procedure rather than a list.</p>" +
+      "<ol>" +
+      "<li><strong>Start from the serving constraint, not the architecture.</strong> How much memory, how long a context, how many concurrent requests. Those three numbers determine your cache budget before any architectural choice is made.</li>" +
+      "<li><strong>Compute the cache per token</strong> with the formula from section 4. Multiply by context length and by concurrency. If it does not fit, nothing else in this list matters yet.</li>" +
+      "<li><strong>Set the KV head count to fit.</strong> This is the largest lever with the smallest quality cost. A 4:1 grouping is the current default because it is close to free; 8:1 needs measuring on your workload; full MQA needs measuring and is usually reserved for cases where concurrency dominates everything.</li>" +
+      "<li><strong>Consider a window only if your context is genuinely long and genuinely local.</strong> Summarization of long documents suffers. Chat with a rolling history does not, much. If you window, keep sinks.</li>" +
+      "<li><strong>Leave the query head count alone.</strong> It costs almost nothing in cache and it is what gives the layer its expressiveness. Nothing in this chapter is an argument for fewer query heads.</li>" +
+      "</ol>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;Why did models move from multi-head to grouped-query attention?&#8221; The answer is not &#8220;it is faster&#8221;. It is that generation requires caching keys and values for every position, layer and head; that cache is often larger than the weights; the query heads are what give attention its expressiveness while the KV heads are what fill memory; so sharing KV heads across groups of query heads buys a large multiple in concurrent capacity for a small, measurable quality cost. Numbers make the answer: on an 8B model at 8,192 context, 512 KB per token becomes 128 KB.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A model has 40 layers, 40 query heads, 8 KV heads and a head dimension of 128, served in bfloat16. Compute its KV cache in bytes per token, then at a 32,768-token context, then for 20 concurrent requests at that context. Compare the total against an 80 GB card and say how much is left for weights. Then redo the first calculation as if the model used full multi-head attention, and state the factor.</li>" +
+      "<li><strong>Trace.</strong> Corvid has 32 query heads and a head dimension of 128. Explain in two sentences why moving to 8 KV heads shrinks the cache by a factor of four but shrinks the parameter count by much less. Name which of the four attention matrices change size and which do not.</li>" +
+      "<li><strong>Investigate.</strong> Open the configs of four models from different families and record <code>num_attention_heads</code>, <code>num_key_value_heads</code>, <code>head_dim</code> or the implied one, <code>num_hidden_layers</code> and any <code>sliding_window</code>. Compute cache bytes per token for each. Rank them by cache cost and check whether the ranking matches their parameter counts. It will not, and the mismatch is the point of this chapter.</li>" +
+      "<li><strong>Investigate.</strong> Find a model whose head dimension is not simply its hidden size divided by its head count. Gemma-2-9B is one: 3,584 hidden, 16 heads, head dimension 256. Work out what that decoupling buys and what it costs, in cache bytes and in attention parameters. Then decide whether you would have made the same call.</li>" +
+      "<li><strong>Build.</strong> Extend the attention function you wrote in Chapter 5 to multi-head, as a reshape rather than a loop: project once to the full width, view the result as h heads of size d_head, run attention on the last axis, then concatenate and apply an output projection. Assert that with h = 1 it reproduces your Chapter 5 output exactly. Then add a <code>n_kv_heads</code> parameter that repeats each KV head across its group, and assert that setting it equal to the query head count reproduces the multi-head result. You have just written the difference between MHA, GQA and MQA in about five lines, which is genuinely all it is.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "head", d: "One of several parallel attentions in a layer, each with its own query, key and value projections, learning a different relationship." },
+    { t: "multi-head attention", d: "Running several heads in parallel over slices of the same projection, so the layer can express several relationships at once." },
+    { t: "head dimension", d: "The width of one head's projections; the model dimension divided by the head count in most models, though not all." },
+    { t: "output projection", d: "The fourth learned matrix, applied after concatenating head outputs, which lets the layer mix information across heads." },
+    { t: "positional head", d: "A head that attends to a fixed relative offset, such as the previous token, largely regardless of content." },
+    { t: "induction head", d: "A two-head circuit that finds an earlier occurrence of the current token and copies what followed it; the clearest known mechanism behind in-context learning." },
+    { t: "in-context learning", d: "Picking up a pattern from the prompt without any weight update, which few-shot prompting relies on." },
+    { t: "KV cache", d: "The stored keys and values of all previous positions, kept during generation so they are not recomputed at every step." },
+    { t: "multi-query attention", d: "Sharing a single set of keys and values across all query heads, cutting the cache by the head count at some cost to quality." },
+    { t: "grouped-query attention", d: "Dividing query heads into groups that each share one set of keys and values; the current default, with Corvid at four query heads per KV head." },
+    { t: "KV heads", d: "The number of distinct key and value projections in a layer, which sets the cache size and need not equal the query head count." },
+    { t: "sliding-window attention", d: "Restricting each position to the last w tokens, capping the cache at w rather than letting it grow with the sequence." },
+    { t: "attention sink", d: "An early token that heads place large attention weight on regardless of content, apparently to absorb weight they do not wish to spend; evicting one collapses quality." },
+    { t: "receptive field", d: "How far back a position's information can reach; in a windowed model it grows with depth even though each layer looks only locally." }
+  ],
+  quiz: [
+    { type: "mc", q: "Why does a model with 32 heads cost roughly the same as a model with one head?", opts: ["The heads are computed sequentially and reuse the same buffers", "Most heads are pruned after training", "The head dimension shrinks so that 32 heads of width 128 total the same 4,096 as one full-width head", "Heads share their query, key and value matrices"], a: 2,
+      why: "Multi-head attention is a reshape, not a loop. One projection to 4,096 dimensions is reinterpreted as 32 vectors of 128, and the attention arithmetic runs on the last axis. The matrix multiplications are the size they would have been anyway, which is exactly why the idea was practical enough to become universal." },
+    { type: "mc", q: "Why is an output projection needed after concatenating the heads?", opts: ["To restore the vector to unit length before it rejoins the residual stream", "Without it each head would own a fixed private slice of the residual stream and no output could depend on two heads at once", "To reduce 32 times 128 dimensions back down to 4,096", "To apply the causal mask across heads"], a: 1,
+      why: "Concatenation already gives 4,096 numbers, so the dimensions work out without it. The problem is structural: a bare concatenation permanently assigns head 0 to dimensions 0 to 127, so nothing downstream could combine two heads. The induction circuit needs exactly that combination, since it is built from two heads composing." },
+    { type: "mc", q: "Corvid-8B stores 128 KB of KV cache per token. Which change would reduce that the most, for the least quality cost?", opts: ["Halving the number of query heads", "Halving the model's layer count", "Reducing the head dimension from 128 to 64", "Reducing the KV head count from 8 to 4"], a: 3,
+      why: "Query head count does not appear in the cache formula at all, so halving it saves nothing while costing expressiveness. Halving layers or head dimension changes the model fundamentally. KV head count is the one term that can be cut with a small, measurable quality cost, which is precisely why grouped-query attention became standard." },
+    { type: "mc", q: "On the 16 GB budget with 4-bit weights, Corvid serves 3 full-context requests under MHA and 11 under 4:1 GQA. What changed about the model's expressiveness?", opts: ["Nothing about the query heads; each still has its own query projection and asks its own question", "Each query head now attends to a quarter as many positions", "The model lost three quarters of its attention parameters", "The head dimension was reduced to a quarter"], a: 0,
+      why: "All 32 query heads survive with their own W_Q, so each still forms its own question and its own attention distribution. What is shared is the advertisement: four query heads consult one set of keys and values. That is a genuine loss, but a much smaller one than the head count suggests, and the measured trade is what made every major family adopt it." },
+    { type: "blank", q: "Storing the keys and values of previous positions during generation, so they are not recomputed at every step, is called the ____ cache.", a: ["kv", "kv cache", "key-value", "key value"],
+      why: "It converts generation from quadratic to linear work, and it introduces the memory cost that reshaped attention. In a serving system it is frequently larger than the model weights: 4.29 GB for one 8,192-token request on an 8B model with full multi-head attention." },
+    { type: "blank", q: "A two-head circuit that finds an earlier occurrence of the current token and copies whatever followed it is called an ____ head.", a: ["induction", "induction head"],
+      why: "It spans two layers: one head writes previous-token information into the residual stream, a second head reads it to find the match. Nobody designed it, and it is the clearest known mechanism behind in-context learning, which means few-shot prompting works partly because gradient descent independently invented a copying circuit." },
+    { type: "mc", q: "Evicting the four oldest tokens from a full KV cache collapses quality far more than the lost information explains. Why?", opts: ["Those tokens carry the positional encoding for the whole sequence", "The first tokens contain the system prompt in most deployments", "Cache eviction corrupts the block table", "Heads place large weight on early tokens as somewhere to put mass they do not want to spend, so removing them disturbs every distribution"], a: 3,
+      why: "Softmax weights must sum to one, so a head with nothing it wants to attend to still has to put its mass somewhere, and early tokens serve as that sink almost regardless of content. Remove them and every head's distribution is disturbed at once. The fix is to keep the first four tokens permanently and evict from the middle, which is close to free." },
+    { type: "order", q: "Order the steps of multi-head attention within one layer:", items: ["project the input once to full width for queries, keys and values", "view each projection as h heads of the head dimension", "run score, scale, mask, softmax and weighted sum per head", "concatenate the head outputs and apply the output projection"],
+      why: "Project, reshape, attend, mix. Only the third step is Chapter 5's mechanism; the first, second and fourth are what turn one attention into many without paying for many. Writing it in this order is also what makes the implementation a reshape rather than a loop." },
+    { type: "mc", q: "Gemma-2-9B has hidden size 3,584 and 16 heads, but a head dimension of 256 rather than the 224 that division would give. What does that show?", opts: ["Head dimension is an independent choice, not necessarily the hidden size divided by the head count", "The config file contains an error", "Gemma uses multi-query attention", "The model pads its hidden size at runtime"], a: 0,
+      why: "Nothing requires head dimension times head count to equal the model dimension; the output projection maps whatever width results back to the residual stream. Decoupling them buys a wider head, which costs more in attention parameters and more cache per KV head, and models make this call deliberately. Reading it off a config is the sort of thing this course exists to make ordinary." },
+    { type: "mc", q: "A team wants to serve a long-context summarization product and is considering sliding-window attention to cap cache growth. What is the strongest objection?", opts: ["Sliding windows are incompatible with grouped-query attention", "Windowed models cannot use a KV cache at all", "Summarization genuinely needs to attend to specific distant tokens, which is the case a window breaks", "Attention sinks make windows unnecessary"], a: 2,
+      why: "Windows work well when the useful context is local, as in rolling chat history. Summarizing a long document is the opposite: the model must reach specific facts anywhere in the input. Depth extends the effective receptive field, but it does not restore the ability to attend to one exact token 30,000 positions back in a windowed layer. Mistral shipping a window in v0.1 and removing it by v0.3 is evidence about how this trade lands." }
   ]
 });
