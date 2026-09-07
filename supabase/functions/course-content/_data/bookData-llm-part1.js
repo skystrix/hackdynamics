@@ -66,6 +66,18 @@
    Gemma-2-9B 16 / 8 with head_dim 256 and a 4,096-token sliding window;
    Llama-3.2-1B 32 / 8, head_dim 64. All KV-cache figures in this chapter were
    computed from those values rather than quoted.
+
+   Sources consulted for Chapter 7: Vaswani et al. 2017 (sinusoidal
+   encodings); Shaw et al. 2018 (relative position representations); Su et al.
+   2021 (RoFormer, RoPE); Press et al. 2021 (ALiBi); Chen et al. 2023
+   (position interpolation); Peng et al. 2023 (YaRN); Liu et al. 2023 (Lost in
+   the Middle); Hsieh et al. 2024 (RULER); Kamradt 2023 (needle in a
+   haystack). Read from config.json on the Hub on 2026-09-06: GPT-2 learned
+   positions capped at 1,024; Llama-3-8B rope_theta 500,000 with an 8,192
+   context; Llama-3.2-1B the same theta with a live rope_scaling block of
+   factor 32 taking 8,192 to 131,072; Qwen2.5-7B and Mistral-7B-v0.3
+   rope_theta 1,000,000. The relative-distance demonstration in section 5 and
+   the wavelength table in section 7 were computed the same day.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -1424,5 +1436,202 @@ CHAPTERS.push({
       why: "Nothing requires head dimension times head count to equal the model dimension; the output projection maps whatever width results back to the residual stream. Decoupling them buys a wider head, which costs more in attention parameters and more cache per KV head, and models make this call deliberately. Reading it off a config is the sort of thing this course exists to make ordinary." },
     { type: "mc", q: "A team wants to serve a long-context summarization product and is considering sliding-window attention to cap cache growth. What is the strongest objection?", opts: ["Sliding windows are incompatible with grouped-query attention", "Windowed models cannot use a KV cache at all", "Summarization genuinely needs to attend to specific distant tokens, which is the case a window breaks", "Attention sinks make windows unnecessary"], a: 2,
       why: "Windows work well when the useful context is local, as in rolling chat history. Summarizing a long document is the opposite: the model must reach specific facts anywhere in the input. Depth extends the effective receptive field, but it does not restore the ability to attend to one exact token 30,000 positions back in a windowed layer. Mistral shipping a window in v0.1 and removing it by v0.3 is evidence about how this trade lands." }
+  ]
+});
+
+/* ======================= CHAPTER 7 ======================= */
+CHAPTERS.push({
+  num: 7, part: 2, title: "Position: Order in a Permutation-Blind Machine",
+  blurb: "Shuffle the words of a sentence and attention returns the same answer. The mechanism has no idea what order anything came in, so every transformer injects position by hand, and the method chosen decides what happens when the model meets a document longer than anything it was trained on. You will walk the four families in the order the field discovered them, ending at RoPE, which is a rotation applied to pairs of dimensions and far simpler than its reputation. Then the part that pays your bills: how context gets extended, and how to tell whether it worked.",
+  sections: [
+    { title: "A Mechanism With No Sense of Order",
+      html: "<p>Go back to the worked example in Chapter 5 and look for a position index. There is not one. Scores are dot products of projected vectors, the softmax normalizes them, the output is a weighted sum. At no point does the arithmetic consult where a token sits.</p>" +
+      "<p>The consequence is exact: permute the input tokens and you get the same set of outputs, permuted the same way. Attention is <strong>permutation-equivariant</strong>. To the mechanism, <em>the cat sat</em> and <em>sat the cat</em> are the same input.</p>" +
+      "<p>That is fatal for language, where order carries most of the grammar. <em>The dog bit the man</em> and <em>the man bit the dog</em> contain identical tokens. So every transformer adds positional information deliberately, and the interesting part is that there is no obvious right way to do it. Four families have been tried, each fixing the previous one's failure, and the one that won is the one that made long context possible.</p>" +
+      "<div class='callout'><strong>Why this is not obvious.</strong> Recurrent networks never needed a positional scheme, because order was implicit in the order of computation: position 5 was processed after position 4 and that was that. Removing recurrence for the parallelism win in Chapter 5 threw away the free ordering along with it. Positional encoding is the bill for that trade.</div>" },
+
+    { title: "Just Learn a Vector Per Position",
+      html: "<p>The most direct fix: keep a second table, with one learned vector per position, and add row <em>i</em> to the token at position <em>i</em> before the first block. This is a <strong>learned absolute position embedding</strong>, and it is what GPT-2 and BERT used.</p>" +
+      "<p>It works. It is trivially simple. And it has one failure that ended it, visible in GPT-2's own configuration: <code>n_positions</code> is 1,024. That is not a soft limit or a recommendation. There is no row 1,025 in the table, so a sequence of 1,025 tokens has no representation for its last position. The model cannot be run past its training length at all, and there is no principled way to invent the missing rows.</p>" +
+      "<p>The second, subtler problem: the model must learn every position independently. Position 700's vector is trained only by examples that reached position 700, so the far end of the table is trained on the least data, exactly where you would want the most reliability.</p>" },
+
+    { title: "Sinusoids, and a Promise Not Kept",
+      html: "<p>The 2017 transformer paper proposed a formula instead of a table. Each position gets a <strong>sinusoidal encoding</strong>: a vector whose dimensions are sines and cosines of the position, evaluated at geometrically spaced frequencies.</p>" +
+      "<pre><code>dimension 2i    :  sin( pos / 10000^(2i/d) )\ndimension 2i+1  :  cos( pos / 10000^(2i/d) )</code></pre>" +
+      "<p>The exponent is what makes it work. At i = 0 the divisor is 1, so the value oscillates once every few positions. At the far end of the vector the divisor approaches 10,000, so the value barely changes across thousands of positions. Reading the vector top to bottom is like reading a number in a strange base: the fast dimensions give the fine digits, the slow ones the coarse. Two positions far apart differ in the slow dimensions; two adjacent positions differ only in the fast ones. Nothing is learned, so a vector exists for any position you like, including ones never seen in training.</p>" +
+      "<p>The argument in the paper was that this ought to extrapolate, and there is a genuinely elegant reason to hope so: because of the angle-addition identities, the encoding of position m+k is a fixed linear function of the encoding of position m, so relative offsets are in principle expressible.</p>" +
+      "<p>In practice it did not <strong>extrapolate</strong>. Models trained at 512 tokens degraded badly at 1,024, because although a vector exists for position 1,000, the model never learned what to do with one. Having a representation and having trained on it are different things, and this is the first place in the course where that distinction bites. It will not be the last. Running a model past its training length is called <strong>extrapolation</strong>, and every technique in section 6 exists because naive extrapolation does not work.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>four ways to tell a transformer where it is</text>" +
+      "<rect x='16' y='30' width='176' height='142' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='104' y='52' text-anchor='middle' fill='#ff5d73' font-size='11'>learned absolute</text>" +
+      "<text x='30' y='76' fill='#c9d6ea' font-size='9.5'>a table, one row per</text>" +
+      "<text x='30' y='92' fill='#c9d6ea' font-size='9.5'>position, added to input</text>" +
+      "<text x='30' y='116' fill='#7d8fb0' font-size='9.5'>GPT-2, BERT</text>" +
+      "<text x='30' y='140' fill='#ff5d73' font-size='9.5'>hard cap: no row</text>" +
+      "<text x='30' y='156' fill='#ff5d73' font-size='9.5'>beyond training length</text>" +
+      "<rect x='200' y='30' width='176' height='142' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='288' y='52' text-anchor='middle' fill='#ffd166' font-size='11'>sinusoidal</text>" +
+      "<text x='214' y='76' fill='#c9d6ea' font-size='9.5'>a formula, added to</text>" +
+      "<text x='214' y='92' fill='#c9d6ea' font-size='9.5'>the input</text>" +
+      "<text x='214' y='116' fill='#7d8fb0' font-size='9.5'>the 2017 paper</text>" +
+      "<text x='214' y='140' fill='#ffd166' font-size='9.5'>defined everywhere,</text>" +
+      "<text x='214' y='156' fill='#ffd166' font-size='9.5'>but does not extrapolate</text>" +
+      "<rect x='384' y='30' width='176' height='142' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='472' y='52' text-anchor='middle' fill='#3ddc97' font-size='11'>RoPE</text>" +
+      "<text x='398' y='76' fill='#c9d6ea' font-size='9.5'>a rotation applied to</text>" +
+      "<text x='398' y='92' fill='#c9d6ea' font-size='9.5'>q and k, inside attention</text>" +
+      "<text x='398' y='116' fill='#7d8fb0' font-size='9.5'>Llama, Qwen, Mistral,</text>" +
+      "<text x='398' y='132' fill='#7d8fb0' font-size='9.5'>Gemma, Corvid</text>" +
+      "<text x='398' y='156' fill='#3ddc97' font-size='9.5'>relative by construction</text>" +
+      "<rect x='568' y='30' width='176' height='142' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='656' y='52' text-anchor='middle' fill='#4f7cff' font-size='11'>ALiBi</text>" +
+      "<text x='582' y='76' fill='#c9d6ea' font-size='9.5'>a distance penalty</text>" +
+      "<text x='582' y='92' fill='#c9d6ea' font-size='9.5'>added to the scores</text>" +
+      "<text x='582' y='116' fill='#7d8fb0' font-size='9.5'>BLOOM, MPT</text>" +
+      "<text x='582' y='140' fill='#4f7cff' font-size='9.5'>extrapolates, at the</text>" +
+      "<text x='582' y='156' fill='#4f7cff' font-size='9.5'>cost of a fixed bias</text>" +
+      "<line x1='16' y1='188' x2='744' y2='188' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='16' y='210' fill='#7d8fb0' font-size='10.5'>The first two add position to the input once. The last two act inside attention, on every layer.</text>" +
+      "</svg><div class='fig-cap'>Where each family injects position is the design decision. Adding to the input means the information must survive 32 blocks; acting inside attention means it is reapplied at every one.</div></div>" },
+
+    { title: "Rotate Instead of Add", viz: "llmRope", vizTitle: "Drag two positions while keeping the gap fixed; the score does not move",
+      html: "<p>Rotary position embedding, published by Jianlin Su and colleagues in 2021, is the method almost every current model uses, and its reputation for difficulty is undeserved. Here is the whole idea.</p>" +
+      "<p>Take the query vector at position m. Chop its 128 dimensions into 64 consecutive pairs, and treat each pair as a point in a plane. Now <strong>rotate each pair by an angle proportional to m</strong>. Do the same to every key, by its own position. Then run attention exactly as Chapter 5 described, unchanged.</p>" +
+      "<p>Different pairs rotate at different rates. The first pair spins fast, completing a full turn every few positions; the last pair spins so slowly it barely moves across the whole sequence. Fast pairs distinguish neighbours, slow pairs distinguish regions.</p>" +
+      "<h3>Why rotation and not addition</h3>" +
+      "<p>Here is the property that makes the whole thing work, and it is one line of trigonometry. Rotating a vector by angle A and another by angle B, then taking their dot product, gives the same answer as rotating one by A&#8722;B and leaving the other alone. Rotation preserves lengths and angles, so <strong>the score depends only on the difference of the two positions, never on where either sits absolutely.</strong></p>" +
+      "<p>Absolute rotations in, relative distance out. That is the trick, and it is why RoPE is applied to q and k rather than added to the input: it has to be inside the dot product to have this effect.</p>" +
+      "<h3>Check it</h3>" +
+      "<p>One query, one key, one 2-D pair, rotated to four different pairs of positions that all have a gap of 2, computed on 6 September 2026:</p>" +
+      "<pre><code>positions m=    1  n=    3   gap 2   score = -0.815615\npositions m=    5  n=    7   gap 2   score = -0.815615\npositions m=   50  n=   52   gap 2   score = -0.815615\npositions m= 1000  n= 1002   gap 2   score = -0.815615</code></pre>" +
+      "<p>Identical to six decimal places, whether the pair sits at the start of the sequence or a thousand tokens in. Change the gap and the score changes: gap 1 gives &#8722;0.033, gap 3 gives &#8722;0.848, gap 8 gives &#8722;0.648. The mechanism sees distance and is blind to absolute location, which is exactly what language needs.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one pair of dimensions, rotated by position</text>" +
+      "<line x1='40' y1='150' x2='250' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='145' y1='45' x2='145' y2='215' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='145' y1='150' x2='225' y2='110' stroke='#2de2ff' stroke-width='3'/><polygon points='232,106 219,105 224,116' fill='#2de2ff'/>" +
+      "<text x='236' y='104' fill='#2de2ff' font-size='10'>q at m=1</text>" +
+      "<line x1='145' y1='150' x2='170' y2='62' stroke='#3ddc97' stroke-width='3'/><polygon points='172,55 163,64 175,67' fill='#3ddc97'/>" +
+      "<text x='180' y='58' fill='#3ddc97' font-size='10'>q at m=5</text>" +
+      "<path d='M205 130 A 70 70 0 0 0 163 79' fill='none' stroke='#ffd166' stroke-width='1.5' stroke-dasharray='3 3'/>" +
+      "<text x='36' y='84' fill='#ffd166' font-size='9.5'>angle = m x theta</text>" +
+      "<text x='40' y='196' fill='#7d8fb0' font-size='9.5'>same vector, different position,</text>" +
+      "<text x='40' y='212' fill='#7d8fb0' font-size='9.5'>rotated by a multiple of theta</text>" +
+      "<line x1='290' y1='40' x2='290' y2='220' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='316' y='58' fill='#c9d6ea' font-size='10.5'>measured, gap of 2 throughout:</text>" +
+      "<text x='336' y='82' fill='#7d8fb0' font-size='10'>m=1, n=3</text><text x='540' y='82' fill='#3ddc97' font-size='10'>-0.815615</text>" +
+      "<text x='336' y='102' fill='#7d8fb0' font-size='10'>m=5, n=7</text><text x='540' y='102' fill='#3ddc97' font-size='10'>-0.815615</text>" +
+      "<text x='336' y='122' fill='#7d8fb0' font-size='10'>m=50, n=52</text><text x='540' y='122' fill='#3ddc97' font-size='10'>-0.815615</text>" +
+      "<text x='336' y='142' fill='#7d8fb0' font-size='10'>m=1000, n=1002</text><text x='540' y='142' fill='#3ddc97' font-size='10'>-0.815615</text>" +
+      "<text x='316' y='170' fill='#ffd166' font-size='10.5'>change the gap and it moves:</text>" +
+      "<text x='336' y='190' fill='#7d8fb0' font-size='10'>gap 1</text><text x='440' y='190' fill='#ffd166' font-size='10'>-0.033</text>" +
+      "<text x='336' y='206' fill='#7d8fb0' font-size='10'>gap 3</text><text x='440' y='206' fill='#ffd166' font-size='10'>-0.848</text>" +
+      "<text x='336' y='222' fill='#7d8fb0' font-size='10'>gap 8</text><text x='440' y='222' fill='#ffd166' font-size='10'>-0.648</text>" +
+      "</svg><div class='fig-cap'>Absolute rotations go in and relative distance comes out. This is the entire reason RoPE displaced everything before it.</div></div>" +
+      "<p>Take the machine and drag both positions while holding the gap fixed. The score will not move. Then change the gap by one and watch it jump. That is the discovery, and it is RoPE in a sentence.</p>" },
+
+    { title: "Penalize Distance Directly",
+      html: "<p>One more family, because you will meet it and because it makes a different trade.</p>" +
+      "<p><strong>ALiBi</strong>, from Ofir Press and colleagues in 2021, skips encoding position into vectors entirely. It adds a penalty to the attention score itself, proportional to how far apart the two positions are, with a different slope per head. Nearby tokens are penalized little, distant ones a lot. Some heads get a steep slope and stay local, others get a shallow one and see far.</p>" +
+      "<p>It is the simplest thing in this chapter and it extrapolates unusually well: a model trained at 1,024 tokens can run at 2,048 with modest degradation, because the penalty formula is defined at any distance and its shape does not change.</p>" +
+      "<p>The cost is that the bias is fixed and monotonic. The model cannot learn that for some heads a token 400 back matters more than one 4 back, because the penalty forbids it. RoPE imposes no such shape. That is broadly why the field went to RoPE while ALiBi stayed in specific models such as BLOOM and MPT.</p>" },
+
+    { title: "Making the Window Longer", viz: "llmContextStretch", vizTitle: "Push the target context past the training length, with and without scaling",
+      html: "<p>Now the practical part. A model was trained at 8,192 tokens and you want 128,000. RoPE defines a rotation for any position, so nothing crashes. But the model has never seen a rotation angle that large, and at positions past training length the slow-rotating pairs enter angular territory that is, to the model, meaningless. Quality does not degrade gently. It falls off a cliff.</p>" +
+      "<p>Three techniques fix it, and they are all variations on one idea: make position 100,000 <em>look like</em> a position the model was trained on.</p>" +
+      "<p><strong>Position interpolation</strong>, from Shouyuan Chen and colleagues in 2023, is the blunt version. Divide every position index by a factor. To go from 8,192 to 32,768, divide by 4, so position 32,000 is presented as position 8,000. Every angle now lands in familiar range. The cost is resolution: adjacent tokens are now a quarter of a step apart instead of a full one, so the fast pairs that distinguished neighbours are squeezed, and fine local detail blurs. A short fine-tune usually recovers most of it.</p>" +
+      "<p><strong>NTK-aware scaling</strong> observes that treating all frequencies the same is wasteful. The fast pairs were never the problem, because their angles wrap around constantly and the model has seen every value. Only the slow pairs run off the end. So interpolate the slow ones and leave the fast ones alone. In practice this is done by raising the base frequency rather than by dividing positions, and it often works with no fine-tuning at all.</p>" +
+      "<p><strong>YaRN</strong>, from Bowen Peng and colleagues in 2023, combines the two with a temperature correction on attention, and is the method most current long-context releases use.</p>" +
+      "<h3>Read it in a config</h3>" +
+      "<p>This is not theory you will only encounter in papers. Llama-3.2-1B ships with exactly this, and you can read it:</p>" +
+      "<pre><code>\"rope_theta\": 500000.0,\n\"max_position_embeddings\": 131072,\n\"rope_scaling\": {\n    \"rope_type\": \"llama3\",\n    \"factor\": 32.0,\n    \"original_max_position_embeddings\": 8192,\n    \"low_freq_factor\": 1.0,\n    \"high_freq_factor\": 4.0\n}</code></pre>" +
+      "<p>Every field is now readable. The model was really trained at 8,192. A factor of 32 takes it to 131,072. And <code>low_freq_factor</code> and <code>high_freq_factor</code> differ, which is the NTK-aware idea in the file: the slow frequencies are scaled differently from the fast ones.</p>" +
+      "<p>The base frequency itself is the other lever, and it is why <code>rope_theta</code> varies so much between models. Measured wavelengths for the slowest pair at head dimension 128:</p>" +
+      "<pre><code>rope_theta       fastest pair      slowest pair (wavelength in tokens)\n    10,000                  6                                54,410\n   500,000                  6                             2,559,196</code></pre>" +
+      "<p>Raising theta from 10,000 to 500,000 leaves the fast pairs untouched and stretches the slowest pair's wavelength by a factor of 47. The slowest pair must complete less than one turn across your whole context, or distant positions start aliasing onto each other. That single requirement is why Llama 3 uses 500,000 where Llama 2 used 10,000, and why Qwen and Mistral use 1,000,000.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>why rope_theta grew: the slowest pair must outlast your context</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10'>theta = 10,000</text>" +
+      "<rect x='150' y='36' width='11' height='16' rx='3' fill='#3ddc97'/><text x='172' y='49' fill='#7d8fb0' font-size='9.5'>fastest pair: 6 tokens</text>" +
+      "<rect x='150' y='58' width='115' height='16' rx='3' fill='#ffd166'/><text x='278' y='71' fill='#ffd166' font-size='9.5'>slowest pair: 54,410 tokens</text>" +
+      "<text x='20' y='108' fill='#7d8fb0' font-size='10'>theta = 500,000</text>" +
+      "<rect x='150' y='96' width='11' height='16' rx='3' fill='#3ddc97'/><text x='172' y='109' fill='#7d8fb0' font-size='9.5'>fastest pair: 6 tokens (unchanged)</text>" +
+      "<rect x='150' y='118' width='460' height='16' rx='3' fill='#2de2ff'/><text x='622' y='131' fill='#2de2ff' font-size='9.5'>2,559,196 tokens</text>" +
+      "<line x1='20' y1='152' x2='740' y2='152' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='174' fill='#c9d6ea' font-size='10.5'>Raising theta stretches only the slow end. Llama 3 uses 500,000; Qwen and Mistral use 1,000,000.</text>" +
+      "<text x='20' y='192' fill='#7d8fb0' font-size='10'>Measured at head dimension 128 on 2026-09-06.</text>" +
+      "</svg><div class='fig-cap'>A config field with a reason. If the slowest pair turns more than once across your context, distant positions become indistinguishable.</div></div>" },
+
+    { title: "Does the Long Context Work?", viz: "llmNeedle", vizTitle: "Move the needle's depth and find where recall drops",
+      html: "<p>A model advertising 128,000 tokens has made a claim about a config field. Whether it can <em>use</em> those tokens is a separate question, and the gap between the two is where a lot of disappointment lives.</p>" +
+      "<p><strong>Needle in a haystack</strong>, popularized by Greg Kamradt in 2023, is the standard first test: hide one specific fact at a known depth in a long document, ask for it, and vary both the document length and the depth. The result is a heatmap, and a healthy model is green everywhere.</p>" +
+      "<p>It is a floor, not a ceiling. Finding one verbatim sentence is close to keyword matching, and a model can pass it convincingly while being unable to do anything harder with the same context.</p>" +
+      "<p><strong>Lost in the middle</strong> is the classic failure it does reveal. Nelson Liu and colleagues showed in 2023 that accuracy is highest when the relevant information sits at the beginning or the end of the context and sags in the middle, producing a U-shaped curve. If you are packing retrieved documents into a prompt, that is an ordering decision with a measurable consequence, and it is the point where this chapter touches <em>RAG In Depth</em>.</p>" +
+      "<p><strong>RULER</strong>, from Cheng-Ping Hsieh and colleagues in 2024, is the harder test: multiple needles, needles that require aggregation, variable tracking, and questions whose answer is not a span you can copy. Its finding is the one to carry away. Models that pass needle retrieval at their full advertised length routinely fail RULER at a fraction of it, so the honest usable context is often far below the number on the box.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>retrieval accuracy by needle depth (the shape to expect)</text>" +
+      "<text x='20' y='44' fill='#7d8fb0' font-size='10'>start</text>" +
+      "<rect x='90' y='32' width='420' height='16' rx='3' fill='#3ddc97'/><text x='524' y='45' fill='#3ddc97' font-size='10'>reliable</text>" +
+      "<text x='20' y='76' fill='#7d8fb0' font-size='10'>25%</text>" +
+      "<rect x='90' y='64' width='340' height='16' rx='3' fill='#3ddc97'/><text x='524' y='77' fill='#7d8fb0' font-size='10'>still good</text>" +
+      "<text x='20' y='108' fill='#7d8fb0' font-size='10'>50%</text>" +
+      "<rect x='90' y='96' width='190' height='16' rx='3' fill='#ff5d73'/><text x='524' y='109' fill='#ff5d73' font-size='10'>the sag: lost in the middle</text>" +
+      "<text x='20' y='140' fill='#7d8fb0' font-size='10'>75%</text>" +
+      "<rect x='90' y='128' width='330' height='16' rx='3' fill='#3ddc97'/><text x='524' y='141' fill='#7d8fb0' font-size='10'>recovering</text>" +
+      "<text x='20' y='172' fill='#7d8fb0' font-size='10'>end</text>" +
+      "<rect x='90' y='160' width='440' height='16' rx='3' fill='#3ddc97'/><text x='546' y='173' fill='#3ddc97' font-size='10'>most reliable</text>" +
+      "<text x='20' y='202' fill='#c9d6ea' font-size='10.5'>If you pack retrieved documents into a prompt, order them with this curve in mind.</text>" +
+      "</svg><div class='fig-cap'>The U shape is robust across models. Passing this test is a floor; RULER asks the questions that actually separate them.</div></div>" +
+      "<p>Use the needle machine, sweep the depth, and find the band where recall drops. Note the number. Then remember that a model passing this at 128,000 tokens has demonstrated it can find a sentence, not that it can reason over a book.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;How would you extend a model's context from 8K to 128K?&#8221; The expected shape: RoPE defines rotations at any position, so nothing breaks mechanically, but the model has never seen those angles, so quality collapses; interpolate positions or raise the base frequency so the angles fall in trained range, ideally scaling low and high frequencies differently; fine-tune briefly to recover local resolution; then verify with something harder than needle retrieval, because needle-in-a-haystack passes long before the context is genuinely usable.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take the 2-D vectors q = (0.8, 0.6) and k = (0.3, 0.9) and a rotation angle of 1 radian per position. Rotate q to position 2 and k to position 5, then compute their dot product. Now rotate q to position 12 and k to position 15 and compute again. The two answers should match. Then do position 2 and position 6 and confirm it differs. You have just reproduced section 4's measurement by hand.</li>" +
+      "<li><strong>Trace.</strong> A model trained at 4,096 tokens is extended to 32,768 by position interpolation. State the scaling factor, state what position index 30,000 is presented to the model as, and describe in one sentence what happens to the model's ability to distinguish two adjacent tokens. Then say why NTK-aware scaling is designed to avoid that particular cost.</li>" +
+      "<li><strong>Investigate.</strong> Open the configs of three models with different advertised context lengths. Record <code>rope_theta</code>, <code>max_position_embeddings</code> and any <code>rope_scaling</code> block. For each, work out whether the long context was trained natively or extended after the fact, and say which field told you. At least one will have been extended, and its config says so plainly once you can read it.</li>" +
+      "<li><strong>Investigate.</strong> Find a published needle-in-a-haystack chart and a RULER score for the same model. Compare the length at which needle retrieval stays green with the length at which RULER holds up. Write down both numbers and the ratio. That ratio is the gap between the context a model advertises and the context you can rely on.</li>" +
+      "<li><strong>Build.</strong> Write a RoPE implementation in about twenty lines: given a tensor of shape (positions, head_dim) and a base frequency, split the last axis into pairs, compute the angle for each pair and position, and rotate. Assert the relative-distance property directly, that the dot product of a rotated query and a rotated key depends only on the difference of positions, by testing several pairs with equal gaps. Then vary the base frequency and print the wavelength of the slowest pair, checking it against the table in section 6. This is the code Chapter 38 drops into PocketLM to replace learned positions.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "permutation-equivariant", d: "The property that permuting the input permutes the output identically and changes nothing else; true of attention, and the reason position must be injected." },
+    { t: "positional encoding", d: "Any scheme that tells a transformer where each token sits, since the attention mechanism itself has no notion of order." },
+    { t: "learned absolute position embedding", d: "A second lookup table with one trained vector per position, added to the input; simple, and hard-capped at the training length." },
+    { t: "sinusoidal encoding", d: "Position vectors built from sines and cosines at geometrically spaced frequencies, defined at any position but poor at extrapolating." },
+    { t: "RoPE", d: "Rotary position embedding: rotating each pair of dimensions of the query and key by an angle proportional to position, so scores depend only on relative distance." },
+    { t: "base frequency", d: "The rope_theta value that sets how fast each pair rotates; raising it stretches the slowest pair's wavelength and is one way to support longer context." },
+    { t: "wavelength", d: "How many positions a given rotary pair takes to complete one full turn; the slowest pair's wavelength must exceed the context length." },
+    { t: "ALiBi", d: "Attention with linear biases: a per-head penalty added directly to attention scores in proportion to distance, which extrapolates well but fixes the shape of the bias." },
+    { t: "extrapolation", d: "Running a model at sequence lengths longer than it was trained on; having a representation for a position is not the same as having trained on it." },
+    { t: "position interpolation", d: "Dividing position indices by a factor so that long positions map into the range the model was trained on, at the cost of local resolution." },
+    { t: "NTK-aware scaling", d: "Scaling low and high rotary frequencies differently, on the grounds that only the slow pairs run past trained territory." },
+    { t: "YaRN", d: "A method combining interpolation and frequency-aware scaling with an attention temperature correction; common in current long-context releases." },
+    { t: "needle in a haystack", d: "A test that hides one fact at a known depth in a long document and asks for it; a floor for long-context ability, not a ceiling." },
+    { t: "lost in the middle", d: "The measured U-shaped curve in which accuracy is highest for information at the start or end of a context and sags in the middle." },
+    { t: "RULER", d: "A harder long-context benchmark using multiple needles, aggregation and variable tracking; models routinely fail it well below their advertised length." }
+  ],
+  quiz: [
+    { type: "mc", q: "Why does a transformer need a positional encoding at all, when a recurrent network did not?", opts: ["Transformers process longer sequences, where order matters more", "Recurrence made order implicit in the order of computation; removing it for parallelism removed the ordering too", "The softmax destroys positional information", "Token embeddings are shared across positions"], a: 1,
+      why: "In a recurrent network position 5 was processed after position 4, so order came free from the computation itself. Chapter 5 removed recurrence to gain parallelism, and positional encoding is the bill for that trade. Nothing in score, scale, softmax or weighted sum refers to an index." },
+    { type: "mc", q: "GPT-2's config sets n_positions to 1,024. What does that number represent?", opts: ["A recommended maximum beyond which quality degrades", "The size of its KV cache in tokens", "The longest document in its training corpus", "The number of rows in its learned position table, past which no representation exists"], a: 3,
+      why: "It is a hard structural limit, not a guideline. A learned absolute scheme stores one trained vector per position, so there is simply no row 1,025 and no principled way to invent one. This is the failure that ended the approach, and it is why later families compute position from a formula instead of storing it." },
+    { type: "mc", q: "RoPE rotates queries and keys by angles proportional to their absolute positions. Why does the resulting score depend only on relative distance?", opts: ["The rotations are small enough that absolute position cancels approximately", "The softmax normalizes absolute position away", "Rotating one vector by A and another by B gives the same dot product as rotating one by A minus B, since rotation preserves lengths and angles", "The model learns to ignore absolute position during training"], a: 2,
+      why: "It is exact, not approximate, and it is a property of rotation rather than something learned. Measured: a query and key with a gap of 2 give a score of -0.815615 at positions 1 and 3, at 5 and 7, at 50 and 52, and at 1000 and 1002. Absolute rotations go in and relative distance comes out, which is why RoPE is applied inside the dot product rather than added to the input." },
+    { type: "mc", q: "A model trained at 8,192 tokens is run at 100,000 with no modification. RoPE defines a rotation for every position, so why does quality collapse?", opts: ["The model has never been trained on angles in that range, and having a representation is not the same as having learned to use one", "The KV cache runs out of memory first", "The rotation angles overflow in floating point", "The causal mask breaks past the training length"], a: 0,
+      why: "Nothing crashes; the formula is defined everywhere. The slow-rotating pairs simply enter angular territory the model never saw during training, so it has no learned behaviour for it. This is the same distinction that defeated sinusoidal extrapolation in 2017: a representation existing and a model knowing what to do with it are different things." },
+    { type: "blank", q: "Dividing position indices by a factor so long positions land in the range the model was trained on is called position ____.", a: ["interpolation"],
+      why: "To reach 32,768 from 8,192 you divide by 4, so position 32,000 is presented as 8,000. Every angle falls back into familiar range. The cost is local resolution: adjacent tokens are now a quarter of a step apart, so the fast pairs that distinguished neighbours get squeezed. A short fine-tune usually recovers most of it." },
+    { type: "blank", q: "The measured U-shaped curve where accuracy is highest at the start and end of a long context and sags in the middle is called lost in the ____.", a: ["middle"],
+      why: "Documented by Liu and colleagues in 2023 and robust across models. It is directly actionable: if you are packing retrieved documents into a prompt, their order is a decision with a measurable effect on whether the model uses them, which is where this chapter touches RAG In Depth." },
+    { type: "mc", q: "Llama 3 uses rope_theta 500,000 where Llama 2 used 10,000. What does raising the base frequency do?", opts: ["It makes all pairs rotate more slowly, uniformly", "It stretches the slowest pair's wavelength, leaving the fast pairs unchanged", "It increases the number of rotary pairs", "It reduces the KV cache size"], a: 1,
+      why: "Measured at head dimension 128, the fastest pair's wavelength stays at about 6 tokens under both, while the slowest pair goes from 54,410 tokens to 2,559,196. The requirement is that the slowest pair complete less than one turn across your whole context, or distant positions begin aliasing onto each other. That single constraint explains why theta grew as contexts did." },
+    { type: "order", q: "Order these positional schemes by when the field adopted them:", items: ["learned absolute position tables", "sinusoidal encodings", "ALiBi and relative bias schemes", "rotary embeddings with frequency-aware context extension"],
+      why: "Each fixed the previous one's failure. Tables hard-capped at training length; sinusoids were defined everywhere but did not extrapolate; ALiBi extrapolated but froze the shape of the bias; RoPE gave relative distance with no imposed shape, and then interpolation and NTK-aware scaling let it stretch. Reading the sequence as a chain of fixes is how the design space makes sense." },
+    { type: "mc", q: "A vendor advertises a 128K context. Their needle-in-a-haystack chart is green throughout. What have they demonstrated?", opts: ["That the model can reason over 128K tokens of input", "That the model's rope_scaling is correctly configured", "That the model will not degrade on summarization at that length", "That the model can locate one verbatim fact in 128K tokens, which is close to keyword matching"], a: 3,
+      why: "Needle retrieval is a floor. Finding one planted sentence is a much easier task than aggregating across the context, tracking a variable through it, or answering something with no copyable span. RULER tests those, and models that stay green on needles at their full advertised length routinely fail RULER at a fraction of it." },
+    { type: "mc", q: "What does ALiBi trade away in exchange for its good extrapolation?", opts: ["The ability to use a KV cache", "Compatibility with multi-head attention", "The model's freedom to decide that a distant token matters more than a nearby one, since the penalty is fixed and monotonic", "Support for causal masking"], a: 2,
+      why: "ALiBi adds a fixed distance penalty to the scores, with a different slope per head. That shape is imposed rather than learned, so a head cannot conclude that a token 400 positions back deserves more weight than one 4 back. RoPE imposes no such shape, which is broadly why the field moved to it while ALiBi remained in specific models such as BLOOM and MPT." }
   ]
 });
