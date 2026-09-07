@@ -137,6 +137,18 @@
    contamination figures in sections 4 and 5 were computed on 2026-09-06: a
    near-duplicate pair scores 0.750 true Jaccard and 0.773 under 128-permutation
    MinHash, while a genuine paraphrase of the same sentence scores 0.000.
+
+   Sources consulted for Chapter 13: Shannon 1948 (entropy and cross-entropy);
+   Bengio et al. 2003 (neural language models and perplexity); Williams &
+   Zipser 1989 (teacher forcing); Rumelhart, Hinton & Williams 1986
+   (backpropagation); Raffel et al. 2020 (sequence packing); Olsson et al.
+   2022 (the induction-head bump in the loss curve); Chowdhery et al. 2022
+   (PaLM) and Zhang et al. 2022 (OPT) for published accounts of loss spikes
+   and restarts during real runs. Every loss and perplexity figure in this
+   chapter was computed on 2026-09-06: a randomly initialized Corvid scores
+   ln(128,256) = 11.762 nats, or 16.97 bits per token, with a perplexity
+   equal to its vocabulary size; the worked position scores 1.5923; and a
+   confidently wrong prediction at p = 1e-6 scores 13.8155.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -2680,5 +2692,192 @@ CHAPTERS.push({
       why: "It names no source, no size, no filter, no decontamination protocol and no licence. Reading it as reassurance is the mistake. For most frontier models the data mixture is the least disclosed part of the system, which is part of why the open corpora that do publish their filtering decisions and ablations are valuable beyond the data itself." },
     { type: "mc", q: "A team's classifier filter keeps only text scoring highly for educational value. What is the cost they may not have measured?", opts: ["It discards forum discussion, dialect and technical writing that does not resemble a textbook, and nothing reports that it did", "The corpus becomes too small to train on", "Slower pipeline throughput", "It biases the tokenizer's merge table"], a: 0,
       why: "A classifier imposes whatever its reference set treated as good, which is a value judgement expressed statistically. The filtering is effective, which is why it is used, and it is opaque about what it removes. Heuristic filters make the opposite trade: blunt, but you can read the rule and predict what it will catch." }
+  ]
+});
+
+/* ======================= CHAPTER 13 ======================= */
+CHAPTERS.push({
+  num: 13, part: 3, title: "Learning to Predict: The Training Loop",
+  blurb: "Training a language model is one loop with four lines in it, and every one is worth understanding exactly. You will see how a batch of token ids becomes a loss, why the labels are just the inputs shifted by one, what teacher forcing makes easy and what it leaves unsolved, and how perplexity is nothing more than the exponential of that loss. Then you will read loss curves the way a doctor reads a chart, because most of debugging a training run is knowing what a shape means.",
+  sections: [
+    { title: "The Labels Are Already There",
+      html: "<p>Supervised learning needs labels, and labelling trillions of tokens is impossible. The reason language models could be trained at all is that the labels were never needed: <strong>the next token is the label</strong>.</p>" +
+      "<p>Take a sequence of token ids. The input is the sequence; the target is the same sequence shifted one position left. Position 0 predicts position 1, position 1 predicts position 2, and so on. One array, used twice, with an offset.</p>" +
+      "<pre><code>ids     [ 791,  6864,   315,  9822,   374, 12366 ]\ninputs  [ 791,  6864,   315,  9822,   374 ]\ntargets [ 6864,  315,  9822,   374, 12366 ]</code></pre>" +
+      "<p>This is <strong>self-supervised learning</strong>: the supervision comes from the structure of the data rather than from an annotator. Every document is simultaneously input and answer key, which is what made scale possible.</p>" +
+      "<p>Two practical details shape the data loader around it.</p>" +
+      "<p><strong>Packing.</strong> Documents vary in length and the model wants fixed-size sequences. Padding short documents wastes computation on padding tokens, so most pipelines concatenate documents end to end with a separator and cut the stream into equal blocks. Nothing is wasted, and the cost is that a block usually straddles a document boundary, so the model sometimes predicts the start of one document from the end of an unrelated one. At scale this is treated as acceptable noise; some pipelines mask attention across the boundary to avoid it, at some complexity.</p>" +
+      "<p><strong>The last position has no target.</strong> A block of 8,192 ids yields 8,191 predictions. Off-by-one errors here are the classic first bug when writing a training loop, and Chapter 37 makes you write it.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 196' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one array, used twice, offset by one</text>" +
+      "<text x='20' y='52' fill='#7d8fb0' font-size='10'>inputs</text>" +
+      "<rect x='96' y='38' width='96' height='22' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='144' y='53' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>The</text>" +
+      "<rect x='198' y='38' width='96' height='22' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='246' y='53' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>capital</text>" +
+      "<rect x='300' y='38' width='96' height='22' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='348' y='53' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>of</text>" +
+      "<rect x='402' y='38' width='96' height='22' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='450' y='53' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>France</text>" +
+      "<rect x='504' y='38' width='96' height='22' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='552' y='53' text-anchor='middle' fill='#c9d6ea' font-size='9.5'>is</text>" +
+      "<line x1='144' y1='64' x2='144' y2='84' stroke='#ffd166' stroke-width='2'/><polygon points='144,90 138,78 150,78' fill='#ffd166'/>" +
+      "<line x1='246' y1='64' x2='246' y2='84' stroke='#ffd166' stroke-width='2'/><polygon points='246,90 240,78 252,78' fill='#ffd166'/>" +
+      "<line x1='348' y1='64' x2='348' y2='84' stroke='#ffd166' stroke-width='2'/><polygon points='348,90 342,78 354,78' fill='#ffd166'/>" +
+      "<line x1='450' y1='64' x2='450' y2='84' stroke='#ffd166' stroke-width='2'/><polygon points='450,90 444,78 456,78' fill='#ffd166'/>" +
+      "<line x1='552' y1='64' x2='552' y2='84' stroke='#ffd166' stroke-width='2'/><polygon points='552,90 546,78 558,78' fill='#ffd166'/>" +
+      "<text x='20' y='110' fill='#7d8fb0' font-size='10'>targets</text>" +
+      "<rect x='96' y='96' width='96' height='22' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='144' y='111' text-anchor='middle' fill='#3ddc97' font-size='9.5'>capital</text>" +
+      "<rect x='198' y='96' width='96' height='22' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='246' y='111' text-anchor='middle' fill='#3ddc97' font-size='9.5'>of</text>" +
+      "<rect x='300' y='96' width='96' height='22' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='348' y='111' text-anchor='middle' fill='#3ddc97' font-size='9.5'>France</text>" +
+      "<rect x='402' y='96' width='96' height='22' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='450' y='111' text-anchor='middle' fill='#3ddc97' font-size='9.5'>is</text>" +
+      "<rect x='504' y='96' width='96' height='22' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='552' y='111' text-anchor='middle' fill='#3ddc97' font-size='9.5'>Paris</text>" +
+      "<line x1='20' y1='140' x2='740' y2='140' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='162' fill='#c9d6ea' font-size='10.5'>Five inputs, five targets, one array. The causal mask from Chapter 5 is what makes all five</text>" +
+      "<text x='20' y='182' fill='#c9d6ea' font-size='10.5'>predictions computable in a single forward pass without any of them seeing its own answer.</text>" +
+      "</svg><div class='fig-cap'>Self-supervision in one picture. The labels were in the data all along, one position to the right.</div></div>" },
+
+    { title: "One Number Per Position", viz: "llmLossStep", vizTitle: "Step a training step; click a position to see what the model got wrong",
+      html: "<p>The model produces a distribution over 128,256 tokens at every position. The target is one token. Turning that into a single number is <strong>cross-entropy</strong>, and for a single correct answer it collapses to something very simple: take the probability the model assigned to the true token, and take the negative logarithm.</p>" +
+      "<pre><code>loss = -ln( p[true token] )</code></pre>" +
+      "<p>Nothing else in the distribution enters directly. The other 128,255 probabilities matter only because they had to come out of the same softmax. The units are worth naming: a natural logarithm gives the loss in nats, and dividing by ln 2 gives bits per token. <strong>Nats and bits</strong> both appear in the literature, and this course quotes nats unless it says otherwise.</p>" +
+      "<h3>Work it</h3>" +
+      "<p>A toy vocabulary of six, and a model that is confidently wrong. Logits out of the final projection, computed on 6 September 2026:</p>" +
+      "<pre><code>token        logit    probability\nParis         2.10         0.2035    <- the true token\nthe           0.40         0.0372\nbanana       -1.20         0.0075\nLondon        3.30         0.6755    <- what the model prefers\na             0.90         0.0613\nxylophone    -0.50         0.0151\n\nloss = -ln(0.2035) = 1.5923</code></pre>" +
+      "<p>The model put two thirds of its mass on <em>London</em> and a fifth on the correct answer. The loss of 1.59 records exactly that: not a catastrophe, since the right answer was a live candidate, but far from free.</p>" +
+      "<h3>The three anchors worth memorizing</h3>" +
+      "<p>Cross-entropy is easier to read once you know a few reference points, all computed for Corvid's 128,256-token vocabulary.</p>" +
+      "<pre><code>situation                              loss\na uniform guess over the vocabulary   11.762   <- where an untrained model starts\nthe true token at p = 0.94             0.062   <- confident and right\nthe true token at p = 1e-6            13.816   <- confident and wrong</code></pre>" +
+      "<p>Read the first and third together. <strong>Being confidently wrong is worse than knowing nothing.</strong> A model that assigns a millionth of its probability to the correct token scores 13.82, above the 11.76 of a model that has learned absolutely nothing and spreads its mass evenly. Cross-entropy punishes confident error harder than ignorance, which is exactly the behaviour you want and the reason models trained this way are cautious in unfamiliar territory rather than assertive.</p>" +
+      "<p>The batch loss is the mean of these per-position values, typically over hundreds of thousands of positions at once, so the number on your dashboard is an average over an enormous number of small judgements.</p>" },
+
+    { title: "Teacher Forcing, and the Bill It Defers",
+      html: "<p>Look again at what the loss computes. At every position the model predicts the next token given <em>the true previous tokens</em>, not given what it would itself have produced. This is <strong>teacher forcing</strong>, and it is what makes the whole scheme efficient.</p>" +
+      "<p>Without it, training would have to generate a token, feed it back, generate the next, and so on, which is sequential and slow, and early in training the generated prefix is garbage so the model learns to continue garbage. Teacher forcing makes every position independent given the true prefix, so the causal mask from Chapter 5 lets one forward pass compute all of them at once.</p>" +
+      "<p>The bill arrives at inference. At generation time there is no true prefix. The model conditions on its own output, and it has never practised that. If it produces a slightly unusual token at step 40, step 41 is now conditioned on a prefix unlike anything in training, which makes another odd token slightly more likely. This is <strong>exposure bias</strong>, and it is a real contributor to the failure where a long generation drifts, loops, or degrades in a way the loss curve never predicted.</p>" +
+      "<p>Nobody has a clean fix. Scheduled sampling, which mixes in the model's own predictions during training, has been tried repeatedly and is not standard. The practical answers live elsewhere in this course: better decoding in Chapter 18, and preference training in Chapters 22 and 23, which optimizes whole responses the model actually generated rather than single next tokens on a fixed prefix.</p>" +
+      "<div class='callout'><strong>The connection worth holding.</strong> Almost every limitation in Part IV traces back to this section. The pretraining objective scores one token at a time against a true prefix. It has no way to express that a whole answer was unhelpful, that a response should have been refused, or that a chain of reasoning went wrong at step three. Everything from supervised fine-tuning to DPO exists because cross-entropy on next tokens cannot say those things.</div>" },
+
+    { title: "Perplexity",
+      html: "<p>The metric quoted everywhere, and it is the loss wearing different units. <strong>Perplexity</strong> is the exponential of the mean cross-entropy.</p>" +
+      "<pre><code>perplexity = exp(loss)</code></pre>" +
+      "<p>The interpretation is the useful part: perplexity is the <em>effective branching factor</em>. A perplexity of 20 means the model is about as uncertain as if it were choosing uniformly among 20 equally likely tokens at each step. Lower is better; the floor is 1, meaning certainty.</p>" +
+      "<p>Computed for Corvid's vocabulary:</p>" +
+      "<pre><code>loss (nats)   bits/token    perplexity\n     11.76        16.97       128,256   <- untrained: the whole vocabulary\n      6.00         8.66           403\n      4.00         5.77            55\n      3.00         4.33            20\n      2.00         2.89           7.4\n      1.70         2.45           5.5   <- a good model on held-out web text</code></pre>" +
+      "<p>The first row is worth pausing on. An untrained model's loss is exactly ln(V), and its perplexity is exactly the vocabulary size, because a uniform distribution over 128,256 tokens is precisely as uncertain as a choice among 128,256 options. That is a free sanity check: <strong>if your training run does not start near 11.76, something is wrong before a single gradient step.</strong> The usual causes are a mismatched vocabulary size, an initialization scale error, or labels that are not shifted correctly.</p>" +
+      "<h3>What it does not measure</h3>" +
+      "<p>Four things, and they are the reason Chapter 32 exists.</p>" +
+      "<ul>" +
+      "<li><strong>It is not comparable across tokenizers.</strong> Perplexity is per token, and Chapter 2 showed the same text is 12 tokens under one tokenizer and 133 under another. Two models with different vocabularies cannot be compared on it, and papers that do so are making an error.</li>" +
+      "<li><strong>It is not comparable across corpora.</strong> Perplexity on your own domain and on generic web text are different numbers about different things.</li>" +
+      "<li><strong>It does not measure usefulness.</strong> A model can have excellent perplexity and refuse to follow instructions, because instruction-following is not what the objective rewarded.</li>" +
+      "<li><strong>It is dominated by easy tokens.</strong> Most tokens in any text are predictable function words. The mean is mostly them, so a large change on the few tokens that carry the meaning barely moves it. This is why a quantization change in Chapter 29 can leave perplexity flat while a task evaluation falls off a cliff.</li>" +
+      "</ul>" +
+      "<p>Perplexity is an excellent instrument for one job: watching whether your own training run, on your own tokenizer and your own held-out split, is improving. Outside that, treat it as weak evidence.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>loss and perplexity for a 128,256-token vocabulary (computed)</text>" +
+      "<text x='20' y='44' fill='#ff5d73' font-size='10'>11.76 nats</text>" +
+      "<rect x='140' y='32' width='560' height='16' rx='3' fill='#ff5d73'/><text x='150' y='45' fill='#0b1120' font-size='9.5'>perplexity 128,256 &#183; untrained: the whole vocabulary</text>" +
+      "<text x='20' y='76' fill='#ffd166' font-size='10'>6.00 nats</text>" +
+      "<rect x='140' y='64' width='176' height='16' rx='3' fill='#ffd166'/><text x='330' y='77' fill='#ffd166' font-size='9.5'>perplexity 403</text>" +
+      "<text x='20' y='108' fill='#4f7cff' font-size='10'>3.00 nats</text>" +
+      "<rect x='140' y='96' width='88' height='16' rx='3' fill='#4f7cff'/><text x='242' y='109' fill='#7d8fb0' font-size='9.5'>perplexity 20</text>" +
+      "<text x='20' y='140' fill='#3ddc97' font-size='10'>1.70 nats</text>" +
+      "<rect x='140' y='128' width='50' height='16' rx='3' fill='#3ddc97'/><text x='204' y='141' fill='#3ddc97' font-size='9.5'>perplexity 5.5 &#183; a good model on held-out web text</text>" +
+      "<line x1='20' y1='162' x2='740' y2='162' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='184' fill='#c9d6ea' font-size='10.5'>Step zero should land on the top row. If it does not, the bug is upstream of training.</text>" +
+      "<text x='20' y='202' fill='#7d8fb0' font-size='10'>Bars are the loss in nats; the perplexity beside each is its exponential.</text>" +
+      "</svg><div class='fig-cap'>An untrained model's perplexity equals its vocabulary size exactly, which makes step zero a free correctness check.</div></div>" },
+
+    { title: "What the Backward Pass Does",
+      html: "<p>You do not need to re-derive automatic differentiation to debug a training run, but you do need to know what the backward pass computes and where it can go wrong.</p>" +
+      "<p>The loss is one number, and every parameter has some influence on it. The backward pass computes, for each parameter, the derivative of the loss with respect to it: the direction and rate at which changing that parameter would change the loss. Gradient descent then steps every parameter a little way against its gradient.</p>" +
+      "<p>Mechanically it works backwards through the computation. The gradient at the loss is trivial. From it, the chain rule gives the gradient at the final projection's inputs, and from that the gradient at layer 32's output, and so on down to the embedding. At each layer two things are computed: the gradient with respect to the layer's <em>inputs</em>, which continues the chain downward, and the gradient with respect to the layer's <em>weights</em>, which is what the optimizer uses. Two matrix multiplications of roughly the size of the forward one, which is the 4N in Chapter 9's 6ND.</p>" +
+      "<p>Three consequences you will meet in practice.</p>" +
+      "<p><strong>Activations must be kept.</strong> Computing a weight gradient needs the layer's input from the forward pass, so every intermediate value is held in memory until its backward pass runs. That is the activation memory of Chapter 9, and it is why memory peaks at the end of the forward pass rather than during the backward one.</p>" +
+      "<p><strong>The gradient can vanish or explode with depth.</strong> Chapter 8's residual connections exist for exactly this, and the reason is now concrete: without the additive path, 32 chained multiplications drive the gradient to nothing or to infinity.</p>" +
+      "<p><strong>One bad batch reaches every parameter.</strong> A single sequence of corrupted text produces a large loss, a large gradient, and an update applied to all 8 billion parameters at once. This is why a training run can be damaged by a fraction of a percent of bad data, and it is what gradient clipping in Chapter 14 defends against.</p>" },
+
+    { title: "The Loop, With Shapes",
+      html: "<p>Everything assembled. One training step, with the tensor shape at each line, for a batch of 4 sequences of 8,192 tokens on Corvid:</p>" +
+      "<pre><code>batch   = next(loader)                # (4, 8193) token ids\ninputs  = batch[:, :-1]               # (4, 8192)\ntargets = batch[:, 1:]                # (4, 8192)\n\nlogits  = model(inputs)               # (4, 8192, 128256)\nloss    = cross_entropy(              # scalar\n              logits.view(-1, 128256),\n              targets.view(-1))\n\nloss.backward()                       # fills .grad on every parameter\nclip_grad_norm_(model.parameters(), 1.0)\noptimizer.step()                      # applies the update\noptimizer.zero_grad()                 # or the next step accumulates</code></pre>" +
+      "<p>Nine lines. Chapter 14 is entirely about the two lines in the middle of the second block, the clip and the step, because that is where every knob in a training configuration lives.</p>" +
+      "<p>One shape is worth staring at. The logits tensor is 4 &#215; 8,192 &#215; 128,256 numbers. In bfloat16 that is <strong>8.6 GB for a single batch's logits</strong>, larger than most models' weights, existing for the moment between the forward pass and the loss. This is why real implementations fuse the projection and the cross-entropy so the full logits tensor is never materialized, and it is the same insight as FlashAttention in Chapter 28: the expensive part was writing down an intermediate nobody wanted to keep.</p>" +
+      "<p>And <code>zero_grad</code> is not housekeeping. <strong>Gradient accumulation</strong> is the default behaviour, which is a feature Chapter 14 uses deliberately for large effective batches, and forgetting it is a bug that trains on a growing sum of all previous batches while looking entirely normal.</p>" },
+
+    { title: "Reading a Loss Curve", viz: "llmLossCurves", vizTitle: "Diagnose each curve before revealing the answer",
+      html: "<p>Most of the skill in running a training job is knowing what a shape means. Six curves, and what each one is telling you.</p>" +
+      "<p><strong>Healthy.</strong> A very fast drop in the first few hundred steps, then a long slow decline that is roughly linear on a log-scale x-axis. The early drop is not the model learning language; it is learning the unigram frequencies. Going from a uniform distribution to simply knowing which tokens are common takes the loss from 11.76 to somewhere around 6 or 7, which is nearly half the total journey, before any structure is learned at all.</p>" +
+      "<p><strong>A loss spike that recovers.</strong> The loss jumps and returns within tens of steps. Usually a difficult batch. If clipping is on, this is normal and needs no action.</p>" +
+      "<p><strong>A spike that does not recover.</strong> The loss jumps and settles at a much higher level, or becomes NaN. The update was large enough to move the parameters somewhere useless. The standard response, used in real frontier runs, is to restore the last checkpoint, skip the batches that caused it, and continue. Both the PaLM and OPT teams documented doing exactly this repeatedly.</p>" +
+      "<p><strong>A step change downward.</strong> Not a bug: something changed. A learning-rate schedule transition, a data-mixture change, or an annealing phase from Chapter 12.</p>" +
+      "<p><strong>A small bump partway through.</strong> The most interesting one. A brief rise or flattening in an otherwise healthy curve, early in training, is where the induction heads of Chapter 11 form. The circuit reorganizes, the loss briefly worsens, and when it resolves the model can do in-context learning. It is a phase change you can see on a chart.</p>" +
+      "<p><strong>A plateau.</strong> Flat for thousands of steps. Either the learning rate has decayed to nearly zero, which the schedule will tell you, or it collapsed early, which is a bug. Check the actual learning rate before touching anything else.</p>" +
+      "<p><strong>Validation rising while training falls.</strong> Overfitting, and during large-scale pretraining it is almost always a sign that something is wrong rather than a natural limit, because a model seeing trillions of mostly-unique tokens should not be able to overfit. Suspect a corpus far smaller than intended, or a validation split that overlaps the training data.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 232' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>six loss curves and what each one means</text>" +
+      "<text x='30' y='42' fill='#3ddc97' font-size='9.5'>healthy</text>" +
+      "<path d='M30 96 L52 62 L82 52 L130 46 L190 42 L240 40' fill='none' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='30' y='114' fill='#7d8fb0' font-size='9'>fast drop = unigram frequencies</text>" +
+      "<text x='280' y='28' fill='#ffd166' font-size='9.5'>spike, recovers</text>" +
+      "<path d='M280 96 L302 62 L330 52 L356 50 L360 34 L366 52 L400 48 L470 44' fill='none' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='280' y='114' fill='#7d8fb0' font-size='9'>a hard batch; clipping did its job</text>" +
+      "<text x='530' y='28' fill='#ff5d73' font-size='9.5'>spike, does not</text>" +
+      "<path d='M530 96 L552 62 L580 52 L606 50 L610 32 L618 36 L660 38 L720 37' fill='none' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='530' y='114' fill='#7d8fb0' font-size='9'>restore a checkpoint, skip the batch</text>" +
+      "<text x='30' y='150' fill='#4f7cff' font-size='9.5'>step down</text>" +
+      "<path d='M30 200 L100 190 L150 188 L152 168 L200 164 L240 162' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='30' y='222' fill='#7d8fb0' font-size='9'>schedule or data change, not a bug</text>" +
+      "<text x='280' y='150' fill='#2de2ff' font-size='9.5'>a bump</text>" +
+      "<path d='M280 200 L320 176 L344 172 L356 178 L370 174 L420 166 L470 162' fill='none' stroke='#2de2ff' stroke-width='2'/>" +
+      "<text x='280' y='222' fill='#2de2ff' font-size='9'>induction heads forming (Chapter 11)</text>" +
+      "<text x='530' y='150' fill='#7d8fb0' font-size='9.5'>plateau</text>" +
+      "<path d='M530 200 L570 180 L600 174 L640 173 L680 173 L720 173' fill='none' stroke='#7d8fb0' stroke-width='2'/>" +
+      "<text x='530' y='222' fill='#7d8fb0' font-size='9'>check the learning rate first</text>" +
+      "</svg><div class='fig-cap'>Five of the six need no action or a known action. Only the second row, middle, is a discovery about the model rather than about the run.</div></div>" +
+      "<p>Use the machine, look at each curve, and commit to a diagnosis before revealing it. Getting the spike-that-recovers wrong is common and harmless; getting the plateau wrong costs a week.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A model over a vocabulary of 50,257 is initialized randomly. Compute the loss and the perplexity you expect at step zero. Then compute both for a model that has reached a loss of 2.4. Then state what you would conclude if your run started at 4.0 instead of the expected value, and name two causes.</li>" +
+      "<li><strong>Trace.</strong> Using the six-token example in section 2, recompute the loss if the true token had been 'London' rather than 'Paris'. Then compute the loss if the model had put 0.999 on 'London' and the true token were still 'Paris'. Compare that number to the untrained model's 11.762 and say in one sentence what cross-entropy is expressing about confidence.</li>" +
+      "<li><strong>Investigate.</strong> Find a published training run with a loss curve, from a technical report or an open training log. Identify the early steep phase, any spikes, and any step changes. For each spike, find whether the report says what was done. Several open reports document checkpoint restores and skipped batches explicitly, and reading one is the fastest way to understand that this is routine rather than a failure.</li>" +
+      "<li><strong>Investigate.</strong> Take two models with different tokenizers and find published perplexity figures for both on the same corpus. Then compute, using Chapter 2's method, how many tokens each tokenizer produces for that corpus. Explain in three sentences why the two perplexities cannot be compared, and what quantity would be comparable.</li>" +
+      "<li><strong>Build.</strong> Write the training loop from section 6 against a tiny model and a few megabytes of text. Assert that the loss at step zero is within 0.05 of ln(vocab_size), which will catch a shift-by-one error, an initialization error and a vocabulary mismatch in one line. Then log the loss every ten steps for a thousand steps and plot it. You should see the steep early drop; note the loss at which it flattens and compare it with the unigram entropy of your own corpus, which you can compute directly from token frequencies. They should be close, which is the point of section 7's first paragraph.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "self-supervised learning", d: "Training where the labels come from the structure of the data itself, here by shifting the token sequence one position." },
+    { t: "shift-by-one", d: "The convention that the target at each position is the input at the next, so one array serves as both input and answer key." },
+    { t: "packing", d: "Concatenating documents into a continuous stream and cutting fixed-size blocks, avoiding padding at the cost of blocks that straddle document boundaries." },
+    { t: "cross-entropy", d: "The training loss: the negative logarithm of the probability the model assigned to the true token." },
+    { t: "nats and bits", d: "Units of loss; a natural logarithm gives nats, dividing by ln 2 gives bits per token." },
+    { t: "teacher forcing", d: "Conditioning each training prediction on the true previous tokens rather than the model's own, which is what allows one forward pass to compute every position." },
+    { t: "exposure bias", d: "The mismatch created by teacher forcing: at generation the model conditions on its own output, which it never practised, contributing to drift in long outputs." },
+    { t: "perplexity", d: "The exponential of the mean cross-entropy, interpretable as the effective number of equally likely tokens the model is choosing among." },
+    { t: "effective branching factor", d: "The intuition behind perplexity: a perplexity of 20 is as uncertain as a uniform choice among 20 options." },
+    { t: "backward pass", d: "Computing the derivative of the loss with respect to every parameter, working backwards through the computation via the chain rule." },
+    { t: "gradient", d: "For one parameter, the direction and rate at which changing it would change the loss; the optimizer steps against it." },
+    { t: "activation memory", d: "Intermediate forward-pass values held until their backward pass needs them, which is why memory peaks at the end of the forward pass." },
+    { t: "gradient accumulation", d: "The default behaviour that gradients add up across backward passes, used deliberately for large effective batches and a silent bug when forgotten." },
+    { t: "loss spike", d: "A sudden jump in the loss; harmless when it recovers within tens of steps, and grounds for a checkpoint restore when it does not." },
+    { t: "checkpoint restore", d: "Rolling back to a saved state and skipping the offending batches after an unrecoverable spike; routine practice in documented frontier runs." }
+  ],
+  quiz: [
+    { type: "mc", q: "A randomly initialized model over a 128,256-token vocabulary should show what loss at step zero?", opts: ["0, since no predictions have been made", "About 11.76, the natural logarithm of the vocabulary size", "About 1.0, the uniform probability scaled", "It depends on the initialization scheme and cannot be predicted"], a: 1,
+      why: "An untrained model spreads probability roughly uniformly, so the true token gets about 1/V and the loss is -ln(1/V) = ln(V) = 11.762 for this vocabulary. Its perplexity is then exactly 128,256. This is a free sanity check: a run that does not start near that number has a mismatched vocabulary, a bad initialization scale, or labels that are not shifted correctly." },
+    { type: "mc", q: "A model assigns one millionth of its probability to the true token, scoring a loss of 13.82. An untrained model scores 11.76. What does the comparison show?", opts: ["The model has been damaged and should be restarted", "The loss function is numerically unstable at small probabilities", "The vocabulary size was misconfigured", "Cross-entropy punishes confident error more harshly than ignorance"], a: 3,
+      why: "Being confidently wrong scores worse than knowing nothing, because the negative logarithm grows without bound as the assigned probability approaches zero. This is exactly the desired behaviour: it is what makes models trained this way hedge in unfamiliar territory rather than assert. Nothing is unstable and nothing is broken; the loss is expressing a judgement about confidence." },
+    { type: "mc", q: "Why does teacher forcing let a single forward pass compute the loss at every position?", opts: ["Each position conditions on the true prefix rather than on generated text, so no position depends on another's output", "The model is run once per position in parallel across devices", "Positions after the first are masked out of the loss", "The optimizer averages the positions afterwards"], a: 0,
+      why: "If each prediction depended on what the model itself had generated, the computation would be sequential. Conditioning on the true prefix makes the positions independent, and the causal mask from Chapter 5 ensures none of them sees its own answer. The cost is exposure bias: at generation there is no true prefix, and the model has never practised conditioning on its own output." },
+    { type: "mc", q: "Two models report perplexities of 8.1 and 6.4 on the same corpus. What can you conclude?", opts: ["The second model is meaningfully better", "The second has a larger vocabulary", "Nothing, unless they share a tokenizer, because perplexity is per token and tokenizers differ in how many tokens a text becomes", "The comparison is valid only if both were trained on that corpus"], a: 2,
+      why: "Perplexity is per token, and Chapter 2 measured the same sentence at 12 tokens under one tokenizer and 133 under another. A model whose tokenizer produces fewer, larger tokens faces a harder per-token prediction and will show a higher perplexity for identical quality. Comparing across tokenizers is a category error, and papers that do it are making one." },
+    { type: "blank", q: "Conditioning each training prediction on the true previous tokens rather than on the model's own output is called teacher ____.", a: ["forcing"],
+      why: "It is what makes the training scheme efficient, and it defers a cost to inference. At generation there is no true prefix, so the model conditions on its own output, a situation it never trained in. That mismatch is exposure bias, and it contributes to long generations drifting or looping in ways the loss curve never predicted." },
+    { type: "blank", q: "The exponential of the mean cross-entropy, interpretable as an effective branching factor, is called ____.", a: ["perplexity"],
+      why: "A perplexity of 20 means the model is about as uncertain as if choosing uniformly among 20 equally likely tokens. Its floor is 1. It is an excellent instrument for watching one run improve on one tokenizer and one held-out split, and weak evidence for almost anything else." },
+    { type: "order", q: "Order one training step:", items: ["slice a batch into inputs and targets shifted by one", "run the forward pass to get logits", "compute cross-entropy against the targets", "backpropagate, clip, step the optimizer, and zero the gradients"],
+      why: "Four moves, and Chapter 14 is entirely about the last one. Zeroing the gradients is not housekeeping: they accumulate by default, which is a feature used deliberately for large effective batches and a silent bug when forgotten, since the run then trains on a growing sum of all previous batches while looking normal." },
+    { type: "mc", q: "The logits tensor for a batch of 4 sequences of 8,192 tokens over a 128,256-token vocabulary is 8.6 GB in bfloat16. What do real implementations do about it?", opts: ["Reduce the batch size until it fits", "Store the logits in int8", "Fuse the output projection with the cross-entropy so the full tensor is never materialized", "Compute the loss on a sampled subset of positions"], a: 2,
+      why: "The full logits tensor exists only for the instant between the projection and the loss, so it need never be written down at all. Fusing the two operations computes the loss in chunks. It is the same insight as FlashAttention in Chapter 28: the expensive part was materializing an intermediate that nobody wanted to keep." },
+    { type: "mc", q: "During pretraining, validation loss starts rising while training loss keeps falling. What should you suspect first?", opts: ["The corpus is far smaller than intended, or the validation split overlaps the training data", "The learning rate is too high", "The model has reached its capacity and training should stop", "The optimizer state has become corrupted"], a: 0,
+      why: "A model seeing trillions of mostly-unique tokens should not be able to overfit, so the classic overfitting signature during pretraining usually means the run is not seeing what you think it is. A corpus a hundred times smaller than intended, or a validation split drawn from the same documents, both produce this shape. Chapter 12's deduplication and decontamination work is what prevents the second." },
+    { type: "mc", q: "A brief bump interrupts an otherwise healthy loss curve early in training, then the curve resumes falling. What is one documented cause?", opts: ["The learning-rate warmup ending", "A corrupted data shard", "Gradient clipping engaging for the first time", "Induction heads forming, which reorganizes the circuit and briefly worsens the loss"], a: 3,
+      why: "Olsson and colleagues showed the formation of induction heads is abrupt, coincides with a visible feature of the loss curve, and is when the model acquires in-context learning. It is the one shape in the gallery that is a discovery about the model rather than about the run. A corrupted shard produces a spike rather than a bump, and warmup ending produces a smooth transition." }
   ]
 });
