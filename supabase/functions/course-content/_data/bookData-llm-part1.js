@@ -90,6 +90,17 @@
    Mistral-7B-v0.3 3.500x; Gemma-2-9B 4.000x with GELU; Qwen2.5-7B 5.286x;
    every model but GPT-2 using RMSNorm. The block composition in section 8
    was computed from Corvid's configuration the same day.
+
+   Sources consulted for Chapter 9: Kaplan et al. 2020 and Hoffmann et al.
+   2022 (the 6ND compute estimate); Micikevicius et al. 2017 (mixed
+   precision); Rajbhandari et al. 2020 (ZeRO, for the optimizer-state
+   accounting); Korthikanti et al. 2022 (activation memory); the Hugging Face
+   transformers model-configuration reference. Every number in this chapter
+   was computed from Corvid's configuration on 2026-09-06 rather than quoted:
+   8,030,261,248 parameters of which 86.92% are the 32 blocks; 16.06 GFLOPs
+   per token forward under the 2N rule, with attention adding 1.7% at 512
+   tokens and 107% at 32,768; 7.227e23 FLOPs to train on 15T tokens; 144.5 GB
+   of training state at 18 bytes per parameter.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -1880,5 +1891,220 @@ CHAPTERS.push({
       why: "This is the exact signature of post-LN. With 32 normalizations on the residual path, early-training gradients in the first layers are very large and a full learning rate diverges. Warmup was the workaround the field used for three years before Xiong and colleagues identified the cause. The choice of which norm, how wide, or which activation does not produce this failure." },
     { type: "mc", q: "What stayed the same between a 2017 transformer block and Corvid's?", opts: ["The residual connections and the two-sub-layer skeleton", "The normalization function", "The activation function", "The position encoding scheme"], a: 0,
       why: "Four things changed in nine years: where the norm sits, which norm, which activation, and how position is injected. The skeleton did not. Attention then a feed-forward, each wrapped in a normalization and a residual add, repeated N times, is the same shape it was in the original paper, and residual connections are the one component nobody has revised." }
+  ]
+});
+
+/* ======================= CHAPTER 9 ======================= */
+CHAPTERS.push({
+  num: 9, part: 2, title: "Counting the Machine: Parameters, FLOPs, and Bytes",
+  blurb: "Almost every practical question about a model is arithmetic you can do on paper in two minutes. Will it fit, what will training cost, how many users can I serve, why did it run out of memory at batch 9. This chapter teaches that arithmetic once, carefully, and the rest of the course uses it constantly. You will count Corvid-8B block by block until the total matches, work out the FLOPs of a forward pass and find where the famous shortcut stops being true, and then read an unfamiliar config and say what a model will cost before downloading a byte of it.",
+  sections: [
+    { title: "Counting Parameters", viz: "llmParamCounter", vizTitle: "Edit a config and watch the parameter breakdown move",
+      html: "<p>Every parameter in a transformer lives in one of four places. Chapters 4 through 8 built all four, so this is bookkeeping rather than new machinery, but doing it once properly is what makes the rest of the course's numbers checkable.</p>" +
+      "<p><strong>The token embeddings.</strong> One row per vocabulary entry, one column per model dimension: <code>V &#215; d</code>. For Corvid, 128,256 &#215; 4,096 = 525,336,576.</p>" +
+      "<p><strong>The blocks.</strong> Per block, four attention matrices and three feed-forward matrices, plus two normalization vectors. With grouped-query attention the key and value projections are smaller than the query and output ones:</p>" +
+      "<pre><code>W_Q     d x (n_heads x d_head)     4,096 x 4,096   =  16,777,216\nW_K     d x (n_kv    x d_head)     4,096 x 1,024   =   4,194,304\nW_V     d x (n_kv    x d_head)     4,096 x 1,024   =   4,194,304\nW_O     (n_heads x d_head) x d     4,096 x 4,096   =  16,777,216\n                                                     -----------\nattention                                             41,943,040\n\nW_gate  d x ff                     4,096 x 14,336  =  58,720,256\nW_up    d x ff                     4,096 x 14,336  =  58,720,256\nW_down  ff x d                    14,336 x 4,096   =  58,720,256\n                                                     -----------\nfeed-forward                                         176,160,768\n\ntwo RMSNorm gains                  2 x 4,096       =       8,192\n                                                     -----------\nper block                                            218,112,000</code></pre>" +
+      "<p><strong>The final normalization.</strong> One more gain vector, 4,096 numbers.</p>" +
+      "<p><strong>The output projection.</strong> Another <code>d &#215; V</code>, another 525,336,576, because Corvid does not tie its embeddings. Chapter 4 explained when a model would.</p>" +
+      "<p>Sum it:</p>" +
+      "<pre><code>token embeddings         525,336,576    6.54%\n32 blocks              6,979,584,000   86.92%\nfinal norm                     4,096    0.00%\noutput projection        525,336,576    6.54%\n                       -------------\ntotal                  8,030,261,248</code></pre>" +
+      "<p>8.03 billion, which is where the name came from. Two things are worth noticing before moving on.</p>" +
+      "<p>The blocks are <strong>87% of the model</strong>, and everything to do with the vocabulary is 13%. That ratio is a strong function of scale: Chapter 4 showed that on a half-billion-parameter model the vocabulary eats more than a quarter of the budget, which is why small models tie their embeddings and this one does not.</p>" +
+      "<p>And the norms, at 8,192 parameters per block, are 0.004% of it. Chapter 8's argument that the components deciding whether the model trains are numerically free is now a number you have produced.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 178' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>where Corvid-8B's 8,030,261,248 parameters live</text>" +
+      "<rect x='20' y='34' width='47' height='30' rx='4' fill='#4f7cff'/>" +
+      "<rect x='69' y='34' width='626' height='30' rx='4' fill='#ff5d73'/>" +
+      "<rect x='697' y='34' width='47' height='30' rx='4' fill='#4f7cff'/>" +
+      "<text x='43' y='84' text-anchor='middle' fill='#4f7cff' font-size='9'>embed</text>" +
+      "<text x='43' y='96' text-anchor='middle' fill='#4f7cff' font-size='9'>6.5%</text>" +
+      "<text x='382' y='84' text-anchor='middle' fill='#ff5d73' font-size='10'>32 transformer blocks &#183; 6,979,584,000 &#183; 86.9%</text>" +
+      "<text x='720' y='84' text-anchor='middle' fill='#4f7cff' font-size='9'>head</text>" +
+      "<text x='720' y='96' text-anchor='middle' fill='#4f7cff' font-size='9'>6.5%</text>" +
+      "<line x1='20' y1='112' x2='740' y2='112' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='134' fill='#c9d6ea' font-size='10.5'>Inside one block: feed-forward 80.8%, attention 19.2%, the two norms 0.004%.</text>" +
+      "<text x='20' y='156' fill='#7d8fb0' font-size='10.5'>On a 0.5B model the vocabulary share is over 25%, which is why small models tie their embeddings (Chapter 4).</text>" +
+      "</svg><div class='fig-cap'>The shape of a model, to scale. Almost everything is blocks, and almost all of a block is the feed-forward network.</div></div>" },
+
+    { title: "The 2N Rule, and Where It Breaks",
+      html: "<p>How much arithmetic does one token cost?</p>" +
+      "<p>Nearly all of it happens in matrix multiplications against the weights, and every parameter participates in exactly one multiply and one add per token. A multiply-accumulate is two floating-point operations. So:</p>" +
+      "<pre><code>forward FLOPs per token = 2N</code></pre>" +
+      "<p>For Corvid, 2 &#215; 8.03 billion = <strong>16.06 GFLOPs to produce one token</strong>. That is the single most useful number in inference planning, and it is why Chapter 26 can predict throughput from a GPU's specification sheet.</p>" +
+      "<p>One warning to carry forward. FLOPs are not time. Two operations with identical FLOP counts can differ by an order of magnitude in wall-clock, because one moves far more bytes through memory than the other. The ratio of arithmetic to bytes moved is called <strong>arithmetic intensity</strong>, Chapter 16 derives it, and Chapter 26 uses it to explain why the first token of a reply is slow and the rest are fast. For now, count FLOPs and remember they are an upper bound on what the hardware can be doing usefully.</p>" +
+      "<h3>What the rule leaves out</h3>" +
+      "<p>The 2N rule counts weights. Attention also multiplies queries by keys and weights by values, and those operations involve no parameters at all, so they are invisible to it. Chapter 5 showed that work grows with the square of the sequence length, so whether it matters depends entirely on context length. Computed for Corvid:</p>" +
+      "<pre><code>context      attention FLOPs/token    on top of the 16.06 GFLOPs\n    512               0.27 GFLOPs                       1.7%\n  2,048               1.07 GFLOPs                       6.7%\n  8,192               4.29 GFLOPs                      26.7%\n 32,768              17.18 GFLOPs                     107.0%</code></pre>" +
+      "<p>At 512 tokens the rule is accurate to within two percent and you should use it without hesitation. At Corvid's full 8,192-token context it is understating the work by a quarter. At 32,768 tokens <strong>attention costs more than every weight in the model combined</strong>, and anyone still quoting 2N is out by more than a factor of two.</p>" +
+      "<p>This is the honest version of a rule most sources give without its domain. Use 2N for short contexts, add the attention term for long ones, and know which regime you are in.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>FLOPs to produce one token: weights versus attention</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10'>n = 512</text>" +
+      "<rect x='120' y='36' width='300' height='16' rx='3' fill='#4f7cff'/><rect x='420' y='36' width='5' height='16' rx='2' fill='#ffd166'/>" +
+      "<text x='440' y='49' fill='#7d8fb0' font-size='9.5'>+1.7%</text>" +
+      "<text x='20' y='80' fill='#7d8fb0' font-size='10'>n = 2,048</text>" +
+      "<rect x='120' y='68' width='300' height='16' rx='3' fill='#4f7cff'/><rect x='420' y='68' width='20' height='16' rx='2' fill='#ffd166'/>" +
+      "<text x='456' y='81' fill='#7d8fb0' font-size='9.5'>+6.7%</text>" +
+      "<text x='20' y='112' fill='#7d8fb0' font-size='10'>n = 8,192</text>" +
+      "<rect x='120' y='100' width='300' height='16' rx='3' fill='#4f7cff'/><rect x='420' y='100' width='80' height='16' rx='2' fill='#ffd166'/>" +
+      "<text x='516' y='113' fill='#ffd166' font-size='9.5'>+26.7%</text>" +
+      "<text x='20' y='144' fill='#7d8fb0' font-size='10'>n = 32,768</text>" +
+      "<rect x='120' y='132' width='300' height='16' rx='3' fill='#4f7cff'/><rect x='420' y='132' width='321' height='16' rx='2' fill='#ff5d73'/>" +
+      "<text x='560' y='145' fill='#ff5d73' font-size='9.5'>+107%: exceeds the weights</text>" +
+      "<rect x='120' y='164' width='14' height='10' rx='2' fill='#4f7cff'/><text x='142' y='173' fill='#7d8fb0' font-size='9.5'>2N = 16.06 GFLOPs, constant</text>" +
+      "<rect x='320' y='164' width='14' height='10' rx='2' fill='#ffd166'/><text x='342' y='173' fill='#7d8fb0' font-size='9.5'>attention, grows with context</text>" +
+      "<text x='20' y='194' fill='#c9d6ea' font-size='10.5'>The 2N rule is a short-context rule. Most sources omit that.</text>" +
+      "</svg><div class='fig-cap'>The blue bar never moves; the gold one squares. Knowing which regime you are in is the difference between a good estimate and a wrong one.</div></div>" },
+
+    { title: "What a Training Run Costs",
+      html: "<p>Training adds a backward pass, and the backward pass costs about twice the forward one. The reason is countable: for each layer the backward pass computes two gradients rather than one, the gradient with respect to the layer's input so the chain can continue, and the gradient with respect to the layer's weights so they can be updated. Each is a matrix multiplication of comparable size to the forward one.</p>" +
+      "<p>So a full training step is roughly 2N forward plus 4N backward:</p>" +
+      "<pre><code>training FLOPs = 6 x N x D</code></pre>" +
+      "<p>where N is parameters and D is training tokens. This is the estimate behind every scaling-law calculation in Chapter 15, and it is accurate to within about ten percent for real runs.</p>" +
+      "<p>Put it to work. Training Corvid on 15 trillion tokens, a plausible modern budget:</p>" +
+      "<pre><code>6 x 8.03e9 x 15e12 = 7.227e23 FLOPs</code></pre>" +
+      "<p>An H100 delivers roughly 400 teraFLOPs per second of useful bf16 throughput once you account for the fraction of peak a real run achieves. Dividing:</p>" +
+      "<pre><code>7.227e23 / 4e14 = 1.8e9 seconds = 20,912 GPU-days\n                              = about 21 days on 1,000 GPUs</code></pre>" +
+      "<p>Those two lines are why frontier pretraining is done by organizations with thousands of GPUs, and they are also why the number is not mysterious. It is one multiplication and one division from numbers on a spec sheet.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;Estimate the cost of training a 70B model on 2 trillion tokens.&#8221; The expected move is 6ND: 6 &#215; 7e10 &#215; 2e12 = 8.4e23 FLOPs, divide by realistic per-GPU throughput, convert to GPU-days, multiply by an hourly rate. The point is not the answer, which depends on assumptions you should state. It is that you reach for an estimate rather than a search engine, and that you name the efficiency assumption instead of using peak FLOPs.</div>" },
+
+    { title: "Will It Fit: Inference", viz: "llmMemoryFit", vizTitle: "Set training or inference mode and watch what fills the card",
+      html: "<p>Three things occupy memory when serving. Two of them you can now compute exactly.</p>" +
+      "<p><strong>Weights</strong> are N times the bytes per parameter. <strong>The KV cache</strong> is Chapter 6's formula, 128 KB per token for Corvid, times context times concurrency. <strong>Activation memory</strong> during inference is small, because nothing needs to be kept for a backward pass: one token's intermediate values at a time, a few megabytes.</p>" +
+      "<p>Corvid at 8,192 tokens of context, one request:</p>" +
+      "<pre><code>precision   weights     KV cache    total\nbf16        16.06 GB    1.07 GB     17.13 GB\nint8         8.03 GB    1.07 GB      9.10 GB\n4-bit        4.02 GB    1.07 GB      5.09 GB</code></pre>" +
+      "<p>Read the first row against the 16 GB budget. It does not fit. An 8-billion-parameter model at its native precision cannot be served on a 16 GB card at all, and this is the arithmetic behind the callout in Chapter 6 rather than an assertion.</p>" +
+      "<p>Read the third row and the picture inverts: at 4-bit, weights and a full-context cache together take under a third of the card, leaving room for the concurrency Chapter 6 measured. Quantization is not a micro-optimization for this model on this hardware. It is the difference between running and not running, which is why Chapter 29 is a keystone.</p>" },
+
+    { title: "Will It Fit: Training",
+      html: "<p>Training holds far more than weights, and the multiplier surprises people who have only served models.</p>" +
+      "<p>A standard mixed-precision AdamW setup keeps five things per parameter:</p>" +
+      "<pre><code>bf16 weights, used for the forward pass          2 bytes\nfp32 master weights, so tiny updates survive     4 bytes\nfp32 gradients                                   4 bytes\nAdam's first moment                              4 bytes\nAdam's second moment                             4 bytes\n                                                --------\n                                                18 bytes per parameter</code></pre>" +
+      "<p>Chapter 14 explains why each exists. For counting purposes what matters is the total: <strong>18 bytes per parameter</strong>, before a single activation is stored.</p>" +
+      "<pre><code>18 x 8.03e9 = 144.5 GB</code></pre>" +
+      "<p>An 80 GB H100, the largest single accelerator most teams can rent, holds 80. Full fine-tuning of an 8B model does not fit on one, by a factor of 1.8, and that is before activations, which for a reasonable batch and sequence length add tens of gigabytes more.</p>" +
+      "<p>Two escape routes follow directly, and both get their own chapter. Split the state across many GPUs so each holds a shard, which is Chapter 17. Or do not train most of the parameters at all: freeze the model and train a small adapter, so the 16 bytes of optimizer state apply to a few million parameters instead of eight billion. That is LoRA, in Chapter 21, and this arithmetic is precisely why it exists.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>memory for Corvid-8B: serving versus training</text>" +
+      "<line x1='300' y1='30' x2='300' y2='150' stroke='#ff5d73' stroke-width='2' stroke-dasharray='5 4'/>" +
+      "<text x='236' y='168' fill='#ff5d73' font-size='9.5'>16 GB budget</text>" +
+      "<line x1='560' y1='30' x2='560' y2='150' stroke='#ffd166' stroke-width='2' stroke-dasharray='5 4'/>" +
+      "<text x='520' y='168' fill='#ffd166' font-size='9.5'>80 GB H100</text>" +
+      "<text x='20' y='48' fill='#7d8fb0' font-size='10'>serve, 4-bit</text>" +
+      "<rect x='150' y='36' width='24' height='16' rx='3' fill='#3ddc97'/><rect x='174' y='36' width='7' height='16' rx='3' fill='#2de2ff'/>" +
+      "<text x='196' y='49' fill='#3ddc97' font-size='9.5'>5.09 GB</text>" +
+      "<text x='20' y='80' fill='#7d8fb0' font-size='10'>serve, int8</text>" +
+      "<rect x='150' y='68' width='48' height='16' rx='3' fill='#3ddc97'/><rect x='198' y='68' width='7' height='16' rx='3' fill='#2de2ff'/>" +
+      "<text x='220' y='81' fill='#3ddc97' font-size='9.5'>9.10 GB</text>" +
+      "<text x='20' y='112' fill='#7d8fb0' font-size='10'>serve, bf16</text>" +
+      "<rect x='150' y='100' width='96' height='16' rx='3' fill='#ffd166'/><rect x='246' y='100' width='7' height='16' rx='3' fill='#2de2ff'/>" +
+      "<text x='268' y='113' fill='#ffd166' font-size='9.5'>17.13 GB &#183; over the budget</text>" +
+      "<text x='20' y='144' fill='#7d8fb0' font-size='10'>full fine-tune</text>" +
+      "<rect x='150' y='132' width='590' height='16' rx='3' fill='#ff5d73'/><polygon points='740,132 752,140 740,148' fill='#ff5d73'/>" +
+      "<text x='150' y='190' fill='#ff5d73' font-size='10'>144.5 GB at 18 bytes per parameter, before activations: 1.8x an H100</text>" +
+      "<rect x='150' y='198' width='14' height='10' rx='2' fill='#3ddc97'/><text x='172' y='207' fill='#7d8fb0' font-size='9'>weights</text>" +
+      "<rect x='250' y='198' width='14' height='10' rx='2' fill='#2de2ff'/><text x='272' y='207' fill='#7d8fb0' font-size='9'>KV cache at 8,192 tokens</text>" +
+      "<rect x='470' y='198' width='14' height='10' rx='2' fill='#ff5d73'/><text x='492' y='207' fill='#7d8fb0' font-size='9'>optimizer state and gradients</text>" +
+      "</svg><div class='fig-cap'>The red bar runs off the chart, which is the point. Chapters 17 and 21 exist because of this one comparison.</div></div>" },
+
+    { title: "Reading an Unfamiliar Config",
+      html: "<p>You can now open a model you have never seen and say what it will cost. Every field in a modern config maps onto a mechanism from Part II.</p>" +
+      "<ul>" +
+      "<li><code>hidden_size</code> &#8212; the residual stream width, Chapter 8. Corvid: 4,096.</li>" +
+      "<li><code>num_hidden_layers</code> &#8212; how many blocks. Multiply block parameters by this.</li>" +
+      "<li><code>num_attention_heads</code> and <code>num_key_value_heads</code> &#8212; Chapter 6. The second sets the KV cache; the first does not.</li>" +
+      "<li><code>head_dim</code>, when present, and not always <code>hidden_size</code> divided by the head count.</li>" +
+      "<li><code>intermediate_size</code> &#8212; the feed-forward width, Chapter 8. Multiply by three for a gated activation, two otherwise.</li>" +
+      "<li><code>hidden_act</code> &#8212; <code>silu</code> means a gated SwiGLU with three matrices; <code>gelu</code> usually means two.</li>" +
+      "<li><code>vocab_size</code> &#8212; Chapter 2, and possibly padded above the tokenizer's real count.</li>" +
+      "<li><code>tie_word_embeddings</code> &#8212; Chapter 4. If true, count the vocabulary matrix once.</li>" +
+      "<li><code>max_position_embeddings</code>, <code>rope_theta</code>, <code>rope_scaling</code> &#8212; Chapter 7, and whether the long context was trained or bolted on.</li>" +
+      "<li><code>torch_dtype</code> &#8212; bytes per parameter for the download size.</li>" +
+      "</ul>" +
+      "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>every field, and the chapter that explains it</text>" +
+      "<rect x='16' y='28' width='400' height='204' rx='8' fill='#0e1626' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='34' y='50' fill='#c9d6ea' font-size='10'>&#123;</text>" +
+      "<text x='46' y='68' fill='#ffd166' font-size='10'>\"hidden_size\"</text><text x='196' y='68' fill='#c9d6ea' font-size='10'>: 4096,</text>" +
+      "<text x='46' y='86' fill='#ffd166' font-size='10'>\"num_hidden_layers\"</text><text x='240' y='86' fill='#c9d6ea' font-size='10'>: 32,</text>" +
+      "<text x='46' y='104' fill='#ffd166' font-size='10'>\"num_attention_heads\"</text><text x='262' y='104' fill='#c9d6ea' font-size='10'>: 32,</text>" +
+      "<text x='46' y='122' fill='#3ddc97' font-size='10'>\"num_key_value_heads\"</text><text x='262' y='122' fill='#c9d6ea' font-size='10'>: 8,</text>" +
+      "<text x='46' y='140' fill='#ff5d73' font-size='10'>\"intermediate_size\"</text><text x='240' y='140' fill='#c9d6ea' font-size='10'>: 14336,</text>" +
+      "<text x='46' y='158' fill='#ff5d73' font-size='10'>\"hidden_act\"</text><text x='184' y='158' fill='#c9d6ea' font-size='10'>: \"silu\",</text>" +
+      "<text x='46' y='176' fill='#4f7cff' font-size='10'>\"vocab_size\"</text><text x='184' y='176' fill='#c9d6ea' font-size='10'>: 128256,</text>" +
+      "<text x='46' y='194' fill='#4f7cff' font-size='10'>\"tie_word_embeddings\"</text><text x='262' y='194' fill='#c9d6ea' font-size='10'>: false,</text>" +
+      "<text x='46' y='212' fill='#2de2ff' font-size='10'>\"rope_theta\"</text><text x='184' y='212' fill='#c9d6ea' font-size='10'>: 500000.0</text>" +
+      "<text x='34' y='228' fill='#c9d6ea' font-size='10'>&#125;</text>" +
+      "<text x='436' y='68' fill='#7d8fb0' font-size='9.5'>residual stream width &#183; ch 8</text>" +
+      "<text x='436' y='86' fill='#7d8fb0' font-size='9.5'>multiply block params by this</text>" +
+      "<text x='436' y='104' fill='#7d8fb0' font-size='9.5'>expressiveness, not cache &#183; ch 6</text>" +
+      "<text x='436' y='122' fill='#3ddc97' font-size='9.5'>this one sets the KV cache &#183; ch 6</text>" +
+      "<text x='436' y='140' fill='#ff5d73' font-size='9.5'>x3 matrices, 80.8% of a block &#183; ch 8</text>" +
+      "<text x='436' y='158' fill='#ff5d73' font-size='9.5'>silu means gated: three, not two</text>" +
+      "<text x='436' y='176' fill='#4f7cff' font-size='9.5'>may be padded above the tokenizer</text>" +
+      "<text x='436' y='194' fill='#4f7cff' font-size='9.5'>false: count the matrix twice &#183; ch 4</text>" +
+      "<text x='436' y='212' fill='#2de2ff' font-size='9.5'>slowest pair's wavelength &#183; ch 7</text>" +
+      "</svg><div class='fig-cap'>Nine fields, nine mechanisms. Two of them, num_key_value_heads and tie_word_embeddings, change the cost far more than their prominence suggests.</div></div>" +
+      "<p>Three real models, read this way:</p>" +
+      "<pre><code>                    Llama-3-8B     Qwen2.5-7B     Gemma-2-9B\nhidden                   4,096          3,584          3,584\nlayers                      32             28             42\nq / kv heads             32 / 8         28 / 4         16 / 8\nhead_dim                   128            128            256\nFFN width               14,336         18,944         14,336\nactivation              SwiGLU         SwiGLU           GELU\nvocab                  128,256        152,064        256,000\ntied                        no             no            yes</code></pre>" +
+      "<p>Gemma-2 is the interesting one. Its head dimension of 256 is larger than its hidden size divided by its head count would give, its vocabulary is twice Llama's, and it ties its embeddings, which for a 256,000-entry vocabulary saves 917 million parameters. Three unusual decisions, all readable, all with consequences you can now compute.</p>" },
+
+    { title: "The Estimation Habit",
+      html: "<p>The <strong>estimation habit</strong> is five questions, in order, answered before you download anything. Each takes under a minute with the arithmetic from this chapter.</p>" +
+      "<ol>" +
+      "<li><strong>What is N?</strong> From the config, not the name. Names round and sometimes mislead.</li>" +
+      "<li><strong>Will the weights fit, at what precision?</strong> N times bytes per parameter, against your card. If the answer is no at bf16, you are in Chapter 29's territory before you start.</li>" +
+      "<li><strong>What does the KV cache cost per token, and per concurrent user?</strong> Chapter 6's formula. On a serving deployment this frequently dominates.</li>" +
+      "<li><strong>What is 2N, and am I in a regime where it is enough?</strong> Short context, use it; long context, add the attention term.</li>" +
+      "<li><strong>If I want to train it, is it 18 bytes per parameter or an adapter?</strong> The answer decides whether you need Chapter 17's sharding or Chapter 21's LoRA.</li>" +
+      "</ol>" +
+      "<p>None of this requires a benchmark, a trial deployment, or a vendor. It requires a config file and two minutes, and the habit of doing it before rather than after is most of what separates engineers who are surprised by their infrastructure bill from engineers who are not.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Count a model with 24 layers, hidden size 2,048, 16 query heads and 4 KV heads of dimension 128, a feed-forward width of 5,632 with a gated activation, a vocabulary of 32,000 and tied embeddings. Produce the four-line summary from section 1 and a total. Then state what fraction of it the vocabulary is, and whether tying was the right call at that size.</li>" +
+      "<li><strong>Trace.</strong> That model is trained on 3 trillion tokens. Compute the training FLOPs with 6ND, then the GPU-days at 400 teraFLOPs per second of effective throughput. Then compute its inference memory at bf16 and at 4-bit, and its KV cache per token. State whether it fits the 16 GB budget in each case.</li>" +
+      "<li><strong>Investigate.</strong> Pick an open-weights model you have never counted. Compute its parameters from its config alone, then compare your total with the published figure. If you are out by more than one percent, find the discrepancy: the usual culprits are tied embeddings, a padded vocabulary, a head dimension that is not hidden size over head count, or a gated activation you counted as two matrices instead of three.</li>" +
+      "<li><strong>Investigate.</strong> Take the same model and find the context length at which attention's FLOPs exceed the 2N term. Then check whether that length is inside or outside its advertised context window. For several current models the crossover sits well inside the window, which means the commonly quoted cost model is wrong for the way they are actually used.</li>" +
+      "<li><strong>Build.</strong> Write a function that takes a Hugging Face <code>config.json</code> and returns a report: total parameters broken down four ways, model size in bytes at four precisions, KV cache bytes per token, forward FLOPs per token under 2N, the attention FLOPs at the model's full context, and the training-state size at 18 bytes per parameter. Run it on five models and sort them by cost to serve rather than by parameter count. The two orderings will differ, and the difference is this chapter's payoff.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "parameter count", d: "The total number of learned numbers in a model, computed from its configuration rather than read from its name." },
+    { t: "the 2N rule", d: "The estimate that a forward pass costs two floating-point operations per parameter per token, accurate at short context and increasingly wrong at long context." },
+    { t: "6ND", d: "The estimate that training costs six FLOPs per parameter per token, being 2N forward plus roughly 4N backward." },
+    { t: "FLOPs", d: "Floating-point operations, the unit of arithmetic work; a multiply-accumulate counts as two." },
+    { t: "effective throughput", d: "The fraction of a GPU's peak FLOPs a real training run achieves, and the number to use in estimates rather than the spec-sheet peak." },
+    { t: "GPU-day", d: "One accelerator running for one day; the natural unit for quoting training cost before converting to money." },
+    { t: "master weights", d: "The fp32 copy of the parameters kept during mixed-precision training so that updates too small to change a bf16 value are not lost." },
+    { t: "optimizer state", d: "The per-parameter values an optimizer maintains between steps; AdamW keeps two, which is eight bytes per parameter in fp32." },
+    { t: "activation memory", d: "Intermediate values kept during training for the backward pass; small during inference, and often tens of gigabytes during training." },
+    { t: "bytes per parameter", d: "The multiplier converting a parameter count into memory: 2 at bf16, 1 at int8, 0.5 at 4-bit, and 18 for a full AdamW training state." },
+    { t: "arithmetic intensity", d: "FLOPs performed per byte moved from memory; introduced here as the reason two operations with equal FLOPs can differ wildly in speed, and derived in Chapter 16." },
+    { t: "config.json", d: "The file declaring a model's architecture, from which every number in this chapter can be computed before downloading any weights." },
+    { t: "padded vocabulary", d: "A declared vocab_size larger than the tokenizer's entry count, rounded up for hardware efficiency; use it for parameter counts." },
+    { t: "estimation habit", d: "Answering the five sizing questions from a config before downloading a model, rather than discovering the answers from an infrastructure bill." }
+  ],
+  quiz: [
+    { type: "mc", q: "Corvid-8B has 8.03 billion parameters. What is the forward cost of producing one token at a short context?", opts: ["8.03 GFLOPs, one operation per parameter", "16.06 GFLOPs, two operations per parameter", "4.02 GFLOPs, since half the parameters are inactive", "It cannot be estimated without knowing the batch size"], a: 1,
+      why: "Every parameter takes part in one multiply and one add per token, and a multiply-accumulate is two floating-point operations. Hence 2N. Batch size multiplies the total work but not the per-token cost, and no parameters are inactive in a dense model, which is exactly the distinction mixture-of-experts breaks in Chapter 10." },
+    { type: "mc", q: "At a context of 32,768 tokens, attention adds 107% on top of Corvid's 2N cost. What does that mean for the 2N rule?", opts: ["The rule is wrong and should not be used", "The rule applies only to training, not inference", "Attention parameters were double-counted", "The rule is a short-context approximation; at long context the parameter-free attention work exceeds every weight in the model"], a: 3,
+      why: "The 2N rule counts weights, and attention's query-key and weight-value multiplications involve no parameters at all, so they are invisible to it. That work grows with the square of context: 1.7% on top at 512 tokens, 26.7% at 8,192, and 107% at 32,768. The rule is excellent in one regime and badly wrong in another, and most sources quote it without saying which." },
+    { type: "mc", q: "Why is the training estimate 6ND rather than 2ND?", opts: ["The backward pass computes gradients with respect to both the layer's input and its weights, costing about twice the forward pass", "It includes the optimizer's update step, which costs 4N", "It accounts for gradient accumulation across microbatches", "Training runs each token through the model three times"], a: 0,
+      why: "Forward is 2N. Backward must produce two gradients per layer, one to continue the chain down to the previous layer and one to update the weights, each a matrix multiplication of comparable size, so it is roughly 4N. Two plus four is six. The optimizer update is a cheap elementwise operation and does not change the estimate." },
+    { type: "mc", q: "A full AdamW mixed-precision training state costs 18 bytes per parameter. Which item is the largest single contributor?", opts: ["The bf16 weights used for the forward pass", "The fp32 master weights alone", "Adam's two moments together, at eight bytes", "The activation memory"], a: 2,
+      why: "Two bytes of bf16 weights, four of fp32 master weights, four of fp32 gradients, and four each for Adam's first and second moments. The two moments together are eight of the eighteen, which is why optimizer state is the first thing ZeRO shards in Chapter 17 and why freezing the base model in Chapter 21 saves so much: the sixteen bytes of gradient and optimizer state then apply to a few million parameters instead of eight billion." },
+    { type: "blank", q: "The estimate that training a model costs six floating-point operations per parameter per token is written as ____.", a: ["6nd", "6 n d", "6*n*d"],
+      why: "Six FLOPs per parameter per token, times parameters, times tokens. Corvid on 15 trillion tokens comes to 7.227e23 FLOPs, or about 21 days on a thousand GPUs at realistic throughput. It is one multiplication and one division from a spec sheet, which is why every scaling-law argument in Chapter 15 rests on it." },
+    { type: "blank", q: "The fp32 copy of the parameters kept during mixed-precision training, so that updates too small to change a bf16 value survive, is called the ____ weights.", a: ["master", "master weights", "fp32 master"],
+      why: "A bf16 number has about three decimal digits of precision, so a small update added to a large weight can round away entirely and be lost. Keeping a full-precision copy for the update, and casting down for the forward pass, is what makes mixed precision safe. Chapter 14 covers the rest of that machinery." },
+    { type: "mc", q: "Corvid at bf16 needs 17.13 GB to serve one full-context request. What follows for the 16 GB budget?", opts: ["It fits, with 1 GB to spare", "It does not fit at bf16, and quantization is a precondition rather than an optimization", "It fits only if the KV cache is disabled", "It fits at a shorter context, which is the usual fix"], a: 1,
+      why: "16.06 GB of weights plus 1.07 GB of cache exceeds the card before any concurrency. Shortening the context helps only slightly, because the weights alone are already 16.06 GB. At 4-bit the same request needs 5.09 GB, which is why Chapter 29 is a keystone rather than a footnote: for this model on this hardware, quantization is what makes it run at all." },
+    { type: "order", q: "Order the five sizing questions from the estimation habit:", items: ["what is N, from the config rather than the name", "will the weights fit, at what precision", "what does the KV cache cost per token and per user", "is training 18 bytes per parameter, or an adapter"],
+      why: "Parameters first because everything else is derived from them, then weights because if they do not fit nothing else matters, then the cache because on a serving deployment it frequently dominates, then the training question because it decides between sharding and an adapter. Two minutes and a config file, before any download." },
+    { type: "mc", q: "You count a model from its config and get 4% more parameters than the published figure. What is the most likely cause?", opts: ["The published figure excludes normalization parameters", "You used the tokenizer's vocabulary rather than the padded config value", "Attention was counted with full-size key and value projections", "The model ties its embeddings and you counted the vocabulary matrix twice"], a: 3,
+      why: "Tying is the classic discrepancy, because the vocabulary matrix is often several percent of a model and it is easy to count both the embedding and the output projection when only one exists. Norms are 0.004% and could not produce a 4% gap. Using the tokenizer's smaller vocabulary would make you count too few, not too many, as would shrinking the key and value projections." },
+    { type: "mc", q: "Two models have identical parameter counts, but one costs far more to serve. What most likely differs?", opts: ["The number of query heads", "The activation function", "The number of KV heads, the head dimension or the context length, which set the cache", "The vocabulary size"], a: 2,
+      why: "Parameter count sets the weight memory and the 2N cost, and says nothing about the KV cache. Chapter 6's formula depends on layers, KV heads, head dimension and precision, none of which is visible in a parameter total. Ranking models by serving cost rather than by size reorders the list, which is the payoff of this chapter's build exercise." }
   ]
 });
