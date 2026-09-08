@@ -4381,3 +4381,275 @@ CHAPTERS.push({
       why: "Caching scales the quadratic term down and requires a byte-identical prefix, which a timestamp in the system prompt silently defeats. Summarisation trades fidelity for tokens, and the detail lost is often what would have prevented a repeated action. Externalisation is the only one that removes text from the context permanently, and it turns memory into an ordinary tool call." }
   ]
 });
+
+/* ======================= CHAPTER 20 ======================= */
+CHAPTERS.push({
+  num: 20, part: 4, title: "Supervised Fine-Tuning: Teaching a Model a Job",
+  blurb: "A pretrained model continues text; an assistant answers questions. Supervised fine-tuning is the step between, and it is mostly a data problem wearing a training loop's costume. You will make the decision first, on the five axes that actually settle it, and find that one requirement rules fine-tuning out entirely. Then you will build the dataset, mask the loss so the model learns the answer rather than the question, pack the batch without letting examples read each other, and measure what the fine-tune broke elsewhere. Because it always breaks something.",
+  sections: [
+    { title: "The Decision, Before Any Training", viz: "llmTuneDecision", vizTitle: "Flip requirements and watch which axis decides",
+      html: "<p>Fine-tuning is the answer to a narrower question than most teams think they are asking. Five axes decide between the options, and the honest procedure is to check them in order, because the first one that returns an answer ends the discussion.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 246' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>five axes &#183; green solves it, gold solves it awkwardly, red cannot</text>" +
+      "<text x='230' y='40' fill='#7d8fb0' font-size='9'>prompt</text>" +
+      "<text x='320' y='40' fill='#7d8fb0' font-size='9'>RAG</text>" +
+      "<text x='400' y='40' fill='#7d8fb0' font-size='9'>SFT</text>" +
+      "<text x='480' y='40' fill='#7d8fb0' font-size='9'>preference</text>" +
+      "<text x='592' y='40' fill='#7d8fb0' font-size='9'>continued pretrain</text>" +
+      "<line x1='20' y1='48' x2='740' y2='48' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='70' fill='#c9d6ea' font-size='9.5'>freshness: changes daily</text>" +
+      "<text x='236' y='70' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='320' y='70' fill='#3ddc97' font-size='10'>yes</text>" +
+      "<text x='404' y='70' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='500' y='70' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='632' y='70' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='20' y='94' fill='#c9d6ea' font-size='9.5'>per-user access control</text>" +
+      "<text x='236' y='94' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='320' y='94' fill='#3ddc97' font-size='10'>yes</text>" +
+      "<text x='404' y='94' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='500' y='94' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='632' y='94' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='20' y='118' fill='#c9d6ea' font-size='9.5'>fixed output shape</text>" +
+      "<text x='232' y='118' fill='#ffd166' font-size='10'>ok</text>" +
+      "<text x='320' y='118' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='404' y='118' fill='#3ddc97' font-size='10'>yes</text>" +
+      "<text x='500' y='118' fill='#ffd166' font-size='10'>ok</text>" +
+      "<text x='632' y='118' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='20' y='142' fill='#c9d6ea' font-size='9.5'>house style and tone</text>" +
+      "<text x='232' y='142' fill='#ffd166' font-size='10'>ok</text>" +
+      "<text x='320' y='142' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='404' y='142' fill='#3ddc97' font-size='10'>yes</text>" +
+      "<text x='500' y='142' fill='#3ddc97' font-size='10'>yes</text>" +
+      "<text x='632' y='142' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='20' y='166' fill='#c9d6ea' font-size='9.5'>which of two answers is better</text>" +
+      "<text x='236' y='166' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='320' y='166' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='408' y='166' fill='#ffd166' font-size='10'>ok</text>" +
+      "<text x='500' y='166' fill='#3ddc97' font-size='10'>yes</text>" +
+      "<text x='632' y='166' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='20' y='190' fill='#c9d6ea' font-size='9.5'>an unseen domain or language</text>" +
+      "<text x='236' y='190' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='324' y='190' fill='#ffd166' font-size='10'>ok</text>" +
+      "<text x='404' y='190' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='500' y='190' fill='#ff5d73' font-size='10'>no</text>" +
+      "<text x='636' y='190' fill='#3ddc97' font-size='10'>yes</text>" +
+      "<line x1='20' y1='202' x2='740' y2='202' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='222' fill='#ffd166' font-size='10.5'>Read the second row across. Nothing but retrieval can express a permission, because weights have no reader.</text>" +
+      "<text x='20' y='238' fill='#7d8fb0' font-size='9.5'>The rows are checked in order and the first one that answers ends the discussion.</text>" +
+      "</svg><div class='fig-cap'>Rows one and two eliminate fine-tuning outright. Rows three and four are the only ones where it is the right instrument.</div></div>" +
+      "<p><strong>Freshness.</strong> If the answer changes daily, weights are the wrong place for it. A fine-tune is a build artefact; retraining nightly to absorb yesterday's prices is an expensive way to reinvent a database with worse consistency guarantees.</p>" +
+      "<p><strong>Access control.</strong> This is the one that ends arguments. If Ana may see a document and Bo may not, that distinction cannot live in the weights, because a weight has no reader. Fine-tune on the union of everyone's documents and every user has a model that has read everything; fine-tune per user and you are maintaining one model per employee. Retrieval expresses permissions naturally, because the filter runs at query time with the user's identity in hand. There is no clever way around this and teams lose months discovering it.</p>" +
+      "<p><strong>Output shape, and style.</strong> Here fine-tuning earns its keep. A fixed schema, a house voice, a required structure, a domain's conventions of phrasing &#8212; these are properties of <em>how</em> the model answers rather than <em>what</em> it knows, and demonstrations teach them far more reliably than instructions do. Prompt <strong>P2</strong>, rewriting a refund notice in plain English, is exactly this shape: no new facts, a specific register, and a hundred examples of the register worth more than a page of adjectives describing it.</p>" +
+      "<p><strong>Preference.</strong> When the requirement is that one answer is better than another and you cannot write down what the better one looks like, you need comparisons rather than demonstrations, which is Chapter 22.</p>" +
+      "<p><strong>Cost.</strong> Last, deliberately. Prompting costs nothing to try and something on every request forever; a fine-tune costs a training run once and then makes every request shorter, because the instructions have moved into the weights. That crossover is computable with Chapter 9's arithmetic and it arrives sooner than people expect.</p>"+
+      "<p>Suppose the prompted version carries a 900-token system prompt full of few-shot examples and the fine-tuned version needs 120 tokens of instruction. Each request saves 780 input tokens. Chapter 9 gave training at roughly 6ND and a forward pass at 2ND, so one token of training costs about three forward passes:</p>"+
+      "<pre><code>2,000 examples &#215; 310 tokens &#215; 3 epochs = 1,860,000 training tokens\n1,860,000 &#215; 3                          = 5,580,000 forward-pass equivalents\n5,580,000 / 780 saved per request      =     7,154 requests to break even</code></pre>"+
+      "<p>Seven thousand requests is days for many services and an afternoon for some. The number is small enough that cost alone will often justify a fine-tune &#8212; which is exactly why it is checked last. A fine-tune that pays for itself in a week and rules out per-user permissions forever is not a saving, and the rows above are the ones that tell you so.</p>" +
+      "<div class='callout'><strong>Try it above.</strong> Turn on &#8220;per-user permissions&#8221; alone, with every other requirement off, and watch fine-tuning become unavailable regardless of what else you select. Then turn on &#8220;house style&#8221; alone and watch it become the recommendation. One toggle, opposite verdicts, and the axis that decided it named in both cases. For the retrieval half of this decision in full, <em>RAG In Depth</em> is the companion course; this chapter takes the other branch.</div>" },
+
+    { title: "What Fine-Tuning Actually Changes",
+      html: "<p>The most useful result in this area is also the most counter-intuitive, and it comes from two papers that appear to disagree and do not.</p>" +
+      "<p>Zhou and colleagues published <strong>LIMA</strong> in 2023: a 65-billion-parameter model fine-tuned on <strong>1,000 curated examples</strong> &#8212; 750 harvested from community forums, 250 written by hand &#8212; with no reinforcement learning and no preference modelling at all. In a human preference study it beat a model trained with RLHF. Their explanation is the <strong>Superficial Alignment Hypothesis</strong>: a model's knowledge and capabilities are learned almost entirely during pretraining, and alignment teaches it which subdistribution of formats to use when talking to a user.</p>" +
+      "<p>Gekhman and colleagues supplied the other half at EMNLP 2024. They split a fine-tuning set by whether each example's facts were already known to the model, and found two things. Examples introducing genuinely new knowledge are learned <em>significantly more slowly</em> than examples consistent with what the model already knows. And as those examples are eventually learned, they <strong>linearly increase the model's tendency to hallucinate</strong>.</p>" +
+      "<p>Read together, the two results give one rule with a mechanism behind it. Fine-tuning is good at teaching behaviour and bad at teaching facts, and the reason it is bad is not that the facts fail to stick. It is that forcing a model to assert things it has no internal support for teaches a more general and much worse lesson: that confident assertion is the expected response shape. The model does not learn your fifty new product names. It learns to produce product-name-shaped strings with confidence, and then does so for products that do not exist.</p>" +
+      "<div class='callout'><strong>The practical test.</strong> Before adding an example to a fine-tuning set, ask the base model the question a few times. If it can answer correctly some of the time, the example is teaching it to answer <em>reliably</em>, which fine-tuning does well. If it never can, the example is teaching new knowledge, and you are buying a small gain on that fact with a diffuse increase in confident invention everywhere else. That kind of fact belongs in retrieval.</div>" +
+      "<p>Two consequences follow for the rest of this chapter. Dataset size stops being the headline number, because a thousand examples of a behaviour can be enough and fifty thousand assertions of new facts are actively harmful. And the evaluation you need is not only &#8220;did the task metric go up&#8221;, since the damage this mechanism does shows up somewhere you were not looking. Section 7 measures that.</p>" },
+
+    { title: "Where Instruction Data Comes From",
+      html: "<p>The field's dataset lineage is a short argument that took two years and reversed itself.</p>" +
+      "<ul>" +
+      "<li><strong>Alpaca</strong> (Stanford, 2023) generated 52,000 instructions by prompting a stronger model with a handful of seed tasks and asking for more, in the self-instruct pattern. It established that synthetic instruction data works at all, and that you can bootstrap an assistant for a few hundred dollars.</li>" +
+      "<li><strong>LIMA</strong> (2023) went the other way: 1,000 examples, curated obsessively, beating models trained on fifty times more.</li>" +
+      "<li><strong>UltraChat</strong> (2023) scaled synthetic dialogue by having two models converse on seeded topics, producing large multi-turn sets rather than single instruction-response pairs.</li>" +
+      "<li><strong>Magpie</strong> (Xu and colleagues, 2024) found the cheapest trick in the sequence. An aligned model is autoregressive, so feeding it only the left-hand side of its own chat template &#8212; the tokens up to where a user message would begin, and nothing else &#8212; makes it generate a plausible user query. Generate the query, then generate the response, and you have extracted instruction data from a model with no seed set and no prompt engineering at all.</li>" +
+      "</ul>" +
+      "<p>What survived the argument is that quality dominates quantity over the range most teams operate in, and the reason is section 2's mechanism. Every example teaches a response shape. A mediocre example does not fail to teach; it teaches something mediocre, and averaging a thousand good demonstrations with nine thousand indifferent ones does not give you a good model with more coverage.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the shape everyone rediscovers: quality sets the ceiling, quantity moves you toward it</text>" +
+      "<line x1='70' y1='170' x2='700' y2='170' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='70' y1='34' x2='70' y2='170' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='300' y='190' fill='#7d8fb0' font-size='9'>examples, log scale &#183; 100 &#183; 1,000 &#183; 10,000 &#183; 100,000</text>" +
+      "<text x='16' y='100' fill='#7d8fb0' font-size='9'>quality</text>" +
+      "<path d='M70 158 C 150 120, 230 78, 330 62 S 520 50, 700 46' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='420' y='40' fill='#3ddc97' font-size='9.5'>curated demonstrations: flat by ~1,000</text>" +
+      "<path d='M70 162 C 160 148, 250 128, 350 118 S 530 108, 700 104' fill='none' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='420' y='98' fill='#ffd166' font-size='9.5'>good synthetic data: lower ceiling, same shape</text>" +
+      "<path d='M70 164 C 170 158, 260 150, 360 148 S 540 152, 700 158' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='420' y='142' fill='#ff5d73' font-size='9.5'>mixed-quality scrape: turns down</text>" +
+      "<circle cx='330' cy='62' r='4' fill='#3ddc97'/>" +
+      "<text x='250' y='60' fill='#c9d6ea' font-size='9'>LIMA: 1,000</text>" +
+      "<text x='20' y='206' fill='#c9d6ea' font-size='10.5'>The red curve is the one to internalise: past a point, more mediocre data makes the model worse, not just no better.</text>" +
+      "</svg><div class='fig-cap'>Three datasets, three ceilings. Adding examples moves you along a curve; it does not move you to a higher one.</div></div>" +
+      "<p>A working recipe, in the order that wastes the least effort. Start with 200 to 500 examples you have read individually, covering the shapes of request you actually receive rather than the ones you can imagine. Train, measure, and look at fifty outputs by hand. Then add examples aimed at the failures you saw, which is the only expansion that reliably helps. Synthesis is for volume once the shape is right, not for finding the shape.</p>" +
+      "<div class='callout'><strong>The edge that catches everyone.</strong> Synthetic data inherits its generator's habits, including the ones you did not want: a preferred opening phrase, a fondness for bulleted lists, a particular hedging style. Train on 50,000 responses from one model and you have not built your house voice, you have cloned that model's voice and put your name on it. Read a random sample aloud before you train on it; the tic will be audible in the first five.</div>" },
+
+    { title: "Building the Set: Duplicates, Contamination, and the Split",
+      html: "<p>Three passes stand between a pile of examples and a dataset. Chapter 12 ran all three over a pretraining corpus; the fine-tuning versions differ in ways that matter.</p>" +
+      "<p><strong>Deduplication.</strong> A duplicated example is an example trained on twice, which is a silent weight on part of your distribution. At pretraining scale duplicates come from the web mirroring itself; at fine-tuning scale they come from your own generation loop, which will happily produce the same instruction forty ways. Near-duplicate detection on the instruction alone is usually enough, and the number that matters is not how many you removed but how much of the remaining set is one template with the nouns swapped.</p>" +
+      "<p><strong>Decontamination against your own evaluation.</strong> Chapter 12 showed that the n-gram threshold <em>is</em> the method &#8212; the same contaminated document was flagged at 8-grams and clean at 20 &#8212; and that the people choosing the threshold are the people reporting the score. Fine-tuning makes this worse in a specific way: you wrote both sets, often in the same session, often from the same source documents. The contamination is not a scraped leak, it is you using the same customer ticket as a training example and a test case. Split by <em>source document</em> rather than by example, before you generate anything, and hold the split fixed for the life of the project.</p>" +
+      "<p><strong>The held-out split you must keep.</strong> Fine-tuning sets are small enough that the temptation to train on everything is strong and the cost of yielding is that you can no longer tell overfitting from learning. Hold out 10% and never train on it, not even for the final run, not even after the hyperparameters are settled.</p>" +
+      "<div class='callout'><strong>Two evaluations, not one.</strong> The held-out split answers &#8220;did it learn the mapping&#8221;. It cannot answer &#8220;did this make the product better&#8221;, because it is drawn from the same distribution as the training data and shares its blind spots. You need a second set, written by hand, containing the requests you are afraid of: the ambiguous ones, the out-of-scope ones, the ones where the right answer is to refuse. Fifty of those, scored by a human, catch things a thousand in-distribution examples never will.</div>" +
+      "<p>One last pass that is not about data hygiene: read the responses for things you do not want taught. A support corpus contains apologies for outages, promises about refunds, and the occasional employee's frustration. Every one of those is a demonstration. Fine-tuning does not distinguish between the style you meant to teach and the commitments that happened to be in the same paragraph.</p>" },
+
+    { title: "Loss Masking: Learning the Answer, Not the Question", viz: "llmLossMask", vizTitle: "Turn masking off and look at which tokens are being learned",
+      html: "<p>Chapter 13 established the training objective: at every position, predict the next token, and the loss is the negative log-probability of the token that actually followed. Applied naively to a fine-tuning example, that objective trains the model on every token in the example &#8212; including the user's question.</p>" +
+      "<p>Which teaches the model to write questions. It is a language model; it learns the distribution you show it, and if you show it question-then-answer with equal weight on both halves, you have spent part of your gradient teaching it to generate plausible user requests. The fix is <strong>loss masking</strong>: compute the loss only on the tokens the model is supposed to produce.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 232' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one P2 example, chat-templated &#183; dim = masked out &#183; green = contributes gradient</text>" +
+      "<rect x='20' y='28' width='720' height='22' rx='4' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='32' y='43' fill='#7d8fb0' font-size='9'>&lt;|start|&gt;system  You are a support assistant for a rail operator.  &lt;|end|&gt;</text>" +
+      "<rect x='20' y='56' width='720' height='40' rx='4' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='32' y='72' fill='#7d8fb0' font-size='9'>&lt;|start|&gt;user  Rewrite this refund notice in plain English:  &#8220;Pursuant to</text>" +
+      "<text x='32' y='88' fill='#7d8fb0' font-size='9'>condition 14.2, reimbursement shall be effected&#8230;&#8221;  &lt;|end|&gt;</text>" +
+      "<rect x='20' y='102' width='720' height='22' rx='4' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='32' y='117' fill='#7d8fb0' font-size='9'>&lt;|start|&gt;assistant</text>" +
+      "<text x='560' y='117' fill='#ffd166' font-size='9'>the mask ends here</text>" +
+      "<rect x='20' y='130' width='720' height='40' rx='4' fill='#0f2a1f' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='32' y='146' fill='#3ddc97' font-size='9'>We will refund your ticket within 14 days. You do not need to do</text>" +
+      "<text x='32' y='162' fill='#3ddc97' font-size='9'>anything.  &lt;|end|&gt;</text>" +
+      "<line x1='20' y1='182' x2='740' y2='182' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='202' fill='#c9d6ea' font-size='10'>310 tokens forward, 96 tokens of gradient &#8212; you pay for all of them and learn from 31%</text>" +
+      "<text x='20' y='222' fill='#ff5d73' font-size='10'>and with masking off, the other 214 teach the model to write refund notices and ask for rewrites</text>" +
+      "</svg><div class='fig-cap'>The mask ends at the assistant header, not after it. The closing turn token is inside the mask, because emitting it is the behaviour that stops generation.</div></div>" +
+      "<p>Two details decide whether an implementation is correct.</p>" +
+      "<p><strong>Where the mask ends.</strong> It ends immediately after the tokens that open the assistant turn, so that the first token the model is graded on is the first token of the answer. Off by one token in either direction and you are either training on part of the template or failing to train on the first word of the response.</p>" +
+      "<p><strong>Whether the turn-ending token is included.</strong> It must be. Chapter 18 showed that a model which never emits its stop token rambles to the token limit, and Chapter 3 showed that the stop token comes from the chat template. If your mask excludes it, you have trained a model whose responses have no ending, and the symptom appears at serving time as runaway generations that look like a decoding bug.</p>" +
+      "<p>In practice you set a flag: TRL exposes <code>completion_only_loss</code> for prompt-completion datasets and <code>assistant_only_loss</code> for conversational ones, the latter requiring the chat template to mark the generated span. Multi-turn conversations mask every user turn and train on every assistant turn, which makes them the cheapest source of gradient in this chapter:</p>"+
+      "<pre><code>                        tokens   graded   fraction\nsingle turn                310       96      31.0%\nfive-turn conversation     840      350      41.7%\n  (40 system + 5 &#215; (90 user + 70 assistant))</code></pre>"+
+      "<p>Same masking rule, 1.35 times the gradient per token of compute, because the one system prompt is amortised over five graded spans instead of one. If your data can be collected as conversations rather than as isolated pairs, collect it as conversations.</p>" +
+      "<div class='callout'><strong>Look at it above.</strong> Turn masking off and read which tokens light up. Then note the numbers: with masking on, 96 of 310 tokens produce gradient. It is tempting to see 69% waste. It is not waste; it is the context those 96 predictions are conditioned on, and removing it would remove the task.</div>" },
+
+    { title: "Packing, Epochs, and the Few Knobs That Matter",
+      html: "<p>Examples are short and sequences are long, and the gap between them is money.</p>" +
+      "<p>The Almanac's instruction pairs average 310 tokens against a 2,048-token training sequence. Pad every example to the full length and 15% of the compute does useful work. Sort by length and pad to the longest in each batch and you do better &#8212; around a third &#8212; at the cost of batches that are no longer randomly composed. <strong>Packing</strong> takes the third option: concatenate examples end to end until the sequence is full, so utilisation approaches 100% and one sequence carries six or seven examples.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 206' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one 2,048-token sequence, three ways &#183; blue = real tokens, dim = padding</text>" +
+      "<text x='20' y='44' fill='#c9d6ea' font-size='9.5'>pad to max</text>" +
+      "<rect x='150' y='32' width='540' height='18' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<rect x='150' y='32' width='82' height='18' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<text x='700' y='45' fill='#ff5d73' font-size='9'>15%</text>" +
+      "<text x='20' y='80' fill='#c9d6ea' font-size='9.5'>pad to batch max</text>" +
+      "<rect x='150' y='68' width='540' height='18' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<rect x='150' y='68' width='186' height='18' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<text x='700' y='81' fill='#ffd166' font-size='9'>34%</text>" +
+      "<text x='20' y='116' fill='#3ddc97' font-size='9.5'>packed</text>" +
+      "<rect x='150' y='104' width='82' height='18' fill='#1b2a4d' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='234' y='104' width='96' height='18' fill='#1b2a4d' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='332' y='104' width='70' height='18' fill='#1b2a4d' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='404' y='104' width='104' height='18' fill='#1b2a4d' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='510' y='104' width='88' height='18' fill='#1b2a4d' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='600' y='104' width='90' height='18' fill='#1b2a4d' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='700' y='117' fill='#3ddc97' font-size='9'>~99%</text>" +
+      "<line x1='20' y1='136' x2='740' y2='136' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='158' fill='#ff5d73' font-size='10'>and the bug packing introduces: example 4 can attend to example 3</text>" +
+      "<text x='20' y='178' fill='#c9d6ea' font-size='10'>the fix is a block-diagonal mask and per-example position ids, so each segment sees only itself</text>" +
+      "<text x='20' y='198' fill='#7d8fb0' font-size='9.5'>without it you have trained the model that unrelated text is context, which shows up as drifting answers</text>" +
+      "</svg><div class='fig-cap'>Packing is a six-fold throughput win and a correctness trap. The mask is not optional; it is what makes the packed sequence mean what you intended.</div></div>" +
+      "<p>The trap is worth stating precisely because implementations get it wrong quietly. Concatenating examples into one sequence means that, under ordinary causal attention, the tokens of example four can attend to example three. The model is being trained to treat an unrelated preceding conversation as context. The fix is to keep the examples separated by attention: a block-diagonal mask so each segment attends only within itself, and position ids that restart at each boundary. Frameworks vary in whether this happens automatically, and TRL's own documentation warns that packing with some attention implementations causes cross-contamination between samples &#8212; check, rather than assume.</p>" +
+      "<h3>The knobs</h3>" +
+      "<p>Fewer than pretraining, because you are moving a converged model rather than finding a basin.</p>" +
+      "<ul>" +
+      "<li><strong>Learning rate</strong> is the one that matters. Full fine-tuning wants something around 1e-5 to 2e-5, one to two orders of magnitude below pretraining, because you are adjusting a solution rather than searching for one. Too high does not diverge visibly; it erases, which is section 7.</li>" +
+      "<li><strong>Epochs: one to three.</strong> On a small curated set, one epoch often suffices and three is where memorisation starts. Watch held-out loss rather than counting epochs: the run to keep is the one just before it turns up.</li>" +
+      "<li><strong>Schedule and warmup</strong>: cosine decay with a short warmup, for Chapter 14's reason &#8212; the first steps of any run have unreliable gradient statistics, and here they are being applied to weights worth protecting.</li>" +
+      "<li><strong>Effective batch size</strong> through gradient accumulation, from Chapter 17. A batch of 4 with 8 accumulation steps is a batch of 32 and costs no extra memory, which matters because the 18 bytes per parameter from Chapter 9 have already used the card.</li>" +
+      "</ul>" },
+
+    { title: "Catastrophic Forgetting, Measured", viz: "llmForgetting", vizTitle: "Find the step where the task keeps rising and general ability starts falling",
+      html: "<p>Training on a narrow distribution moves weights that were doing other work. The phenomenon has a name from long before language models &#8212; McCloskey and Cohen described <strong>catastrophic forgetting</strong> in connectionist networks in 1989 &#8212; and the modern version is easy to miss, because the metric you are watching goes up the whole time.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the shape to look for: one curve rising, three falling, and a crossing you have to choose</text>" +
+      "<line x1='70' y1='176' x2='700' y2='176' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='70' y1='30' x2='70' y2='176' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='330' y='196' fill='#7d8fb0' font-size='9'>fine-tuning steps</text>" +
+      "<path d='M70 150 C 160 96, 250 66, 360 54 S 560 44, 700 40' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='560' y='34' fill='#3ddc97' font-size='9.5'>your task metric</text>" +
+      "<path d='M70 62 C 200 64, 320 70, 430 84 S 600 128, 700 156' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='560' y='172' fill='#ff5d73' font-size='9.5'>general reasoning</text>" +
+      "<path d='M70 74 C 200 76, 330 82, 440 94 S 600 126, 700 146' fill='none' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='420' y='112' fill='#ffd166' font-size='9'>instruction following</text>" +
+      "<path d='M70 88 C 220 90, 350 94, 460 102 S 610 118, 700 130' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='150' y='108' fill='#4f7cff' font-size='9'>code</text>" +
+      "<line x1='400' y1='30' x2='400' y2='176' stroke='#ffd166' stroke-width='1.5' stroke-dasharray='4 4'/>" +
+      "<text x='286' y='214' fill='#ffd166' font-size='10'>the knee: the task is still improving and the other three have started to go</text>" +
+      "<text x='406' y='28' fill='#ffd166' font-size='9'>stop here</text>" +
+      "<text x='20' y='214' fill='#7d8fb0' font-size='9'>step 0</text>" +
+      "</svg><div class='fig-cap'>Nothing in the task metric tells you where the dashed line is. You only see it if you are running the other three evaluations on the same schedule.</div></div>" +
+      "<p>The measurement protocol is the whole content of this section, because the phenomenon is not subtle once you look and invisible until you do.</p>" +
+      "<ol>" +
+      "<li><strong>Fix a baseline before training.</strong> Run your task metric and three or four general evaluations on the base model and write the numbers down. Without this you cannot attribute anything, and after the fine-tune it is too late to get them.</li>" +
+      "<li><strong>Choose general evaluations that are genuinely unrelated.</strong> A broad reasoning benchmark, an instruction-following check, and a capability the fine-tune has nothing to do with &#8212; code generation if you fine-tuned on support tickets. The point is coverage of things you did not touch, since those are what will move without warning.</li>" +
+      "<li><strong>Evaluate at checkpoints, not at the end.</strong> Every few hundred steps, on all of them, and keep the checkpoints. A run evaluated only at the end gives you one point on all four curves and no way to find the knee.</li>" +
+      "<li><strong>Choose the trade explicitly.</strong> There is a step count at which the task is still improving and general ability is measurably falling. It is a decision, not a bug, and it should be made by someone who knows both numbers.</li>" +
+      "</ol>" +
+      "<p>What actually reduces the damage, in rough order of effect: <strong>lower the learning rate</strong>, which is the largest single lever; <strong>train fewer steps</strong>, chosen from the curves rather than from a round number; <strong>mix in general instruction data</strong> &#8212; <strong>replay</strong>, a few per cent of every batch drawn from a broad set, which works because forgetting is not erasure by decay but displacement by gradient: a batch containing only support tickets has no term pulling toward general behaviour, and a batch that is 5% general does; and <strong>constrain what can move at all</strong>, which is the parameter-efficient route and the subject of Chapter 21. A LoRA adapter touching a small fraction of the weights forgets less because most of the model is not eligible to change &#8212; and that is a mechanism, not a hope.</p>" +
+      "<div class='callout'><strong>Find the knee above.</strong> Raise the learning rate by 10x and watch the general curves fall much earlier while the task curve barely arrives sooner. Then turn LoRA on at the original rate and watch the general curves flatten out. Note which lever moved the crossing further right; it is the one you will reach for on real runs.</div>" },
+
+    { title: "When the Answer Is More Pretraining",
+      html: "<p>One case does not fit anything above. Sometimes the model's problem is not that it answers in the wrong shape but that it does not read your domain well in the first place: a language it saw little of, an internal code dialect, a scientific notation, a corpus of contracts whose vocabulary is a dialect of English at best.</p>" +
+      "<p><strong>Continued pretraining</strong> is the answer there &#8212; the same next-token objective from Chapter 13, on raw domain text rather than instruction pairs, with no masking because there is no prompt to mask. You are extending pretraining rather than adapting behaviour, and instruction tuning comes afterwards, on top of the adapted base.</p>" +
+      "<p>The diagnostic is Chapter 13's perplexity. Measure it on a held-out sample of your domain text and on general text of similar difficulty. If domain perplexity is close to general, the model reads your domain fine and your problem is behaviour, so use the rest of this chapter. If domain perplexity is several times higher, no amount of instruction tuning will fix that, because instruction tuning does not teach reading.</p>" +
+      "<p>Three things make it work in practice, and all three come from earlier chapters.</p>" +
+      "<ul>" +
+      "<li><strong>Mix in general data.</strong> Training on domain text alone is the fastest catastrophic forgetting in this chapter. Common practice is to keep a substantial fraction of the mixture general &#8212; replaying the original distribution so the gradient has a reason to preserve it.</li>" +
+      "<li><strong>Watch the tokenizer.</strong> Chapter 2's fertility measurement is the check: if your domain text costs far more tokens per word than general text, the tokenizer is fighting you, every sequence holds less content, and you are paying for the mismatch on every forward pass forever.</li>" +
+      "<li><strong>Expect real scale.</strong> Fine-tuning is thousands of examples; continued pretraining is billions of tokens, at a learning rate above fine-tuning's and below pretraining's. If you were hoping for an afternoon, this is not the branch you wanted &#8212; which is itself the reason to run the perplexity check first rather than after.</li>" +
+      "</ul>" +
+      "<div class='callout'><strong>The order that wastes the least.</strong> Continued pretraining first, then supervised fine-tuning, then preference alignment in Chapter 22. Each stage assumes the one before it. Running them out of order &#8212; continued pretraining on top of an instruction-tuned model, most commonly &#8212; strips the instruction behaviour you paid for, and you will do the fine-tune again.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> For each of these requirements, name the approach and the deciding axis: answers must cite a source document; the assistant must always reply in a fixed JSON shape; support agents may see only their own region's tickets; the model must write in your company's voice; the model must handle a programming language it has clearly never seen. Then state which two of the five rule out fine-tuning outright and why the reason is structural rather than a matter of effort.</li>" +
+      "<li><strong>Trace.</strong> A training example is 214 prompt tokens and 96 completion tokens. Compute the fraction of tokens producing gradient with masking on and off. Then compute both for a five-turn conversation with a 40-token system prompt, a 90-token user turn and a 70-token assistant turn each time. State which format gives more gradient per token of compute and by how much, and why multi-turn data is therefore the cheapest thing in your dataset.</li>" +
+      "<li><strong>Trace.</strong> Examples average 310 tokens and the sequence length is 2,048. Compute utilisation when padding every example to the sequence length, when padding to a batch maximum of 900, and when packing. Then compute how many optimizer steps each strategy needs for one epoch over 2,000 examples at a batch of 8 sequences, and state the speed-up packing buys.</li>" +
+      "<li><strong>Investigate.</strong> Take any instruction dataset and sample 100 examples at random. Read them. Count how many you would be happy to have the model imitate exactly, how many are one template with the nouns swapped, and how many contain a commitment or a factual claim you would not want asserted. Report the three percentages. Most public datasets return numbers that surprise people, and the exercise is worth more than any statistic you could compute automatically.</li>" +
+      "<li><strong>Investigate.</strong> Fine-tune any small model on a few hundred examples, evaluating your task metric and two unrelated benchmarks every 100 steps from step 0. Plot all three. Identify the step at which the unrelated benchmarks begin falling and the step at which the task metric flattens. Report the gap. Then repeat at one tenth the learning rate and report how far the crossing moved.</li>" +
+      "<li><strong>Build.</strong> Write the data pipeline end to end: load raw pairs, near-duplicate filter on the instruction, split by source document, apply the chat template, build the loss mask, pack to a fixed sequence length with per-example position ids and a block-diagonal mask, and emit a batch. Then write one assertion that would have caught each of three bugs &#8212; a mask that starts one token late, a packed batch whose position ids never reset, and a held-out example that also appears in training. The assertions are the deliverable; the pipeline is how you test them.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "supervised fine-tuning", d: "Continuing training on demonstration pairs so the model produces a particular kind of response, as distinct from teaching it new facts." },
+    { t: "Superficial Alignment Hypothesis", d: "LIMA's claim that knowledge and capability come almost entirely from pretraining, and alignment only selects which format of response to use." },
+    { t: "self-instruct", d: "Bootstrapping an instruction dataset by prompting a stronger model with a few seed tasks and asking it to generate more, as Alpaca did for 52,000 examples." },
+    { t: "loss masking", d: "Computing the training loss only on the tokens the model should generate, so the prompt is context rather than a target." },
+    { t: "chat template", d: "The role markers and turn delimiters wrapping a conversation, which decide where the loss mask ends and which token stops generation." },
+    { t: "packing", d: "Concatenating several short examples into one full-length training sequence to raise compute utilisation from roughly 15% to nearly 100%." },
+    { t: "cross-contamination", d: "The bug where a packed example attends to the unrelated example before it, teaching the model that arbitrary preceding text is context." },
+    { t: "block-diagonal mask", d: "The attention mask that confines each packed example to itself, which together with per-example position ids is what makes packing correct." },
+    { t: "epoch", d: "One pass over the training set; for a small curated fine-tuning set, one to three, chosen by watching held-out loss turn up." },
+    { t: "catastrophic forgetting", d: "The loss of previously learned capability when training on a narrow new distribution, named by McCloskey and Cohen in 1989." },
+    { t: "the knee", d: "The step count at which the task metric is still improving while unrelated capabilities have begun to fall; a trade to be chosen rather than a bug to be fixed." },
+    { t: "replay", d: "Mixing general data into a fine-tuning or continued-pretraining batch so the gradient has a reason to preserve behaviour you are not training." },
+    { t: "continued pretraining", d: "More next-token training on raw domain text rather than instruction pairs, used when the model reads a domain badly rather than answers in the wrong shape." },
+    { t: "decontamination", d: "Removing training examples that overlap your evaluation set; at fine-tuning scale the leak is usually your own source documents rather than the web." },
+    { t: "held-out split", d: "The fraction never trained on, which answers whether the mapping was learned and cannot answer whether the product improved." },
+    { t: "instruction dataset", d: "A collection of prompt-and-response demonstrations, whose quality sets the ceiling that quantity can only move you toward." },
+    { t: "gradient accumulation", d: "Summing gradients over several micro-batches before an optimizer step, raising effective batch size without raising memory." },
+    { t: "fertility", d: "Tokens produced per word of text; a domain whose fertility is far above general text is a domain the tokenizer is fighting." }
+  ],
+  quiz: [
+    { type: "mc", q: "A team wants a model that answers from internal documents, where each employee may see a different subset. Why can fine-tuning not deliver this?", opts: ["Fine-tuning would be too expensive to repeat as documents change", "A permission is a property of a reader at query time, and weights have no reader: a model trained on the union has read everything for everyone", "The documents would need to be reformatted as instruction pairs first", "Fine-tuning would cause too much catastrophic forgetting"], a: 1,
+      why: "Freshness and cost are real objections but they are matters of degree. Access control is structural: there is no representation of &#8220;visible to Ana but not Bo&#8221; inside a weight matrix. Retrieval expresses it naturally because the filter runs at query time with the identity in hand. Fine-tuning per user replaces the problem with one model per employee." },
+    { type: "mc", q: "LIMA reached strong results with 1,000 examples, and Gekhman found that fine-tuning on new facts linearly increases hallucination. What single rule do they jointly support?", opts: ["Small datasets are always better than large ones", "Fine-tuning should be replaced by preference alignment", "Fine-tuning teaches behaviour well and facts badly, and forcing unsupported assertions teaches confident invention as a response shape", "Human-written data outperforms synthetic data"], a: 2,
+      why: "LIMA's Superficial Alignment Hypothesis says capability comes from pretraining and alignment selects a response format. Gekhman shows the cost of the other use: examples carrying unknown facts are learned slowly, and as they are learned they raise hallucination. The damage is not the fifty facts, it is the general lesson that confident assertion is expected." },
+    { type: "mc", q: "You train on a fine-tuning example without loss masking. What does the model learn that you did not intend?", opts: ["To generate plausible user questions, since the prompt tokens are targets and it is a language model learning the distribution you showed it", "To ignore the system prompt at inference time", "To produce longer responses than the examples contain", "Nothing; masking is purely a compute optimisation"], a: 0,
+      why: "The objective is next-token prediction at every position, so an unmasked prompt is a training target like any other. Part of the gradient goes into modelling user requests. Masking is not an optimisation: it changes what is learned. The compute is spent either way, since the prompt tokens still go through the forward pass as the context those predictions are conditioned on." },
+    { type: "mc", q: "A fine-tuned model's responses never stop; at serving time it rambles to the token limit. Which mistake in the training pipeline produces exactly this?", opts: ["The learning rate was too high", "Packing was enabled without a block-diagonal mask", "The held-out split was contaminated", "The loss mask excluded the turn-ending token, so the model was never trained to emit its own stop token"], a: 3,
+      why: "Chapter 3 established that the stop token comes from the chat template and Chapter 18 that a model which never emits it generates until the limit fires. If the mask covers the response but stops short of the closing turn token, emitting it is the one behaviour the run never rewarded. The symptom looks like a decoding bug and is a data-formatting bug." },
+    { type: "mc", q: "Examples average 310 tokens against a 2,048-token sequence. Why is packing worth the trouble it causes?", opts: ["It reduces the memory needed for optimizer states", "It removes the need for gradient accumulation", "It lets you train for fewer epochs", "It raises compute utilisation from about 15% to nearly 100%, because six or seven examples share one sequence instead of one example plus padding"], a: 3,
+      why: "Padding to the full sequence length means 310 of 2,048 positions carry content. Padding to a batch maximum of 900 gets you to about a third. Packing fills the sequence, which is a six-fold throughput difference on the same hardware. It does not change memory per parameter, epochs, or the need for accumulation." },
+    { type: "mc", q: "What goes wrong when packed examples share a sequence under ordinary causal attention?", opts: ["The loss is computed twice on the boundary tokens", "Later examples attend to earlier unrelated ones, training the model to treat arbitrary preceding text as context", "The sequence exceeds the context window", "Position ids overflow"], a: 1,
+      why: "Causal attention lets every token see everything before it, and after concatenation that includes the previous example. The model is trained on a relationship you did not intend, and the symptom at serving time is answers that drift toward whatever preceded them. A block-diagonal mask plus per-example position ids confines each segment to itself; frameworks differ in whether this is automatic." },
+    { type: "blank", q: "Losing previously learned capability while training on a narrow new distribution is called catastrophic ____.", a: ["forgetting", "interference"],
+      why: "McCloskey and Cohen named it in connectionist networks in 1989. The modern version is easy to miss because the metric you are watching improves the whole time: the task curve rises while unrelated capabilities fall, and you only see the second half if you are evaluating on the same schedule as the first." },
+    { type: "mc", q: "Which measurement discipline makes forgetting visible, and why do teams usually miss it?", opts: ["Baseline the model before training, evaluate several unrelated capabilities at checkpoints throughout, and compare; teams miss it because they evaluate only the task metric, only at the end", "Compare training loss with held-out loss at every step", "Run the general benchmarks once after training and compare against published scores", "Increase the evaluation set size until the variance is acceptable"], a: 0,
+      why: "One evaluation at the end gives a single point on every curve and no way to find the knee. Published scores are the wrong comparison because they were measured on a different setup. The knee is where the task is still improving and general ability is already falling, and it is a trade that should be chosen by someone who can see both numbers." },
+    { type: "mc", q: "Your domain text has perplexity several times higher than general text under the base model. What does that tell you?", opts: ["The tokenizer needs replacing before anything else", "More instruction examples will fix it once you have enough of them", "The model reads the domain badly, so the problem is not behaviour and continued pretraining on raw domain text is the branch to take", "The evaluation set is contaminated"], a: 2,
+      why: "Instruction tuning teaches response shape; it does not teach reading. High domain perplexity means the model's next-token distribution over your text is poor, and no number of demonstrations repairs that. Continued pretraining is the same objective from Chapter 13 on raw text with no masking, at billions of tokens rather than thousands of examples, and instruction tuning comes afterwards." },
+    { type: "order", q: "Order these stages as they must be run, and note that reversing any adjacent pair destroys work:", items: ["Continued pretraining on raw domain text, if domain perplexity demands it", "Supervised fine-tuning on demonstration pairs", "Preference alignment on comparisons", "Evaluation of the task metric and unrelated capabilities together"], why: "Each stage assumes the one before it. The common and expensive mistake is continued pretraining on top of an already instruction-tuned model, which strips the instruction behaviour and forces the fine-tune to be redone. Evaluation is last in the list because it is what gates release, though in practice it runs at checkpoints throughout every stage." },
+    { type: "mc", q: "A team has 50,000 synthetic examples generated by one strong model and 800 examples they wrote and reviewed. What does the evidence in this chapter suggest?", opts: ["Train on all 50,800; more data cannot hurt", "Train on the 50,000 and use the 800 as the held-out set", "Use the 800 first, measure, then add synthetic examples aimed only at the failures found; and read the synthetic sample aloud first, because it carries the generator's voice", "Discard both and collect human data at scale"], a: 2,
+      why: "LIMA reached strong results on 1,000 curated examples, and past a point mediocre data lowers the ceiling rather than raising coverage. Using the reviewed 800 as a held-out set wastes the best data you have. And synthetic responses inherit their generator's habits, so training on 50,000 of them clones that model's voice rather than establishing your own." },
+    { type: "mc", q: "Which lever reduces catastrophic forgetting most, and what is the mechanism?", opts: ["Lowering the learning rate, because forgetting is driven by how far weights are moved from a solution that already worked", "Increasing the batch size, because larger batches give less noisy gradients", "Training more epochs on a smaller set, because repetition consolidates", "Raising the temperature during evaluation so the differences are visible"], a: 0,
+      why: "Full fine-tuning already runs one to two orders of magnitude below pretraining rates for this reason: you are adjusting a converged solution rather than searching for a basin. Too high a rate does not diverge visibly, it erases. Fewer steps and mixing in general data help next, and restricting which parameters may move at all is Chapter 21's mechanism." }
+  ]
+});
