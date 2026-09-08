@@ -3484,3 +3484,309 @@ CHAPTERS.push({
       why: "Intensity climbs almost linearly with batch, from 1.0 at one token to 123 at 128, and 123 is still well under 295. The workload is faster but remains memory-bound. This is why serving stacks combine batching with quantization and speculation rather than relying on any one of them, and why the batch size that saturates a GPU is larger than people expect." }
   ]
 });
+
+/* ======================= CHAPTER 17 ======================= */
+CHAPTERS.push({
+  num: 17, part: 3, title: "Spreading a Training Run: Data, Tensor, Pipeline, Expert",
+  blurb: "Chapter 9 worked out that training Corvid needs 144.5 GB of state and the largest accelerator you can rent holds 80. This is the chapter that resolves that contradiction. There are four ways to cut a training step across many devices, they are not interchangeable, and each one pays for the memory it saves with a different kind of network traffic. You will split the same step four ways, compute what crosses the wire in each, and finish able to read an FSDP or DeepSpeed configuration and say what it will cost.",
+  sections: [
+    { title: "Data Parallelism, and the All-Reduce That Pays for It", viz: "llmParallelism", vizTitle: "Add GPUs under plain data parallelism, then switch to ZeRO-3",
+      html: "<p>Chapter 9 counted the training state of Corvid-8B at 18 bytes per parameter &#8212; bf16 weights, fp32 master weights, fp32 gradients, and Adam's two moments &#8212; which is 144.5 GB. An 80 GB H100 is the largest single accelerator most teams can rent. The run does not fit on one device, and no amount of patience fixes that.</p>" +
+      "<p>Every solution splits something. There are exactly four things in a training step large enough to be worth splitting, and each of the four strategies in this chapter picks one of them.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 176' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>four axes: each strategy cuts a different dimension and sends a different thing over the wire</text>" +
+      "<rect x='20' y='28' width='168' height='120' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='48' fill='#4f7cff' font-size='11'>data</text>" +
+      "<text x='34' y='68' fill='#c9d6ea' font-size='9.5'>splits: the batch</text>" +
+      "<text x='34' y='84' fill='#c9d6ea' font-size='9.5'>copies: the model</text>" +
+      "<text x='34' y='108' fill='#ffd166' font-size='9.5'>sends: gradients</text>" +
+      "<text x='34' y='124' fill='#7d8fb0' font-size='9'>once per step</text>" +
+      "<rect x='202' y='28' width='168' height='120' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='216' y='48' fill='#4f7cff' font-size='11'>tensor</text>" +
+      "<text x='216' y='68' fill='#c9d6ea' font-size='9.5'>splits: each matrix</text>" +
+      "<text x='216' y='84' fill='#c9d6ea' font-size='9.5'>copies: nothing</text>" +
+      "<text x='216' y='108' fill='#ffd166' font-size='9.5'>sends: activations</text>" +
+      "<text x='216' y='124' fill='#ff5d73' font-size='9'>128 times per step</text>" +
+      "<rect x='384' y='28' width='168' height='120' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='398' y='48' fill='#4f7cff' font-size='11'>pipeline</text>" +
+      "<text x='398' y='68' fill='#c9d6ea' font-size='9.5'>splits: the layers</text>" +
+      "<text x='398' y='84' fill='#c9d6ea' font-size='9.5'>copies: nothing</text>" +
+      "<text x='398' y='108' fill='#ffd166' font-size='9.5'>sends: one boundary</text>" +
+      "<text x='398' y='124' fill='#3ddc97' font-size='9'>point-to-point, tiny</text>" +
+      "<rect x='566' y='28' width='174' height='120' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='580' y='48' fill='#4f7cff' font-size='11'>expert</text>" +
+      "<text x='580' y='68' fill='#c9d6ea' font-size='9.5'>splits: the experts</text>" +
+      "<text x='580' y='84' fill='#c9d6ea' font-size='9.5'>copies: everything else</text>" +
+      "<text x='580' y='108' fill='#ffd166' font-size='9.5'>sends: routed tokens</text>" +
+      "<text x='580' y='124' fill='#7d8fb0' font-size='9'>all-to-all, twice per layer</text>" +
+      "<text x='20' y='168' fill='#c9d6ea' font-size='10.5'>Choosing a strategy is choosing which of these four bills you can afford on the network you actually have.</text>" +
+      "</svg><div class='fig-cap'>The bottom line of each box is the one that decides. Data parallelism sends a fixed amount once per step; tensor parallelism sends a small amount 128 times per step, and every one of those is a barrier.</div></div>" +
+      "<h3>The simplest cut</h3>" +
+      "<p><strong>Data parallelism</strong> gives every device a complete copy of the model and a different slice of the batch. Each device runs a forward and backward pass on its own tokens, producing gradients that are correct for its slice and wrong for the batch as a whole. Averaging them fixes that, and the averaging is the whole mechanism.</p>" +
+      "<p>The operation that does it is an <strong>all-reduce</strong>: every device contributes a tensor, all of them are summed, and every device ends with the sum. The naive implementation sends everything to one device and broadcasts the answer back, which makes that device's link the bottleneck and gets worse as you add hardware. The implementation everyone actually uses is the <strong>ring all-reduce</strong>, popularised for deep learning by Baidu's team in 2017 and now the default inside NCCL: the devices form a ring, each sends a chunk to its neighbour, and after two passes around the ring every device holds the full sum. Each device moves</p>" +
+      "<pre><code>2 &#215; (D - 1) / D &#215; M bytes</code></pre>" +
+      "<p>where <code>D</code> is the device count and <code>M</code> the gradient size. The important property is that this barely depends on <code>D</code> &#8212; the factor approaches 2 and stops. Doubling the cluster does not double the traffic per device.</p>" +
+      "<p>For Corvid, reducing gradients in bf16 makes <code>M</code> = 16.06 GB, so each device moves about 28.1 GB per step on 8 devices and 31.6 GB on 64. On an 8-way NVLink domain at roughly 900 GB/s that is 31 ms. A step that processes 8,192 tokens per device costs 6 &#215; 8.03e9 &#215; 8,192 = 3.95e14 FLOPs, which at 400 TFLOP/s of realistic throughput is 987 ms. The communication is 3% of the step and effectively free.</p>" +
+      "<h3>What it does not fix</h3>" +
+      "<p>Nothing about the memory. Every device still holds all 144.5 GB, because every device holds a complete copy. Data parallelism buys throughput and buys no capacity at all, which is the single most common surprise for people adding GPUs to a run that is out of memory.</p>" +
+      "<div class='callout'><strong>Try it above.</strong> Set the strategy to plain data parallelism and raise the device count from 2 to 64. Watch bytes-per-step-per-device climb slightly and then flatten, and watch per-device memory not move by a single gigabyte. Then switch to ZeRO-3 at the same device count and watch the memory bar collapse. That contrast is the next section.</div>" +
+      "<p>One more property matters later. If you cannot fit even one micro-batch, you can run several micro-batches sequentially and sum their gradients before the all-reduce &#8212; <strong>gradient accumulation</strong>, from Chapter 14. Doing this does not change the communication at all, because the traffic depends on the size of the model and not on the number of tokens. Remember that; it is half of the decision procedure in section 7.</p>" },
+
+    { title: "ZeRO and FSDP: Sharding the Three Things", 
+      html: "<p>Data parallelism replicates the training state D times, which means D - 1 copies of it are pure waste at any given instant. <strong>ZeRO</strong> (Zero Redundancy Optimizer), introduced by Rajbhandari and colleagues at Microsoft in 2020 for DeepSpeed, removes that redundancy in three stages, each one sharding a further piece and each one strictly cheaper in memory than the last.</p>" +
+      "<p>Corvid's 18 bytes per parameter divide into three groups: 2 bytes of bf16 weights needed for the forward pass, 4 bytes of gradients, and 12 bytes of optimizer state (the fp32 master copy plus Adam's two moments). The stages peel them off in reverse order of how often they are needed.</p>" +
+      "<ul>" +
+      "<li><strong>Stage 1</strong> shards the optimizer state. Each device keeps all weights and all gradients, but only 1/D of the 12 bytes. It updates its own slice of parameters and all-gathers the updated weights.</li>" +
+      "<li><strong>Stage 2</strong> also shards the gradients. A device only needs the gradients for the parameters it will update, so instead of an all-reduce it does a <strong>reduce-scatter</strong>: everyone contributes, the sums are computed, and each device receives only its own slice.</li>" +
+      "<li><strong>Stage 3</strong> also shards the parameters. No device holds the whole model. Before each layer runs, its weights are <strong>all-gathered</strong> from the devices that own them, used, and thrown away again.</li>" +
+      "</ul>" +
+      "<pre><code>per device, Corvid-8B          8 GPUs      64 GPUs\nplain data parallel           144.5 GB    144.5 GB\nZeRO-1  (optimizer sharded)    60.2 GB     49.7 GB\nZeRO-2  (+ gradients)          32.1 GB     18.1 GB\nZeRO-3  (+ parameters)         18.1 GB      2.3 GB</code></pre>" +
+      "<p>Read the ZeRO-1 row across. Going from 8 devices to 64 saves 10.5 GB, because the 12 sharded bytes were already almost gone and the 6 unsharded ones never move. That is the shape of every partial sharding scheme: it has a floor, and the floor is whatever you did not shard.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 208' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>memory per device on 8 GPUs &#183; weights (blue) &#183; gradients (gold) &#183; optimizer state (red)</text>" +
+      "<text x='20' y='44' fill='#c9d6ea' font-size='10'>plain DP</text>" +
+      "<rect x='110' y='32' width='67' height='18' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<rect x='177' y='32' width='133' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='310' y='32' width='400' height='18' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+      "<text x='720' y='45' fill='#ff5d73' font-size='9.5'>144.5</text>" +
+      "<text x='20' y='84' fill='#c9d6ea' font-size='10'>ZeRO-1</text>" +
+      "<rect x='110' y='72' width='67' height='18' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<rect x='177' y='72' width='133' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='310' y='72' width='50' height='18' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+      "<text x='370' y='85' fill='#c9d6ea' font-size='9.5'>60.2</text>" +
+      "<text x='20' y='124' fill='#c9d6ea' font-size='10'>ZeRO-2</text>" +
+      "<rect x='110' y='112' width='67' height='18' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<rect x='177' y='112' width='17' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='194' y='112' width='50' height='18' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+      "<text x='254' y='125' fill='#c9d6ea' font-size='9.5'>32.1</text>" +
+      "<text x='20' y='164' fill='#3ddc97' font-size='10'>ZeRO-3</text>" +
+      "<rect x='110' y='152' width='9' height='18' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<rect x='119' y='152' width='17' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='136' y='152' width='50' height='18' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+      "<text x='196' y='165' fill='#3ddc97' font-size='9.5'>18.1 &#183; fits on one H100 with room for activations</text>" +
+      "<line x1='110' y1='180' x2='710' y2='180' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='200' fill='#c9d6ea' font-size='10.5'>The optimizer state is 12 of the 18 bytes, which is why stage 1 alone removes more than half the problem.</text>" +
+      "</svg><div class='fig-cap'>Each stage shards one more band. Stage 1 is the biggest single win and the cheapest; stage 3 is the one that makes the run fit.</div></div>" +
+      "<h3>The part that surprises people</h3>" +
+      "<p>Stages 1 and 2 are free. A ring all-reduce is internally a reduce-scatter followed by an all-gather, each moving (D-1)/D &#215; M bytes. ZeRO-2 does exactly those two operations, just with the parameter update in between rather than after. Same 28.1 GB per device per step. You get half the memory back for nothing.</p>" +
+      "<p>Stage 3 is not free. Parameters now have to be gathered in the forward pass and gathered again in the backward pass, on top of the reduce-scatter for gradients, so the traffic is 3 units instead of 2 &#8212; 42.2 GB per device on 8 devices, a 50% increase.</p>" +
+      "<pre><code>per device per step      traffic   NVLink 900 GB/s   400 Gb/s network\ndata parallel            28.1 GB          31 ms             562 ms\nZeRO-1 or ZeRO-2         28.1 GB          31 ms             562 ms\nZeRO-3                   42.2 GB          47 ms             843 ms\n                                    (a step is 987 ms of compute)</code></pre>" +
+      "<p>The last column is the whole chapter in one number. Inside a node, ZeRO-3 costs 5% and you would be foolish not to take it. Across a 400 Gb/s network it costs 85% of the step, so nearly half of your cluster's time goes to moving weights that a different strategy would never have moved.</p>" +
+      "<div class='callout'><strong>Naming.</strong> <strong>FSDP</strong> (Fully Sharded Data Parallel) is PyTorch's implementation of the same idea, upstreamed from FairScale. It exposes <code>FULL_SHARD</code> (ZeRO-3), <code>SHARD_GRAD_OP</code> (ZeRO-2), <code>NO_SHARD</code> (ordinary replication) and <code>HYBRID_SHARD</code> (shard within a node, replicate across nodes &#8212; precisely the fix for the 843 ms above). There is deliberately no stage-1 equivalent, because stage 2 costs the same to communicate and saves more.</div>" },
+
+    { title: "Tensor Parallelism: Splitting the Matmul Itself",
+      html: "<p>ZeRO-3 shards weights for storage but reassembles each layer before using it, so every device still computes the whole layer. <strong>Tensor parallelism</strong>, from Megatron-LM (Shoeybi and colleagues at NVIDIA, 2019), shards the arithmetic instead: each device computes a genuine piece of every matrix multiply and the pieces are combined once at the end of the block.</p>" +
+      "<p>The trick is to alternate how you cut. Take the feed-forward network from Chapter 8, which is <code>X &#183; A</code>, an activation, then <code>&#183; B</code>. Split <code>A</code> by columns, giving device 1 the first half of <code>d_ff</code> and device 2 the second. Each device produces half the hidden vector, and because SwiGLU is elementwise it can apply the activation to its own half with no coordination at all. Now split <code>B</code> by rows to match. Each device multiplies its half of the hidden vector by its half of <code>B</code> and gets a full-width output that is a <em>partial sum</em>. Add the partial sums and you have the exact answer.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the FFN split two ways: columns, then rows, then one all-reduce</text>" +
+      "<rect x='20' y='34' width='58' height='150' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='30' y='106' fill='#4f7cff' font-size='10'>X</text>" +
+      "<text x='30' y='124' fill='#7d8fb0' font-size='9'>tokens</text>" +
+      "<line x1='84' y1='70' x2='114' y2='70' stroke='#4f7cff' stroke-width='2'/><polygon points='114,66 122,70 114,74' fill='#4f7cff'/>" +
+      "<line x1='84' y1='148' x2='114' y2='148' stroke='#4f7cff' stroke-width='2'/><polygon points='114,144 122,148 114,152' fill='#4f7cff'/>" +
+      "<rect x='128' y='34' width='230' height='68' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='142' y='58' fill='#ffd166' font-size='10'>GPU 0: A[:, :7168]</text>" +
+      "<text x='142' y='78' fill='#c9d6ea' font-size='9.5'>half of d_ff, then SwiGLU</text>" +
+      "<text x='142' y='94' fill='#7d8fb0' font-size='9'>no communication needed here</text>" +
+      "<rect x='128' y='116' width='230' height='68' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='142' y='140' fill='#ffd166' font-size='10'>GPU 1: A[:, 7168:]</text>" +
+      "<text x='142' y='160' fill='#c9d6ea' font-size='9.5'>other half, then SwiGLU</text>" +
+      "<text x='142' y='176' fill='#7d8fb0' font-size='9'>no communication needed here</text>" +
+      "<line x1='364' y1='68' x2='394' y2='68' stroke='#ffd166' stroke-width='2'/><polygon points='394,64 402,68 394,72' fill='#ffd166'/>" +
+      "<line x1='364' y1='150' x2='394' y2='150' stroke='#ffd166' stroke-width='2'/><polygon points='394,146 402,150 394,154' fill='#ffd166'/>" +
+      "<rect x='408' y='34' width='168' height='68' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='422' y='58' fill='#4f7cff' font-size='10'>B[:7168, :]</text>" +
+      "<text x='422' y='80' fill='#c9d6ea' font-size='9.5'>partial sum, full width</text>" +
+      "<rect x='408' y='116' width='168' height='68' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='422' y='140' fill='#4f7cff' font-size='10'>B[7168:, :]</text>" +
+      "<text x='422' y='162' fill='#c9d6ea' font-size='9.5'>partial sum, full width</text>" +
+      "<line x1='582' y1='68' x2='612' y2='96' stroke='#ff5d73' stroke-width='2'/>" +
+      "<line x1='582' y1='150' x2='612' y2='122' stroke='#ff5d73' stroke-width='2'/>" +
+      "<rect x='618' y='84' width='122' height='50' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='632' y='104' fill='#ff5d73' font-size='10'>all-reduce</text>" +
+      "<text x='632' y='122' fill='#ff5d73' font-size='9.5'>117.4 MB</text>" +
+      "<text x='20' y='214' fill='#c9d6ea' font-size='10.5'>Column split, then row split: the only synchronisation is the final sum. Attention splits the same way, by head.</text>" +
+      "</svg><div class='fig-cap'>Cutting A by columns and B by rows means the two devices never need to exchange the hidden vector &#8212; only the block's output, once.</div></div>" +
+      "<p>Attention takes the same treatment along a more natural seam. Chapter 5 established that heads are independent, so give each device a subset of heads and split the output projection by rows. One all-reduce at the end of attention, one at the end of the FFN. Two per block in the forward pass, and two more in the backward pass to combine input gradients: <strong>four collectives per layer</strong>.</p>" +
+      "<h3>What that costs</h3>" +
+      "<p>Each collective moves an activation tensor rather than a weight tensor. For 8,192 tokens at <code>d_model</code> 4,096 in bf16 that tensor is 67.1 MB, and a ring all-reduce across 8 devices moves 2 &#215; (7/8) &#215; 67.1 = 117.4 MB per device. Across 32 layers:</p>" +
+      "<pre><code>4 collectives &#215; 32 layers = 128 per step\n128 &#215; 117.4 MB          = 15.0 GB per device per step\n  on NVLink at 900 GB/s =  17 ms  (2% of the step)\n  on a 50 GB/s network  = 301 ms  (30% of the step)</code></pre>" +
+      "<p>The bandwidth figure understates the problem. Those 128 collectives are 128 barriers: no device can start layer <em>n</em>+1 until every device has finished layer <em>n</em>, and there is no useful work to overlap with the wait because the next operation needs the result. Latency, not bandwidth, is what makes tensor parallelism collapse off a fast interconnect. This is why the rule in practice is absolute: <strong>tensor parallelism stays inside one node</strong>, and its degree is usually the number of GPUs on that node's NVLink domain.</p>" +
+      "<p>The compensation is real. Tensor parallelism is the only strategy so far that shards <em>activations</em> as well as weights &#8212; each device holds a fraction of the hidden state, not a full copy &#8212; which is why it is the axis that rescues runs that are out of memory on activations rather than on parameters.</p>" +
+      "<div class='callout'><strong>The edge.</strong> Not everything divides. Layer norms, the embedding table and the loss need care: Megatron replicates the norms (they are cheap), shards the vocabulary dimension of the output projection, and computes the cross-entropy in a distributed form so the 128,256-wide logits never have to be gathered onto one device. Gathering them would cost 8,192 &#215; 128,256 &#215; 2 bytes = 2.1 GB per step, more than everything else in the block combined.</div>" },
+
+    { title: "Pipeline Parallelism: Stages, Micro-batches, and the Bubble",
+      html: "<p><strong>Pipeline parallelism</strong> cuts along the depth of the model. With 32 layers and 4 devices, device 0 holds layers 1&#8211;8, device 1 holds 9&#8211;16, and so on. A batch flows through device 0, its output crosses to device 1, and so forth; gradients flow back the other way.</p>" +
+      "<p>The communication is trivial and that is the point. Only the activations at each stage boundary cross the wire, only 3 boundaries for 4 stages, and the transfer is <strong>point-to-point</strong> rather than a collective &#8212; two devices talk, nobody else waits. A micro-batch of 1,024 tokens at <code>d_model</code> 4,096 in bf16 is 8.4 MB. Against tensor parallelism's 15 GB of collectives, this is nothing, and it is why pipeline parallelism is the axis you stretch across slow links.</p>" +
+      "<p>The naive version is also catastrophically wasteful. Send one batch through: device 0 works while 1, 2 and 3 sit idle; then device 1 works while the rest sit idle. Three quarters of the cluster is idle at any moment, and the idle time is called the <strong>pipeline bubble</strong>.</p>" +
+      "<h3>Micro-batches shrink it</h3>" +
+      "<p><strong>GPipe</strong> (Huang and colleagues at Google, 2019) fixed this by splitting the batch into <strong>micro-batches</strong> and feeding them in one after another, so that while device 1 works on micro-batch 1, device 0 is already on micro-batch 2. Only the fill at the start and the drain at the end are wasted.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>4 stages, 4 micro-batches &#183; blue = forward, green = backward, dark = bubble</text>" +
+      "<text x='20' y='47' fill='#c9d6ea' font-size='9.5'>stage 0</text><text x='20' y='81' fill='#c9d6ea' font-size='9.5'>stage 1</text>" +
+      "<text x='20' y='115' fill='#c9d6ea' font-size='9.5'>stage 2</text><text x='20' y='149' fill='#c9d6ea' font-size='9.5'>stage 3</text>" +
+      "<rect x='86' y='32' width='588' height='20' fill='#0c1425' stroke='#1c2a45' stroke-width='1'/>" +
+      "<rect x='86' y='66' width='588' height='20' fill='#0c1425' stroke='#1c2a45' stroke-width='1'/>" +
+      "<rect x='86' y='100' width='588' height='20' fill='#0c1425' stroke='#1c2a45' stroke-width='1'/>" +
+      "<rect x='86' y='134' width='588' height='20' fill='#0c1425' stroke='#1c2a45' stroke-width='1'/>" +
+      "<rect x='86' y='32' width='168' height='20' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='128' y='66' width='168' height='20' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='170' y='100' width='168' height='20' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='212' y='134' width='168' height='20' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='380' y='134' width='168' height='20' fill='#173328' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='422' y='100' width='168' height='20' fill='#173328' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='464' y='66' width='168' height='20' fill='#173328' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='506' y='32' width='168' height='20' fill='#173328' stroke='#3ddc97' stroke-width='1'/>" +
+      "<text x='104' y='46' fill='#4f7cff' font-size='9'>F1 F2 F3 F4</text>" +
+      "<text x='524' y='46' fill='#3ddc97' font-size='9'>B4 B3 B2 B1</text>" +
+      "<line x1='86' y1='166' x2='674' y2='166' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='300' y='182' fill='#ffd166' font-size='10'>6 of every 14 slots idle &#8212; a 42.9% bubble</text>" +
+      "<text x='20' y='196' fill='#c9d6ea' font-size='10.5'>Raising micro-batches from 4 to 16 with the same 4 stages takes that to 15.8%.</text>" +
+      "</svg><div class='fig-cap'>The fill and the drain are fixed at P-1 slots each; only the number of micro-batches in between can grow, which is why the bubble is a ratio and not a constant.</div></div>" +
+      "<p>With <code>P</code> stages and <code>m</code> micro-batches, the fill and drain together cost <code>P - 1</code> slots against <code>m</code> slots of useful work, so the fraction of wall-clock time wasted is <code>(P - 1) / (m + P - 1)</code>:</p>" +
+      "<pre><code>stages  micro-batches   bubble\n   4          4         42.9%\n   4         16         15.8%\n   8          8         46.7%\n   8         32         17.9%\n   8         64          9.9%</code></pre>" +
+      "<p>The working rule that falls out is <code>m</code> &#8805; 4<code>P</code>, which keeps the bubble under about 20%.</p>" +
+      "<div class='callout'><strong>Sources differ.</strong> Megatron's papers quote the bubble as <code>(P - 1) / m</code>, which is the same quantity measured against ideal compute time rather than total time &#8212; 75% rather than 42.9% for four and four. Neither is wrong; check the denominator before comparing two numbers from two papers.</div>" +
+      "<h3>The memory cost nobody mentions first</h3>" +
+      "<p>GPipe runs all <code>m</code> forwards before any backward, so every micro-batch's activations must be kept alive at once, and activation memory scales with <code>m</code> &#8212; exactly the quantity you wanted to raise. <strong>1F1B</strong> (one-forward-one-backward), from PipeDream (Narayanan and colleagues, 2019), fixes it by starting backward passes as soon as the pipeline is full and alternating thereafter. The bubble is identical; the number of micro-batches in flight is capped at <code>P</code> instead of <code>m</code>. Interleaving on top of that (Megatron-LM, 2021) gives each device <code>v</code> non-contiguous chunks of layers and divides the bubble by a further <code>v</code>, at the cost of <code>v</code> times the point-to-point messages.</p>" },
+
+    { title: "Expert and Context Parallelism",
+      html: "<p>Two more axes exist because two specific architectures have a dimension the first three do not know how to cut.</p>" +
+      "<h3>Expert parallelism</h3>" +
+      "<p>Chapter 10's mixture-of-experts layer holds many feed-forward networks and routes each token to a couple of them. <strong>Expert parallelism</strong>, introduced with GShard (Lepikhin and colleagues at Google, 2020), places different experts on different devices and moves the tokens to them.</p>" +
+      "<p>That movement is an <strong>all-to-all</strong>: every device sends each other device the tokens the router assigned to its experts, and after the experts run, a second all-to-all sends the results home. Two all-to-alls per MoE layer. For 8,192 tokens with top-2 routing at <code>d_model</code> 4,096 in bf16, the dispatch moves 8,192 &#215; 2 &#215; 4,096 &#215; 2 = 134 MB, and the same comes back.</p>" +
+      "<p>The failure mode is the interesting part and it is not bandwidth. An all-to-all finishes when its slowest participant finishes, so if the router sends 30% of the batch to one expert, seven devices wait for the eighth on every single MoE layer. This is the operational reason the load-balancing loss from Chapter 10 exists: it is not there to make the experts fair, it is there to stop the network from stalling.</p>" +
+      "<h3>Context parallelism</h3>" +
+      "<p>The other axis appears when one sequence is too long for one device. Chapter 6's arithmetic says the KV cache and the attention activations grow with sequence length, so prompt <strong>P4</strong> &#8212; the needle placed in a 100,000-token document &#8212; overflows a device that trains happily at 8,192 tokens. <strong>Context parallelism</strong> splits the sequence dimension: device 0 takes positions 1&#8211;25,000, device 1 takes 25,001&#8211;50,000, and so on.</p>" +
+      "<p>Everything except attention is elementwise along the sequence and needs no communication at all. Attention is the exception, because query positions on device 3 must attend to key and value positions living on devices 0, 1 and 2. <strong>Ring Attention</strong> (Liu, Zaharia and Abbeel, 2023) solves it by passing key-value blocks around a ring while each device computes attention against the block it currently holds, using the same online-softmax accumulation that Chapter 28's FlashAttention uses to combine partial results. Because the communication of the next block overlaps with the computation on the current one, the cost is hidden almost entirely &#8212; provided the block is large enough that computing on it takes longer than fetching the next.</p>" +
+      "<div class='callout'><strong>When to reach for these.</strong> Expert parallelism is not optional for a large MoE: the experts are most of the parameters and replicating them defeats the architecture. Context parallelism is the last resort for long context, after activation checkpointing and sequence-level micro-batching have already been spent.</div>" },
+
+    { title: "Three Dimensions, and the Order They Nest",
+      html: "<p>Real runs use several axes at once, which is called <strong>3-D parallelism</strong> when it is data, tensor and pipeline. The composition is a product: 8-way tensor &#215; 8-way pipeline &#215; 8-way data is 512 devices, and each device holds 1/8 of each layer's weights for 1/8 of the layers.</p>" +
+      "<p>The nesting order is not a matter of taste. Each axis has a communication frequency, and the rule is to give the most talkative axis the fastest wire.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the nesting rule: chattiest axis on the fastest wire</text>" +
+      "<rect x='20' y='30' width='330' height='84' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='34' y='50' fill='#3ddc97' font-size='10.5'>node 0 &#183; 8 GPUs &#183; NVLink 900 GB/s</text>" +
+      "<rect x='34' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='72' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='110' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='148' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='186' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='224' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='262' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='300' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<text x='34' y='104' fill='#c9d6ea' font-size='9.5'>tensor parallel &#183; 128 collectives per step</text>" +
+      "<rect x='400' y='30' width='330' height='84' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='414' y='50' fill='#3ddc97' font-size='10.5'>node 7 &#183; 8 GPUs &#183; NVLink 900 GB/s</text>" +
+      "<rect x='414' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='452' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='490' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='528' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='566' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='604' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='642' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<rect x='680' y='60' width='34' height='24' rx='4' fill='#0c1425' stroke='#3ddc97' stroke-width='1'/>" +
+      "<text x='414' y='104' fill='#c9d6ea' font-size='9.5'>tensor parallel &#183; 128 collectives per step</text>" +
+      "<text x='362' y='76' fill='#7d8fb0' font-size='11'>&#183; &#183; &#183;</text>" +
+      "<line x1='185' y1='118' x2='185' y2='150' stroke='#ff5d73' stroke-width='2'/>" +
+      "<line x1='565' y1='118' x2='565' y2='150' stroke='#ff5d73' stroke-width='2'/>" +
+      "<rect x='20' y='150' width='710' height='40' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='34' y='166' fill='#ff5d73' font-size='10.5'>network across 8 nodes &#183; 400 Gb/s = 50 GB/s</text>" +
+      "<text x='34' y='182' fill='#c9d6ea' font-size='9.5'>data parallel (or pipeline) &#183; 1 collective per step &#183; 30.6 GB &#183; 0.61 s against 8.6 s of compute</text>" +
+      "<text x='20' y='214' fill='#c9d6ea' font-size='10.5'>Put tensor parallelism across nodes instead and the same run spends more time waiting than computing.</text>" +
+      "</svg><div class='fig-cap'>Tensor parallelism inside the NVLink domain, data or pipeline parallelism across it. The two red links carry one collective per step; the green ones carry 128.</div></div>" +
+      "<h3>Why it is worth the complexity</h3>" +
+      "<p>Take a 70B model on 64 H100s arranged as 8 nodes of 8, and use the 18-bytes-per-parameter rule: the training state is 1,260 GB, and sharded 64 ways that is 19.7 GB per device. It fits. So why not run plain ZeRO-3 across all 64 and be done?</p>" +
+      "<p>Because ZeRO-3 all-gathers parameters twice per step and reduce-scatters gradients once, which for 140 GB of bf16 weights is 3 &#215; (63/64) &#215; 140 = 413 GB per device per step, and most of it crosses the network:</p>" +
+      "<pre><code>compute per device per step        8.60 s   (6ND at 8,192 tokens, 400 TFLOP/s)\nZeRO-3 across all 64 GPUs          8.27 s   of network traffic\nTP 8-way in node + DP across       0.61 s   of network traffic\n                                            (the TP traffic never leaves NVLink)</code></pre>" +
+      "<p>The first arrangement spends 96% of its compute time again on communication and runs at roughly half speed. The second spends 7%. Same hardware, same model, same step; the difference is entirely which axis was placed on which wire.</p>" +
+      "<p>The conventional nesting, from innermost to outermost, is therefore: <strong>tensor</strong> inside a node, <strong>pipeline</strong> across a small group of nodes, <strong>data</strong> or ZeRO outermost across everything, and <strong>expert</strong> or <strong>context</strong> layered in where the architecture demands it. Frameworks express this as a device mesh with one named dimension per axis, which is why a modern configuration reads as a list of degrees whose product must equal your device count.</p>" },
+
+    { title: "Choosing From the Bottleneck",
+      html: "<p>The four axes are not a menu of preferences. There is a decision procedure, and it runs in order, because each step is cheaper than the one after it.</p>" +
+      "<ol>" +
+      "<li><strong>Does one micro-batch of one sequence fit on one device with plain data parallelism?</strong> If yes, stop. Use data parallelism with gradient accumulation and do not read the rest of this list. Most fine-tuning runs end here.</li>" +
+      "<li><strong>Is the problem the optimizer state?</strong> Turn on ZeRO-2 or <code>SHARD_GRAD_OP</code>. It is free in communication and removes 12 of the 18 bytes. Nothing else in this chapter has that ratio.</li>" +
+      "<li><strong>Do the parameters themselves not fit?</strong> ZeRO-3 or <code>FULL_SHARD</code>, if your devices are on a fast interconnect. Its 50% extra traffic is 5% of a step inside a node and 85% of one across a slow network, so check which of those you have before enabling it.</li>" +
+      "<li><strong>Are activations the problem, not parameters?</strong> Tensor parallelism, at exactly the degree of your NVLink domain and no more. It is the only axis that shards activations.</li>" +
+      "<li><strong>Is the model too deep for any single device even sharded, or is your interconnect slow?</strong> Pipeline parallelism, with micro-batches at four times the stage count.</li>" +
+      "<li><strong>Is it an MoE, or is one sequence too long?</strong> Expert or context parallelism, layered on top of whatever the answers above produced.</li>" +
+      "</ol>" +
+      "<p>Two facts make this procedure work, and they are worth stating on their own because they are the reason the ordering is what it is.</p>" +
+      "<p><strong>Data-parallel traffic scales with the model; tensor-parallel traffic scales with the tokens.</strong> Doubling the micro-batch leaves the gradient all-reduce untouched and doubles every tensor-parallel collective. So gradient accumulation is a free way to hide data-parallel cost and does nothing whatsoever for tensor-parallel cost. If your profile shows communication dominating, which axis it is on determines whether a larger micro-batch is the fix or is irrelevant.</p>" +
+      "<p><strong>Topology is in the bill.</strong> The same 42.2 GB is 47 ms or 843 ms depending only on which cable it crosses, and every cloud provider prices those cables differently. A cluster of 8-GPU nodes with NVLink inside and 400 Gb/s between them is not 64 equivalent GPUs; it is 8 fast groups with a narrow bridge, and a strategy that ignores the bridge will run at half speed on hardware whose specification sheet says otherwise. <code>HYBRID_SHARD</code> exists for exactly this shape: shard fully within the node where bandwidth is abundant, replicate across nodes where it is not, and pay one gradient all-reduce over the bridge instead of three collectives.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;You add 8 more GPUs to an out-of-memory training run and it is still out of memory. Why?&#8221; The answer is that plain data parallelism replicates the model, so per-device memory is independent of device count. What the questioner is testing is whether you know that throughput and capacity are bought with different mechanisms &#8212; and the follow-up is which ZeRO stage you would reach for and what it costs.</div>" },
+
+    { title: "Reading a Real Configuration",
+      html: "<p>Everything above is visible in two configuration files that most engineers meet before they meet the mechanisms. Here is the same setup written both ways: ZeRO-3, bf16, gradients reduced in fp32, four sequences per device with eight-step accumulation.</p>" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>PyTorch FSDP</button><button class='code-tab' data-lang='json'>DeepSpeed</button></div>" +
+      "<pre data-lang='python'><code>from torch.distributed.fsdp import (\n    FullyShardedDataParallel as FSDP,\n    ShardingStrategy, MixedPrecision, CPUOffload,\n)\n\nmodel = FSDP(\n    model,\n    # FULL_SHARD = ZeRO-3. SHARD_GRAD_OP = ZeRO-2.\n    # HYBRID_SHARD = shard in node, replicate across nodes.\n    sharding_strategy=ShardingStrategy.FULL_SHARD,\n\n    # weights and activations in bf16; gradients reduced in\n    # fp32 so small updates survive the sum (Chapter 14).\n    mixed_precision=MixedPrecision(\n        param_dtype=torch.bfloat16,\n        reduce_dtype=torch.float32,\n    ),\n\n    # the unit that gets gathered and freed: one block.\n    # too coarse and you gather the whole model at once.\n    auto_wrap_policy=transformer_auto_wrap_policy,\n\n    # cap concurrent all-gathers so prefetching does not\n    # allocate more than it saves.\n    limit_all_gathers=True,\n    device_id=torch.cuda.current_device(),\n)\n\n# accumulation is a plain loop: 4 x 8 = 32 sequences per step.\nfor i, batch in enumerate(loader):\n    (model(batch).loss / 8).backward()\n    if (i + 1) % 8 == 0:\n        optimizer.step(); optimizer.zero_grad()</code></pre>" +
+      "<pre data-lang='json' hidden><code>{\n  \"train_micro_batch_size_per_gpu\": 4,\n  \"gradient_accumulation_steps\": 8,\n\n  \"bf16\": { \"enabled\": true },\n\n  \"zero_optimization\": {\n    \"stage\": 3,\n\n    \"overlap_comm\": true,\n    \"contiguous_gradients\": true,\n\n    \"reduce_bucket_size\": 5e8,\n    \"stage3_prefetch_bucket_size\": 5e8,\n    \"stage3_param_persistence_threshold\": 1e6,\n\n    \"offload_optimizer\": {\n      \"device\": \"cpu\",\n      \"pin_memory\": true\n    }\n  }\n}</code></pre></div>" +
+      "<p>Four of these fields decide performance and the rest are defaults.</p>" +
+      "<ul>" +
+      "<li><strong><code>stage</code> / <code>sharding_strategy</code></strong> &#8212; which of the three bands from section 2 gets sharded. This is the memory-against-traffic dial and everything else is secondary to it.</li>" +
+      "<li><strong><code>overlap_comm</code> and <code>limit_all_gathers</code></strong> &#8212; whether a layer's all-gather is issued while the previous layer is still computing. Overlapping is what makes ZeRO-3's extra 50% of traffic partly invisible; the limit exists because prefetching too far ahead reintroduces the memory you were trying to shard.</li>" +
+      "<li><strong><code>reduce_bucket_size</code> and <code>auto_wrap_policy</code></strong> &#8212; the granularity of communication. Too small and you pay per-collective latency hundreds of times; too large and you hold a big buffer and lose overlap. One transformer block per unit is the standard answer for both frameworks.</li>" +
+      "<li><strong><code>offload_optimizer</code></strong> &#8212; move the 12 bytes of optimizer state to host memory over PCIe. This trades a bandwidth problem for a much worse one and is the correct choice only when the alternative is not running at all.</li>" +
+      "</ul>" +
+      "<p>What neither file shows is the topology, and the topology is what section 6 proved determines the answer. A configuration is only readable next to the machine it will run on: <code>FULL_SHARD</code> across a node is excellent engineering and <code>FULL_SHARD</code> across a slow network is the 843 ms mistake, and the file looks identical in both cases.</p>" +
+      "<div class='callout'><strong>What real systems do.</strong> Megatron-LM composes tensor, pipeline, context and expert parallelism over an explicit device mesh; DeepSpeed leads with ZeRO and adds the other axes around it; PyTorch's newer <code>fully_shard</code> API rebuilds FSDP on the same mesh abstraction so the axes compose without a wrapper per strategy. The vocabulary differs and the four cuts underneath do not.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A 13B-parameter model is trained at 18 bytes per parameter on 16 devices. Compute per-device memory under plain data parallelism and under each ZeRO stage. Then compute the per-device communication for each, using a bf16 reduction and the ring formula. State which stage is the best deal and why the answer is not stage 3.</li>" +
+      "<li><strong>Trace.</strong> You have 8 pipeline stages and a global batch of 256 sequences. Compute the bubble fraction at micro-batch counts of 8, 32 and 128, in both the wall-clock form and the against-ideal form. Then explain why you cannot simply raise the count to 256 under GPipe, and what 1F1B changes about that limit.</li>" +
+      "<li><strong>Trace.</strong> Repeat section 3's tensor-parallel arithmetic for Corvid at a micro-batch of 512 tokens instead of 8,192. Compute the bytes per collective and the total per step, then compare with the data-parallel all-reduce at the same micro-batch. State which axis just became more expensive and give the general rule that predicted it.</li>" +
+      "<li><strong>Investigate.</strong> Run <code>nvidia-smi topo -m</code> on any multi-GPU machine you have access to, or find the topology diagram for an instance type your provider sells. Identify which GPU pairs share a fast link and which cross a slower one. Then state the maximum tensor-parallel degree that machine supports without crossing the slow boundary. On an 8-GPU NVLink node every pair will read <code>NV#</code> and the answer is 8; on a PCIe-attached machine the answer is usually 2 or 1.</li>" +
+      "<li><strong>Investigate.</strong> Take a public training configuration from an open-weights model release and identify every parallelism degree in it. Multiply them together and check the product against the reported device count. Then state, from this chapter's rules alone, which axis they placed inside the node and whether their micro-batch count clears the 4P bar for the pipeline depth they chose.</li>" +
+      "<li><strong>Build.</strong> Write a function taking parameter count, device count, devices per node, intra-node and inter-node bandwidth, and tokens per micro-batch, and returning per-device memory and per-step communication seconds for plain DP, each ZeRO stage, tensor parallelism at the node degree, and one hybrid. Rank them by total step time against a 6ND compute estimate. Run it for an 8B model on 8 GPUs and for a 70B on 64 across 8 nodes; the winner will differ between the two, and reproducing that difference is the point of the exercise.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "data parallelism", d: "Replicating the whole model on every device and giving each a different slice of the batch; it buys throughput and no memory capacity at all." },
+    { t: "all-reduce", d: "A collective in which every device contributes a tensor and every device ends up holding the sum, used to average gradients across data-parallel replicas." },
+    { t: "ring all-reduce", d: "The bandwidth-optimal all-reduce, in which each device moves 2(D-1)/D times the tensor size regardless of how large the cluster grows." },
+    { t: "reduce-scatter", d: "A collective that sums contributions but leaves each device holding only its own slice of the result, which is the first half of an all-reduce." },
+    { t: "all-gather", d: "A collective that assembles a full tensor on every device from the slices they each own; the second half of an all-reduce, and what ZeRO-3 does before every layer." },
+    { t: "ZeRO", d: "The Zero Redundancy Optimizer: three stages that shard optimizer state, then gradients, then parameters across data-parallel devices, removing the replication that plain data parallelism wastes." },
+    { t: "FSDP", d: "Fully Sharded Data Parallel, PyTorch's implementation of ZeRO, whose FULL_SHARD and SHARD_GRAD_OP strategies correspond to stages 3 and 2." },
+    { t: "tensor parallelism", d: "Splitting each individual matrix multiply across devices, cutting one weight matrix by columns and the next by rows so that only the block's output needs combining." },
+    { t: "pipeline parallelism", d: "Splitting the model by depth so each device owns a contiguous group of layers, paying only point-to-point activation transfers at the stage boundaries." },
+    { t: "micro-batch", d: "One of the slices a batch is divided into so that pipeline stages can work on different slices simultaneously." },
+    { t: "pipeline bubble", d: "The idle time while a pipeline fills and drains, equal to (P-1)/(m+P-1) of wall-clock time and the reason micro-batch count must exceed stage count several times over." },
+    { t: "1F1B", d: "A pipeline schedule that alternates one forward with one backward once the pipeline is full, keeping the same bubble as GPipe while capping in-flight activations at the stage count." },
+    { t: "expert parallelism", d: "Placing a mixture-of-experts layer's experts on different devices and routing tokens to them with two all-to-all collectives per layer." },
+    { t: "all-to-all", d: "A collective in which every device sends a different message to every other device; it completes only when its slowest participant does, which is why expert load imbalance stalls the network." },
+    { t: "context parallelism", d: "Splitting one sequence across devices so that long contexts fit, requiring key-value blocks to circulate during attention." },
+    { t: "3-D parallelism", d: "Composing data, tensor and pipeline parallelism at once, with degrees whose product equals the device count." },
+    { t: "device mesh", d: "The named multi-dimensional arrangement of devices a framework uses to express which axis of parallelism runs over which group of hardware." },
+    { t: "gradient accumulation", d: "Summing gradients over several micro-batches before one optimizer step, which raises the effective batch without changing data-parallel communication at all." }
+  ],
+  quiz: [
+    { type: "mc", q: "A training run runs out of memory on 8 GPUs under plain data parallelism. You move it to 32 GPUs, unchanged. What happens?", opts: ["It fits, because memory is now spread over four times as many devices", "It fits, because the batch per device is smaller", "It still runs out, because data parallelism replicates the full model on every device", "It fits only if the batch size is also raised"], a: 2,
+      why: "Data parallelism splits the batch and replicates everything else. Per-device memory for weights, gradients and optimizer state is completely independent of device count, so adding hardware buys throughput and no capacity. Reducing the per-device batch helps only with activation memory, which is rarely the binding constraint for an 8B model at 144.5 GB of state." },
+    { type: "mc", q: "Why is ZeRO-2 essentially free in communication compared with plain data parallelism?", opts: ["A ring all-reduce is already a reduce-scatter followed by an all-gather, and ZeRO-2 performs exactly those two operations with the update in between", "It compresses the gradients before sending them", "It sends gradients less often", "It overlaps communication with computation, which plain data parallelism cannot do"], a: 0,
+      why: "The two halves of a ring all-reduce each move (D-1)/D times the tensor. ZeRO-2 does the reduce-scatter, updates its own slice of parameters, then all-gathers the new weights: the same two collectives and the same 28.1 GB per device for Corvid on 8 devices. Half the memory disappears for no extra traffic, which is why stage 2 is the highest-value setting in the chapter." },
+    { type: "mc", q: "Corvid under ZeRO-3 moves 42.2 GB per device per step. On NVLink that is 47 ms against a 987 ms step; on a 400 Gb/s network it is 843 ms. What does the pair of numbers establish?", opts: ["ZeRO-3 is generally a poor choice", "The network measurement must be wrong, since collectives are bandwidth-optimal", "The step should be made longer to amortize the transfer", "A strategy is not good or bad on its own; the same traffic is 5% or 85% of a step depending only on which wire it crosses"], a: 3,
+      why: "Nothing about the algorithm changed between the two columns. This is why the decision procedure asks what interconnect you have before it recommends a stage, and why HYBRID_SHARD exists: shard fully inside the NVLink domain and replicate across the slow bridge, paying one gradient all-reduce over it rather than three collectives." },
+    { type: "mc", q: "In tensor parallelism, why is the first FFN matrix split by columns and the second by rows?", opts: ["To balance the parameter count between the two matrices", "So each device holds a contiguous region of memory", "So each device can apply the activation to its own slice without communication, and the second matmul then yields partial sums that need only one all-reduce", "Because the activation function requires the full hidden vector"], a: 2,
+      why: "A column split of A gives each device a complete slice of the hidden dimension, and SwiGLU is elementwise along that dimension, so no exchange is needed mid-block. Matching that with a row split of B makes each device produce a full-width partial sum. One all-reduce at the end of the block is the entire synchronisation cost, instead of one in the middle as well." },
+    { type: "mc", q: "A profile shows communication dominating a run. Which fact tells you whether doubling the micro-batch will help?", opts: ["The device count, since collective cost grows with it", "Which axis the traffic is on: data-parallel traffic scales with model size and is unchanged by micro-batch, while tensor-parallel traffic scales with tokens and doubles", "The precision, since bf16 halves every transfer", "Whether gradient accumulation is enabled"], a: 1,
+      why: "The gradient all-reduce moves a fixed 2(D-1)/D times the parameter bytes whatever the batch, so a larger micro-batch amortizes it across more compute and is a genuine fix. Every tensor-parallel collective carries an activation tensor sized by tokens, so doubling the micro-batch doubles that traffic and buys nothing. Same symptom, opposite remedies." },
+    { type: "mc", q: "Why does tensor parallelism collapse across a slow network in a way that pipeline parallelism does not?", opts: ["Tensor parallelism moves far more total bytes than pipeline parallelism ever does", "Pipeline parallelism compresses its transfers", "Tensor parallelism issues 128 blocking collectives per step with nothing to overlap them with, while pipeline parallelism sends a handful of point-to-point messages", "Tensor parallelism requires a collective across every device in the cluster"], a: 2,
+      why: "Bandwidth is not the deciding factor: 15 GB per step is modest. The problem is that each of the 128 collectives is a barrier whose result the very next operation needs, so the latency cannot be hidden. Pipeline parallelism sends one activation tensor between two adjacent devices per micro-batch boundary, which is why it is the axis you stretch across the slow link." },
+    { type: "mc", q: "A mixture-of-experts run using expert parallelism shows seven of eight GPUs idle during each MoE layer. What is the most likely cause?", opts: ["The interconnect bandwidth is saturated by the dispatch all-to-all", "Router load imbalance: an all-to-all completes only when its slowest participant does, so one overloaded expert stalls everyone", "The experts are too large for the devices holding them", "Top-2 routing is doubling the traffic"], a: 1,
+      why: "The dispatch moves only 134 MB for 8,192 tokens at top-2, which no modern interconnect struggles with. What stalls is the collective's synchronisation: if the router sends a disproportionate share of tokens to one expert, every other device waits for that one on every MoE layer. This is the operational reason Chapter 10's load-balancing loss exists." },
+    { type: "blank", q: "The idle time while a pipeline fills at the start of a step and drains at the end is called the pipeline ____.", a: ["bubble", "bubbles"],
+      why: "It costs P-1 slots against m slots of useful work, so the wasted fraction of wall-clock time is (P-1)/(m+P-1): 42.9% for four stages and four micro-batches, and 15.8% for the same four stages with sixteen. The working rule is to keep the micro-batch count at four times the stage count or more." },
+    { type: "mc", q: "70B on 64 H100s across 8 nodes: ZeRO-3 over all 64 needs 8.27 s of network traffic against 8.60 s of compute, while 8-way tensor parallelism inside each node with data parallelism across them needs 0.61 s. What changed?", opts: ["The second arrangement moves far fewer bytes in total", "The second uses a lower precision for its collectives", "The second overlaps communication with computation and the first cannot", "The chattiest traffic was moved onto NVLink, leaving one all-reduce of a 1/8 shard to cross the network"], a: 3,
+      why: "Both arrangements move a great deal; the question is over which wire. ZeRO-3 gathers 140 GB of weights twice and scatters gradients once, and on a flat 64-way group all of it crosses the 50 GB/s bridge. Tensor parallelism keeps its 128 collectives per step inside the 900 GB/s domain, and the only inter-node traffic is a gradient all-reduce over a 17.5 GB shard: 30.6 GB, 0.61 s." },
+    { type: "order", q: "Order the decision procedure for choosing a parallelism strategy, cheapest first:", items: ["Plain data parallelism with gradient accumulation, if one micro-batch fits", "ZeRO-2, which shards 12 of the 18 bytes for no extra communication", "ZeRO-3, if the parameters themselves do not fit and the interconnect is fast", "Tensor parallelism at the node's NVLink degree, when activations rather than parameters are the constraint", "Pipeline parallelism, when the model is too deep or the interconnect too slow for the axes above"],
+      why: "The order is by cost, not by capability. Each step buys memory with a larger communication bill than the one before it, so you stop at the first that makes the run fit. Reaching for tensor or pipeline parallelism before trying ZeRO-2 is the most common way to make a run both slower and more complicated than it needed to be." },
+    { type: "mc", q: "What does raising a GPipe run's micro-batch count from 4 to 32 cost, and what does 1F1B change about it?", opts: ["Nothing is stored per micro-batch, so nothing is paid; 1F1B only reduces the bubble", "It costs extra collectives; 1F1B batches them", "GPipe stores activations for all micro-batches in flight, so memory scales with the count; 1F1B keeps the same bubble but caps in-flight micro-batches at the stage count", "It costs nothing in memory but raises the bubble, which 1F1B removes"], a: 2,
+      why: "GPipe runs every forward before any backward, so all 32 micro-batches' activations are alive at once, and the quantity you raised to shrink the bubble is the one inflating memory. 1F1B starts backward passes as soon as the pipeline is full and alternates, so at most P micro-batches are in flight. The bubble fraction is identical; only the peak memory differs." },
+    { type: "mc", q: "Why does context parallelism need special handling for attention but not for the feed-forward network?", opts: ["Attention has more parameters to shard", "The FFN is elementwise along the sequence, so each device handles its own positions alone, while a query on one device must attend to keys and values held on the others", "The FFN can be recomputed cheaply and attention cannot", "Attention runs in a different precision"], a: 1,
+      why: "Splitting a sequence across devices leaves every position-wise operation completely local, which covers norms and the whole feed-forward network. Attention is the one operation that mixes positions, so the key-value blocks must travel. Ring Attention passes them around a ring while each device computes on the block it holds, hiding the transfer behind the arithmetic when the blocks are large enough." }
+  ]
+});
