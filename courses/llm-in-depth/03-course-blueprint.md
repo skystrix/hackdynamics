@@ -2,8 +2,13 @@
 
 **Status:** Phase 3 complete, awaiting owner approval. On approval, chapter numbers are frozen (the platform keys progress and links on them).
 **Date:** 2026-09-05. Gap Matrix (Phase 2) approved 2026-09-05.
+**Revised 2026-09-08:** per-chapter word targets recalibrated against 20 delivered chapters. Nothing else changed — no chapter, section, machine, figure or number was altered.
 
-**Shape:** 6 parts · **41 chapters** (34 teaching + 7 capstone) · **81 machines** · ~110 static figures · capstone *PocketLM* in Python with the inference engine in C · 3 free chapters (1, 2, 5). Estimated body total ≈ 118,000 words.
+**Shape:** 6 parts · **41 chapters** (34 teaching + 7 capstone) · **81 machines** · ~110 static figures · capstone *PocketLM* in Python with the inference engine in C · 3 free chapters (1, 2, 5). Estimated body total ≈ **133,000 words** (revised 2026-09-08 from the original estimate of 118,000, which was itself inconsistent with the per-chapter targets it summarised: those summed to 162,600).
+
+**On the word-target revision (2026-09-08).** The original per-chapter targets were set before any chapter existed. Twenty chapters in, they are measurably wrong in a consistent direction: delivered body text averages **345 words per section** across Chapters 1–20, and **420** across the denser Chapters 17–20, against targets that implied 500–600. The gap is not thin sections — every section shipped sits inside the guide's §6.1 range of 250–700 words — and it is not a measurement artifact, since including code blocks raises the totals by only 6%. It is that the original targets assumed more sections per chapter than the syllabus actually lists.
+
+Targets are therefore restated as **420 words per content section**, rounded to the nearest 100, which is the standard the strongest recent chapters already meet rather than a rubber stamp of the weakest. Exercises are excluded, as the course-wide convention above already specifies. Two consequences worth stating plainly: a chapter that needs more room should gain a **section**, not a longer one; and the capstone chapters (35–41) are code-heavy, so the same per-section figure buys less prose there — if their delivered counts come in low against these numbers, the code is doing the teaching and the target is the thing to question, not the chapter.
 
 **On the chapter count.** Guide §2 targets 24–36 and *RAG In Depth* shipped 36. Phase 2 measured 108 Core rows and projected 28–34 teaching chapters plus a 5–6 chapter capstone; this lands at 34 teaching and 7 capstone. The seventh capstone chapter (§9 permits 5–8) exists because the evaluation harness cannot share a chapter with the C engine without one of them becoming a summary. Declared here rather than quietly exceeded, same as the 41 outcomes.
 
@@ -61,7 +66,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F1.1 the next-token function; F1.2 the three-machine map (pretrain → post-train → serve); F1.3 the token loop; F1.4 the LLM/RAG boundary; F1.5 Corvid-8B's spec card.
 
-**Outcomes.** E1 (full), A10 (intro). **Rows.** §3.A rows 1, 3, 7. **Prereqs.** none. **Words.** 2,800.
+**Outcomes.** E1 (full), A10 (intro). **Rows.** §3.A rows 1, 3, 7. **Prereqs.** none. **Words.** 2,500.
 
 ---
 
@@ -86,7 +91,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F2.1 text → tokens → ids → vectors; F2.2 a merge table being built; F2.3 byte-level fallback on an emoji; F2.4 BPE vs WordPiece vs Unigram; F2.5 token count by language on the same paragraph.
 
-**Outcomes.** E2, E3 (partial), B1 (foundation). **Rows.** §3.B rows 1–5, 8, 9. **Prereqs.** 1. **Words.** 4,200.
+**Outcomes.** E2, E3 (partial), B1 (foundation). **Rows.** §3.B rows 1–5, 8, 9. **Prereqs.** 1. **Words.** 2,900.
 
 ---
 
@@ -110,7 +115,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F3.1 digit splits across three tokenizers; F3.2 code indentation tokenized; F3.3 the trailing-space distribution shift; F3.4 token inflation by language; F3.5 a chat template rendered with special tokens marked.
 
-**Outcomes.** E3, E16, A6 (partial), O2 (partial). **Rows.** §3.B rows 6–8; §3.J chat templates. **Prereqs.** 2. **Words.** 3,000.
+**Outcomes.** E3, E16, A6 (partial), O2 (partial). **Rows.** §3.B rows 6–8; §3.J chat templates. **Prereqs.** 2. **Words.** 2,900.
 
 ---
 
@@ -162,7 +167,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F5.1 Q/K/V projections; F5.2 the score matrix with the softmax row; F5.3 the causal mask; F5.4 variance with and without the divisor; F5.5 n² cost curve.
 
-**Outcomes.** E6, E5 (cost half), B2 (foundation). **Rows.** §3.D rows 1–5; §3.A rows 2, 5. **Prereqs.** 4. **Words.** 4,600.
+**Outcomes.** E6, E5 (cost half), B2 (foundation). **Rows.** §3.D rows 1–5; §3.A rows 2, 5. **Prereqs.** 4. **Words.** 2,900.
 
 ---
 
@@ -186,7 +191,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F6.1 the reshape into heads; F6.2 three heads' patterns on one sentence; F6.3 MHA vs GQA vs MQA key/value sharing; F6.4 KV bytes per token, per layer; F6.5 the sliding window.
 
-**Outcomes.** E7, E20 (introduced), A9, A1 (partial). **Rows.** §3.D row 4; §3.E rows 1, 4, 5. **Prereqs.** 5. **Words.** 3,800.
+**Outcomes.** E7, E20 (introduced), A9, A1 (partial). **Rows.** §3.D row 4; §3.E rows 1, 4, 5. **Prereqs.** 5. **Words.** 2,900.
 
 ---
 
@@ -211,7 +216,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F7.1 permutation invariance; F7.2 sinusoidal encodings; F7.3 the RoPE rotation per subspace; F7.4 relative distance from absolute rotation; F7.5 the needle heatmap.
 
-**Outcomes.** E5, A8. **Rows.** §3.D rows 6–9; §3.E row 6. **Prereqs.** 5. **Words.** 4,000.
+**Outcomes.** E5, A8. **Rows.** §3.D rows 6–9; §3.E row 6. **Prereqs.** 5. **Words.** 2,900.
 
 ---
 
@@ -236,7 +241,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F8.1 the block, complete; F8.2 the residual stream through 32 layers; F8.3 pre-LN vs post-LN gradient paths; F8.4 LayerNorm vs RMSNorm arithmetic; F8.5 GELU vs SwiGLU.
 
-**Outcomes.** E8, E4 (residual stream). **Rows.** §3.D rows 10–14, 16. **Prereqs.** 5, 6. **Words.** 4,400.
+**Outcomes.** E8, E4 (residual stream). **Rows.** §3.D rows 10–14, 16. **Prereqs.** 5, 6. **Words.** 3,400.
 
 ---
 
@@ -260,7 +265,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F9.1 the parameter table; F9.2 the 6ND derivation; F9.3 stacked inference memory; F9.4 stacked training memory; F9.5 an annotated `config.json`.
 
-**Outcomes.** E8 (counting), A1, A10, E12 (6ND half). **Rows.** §3.D row 15; §3.E row 9; §3.H rows 2. **Prereqs.** 8. **Words.** 3,600.
+**Outcomes.** E8 (counting), A1, A10, E12 (6ND half). **Rows.** §3.D row 15; §3.E row 9; §3.H rows 2. **Prereqs.** 8. **Words.** 2,900.
 
 ---
 
@@ -284,7 +289,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F10.1 dense FFN vs MoE layer; F10.2 the router and top-k; F10.3 load collapse with and without the auxiliary loss; F10.4 capacity and dropped tokens; F10.5 active vs total parameters for four real models.
 
-**Outcomes.** E9, A9. **Rows.** §3.E rows 2, 3. **Prereqs.** 8, 9. **Words.** 3,800.
+**Outcomes.** E9, A9. **Rows.** §3.E rows 2, 3. **Prereqs.** 8, 9. **Words.** 2,900.
 
 ---
 
@@ -306,7 +311,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F11.1 the logit lens; F11.2 the induction circuit; F11.3 a probe's accuracy by layer; F11.4 superposition drawn in 2-D.
 
-**Outcomes.** E4 (deepened), A6 (evidence). **Rows.** §3.R all rows. **Prereqs.** 8. **Words.** 2,600.
+**Outcomes.** E4 (deepened), A6 (evidence). **Rows.** §3.R all rows. **Prereqs.** 8. **Words.** 2,100.
 
 ---
 
@@ -357,7 +362,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F13.1 inputs and shifted labels; F13.2 one position's cross-entropy; F13.3 the loop with shapes; F13.4 perplexity vs loss; F13.5 the loss-curve pathology gallery.
 
-**Outcomes.** E10, O1 (diagnosis), B3 (foundation). **Rows.** §3.G rows 1–3, 13. **Prereqs.** 8, 12. **Words.** 4,000.
+**Outcomes.** E10, O1 (diagnosis), B3 (foundation). **Rows.** §3.G rows 1–3, 13. **Prereqs.** 8, 12. **Words.** 2,900.
 
 ---
 
@@ -383,7 +388,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F14.1 optimizer trajectories; F14.2 the three schedules; F14.3 a clipped spike; F14.4 fp16/bf16/fp8 ranges; F14.5 memory before and after checkpointing.
 
-**Outcomes.** E11, O1. **Rows.** §3.G rows 4–12. **Prereqs.** 13. **Words.** 4,400.
+**Outcomes.** E11, O1. **Rows.** §3.G rows 4–12. **Prereqs.** 13. **Words.** 3,400.
 
 ---
 
@@ -407,7 +412,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F15.1 loss vs compute power law; F15.2 Kaplan vs Chinchilla allocation; F15.3 the isoFLOP curves; F15.4 training vs lifetime inference cost; F15.5 emergence under two metrics.
 
-**Outcomes.** E12, A2. **Rows.** §3.H rows 1–3; §3.A row 6. **Prereqs.** 9, 14. **Words.** 3,800.
+**Outcomes.** E12, A2. **Rows.** §3.H rows 1–3; §3.A row 6. **Prereqs.** 9, 14. **Words.** 2,900.
 
 ---
 
@@ -431,7 +436,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F16.1 the GPU memory hierarchy with bandwidths; F16.2 arithmetic intensity worked three ways; F16.3 the roofline with operations plotted; F16.4 fused vs unfused traffic; F16.5 an annotated profiler trace.
 
-**Outcomes.** E19 (foundation), A5 (foundation), B8 (foundation). **Rows.** §3.H rows 4, 5, 9. **Prereqs.** 9. **Words.** 3,600.
+**Outcomes.** E19 (foundation), A5 (foundation), B8 (foundation). **Rows.** §3.H rows 4, 5, 9. **Prereqs.** 9. **Words.** 2,900.
 
 ---
 
@@ -455,7 +460,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F17.1 the four axes; F17.2 ZeRO stages; F17.3 a tensor-parallel matmul; F17.4 the pipeline bubble; F17.5 a 3-D parallel mesh.
 
-**Outcomes.** E13, A5 (training side). **Rows.** §3.H rows 6–8. **Prereqs.** 14, 16. **Words.** 3,600.
+**Outcomes.** E13, A5 (training side). **Rows.** §3.H rows 6–8. **Prereqs.** 14, 16. **Words.** 3,400.
 
 ---
 
@@ -482,7 +487,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F18.1 logits → softmax → sample; F18.2 temperature on one distribution; F18.3 top-k vs top-p vs min-p truncation; F18.4 a beam-search tree; F18.5 the repetition loop.
 
-**Outcomes.** E14, A6 (decoding half). **Rows.** §3.I rows 1–6, 9. **Prereqs.** 13. **Words.** 3,800.
+**Outcomes.** E14, A6 (decoding half). **Rows.** §3.I rows 1–6, 9. **Prereqs.** 13. **Words.** 3,400.
 
 ---
 
@@ -509,7 +514,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F19.1 schema → automaton → token mask; F19.2 the tool-call round trip; F19.3 the ReAct loop; F19.4 an MCP client/server exchange; F19.5 cost per step across an agent run.
 
-**Outcomes.** **E27**, E14 (constrained half), O9 (partial). **Rows.** §3.I row 7; §3.P all rows. **Prereqs.** 18. **Words.** 4,600.
+**Outcomes.** **E27**, E14 (constrained half), O9 (partial). **Rows.** §3.I row 7; §3.P all rows. **Prereqs.** 18. **Words.** 4,200.
 
 ---
 
@@ -535,7 +540,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F20.1 the five-axis decision matrix; F20.2 a formatted example with the loss mask; F20.3 packing; F20.4 forgetting curves; F20.5 data quality vs quantity.
 
-**Outcomes.** E15 (SFT half), A3, O2, O3 (partial). **Rows.** §3.J rows 1–4, 8, 9, 12. **Prereqs.** 3, 13, 14. **Words.** 4,800.
+**Outcomes.** E15 (SFT half), A3, O2, O3 (partial). **Rows.** §3.J rows 1–4, 8, 9, 12. **Prereqs.** 3, 13, 14. **Words.** 3,400.
 
 ---
 
@@ -562,7 +567,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F21.1 the LoRA decomposition; F21.2 memory: full vs LoRA vs QLoRA; F21.3 NF4 quantization levels; F21.4 adapter merging and serving; F21.5 distillation loss.
 
-**Outcomes.** E15, **E18** (distillation), A4, O3. **Rows.** §3.J rows 5–7, 10, 11, 13 (frameworks). **Prereqs.** 9, 20. **Words.** 4,600.
+**Outcomes.** E15, **E18** (distillation), A4, O3. **Rows.** §3.J rows 5–7, 10, 11, 13 (frameworks). **Prereqs.** 9, 20. **Words.** 3,800.
 
 ---
 
@@ -587,7 +592,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F22.1 the three-stage pipeline; F22.2 Bradley–Terry; F22.3 the PPO loop; F22.4 reward vs KL trajectories; F22.5 the alignment tax.
 
-**Outcomes.** E17 (RLHF half), O4 (partial). **Rows.** §3.K rows 1–5, 10. **Prereqs.** 20. **Words.** 4,400.
+**Outcomes.** E17 (RLHF half), O4 (partial). **Rows.** §3.K rows 1–5, 10. **Prereqs.** 20. **Words.** 3,400.
 
 ---
 
@@ -614,7 +619,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F23.1 the derivation on one page; F23.2 the implicit reward; F23.3 GRPO's group advantage; F23.4 likelihood collapse; F23.5 the four-objective comparison.
 
-**Outcomes.** E17, O4. **Rows.** §3.K rows 6–9. **Prereqs.** 22. **Words.** 4,600.
+**Outcomes.** E17, O4. **Rows.** §3.K rows 6–9. **Prereqs.** 22. **Words.** 3,800.
 
 ---
 
@@ -639,7 +644,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F24.1 CoT's effect on the distribution; F24.2 self-consistency voting; F24.3 the RLVR loop; F24.4 accuracy vs thinking tokens; F24.5 process vs outcome supervision.
 
-**Outcomes.** E24, A2 (test-time axis). **Rows.** §3.L all rows. **Prereqs.** 23. **Words.** 4,000.
+**Outcomes.** E24, A2 (test-time axis). **Rows.** §3.L all rows. **Prereqs.** 23. **Words.** 3,400.
 
 ---
 
@@ -663,7 +668,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F25.1 an annotated model card; F25.2 architecture choices across seven families; F25.3 the licence spectrum; F25.4 the release timeline; F25.5 the decision procedure.
 
-**Outcomes.** A10, A9 (applied), A5 (model choice). **Rows.** §3.A row 8; §3.E rows 8, 9 (applied). **Prereqs.** 10, 15, 21. **Words.** 3,600.
+**Outcomes.** A10, A9 (applied), A5 (model choice). **Rows.** §3.A row 8; §3.E rows 8, 9 (applied). **Prereqs.** 10, 15, 21. **Words.** 3,400.
 
 ---
 
@@ -689,7 +694,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F26.1 the two phases on a timeline; F26.2 matmul vs matvec shapes; F26.3 bytes vs FLOPs per decoded token; F26.4 the roofline with both phases plotted; F26.5 KV-cache bytes for four models.
 
-**Outcomes.** E19, E20, A1, A5. **Rows.** §3.N rows 1–4. **Prereqs.** 6, 9, 16. **Words.** 4,800.
+**Outcomes.** E19, E20, A1, A5. **Rows.** §3.N rows 1–4. **Prereqs.** 6, 9, 16. **Words.** 2,900.
 
 ---
 
@@ -715,7 +720,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F27.1 static vs continuous batching timelines; F27.2 cache fragmentation; F27.3 blocks and the block table; F27.4 copy-on-write for a shared prefix; F27.5 goodput vs batch size under an SLO.
 
-**Outcomes.** E20 (paging), A5, O5. **Rows.** §3.N rows 5–7, 12. **Prereqs.** 26. **Words.** 4,600.
+**Outcomes.** E20 (paging), A5, O5. **Rows.** §3.N rows 5–7, 12. **Prereqs.** 26. **Words.** 3,400.
 
 ---
 
@@ -740,7 +745,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F28.1 standard attention's HBM traffic; F28.2 flash tiling with the online softmax; F28.3 memory traffic compared; F28.4 the speculative accept/reject walk; F28.5 speedup against acceptance rate.
 
-**Outcomes.** E21, A5. **Rows.** §3.N rows 8, 9; §3.E row 7. **Prereqs.** 16, 26. **Words.** 4,200.
+**Outcomes.** E21, A5. **Rows.** §3.N rows 8, 9; §3.E row 7. **Prereqs.** 16, 26. **Words.** 3,400.
 
 ---
 
@@ -766,7 +771,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F29.1 fp16 → int4 on a real distribution; F29.2 outlier features; F29.3 NF4 levels; F29.4 the GGUF k-quant family; F29.5 quality vs memory vs speed for five schemes.
 
-**Outcomes.** E22, A5, O6. **Rows.** §3.N rows 10, 11, 14 (mentioned). **Prereqs.** 26. **Words.** 4,400.
+**Outcomes.** E22, A5, O6. **Rows.** §3.N rows 10, 11, 14 (mentioned). **Prereqs.** 26. **Words.** 3,800.
 
 ---
 
@@ -793,7 +798,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F30.1 the engine request loop; F30.2 the six engines on the course's dimensions; F30.3 deployment shapes; F30.4 a routing cascade; F30.5 the sizing worksheet.
 
-**Outcomes.** A5, O5, O10. **Rows.** §3.O all rows; §3.I row 8; §3.N row 13. **Prereqs.** 27, 28, 29. **Words.** 3,800.
+**Outcomes.** A5, O5, O10. **Rows.** §3.O all rows; §3.I row 8; §3.N row 13. **Prereqs.** 27, 28, 29. **Words.** 4,200.
 
 ---
 
@@ -818,7 +823,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F31.1 patches → tokens → the same stream; F31.2 CLIP's contrastive matrix; F31.3 projector vs Q-Former; F31.4 VLM training stages; F31.5 image token cost by resolution.
 
-**Outcomes.** E25. **Rows.** §3.Q rows 1–4. **Prereqs.** 4, 7. **Words.** 3,200.
+**Outcomes.** E25. **Rows.** §3.Q rows 1–4. **Prereqs.** 4, 7. **Words.** 3,400.
 
 ---
 
@@ -846,7 +851,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F32.1 the scoring paths for one MMLU question; F32.2 prompt-sensitivity spread; F32.3 contamination pipeline; F32.4 judge bias measurements; F32.5 scores with confidence intervals.
 
-**Outcomes.** E23, A7, O7. **Rows.** §3.M all rows. **Prereqs.** 13, 24. **Words.** 4,600.
+**Outcomes.** E23, A7, O7. **Rows.** §3.M all rows. **Prereqs.** 13, 24. **Words.** 4,200.
 
 ---
 
@@ -874,7 +879,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F33.1 instruction and data in one stream; F33.2 the jailbreak taxonomy; F33.3 an indirect-injection path; F33.4 guardrail placement; F33.5 the ROC of a guardrail.
 
-**Outcomes.** E26, O9. **Rows.** §3.S all rows; §3.P row 7. **Prereqs.** 19. **Words.** 4,000.
+**Outcomes.** E26, O9. **Rows.** §3.S all rows; §3.P row 7. **Prereqs.** 19. **Words.** 4,600.
 
 ---
 
@@ -899,7 +904,7 @@ Format per chapter: title · archetype · blurb · sections · machines (spec pe
 
 **Figures.** F34.1 the unit economics of one request; F34.2 the span tree of a served request; F34.3 a drift canary over time; F34.4 the FTI split; F34.5 the incident table.
 
-**Outcomes.** O8, O10, A6. **Rows.** §3.T all rows. **Prereqs.** 26, 27, 29, 30, 32, 33. **Words.** 4,200.
+**Outcomes.** O8, O10, A6. **Rows.** §3.T all rows. **Prereqs.** 26, 27, 29, 30, 32, 33. **Words.** 3,400.
 
 ---
 
@@ -915,7 +920,7 @@ Every chapter adds one layer and ends with a test the learner runs. Every design
 **Sections.** 1 The design decisions (byte-level, no regex pre-tokenizer at first, then one added and measured). 2 Training the merge table on *The Almanac*. 3 Encoding efficiently: the priority-queue merge loop. 4 Decoding and the invalid-UTF-8 case. 5 Special tokens and the template. 6 What we simplified.
 **The test.** A round-trip fuzz over 100,000 random byte strings (decode(encode(x)) == x for every one), plus a merge-table comparison against Hugging Face `tokenizers` trained on the same corpus with the same vocabulary size — the first 500 merges must match.
 **Machine.** `llmPocketTokenizer` · Builder · trains on a pasted corpus and shows the learner's own merge table growing beside the reference implementation's.
-**Outcomes.** B1. **Prereqs.** 2, 3. **Words.** 3,000.
+**Outcomes.** B1. **Prereqs.** 2, 3. **Words.** 2,500.
 
 #### Chapter 36 — PocketLM: Attention and the Block *(Build it)*
 
@@ -923,7 +928,7 @@ Every chapter adds one layer and ends with a test the learner runs. Every design
 **Sections.** 1 Tensors and shapes, stated once so every later shape is checkable. 2 Single-head attention. 3 Multi-head as a reshape. 4 The causal mask. 5 The KV cache, written now because retro-fitting one is painful. 6 The block assembled. 7 What we simplified.
 **The test.** Numerical equivalence against `torch.nn.functional.scaled_dot_product_attention` and a reference block to within 1e-5 on random inputs, including with the cache warm — the cached path must produce identical logits to the uncached path.
 **Machine.** `llmPocketShapes` · Inspector · every tensor in the block with its shape, live, as the learner changes the config.
-**Outcomes.** B2. **Prereqs.** 5, 6, 8, 35. **Words.** 3,600.
+**Outcomes.** B2. **Prereqs.** 5, 6, 8, 35. **Words.** 2,900.
 
 #### Chapter 37 — PocketLM: Pretraining *(Build it)*
 
@@ -931,7 +936,7 @@ Every chapter adds one layer and ends with a test the learner runs. Every design
 **Sections.** 1 The model class. 2 The data loader with packing and shift-by-one. 3 The training step. 4 The optimizer and schedule. 5 Checkpointing and resuming (with a deliberate crash and resume). 6 Sampling from your own model. 7 Reading your loss curve. 8 What we simplified.
 **The test.** A 24M-parameter model reaches a stated validation loss on *The Almanac* within a stated wall-clock budget on the 16 GB budget machine (and a CPU-only path with a smaller target); the run is resumable — kill it at step 500, resume, and the loss curve must be continuous.
 **Machine.** `llmPocketTraining` · Simulator · the learner's own logged run replayed, with the loss-curve gallery from Chapter 13 overlaid for comparison.
-**Outcomes.** B3, O1. **Prereqs.** 13, 14, 36. **Words.** 4,000.
+**Outcomes.** B3, O1. **Prereqs.** 13, 14, 36. **Words.** 3,400.
 
 #### Chapter 38 — PocketLM: Modern Parts, and the Harness That Judges Them *(Build it)*
 
@@ -939,7 +944,7 @@ Every chapter adds one layer and ends with a test the learner runs. Every design
 **Sections.** 1 Why an ablation without an interval is an anecdote — the harness comes first. 2 RoPE, replacing learned positions. 3 RMSNorm, replacing LayerNorm. 4 SwiGLU, with the ×2/3 width correction so the comparison is parameter-matched. 5 GQA, and the KV bytes it saves measured on your own model. 6 The ablation table, with intervals. 7 What we simplified.
 **The test.** Each component can be switched on and off by a config flag; the harness reports every combination with a confidence interval, and the learner must state which differences are real. A component that fails to beat its baseline is reported as such — the chapter's honesty rule.
 **Machine.** `llmPocketAblation` · Comparator · the learner's own ablation table against the reference results, with intervals drawn.
-**Outcomes.** B4, B9 (harness), A7. **Prereqs.** 7, 8, 32, 37. **Words.** 4,000.
+**Outcomes.** B4, B9 (harness), A7. **Prereqs.** 7, 8, 32, 37. **Words.** 2,900.
 
 #### Chapter 39 — PocketLM: Loading Real Weights *(Build it)*
 
@@ -947,7 +952,7 @@ Every chapter adds one layer and ends with a test the learner runs. Every design
 **Sections.** 1 What is in a `safetensors` file. 2 The name mapping, and the four transposes that will catch you. 3 Loading GPT-2 and matching logits. 4 The modern model: RoPE parameters, GQA head grouping, tied vs untied embeddings. 5 When the numbers do not match: a debugging procedure that bisects by layer. 6 Generating from real weights with your own code. 7 What we simplified.
 **The test.** Maximum absolute logit deviation from the reference implementation below a stated tolerance across 100 prompts, for both models. This is the chapter that proves the implementation is correct rather than merely plausible.
 **Machine.** `llmPocketDiff` · Inspector · per-layer activation deviation between the learner's model and the reference, so a mismatch is located rather than hunted.
-**Outcomes.** B5, A10. **Prereqs.** 9, 38. **Words.** 3,600.
+**Outcomes.** B5, A10. **Prereqs.** 9, 38. **Words.** 2,900.
 
 #### Chapter 40 — PocketLM: LoRA, SFT and DPO From the Loss Up *(Build it)*
 
@@ -955,7 +960,7 @@ Every chapter adds one layer and ends with a test the learner runs. Every design
 **Sections.** 1 The LoRA layer: two matrices, the scaling, the injection points. 2 Freezing the base and counting what is trainable. 3 SFT on *The Almanac*'s instruction pairs, with the loss mask from Chapter 20. 4 Merging the adapter, and proving the merge is equivalent. 5 Preference pairs and the DPO loss, written from Chapter 23's derivation. 6 Training, and reading the margin against both likelihoods. 7 Evaluating with the Chapter 38 harness. 8 What we simplified.
 **The test.** Three assertions the learner runs: the merged model produces identical logits to the base-plus-adapter model; SFT measurably improves the instruction-following score on a held-out split with an interval; DPO increases the implicit reward margin on held-out pairs **without** both likelihoods falling — the failure mode from Chapter 23, now guarded by a test.
 **Machine.** `llmPocketDpo` · Tuner · the learner's own DPO run, β on a slider, margin and likelihoods plotted together.
-**Outcomes.** B6, B7, O3, O4. **Prereqs.** 21, 23, 39. **Words.** 4,200.
+**Outcomes.** B6, B7, O3, O4. **Prereqs.** 21, 23, 39. **Words.** 3,400.
 
 #### Chapter 41 — PocketLM-C: The Engine, the Honest Benchmark, and Graduation *(Build it, C)*
 
@@ -963,7 +968,7 @@ Every chapter adds one layer and ends with a test the learner runs. Every design
 **Sections.** 1 Why C for this layer and only this layer, restated in one paragraph. 2 The file format: your own minimal GGUF-like container, and why. 3 The forward pass in C: memory layout first, arithmetic second. 4 The KV cache as a flat buffer, and the fragmentation you are choosing to accept. 5 A quantized matmul: int8 with per-group scales, and the error measured against the fp32 path. 6 The sampler, matching Chapter 18's semantics exactly. 7 **Measuring your own engine**: tokens per second, arithmetic intensity, and where you sit on Chapter 16's roofline. 8 **The honest benchmark**: PocketLM-C against `llama.cpp` and vLLM on the same model, same hardware, same prompt set, with every condition stated and every place they are not comparable named. 9 **The confession table**: every simplification, with the chapter that holds the real machinery. 10 **Graduation**: three weekend projects — continuous batching, a Metal or CUDA kernel for the matmul, and speculative decoding with your 24M model drafting for a larger one. Ends with "this is early, not wrong".
 **The test.** The C engine's output tokens match the Python implementation's greedy output exactly for 50 prompts; the quantized path's perplexity delta against fp32 is reported with an interval; the benchmark script reproduces its own numbers within a stated variance across three runs.
 **Machine.** `llmPocketBench` · Comparator · the learner's measured numbers against the reference measurements and the two production engines, with the conditions attached to every bar.
-**Outcomes.** B8, B9, E19 (proved by hand), O5, O6. **Prereqs.** 16, 26, 27, 29, 40. **Words.** 5,000.
+**Outcomes.** B8, B9, E19 (proved by hand), O5, O6. **Prereqs.** 16, 26, 27, 29, 40. **Words.** 2,500.
 
 ---
 
