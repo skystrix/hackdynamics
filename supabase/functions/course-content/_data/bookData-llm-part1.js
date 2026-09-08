@@ -3790,3 +3790,288 @@ CHAPTERS.push({
       why: "Splitting a sequence across devices leaves every position-wise operation completely local, which covers norms and the whole feed-forward network. Attention is the one operation that mixes positions, so the key-value blocks must travel. Ring Attention passes them around a ring while each device computes on the block it holds, hiding the transfer behind the arithmetic when the blocks are large enough." }
   ]
 });
+
+/* ======================= CHAPTER 18 ======================= */
+CHAPTERS.push({
+  num: 18, part: 4, title: "Decoding: Turning a Distribution Into Text",
+  blurb: "Chapter 1 called the model a function that returns a probability for every token, and left one box unopened: how you get from 128,256 numbers to a word. That box is this chapter, and the choices inside it are why the same weights can produce a careful assistant or a confident liar. You will sample from one real distribution under every strategy in the field, watch temperature move probability into the tail, find the exact point where top-p starts admitting nonsense, and see why greedy decoding, the obvious choice, walks into a loop it cannot leave.",
+  sections: [
+    { title: "Greedy Decoding, and the Loop It Walks Into", viz: "llmGreedyLoop", vizTitle: "Step a greedy generation until it repeats, then switch strategy at that token",
+      html: "<p>The model's output is a vector of 128,256 <strong>logits</strong>, one raw score per vocabulary entry. A softmax turns those into probabilities. Something then has to pick one token, and that picker is the entire subject of this chapter.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 176' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one decoding step: everything this chapter changes happens in the last two boxes</text>" +
+      "<rect x='20' y='34' width='120' height='56' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='56' fill='#4f7cff' font-size='10'>the model</text>" +
+      "<text x='34' y='76' fill='#7d8fb0' font-size='9'>8.03B parameters</text>" +
+      "<line x1='146' y1='62' x2='176' y2='62' stroke='#4f7cff' stroke-width='2'/><polygon points='184,62 174,57 174,67' fill='#4f7cff'/>" +
+      "<rect x='190' y='34' width='120' height='56' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='204' y='56' fill='#4f7cff' font-size='10'>logits</text>" +
+      "<text x='204' y='76' fill='#7d8fb0' font-size='9'>128,256 raw scores</text>" +
+      "<line x1='316' y1='62' x2='346' y2='62' stroke='#ffd166' stroke-width='2'/><polygon points='354,62 344,57 344,67' fill='#ffd166'/>" +
+      "<rect x='360' y='34' width='150' height='56' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='374' y='56' fill='#ffd166' font-size='10'>reshape the scores</text>" +
+      "<text x='374' y='76' fill='#c9d6ea' font-size='9'>temperature, penalties</text>" +
+      "<line x1='516' y1='62' x2='546' y2='62' stroke='#ffd166' stroke-width='2'/><polygon points='554,62 544,57 544,67' fill='#ffd166'/>" +
+      "<rect x='560' y='34' width='180' height='56' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='574' y='56' fill='#ffd166' font-size='10'>truncate, then pick</text>" +
+      "<text x='574' y='76' fill='#c9d6ea' font-size='9'>top-k, top-p, min-p, sample</text>" +
+      "<line x1='650' y1='96' x2='650' y2='120' stroke='#3ddc97' stroke-width='2'/>" +
+      "<line x1='650' y1='120' x2='80' y2='120' stroke='#3ddc97' stroke-width='2'/>" +
+      "<line x1='80' y1='120' x2='80' y2='96' stroke='#3ddc97' stroke-width='2'/><polygon points='80,88 75,98 85,98' fill='#3ddc97'/>" +
+      "<text x='300' y='136' fill='#3ddc97' font-size='9.5'>the chosen token is appended and the whole thing runs again</text>" +
+      "<text x='20' y='162' fill='#c9d6ea' font-size='10.5'>The weights are fixed. Every difference between two runs of the same model is made in the gold boxes.</text>" +
+      "</svg><div class='fig-cap'>Chapter 1 drew this loop and left the picker empty. Two operations fill it: reshape the scores, then truncate and sample.</div></div>" +
+      "<h3>The distribution this chapter uses</h3>" +
+      "<p>Every number below comes from one distribution, and here is the whole thing, so that nothing in this chapter has to be taken on faith. Corvid's top ten logits for the context <code>The old bridge across the river was</code>, with the remaining 128,246 entries modelled as a power-law tail:</p>" +
+      "<pre><code>import math\n\nV = 128256\ntop = [4.2, 3.9, 3.1, 3.0, 2.8, 2.6, 2.4, 2.2, 2.1, 1.9]\nnames = [\" built\", \" a\", \" the\", \" destroyed\", \" still\",\n         \" one\", \" completed\", \" named\", \" in\", \" an\"]\nlogits = top + [top[-1] - 2.0 * math.log(r / 10) for r in range(11, V + 1)]\n\ndef softmax(ls, T=1.0):\n    zs = [l / T for l in ls]\n    m = max(zs)\n    es = [math.exp(z - m) for z in zs]\n    Z = sum(es)\n    return [e / Z for e in es]</code></pre>" +
+      "<p>Run <code>softmax(logits)</code> and the top ten come out as 0.2325, 0.1723, 0.0774, 0.0700, 0.0573, 0.0469, 0.0384, 0.0315, 0.0285 and 0.0233, together 0.7782 of the mass. The entropy is 4.409 bits. The tail is a model, not a measurement, and a real tail is lumpier; every conclusion below depends on its shape only through the fact that it is long and low, which all real tails are.</p>" +
+      "<h3>Always take the best one</h3>" +
+      "<p><strong>Greedy decoding</strong> takes the argmax at every step: here, <code> built</code>. It is deterministic, it is free, and it is the default in Hugging Face's <code>generate</code>, which uses greedy search unless you pass <code>do_sample=True</code>. It is also the strategy that produces the single most recognisable failure in the field.</p>" +
+      "<p>Run it long enough on an open-ended prompt and the output starts repeating &#8212; a phrase, then a sentence, then the same sentence forever. The reason is a feedback loop rather than a bug. Chapter 13's teacher forcing trained the model only on contexts that a human wrote; a context containing three copies of the same clause is not one of those, and the model's behaviour there was never shaped. Worse, the repetition shows <strong>self-reinforcement</strong>: Holtzman and colleagues measured in 2019 that the probability a model assigns to a phrase <em>rises</em> with each repetition of it. Once the loop starts, greedy decoding is the strategy least able to leave it, because leaving requires taking a token that is not the most likely one, and that is the one thing greedy will never do.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 194' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>why greedy decoding cannot leave a loop it has entered</text>" +
+      "<rect x='40' y='32' width='210' height='42' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='54' y='50' fill='#c9d6ea' font-size='9.5'>a phrase is emitted once</text>" +
+      "<text x='54' y='66' fill='#7d8fb0' font-size='9'>p of repeating it: low</text>" +
+      "<line x1='256' y1='53' x2='294' y2='53' stroke='#ffd166' stroke-width='2'/><polygon points='302,53 292,48 292,58' fill='#ffd166'/>" +
+      "<rect x='308' y='32' width='210' height='42' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='322' y='50' fill='#c9d6ea' font-size='9.5'>the context now contains it</text>" +
+      "<text x='322' y='66' fill='#ffd166' font-size='9'>p of repeating it: higher</text>" +
+      "<line x1='524' y1='53' x2='562' y2='53' stroke='#ff5d73' stroke-width='2'/><polygon points='570,53 560,48 560,58' fill='#ff5d73'/>" +
+      "<rect x='576' y='32' width='164' height='42' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='590' y='50' fill='#ff5d73' font-size='9.5'>it is now the argmax</text>" +
+      "<text x='590' y='66' fill='#7d8fb0' font-size='9'>greedy must take it</text>" +
+      "<line x1='658' y1='80' x2='658' y2='100' stroke='#ff5d73' stroke-width='2'/>" +
+      "<line x1='658' y1='100' x2='145' y2='100' stroke='#ff5d73' stroke-width='2'/>" +
+      "<line x1='145' y1='100' x2='145' y2='80' stroke='#ff5d73' stroke-width='2'/><polygon points='145,74 140,84 150,84' fill='#ff5d73'/>" +
+      "<text x='300' y='116' fill='#ff5d73' font-size='9.5'>and each pass around this loop makes the next one more likely</text>" +
+      "<line x1='20' y1='130' x2='740' y2='130' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='150' fill='#3ddc97' font-size='10'>the exit: any strategy that can choose a token which is not the most likely one</text>" +
+      "<text x='20' y='168' fill='#c9d6ea' font-size='10'>sampling, a penalty on repeated tokens, or a truncation set with more than one member</text>" +
+      "<text x='20' y='188' fill='#7d8fb0' font-size='9.5'>this is why the repair is never &#8220;a better model&#8221; and always a different decoder</text>" +
+      "</svg><div class='fig-cap'>The loop is closed by the rule, not by the weights. The same model sampling instead of maximising walks out of it on the first step.</div></div>" +
+      "<div class='callout'><strong>Step it above.</strong> Run the greedy stepper until the same clause appears twice, note the token index where it happens, then switch to sampling at exactly that token and step on. The loop does not resume. That single observation is the whole argument for everything in the rest of this chapter.</div>" },
+
+    { title: "Temperature: Dividing the Logits",
+      html: "<p><strong>Temperature</strong> divides every logit by a constant before the softmax. That is the entire operation; the interesting part is what it does to the shape.</p>" +
+      "<p>Dividing by <code>T</code> below 1 spreads the logits further apart, so the softmax's exponential magnifies the gap and the top token takes more of the mass. Dividing by <code>T</code> above 1 pulls them together, so the mass flattens outward. At <code>T</code> = 0 the operation is undefined and every implementation treats it as greedy decoding instead.</p>" +
+      "<p>Here is the effect on the bridge distribution, from the code in section 1:</p>" +
+      "<pre><code>                 T=0.7    T=1.0    T=1.5    T=2.0\n built           0.3730   0.2325   0.0943   0.0284\n a               0.2430   0.1723   0.0772   0.0245\n the             0.0775   0.0774   0.0453   0.0164\n destroyed       0.0672   0.0700   0.0424   0.0156\n--------------------------------------------------\ntop 10 together  0.9315   0.7782   0.4255   0.1528\nentropy (bits)    3.017    4.409    7.983   12.474</code></pre>" +
+      "<p>Read the bottom two rows, not the top. At <code>T</code> = 1 the ten most likely tokens hold 78% of the mass. At <code>T</code> = 2 they hold 15%, which means <strong>85% of the probability now sits in tokens the model considered implausible</strong>. Nothing was added to the tail; the tail was always there, holding 22% at <code>T</code> = 1. Temperature does not invent nonsense, it promotes nonsense that was already present and had been safely outvoted.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>where the probability mass sits &#183; gold = the top ten tokens &#183; red = the other 128,246</text>" +
+      "<text x='20' y='48' fill='#c9d6ea' font-size='10'>T = 0.7</text>" +
+      "<rect x='96' y='34' width='596' height='20' fill='#2e1620' stroke='#ff5d73' stroke-width='1'/>" +
+      "<rect x='96' y='34' width='555' height='20' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='700' y='48' fill='#ffd166' font-size='9.5'>93%</text>" +
+      "<text x='20' y='84' fill='#c9d6ea' font-size='10'>T = 1.0</text>" +
+      "<rect x='96' y='70' width='596' height='20' fill='#2e1620' stroke='#ff5d73' stroke-width='1'/>" +
+      "<rect x='96' y='70' width='464' height='20' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='700' y='84' fill='#ffd166' font-size='9.5'>78%</text>" +
+      "<text x='20' y='120' fill='#c9d6ea' font-size='10'>T = 1.5</text>" +
+      "<rect x='96' y='106' width='596' height='20' fill='#2e1620' stroke='#ff5d73' stroke-width='1'/>" +
+      "<rect x='96' y='106' width='254' height='20' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='700' y='120' fill='#ffd166' font-size='9.5'>43%</text>" +
+      "<text x='20' y='156' fill='#ff5d73' font-size='10'>T = 2.0</text>" +
+      "<rect x='96' y='142' width='596' height='20' fill='#2e1620' stroke='#ff5d73' stroke-width='1'/>" +
+      "<rect x='96' y='142' width='91' height='20' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='700' y='156' fill='#ff5d73' font-size='9.5'>15%</text>" +
+      "<line x1='96' y1='174' x2='692' y2='174' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='194' fill='#c9d6ea' font-size='10.5'>Entropy goes 3.0 to 4.4 to 8.0 to 12.5 bits. The vocabulary is 17 bits wide, so at T = 2 the model is</text>" +
+      "<text x='20' y='208' fill='#c9d6ea' font-size='10.5'>most of the way to choosing uniformly at random.</text>" +
+      "</svg><div class='fig-cap'>The red band is the tail at every temperature. Raising T does not change what is in it; it changes how often you reach into it.</div></div>" +
+      "<p>This is also why temperature alone is a bad diversity control. To get genuinely different phrasings you must raise <code>T</code> enough that the tail becomes reachable, and the tail is where the misspellings, the wrong languages and the invented words live. The strategies in the next section exist so that you can raise the temperature without paying that.</p>" +
+      "<div class='callout'><strong>The misconception.</strong> Temperature is not a creativity dial and it is not a confidence setting. It is a monotone reshaping of a fixed distribution, so it can only change how much of the model's existing uncertainty you act on. A model that does not know the answer at <code>T</code> = 0.2 does not know it at <code>T</code> = 1.2 either; it simply commits to one wrong answer instead of sampling among several.</div>" },
+
+    { title: "Truncation: Top-k, Top-p, and Min-p", viz: "llmSampler", vizTitle: "Sample twenty times at temperature 0, then at 1.5, then add min-p",
+      html: "<p>If the trouble is the tail, cut the tail off. All three truncation methods do that; they disagree only about where to cut.</p>" +
+      "<p><strong>Top-k sampling</strong> keeps the <code>k</code> highest-probability tokens and renormalises. It is the oldest and the crudest, because <code>k</code> is a fixed count applied to a distribution whose useful width changes at every step. Take the two contexts from Chapter 1:</p>" +
+      "<pre><code>                                        top-5 keeps   top-50 keeps\nThe capital of France is  (H = 0.65)       0.9682        0.9962\nThe old bridge ... was    (H = 4.41)       0.6095        0.9539</code></pre>" +
+      "<p>The same <code>k</code> = 5 makes two opposite errors. On the peaked context it leaves 3.2% of the mass on four alternatives to <code> Paris</code> that are all wrong, so roughly one continuation in thirty is a factual error you have deliberately kept reachable. On the open context it throws away 39% of the mass, including perfectly good continuations, and makes the model duller than it is.</p>" +
+      "<h3>Nucleus sampling</h3>" +
+      "<p><strong>Top-p</strong>, also called <strong>nucleus sampling</strong>, fixes that by cutting on mass rather than count: sort the tokens, walk down the list accumulating probability, and stop when the total reaches <code>p</code>. The size of the surviving set is whatever the distribution says it should be. Holtzman, Buys, Du, Forbes and Choi introduced it in 2019, in the same paper that diagnosed the repetition problem, and it is the default sampler almost everywhere.</p>" +
+      "<pre><code>                          top-p = 0.9 keeps    top-p = 0.95 keeps\nThe capital of France is        1 token             3 tokens\nThe old bridge ... was         23 tokens           47 tokens</code></pre>" +
+      "<p>That is the behaviour you want: one token when the model is certain, twenty-three when it is not, from one setting.</p>" +
+      "<h3>Where top-p breaks</h3>" +
+      "<p>It breaks in combination with temperature, and this is the part most people meet only as a mystery. Top-p cuts at a fixed amount of mass, and temperature moves mass into the tail, so top-p obediently follows it there:</p>" +
+      "<pre><code>The capital of France is, top-p = 0.9 throughout\n  T = 1.0   keeps      1 token\n  T = 1.5   keeps    156 tokens\n  T = 2.0   keeps 34,818 tokens</code></pre>" +
+      "<p>At <code>T</code> = 1.5 the setting that kept exactly <code> Paris</code> now admits a hundred and fifty-six candidates for the capital of France. The nucleus did not fail; it did precisely what it was told, on a distribution that had been flattened underneath it.</p>" +
+      "<h3>Min-p</h3>" +
+      "<p><strong>Min-p sampling</strong> anchors the cut to the model's own confidence. Set a threshold as a fraction of the top token's probability &#8212; keep every token with <code>p</code> at least <code>min_p</code> &#215; <code>p_max</code> &#8212; and the surviving set shrinks automatically whenever the model is sure, at any temperature. Nguyen and colleagues published it in 2024 with exactly this motivation: keeping output coherent at temperatures where top-p falls apart.</p>" +
+      "<pre><code>The capital of France is, min-p = 0.1        The old bridge ... was, min-p = 0.1\n  T = 1.0   keeps  1 token                     T = 1.0   keeps 10 tokens\n  T = 1.5   keeps  1 token                     T = 1.5   keeps 17 tokens\n  T = 2.0   keeps  2 tokens                    T = 2.0   keeps 31 tokens</code></pre>" +
+      "<p>Compare the left column with the top-p table above at the same temperatures: 1, 156 and 34,818 becomes 1, 1 and 2. The threshold moves with the peak, so flattening the distribution flattens the threshold too and the garbage never becomes eligible.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the same open distribution, three cuts &#183; kept in gold, discarded in dim</text>" +
+      "<text x='20' y='40' fill='#c9d6ea' font-size='9.5'>p</text>" +
+      "<rect x='60' y='26' width='90' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='154' y='26' width='67' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='225' y='26' width='30' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='259' y='26' width='27' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='290' y='26' width='22' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='316' y='26' width='18' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='338' y='26' width='15' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='357' y='26' width='12' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='373' y='26' width='11' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='388' y='26' width='9' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='401' y='26' width='291' height='18' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='60' y='58' fill='#7d8fb0' font-size='8.5'>built  a  the destroyed still ... </text>" +
+      "<text x='500' y='38' fill='#7d8fb0' font-size='9'>the 128,246-token tail</text>" +
+      "<line x1='20' y1='72' x2='740' y2='72' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='96' fill='#c9d6ea' font-size='10'>top-k = 5</text>" +
+      "<rect x='150' y='84' width='150' height='16' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='300' y='84' width='392' height='16' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='700' y='96' fill='#7d8fb0' font-size='9'>61%</text>" +
+      "<text x='150' y='114' fill='#7d8fb0' font-size='9'>a fixed count: too many when the model is sure, too few when it is not</text>" +
+      "<text x='20' y='142' fill='#c9d6ea' font-size='10'>top-p = 0.9</text>" +
+      "<rect x='150' y='130' width='486' height='16' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='636' y='130' width='56' height='16' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='700' y='142' fill='#ffd166' font-size='9'>90%</text>" +
+      "<text x='150' y='160' fill='#7d8fb0' font-size='9'>a fixed mass: adapts to shape, but follows the mass into the tail as T rises</text>" +
+      "<text x='20' y='188' fill='#3ddc97' font-size='10'>min-p = 0.1</text>" +
+      "<rect x='150' y='176' width='324' height='16' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='474' y='176' width='218' height='16' fill='#141c30' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='700' y='188' fill='#3ddc97' font-size='9'>78%</text>" +
+      "<text x='150' y='206' fill='#7d8fb0' font-size='9'>a fixed ratio to the top token: the cut moves with the peak, so temperature cannot drag it out</text>" +
+      "<text x='20' y='230' fill='#c9d6ea' font-size='10.5'>All three keep the front of the distribution. They differ entirely in what happens when the shape changes.</text>" +
+      "</svg><div class='fig-cap'>On this one distribution the three cuts land in similar places. The differences appear when the distribution gets peakier or flatter, which is every other token.</div></div>" +
+      "<div class='callout'><strong>Play with it above.</strong> Sample twenty continuations at temperature 0 and read them: they are identical. Now set temperature 1.5 with top-p 0.95 and sample twenty more, and find the first token that is simply wrong. Then leave the temperature at 1.5, turn top-p off and set min-p to 0.1, and sample twenty more. The variety survives; the specific failure you found does not.</div>" +
+      "<p>The practical settings that follow: for factual work, low temperature with top-p around 0.9, or greedy if you also need reproducibility. For open writing, temperature 1.0 to 1.5 with min-p around 0.05 to 0.1 rather than a high top-p. Setting all three at once is common and mostly harmless, since they compose as successive filters, but it makes the behaviour hard to reason about and you will not know which one is doing the work.</p>" },
+
+    { title: "Beam Search, and Why Chat Does Not Use It",
+      html: "<p>Every strategy so far is myopic: it commits to a token before seeing what follows. <strong>Beam search</strong> refuses to. It keeps the <code>B</code> best partial sequences at every step, scored by cumulative log-probability, expands all of them, and keeps the best <code>B</code> of the results. When a beam emits the end-of-sequence token it is set aside as a candidate, and at the end the best complete candidate wins.</p>" +
+      "<p>It genuinely finds sequences that greedy decoding cannot:</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>beam width 2 &#183; the highest-probability first token does not start the highest-probability sequence</text>" +
+      "<rect x='20' y='84' width='118' height='36' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='30' y='106' fill='#c9d6ea' font-size='9'>...river was</text>" +
+      "<line x1='144' y1='96' x2='196' y2='56' stroke='#ffd166' stroke-width='2'/>" +
+      "<line x1='144' y1='102' x2='196' y2='102' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='144' y1='108' x2='196' y2='150' stroke='#ffd166' stroke-width='2'/>" +
+      "<rect x='200' y='38' width='124' height='34' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='210' y='52' fill='#ffd166' font-size='9'>built</text>" +
+      "<text x='210' y='66' fill='#7d8fb0' font-size='8.5'>0.2325 &#183; kept</text>" +
+      "<rect x='200' y='86' width='124' height='34' rx='6' fill='#111a2e' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='210' y='100' fill='#7d8fb0' font-size='9'>a</text>" +
+      "<text x='210' y='114' fill='#7d8fb0' font-size='8.5'>0.1723 &#183; dropped</text>" +
+      "<rect x='200' y='134' width='124' height='34' rx='6' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='210' y='148' fill='#ffd166' font-size='9'>destroyed</text>" +
+      "<text x='210' y='162' fill='#7d8fb0' font-size='8.5'>0.0700 &#183; kept</text>" +
+      "<line x1='330' y1='55' x2='388' y2='55' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='330' y1='151' x2='388' y2='151' stroke='#3ddc97' stroke-width='2'/>" +
+      "<rect x='392' y='38' width='190' height='34' rx='6' fill='#111a2e' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='402' y='52' fill='#c9d6ea' font-size='9'>built in &#183; p(in) = 0.22</text>" +
+      "<text x='402' y='66' fill='#ff5d73' font-size='9'>joint 0.0512</text>" +
+      "<rect x='392' y='134' width='190' height='34' rx='6' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='402' y='148' fill='#c9d6ea' font-size='9'>destroyed in &#183; p(in) = 0.81</text>" +
+      "<text x='402' y='162' fill='#3ddc97' font-size='9'>joint 0.0567</text>" +
+      "<text x='600' y='58' fill='#ff5d73' font-size='9.5'>greedy stops here</text>" +
+      "<text x='600' y='154' fill='#3ddc97' font-size='9.5'>beam-2 finds this</text>" +
+      "<text x='20' y='192' fill='#c9d6ea' font-size='10.5'>&#8220;destroyed&#8221; is a third as likely as &#8220;built&#8221;, but almost forces its continuation, and the product wins.</text>" +
+      "<text x='20' y='208' fill='#7d8fb0' font-size='9.5'>greedy cannot see this, because at step one it has already thrown the branch away.</text>" +
+      "</svg><div class='fig-cap'>The whole value of beam search in one picture: a locally worse token that leads somewhere better. The whole problem is that this is not what a chat model needs.</div></div>" +
+      "<p>Two properties decide where it belongs.</p>" +
+      "<p><strong>It optimises sequence probability, and it has a length bias.</strong> Every extra token multiplies the score by a number below 1, so short sequences win by default. The standard repair is <strong>length normalisation</strong>: divide the log-probability by the length, or by length raised to a power around 0.6 to 1.0, which is what Google's neural translation system did in 2016. Without it, beam search will happily stop a sentence early.</p>" +
+      "<p><strong>Wider is not better.</strong> Koehn and Knowles measured this for translation in 2017 and found the optimal beam width running from about 4 for Czech-English to about 30 for English-Romanian, with quality <em>falling</em> beyond it, mainly because wider beams find shorter translations. This is not a tuning inconvenience; it is a sign that the highest-probability sequence is not the best one.</p>" +
+      "<h3>The result that settles it</h3>" +
+      "<p>Holtzman and colleagues put it directly: human text does not have high probability under the model. Real writing wanders, chooses the surprising word, and has per-token probabilities that fluctuate constantly. Beam-search output is smooth, high-probability and, to a reader, unmistakably bland. Maximising likelihood is the wrong objective for open-ended text, and no beam width fixes an objective.</p>" +
+      "<p>So the division is clean. Translation, summarisation and speech transcription have a roughly correct answer, and searching harder for the highest-probability output finds it. Chat, story writing and any task where the output is one of many acceptable answers do not, and there beam search is expensive &#8212; <code>B</code> times the compute and <code>B</code> times the KV cache from Chapter 6 &#8212; in exchange for output that reads worse.</p>" },
+
+    { title: "Penalties, and the Damage They Do",
+      html: "<p>Penalties attack repetition directly, by editing the logits of tokens that have already appeared. There are two families and they are not interchangeable.</p>" +
+      "<p>The <strong>presence penalty</strong> and <strong>frequency penalty</strong>, from the OpenAI API, are subtractive. For each token <code>j</code>, with <code>c[j]</code> its count so far in the generation:</p>" +
+      "<pre><code>logit[j] -= c[j] * frequency_penalty + (1 if c[j] &gt; 0 else 0) * presence_penalty</code></pre>" +
+      "<p>Presence is a one-off charge for having appeared at all; frequency is a charge that grows with every appearance. The <strong>repetition penalty</strong> from Hugging Face, which follows the CTRL paper of Keskar and colleagues in 2019, is multiplicative instead: a seen token's logit is divided by <code>&#952;</code> if it is positive and multiplied by <code>&#952;</code> if it is negative, with 1.2 the usual value.</p>" +
+      "<h3>What frequency penalty does to a function word</h3>" +
+      "<p>Take the bridge distribution and suppose that in the text so far <code> built</code> has appeared 4 times and <code> the</code> has appeared 9 times, which for <code> the</code> is entirely normal English:</p>" +
+      "<pre><code>frequency_penalty      logit of  the     p( the)      p( built)\n0.0  (off)                   3.10       0.0774        0.2325\n0.2                          1.30       0.0158        0.1294\n0.5                         -1.40       0.0012        0.0436\n1.0                         -5.90       0.0000        0.0061</code></pre>" +
+      "<p>At 0.5 &#8212; a value people reach for casually &#8212; the probability of the definite article has fallen by a factor of 65 because the model already used it nine times. The text that comes out is not less repetitive, it is ungrammatical. The penalty cannot tell the difference between a phrase repeating and a language having function words.</p>" +
+      "<p>The damage is worst exactly where repetition is correct. Code repeats <code>self</code>, <code>return</code>, brackets and semicolons; tables repeat delimiters; lists repeat their opening word; JSON repeats every key name in the schema. A frequency penalty applied to structured output is a slow corruption that passes review because each individual token still looks plausible.</p>" +
+      "<h3>The asymmetry in the multiplicative form</h3>" +
+      "<p>Hugging Face's <code>repetition_penalty</code> has a discontinuity at zero that is worth seeing written out, at <code>&#952;</code> = 1.2:</p>" +
+      "<pre><code>logit  4.20  ->  3.500     a strong candidate, pushed down 0.70\nlogit  0.10  ->  0.083     right at the boundary, pushed down 0.017\nlogit -0.10  -> -0.120     just below it, pushed down 0.020\nlogit -3.00  -> -3.600     already hopeless, pushed down 0.60</code></pre>" +
+      "<p>The penalty is strongest on tokens that were never going to be chosen and weakest on tokens sitting exactly at the decision boundary, which is the opposite of what you want. It also scales with the magnitude of the logit rather than with the amount of repetition, so it behaves differently on models whose logits are differently scaled.</p>" +
+      "<div class='callout'><strong>The rule.</strong> Reach for a penalty only after sampling has failed. If greedy decoding loops, sampling with min-p usually ends the loop with no penalty at all, because escaping requires nothing more than the ability to pick a token that is not the argmax. Keep <code>frequency_penalty</code> below about 0.3, never apply penalties to code or structured output, and if you need one above 0.5, the real problem is a prompt that invites repetition.</div>" },
+
+    { title: "Stopping, and the Truncation Bugs It Causes",
+      html: "<p>Generation is a loop, and something has to end it. There are exactly three exits, and each one has a characteristic bug.</p>" +
+      "<p><strong>The EOS token.</strong> The model emits a designated end-of-sequence token and the loop halts. Chapter 3 showed that chat models use a turn-terminating token from the chat template rather than the pretraining EOS, and that a wrong template produces a model that never emits the right one and rambles until the token limit. The failure is silent: nothing errors, you just get 4,000 tokens where you expected 40, and you are billed for all of them.</p>" +
+      "<p><strong>Stop sequences.</strong> You supply strings; generation halts when one appears. The subtlety is that stop strings are text and the model emits tokens, so a stop string can straddle a token boundary &#8212; a stop string of <code>\\n\\n</code> may arrive inside a single token that also carries the first word of the next paragraph. Implementations handle this by decoding incrementally and buffering, which is why a streaming API sometimes holds back a few characters before releasing them. The stop string itself is removed from the returned text, so a stop sequence that also occurs legitimately inside your content truncates the answer at its first innocent occurrence.</p>" +
+      "<p><strong>The token limit.</strong> The hard cap fires and generation stops mid-word. This is the one that breaks programs rather than prose, because a truncated JSON object does not parse and a truncated tool call is not a tool call. Chapter 19's constrained decoding removes the malformed-output half of this problem but not the truncation itself; nothing can finish an object in zero remaining tokens.</p>" +
+      "<div class='callout'><strong>The check that catches all three.</strong> Every provider returns a reason alongside the text &#8212; <code>finish_reason</code> or an equivalent &#8212; and it distinguishes a natural stop from a limit-truncated one. Programs that do not read that field will parse a truncated answer as a short answer, and the resulting bug appears at the far end of the system as a missing field rather than as a generation failure. Reading it costs one line and is the single highest-value habit in this chapter.</div>" +
+      "<p>The budget interacts with the context window from Chapter 6: the limit applies to generated tokens, and the prompt plus the generation must fit the window. A long conversation therefore shrinks the space available for the answer, which is why the same request succeeds early in a session and gets truncated later.</p>" },
+
+    { title: "Determinism, and Why the Same Prompt Answers Differently",
+      html: "<p>Set temperature to 0, send the same prompt twice, and the two answers may still differ. This is not a bug report anyone will accept, and the reason is worth knowing precisely.</p>" +
+      "<p>Sampling is the obvious source: any temperature above 0 draws from a random number generator, and identical output requires an identical <strong>seed</strong>. Providers that expose a seed parameter give you reproducibility within one model version and configuration, and nothing across them &#8212; a provider silently updating the model behind an alias changes the weights, and no seed survives that.</p>" +
+      "<p>The non-obvious source remains after you have fixed the seed and set temperature to 0, which makes decoding a pure argmax. Floating-point addition is not associative, so summing the same numbers in a different order gives a slightly different result, and GPU kernels choose their reduction order based on the shape of the work they are given. Your request is batched with whatever other requests arrived at the same moment, that batch size varies with load, and so the last bits of every logit vary with it. When two candidate tokens are nearly tied, the argmax flips, and one different token early in a generation changes everything after it.</p>" +
+      "<div class='callout'><strong>Sources differ.</strong> The usual explanation blames floating-point non-associativity combined with concurrent atomic accumulation, which makes the machine sound irreducibly random. Work published by Thinking Machines Lab in 2025 argues the dominant cause is more specific and more fixable: reduction kernels whose strategy depends on batch size, so the same input reduces differently depending on who else was in the batch. They demonstrated <strong>batch invariance</strong> &#8212; kernels whose result does not depend on the batch &#8212; producing bit-identical output across 1,000 runs of Qwen3-8B under vLLM, at roughly a 61.5% throughput cost in their unoptimised implementation. The distinction matters because it turns &#8220;inherently nondeterministic&#8221; into a price.</div>" +
+      "<p>Practically: temperature 0 gives you <em>near</em>-determinism, not determinism. Tests that assert on exact generated strings will be flaky, and the flakiness will be rare enough to look like something else. Assert on structure, on a parsed field, or on a similarity threshold; save exact-match assertions for a pinned model behind a batch-invariant server, and expect to pay for it.</p>" },
+
+    { title: "Logprobs: Reading the Model's Own Uncertainty",
+      html: "<p>The distribution you have been truncating and sampling from is available to you. Most providers will return, per generated position, the log-probability of the chosen token and of the top few alternatives. That is a signal about the model's state that nothing else in the response carries.</p>" +
+      "<p>Three uses are worth the plumbing.</p>" +
+      "<p><strong>Confidence on a span.</strong> Average the log-probabilities of the tokens making up an extracted value &#8212; prompt <strong>P3</strong> asks for parties, dates and amounts as JSON &#8212; and you get a per-field score rather than a per-answer one. A date the model was sure of and an amount it guessed at are indistinguishable in the JSON and obvious in the logprobs.</p>" +
+      "<p><strong>Routing.</strong> Compute the entropy of the first generated token or the mean logprob of a short answer, and escalate the low-confidence fraction to a larger model or a human. This buys most of a large model's accuracy at a fraction of its cost, and it is measurable: sort a labelled evaluation set by confidence and read off the accuracy in each decile before deciding the threshold.</p>" +
+      "<p><strong>Detecting a guess.</strong> A model that does not know tends to produce a flat distribution &#8212; several alternatives within a factor of two of each other, and an entropy several bits high. The bridge distribution at 4.4 bits is a model with no strong opinion; the Paris distribution at 0.65 bits is one with a strong opinion. The second is worth trusting more than the first, other things being equal.</p>" +
+      "<div class='callout'><strong>The honest caveat.</strong> Other things are often not equal. A model's probabilities are <strong>calibrated</strong> when its stated confidence matches how often it is right, and preference training damages calibration: OpenAI reported in the GPT-4 technical report that the pre-trained model was well calibrated and that calibration was reduced after post-training. So a high logprob from an aligned chat model means the model is committed, which is not the same as the model being correct. Use logprobs to rank and to route, where only the ordering matters; be careful using them as an absolute probability of correctness, and if you do, calibrate them on your own labelled data first.</div>" +
+      "<p>One measurement error to avoid: the logprob of a token is conditional on everything before it, so the second token of a two-token number is usually near-certain once the first is chosen. Averaging across a span therefore understates uncertainty for multi-token values, and comparing spans of different lengths compares different things. Compare like with like, or use the first token of a field as the signal.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Using the ten logits and the softmax from section 1, compute the distribution at temperatures 0.5, 1.0 and 1.8 by hand or in a few lines of code. For each, report the top token's probability, the mass held by the top ten, and the entropy. Then state the temperature at which the top ten first hold less than half the mass. You should find it between 1.0 and 1.5, and the mass at 1.5 is 0.4255.</li>" +
+      "<li><strong>Trace.</strong> Take the peaked distribution from the same section (<code>The capital of France is</code>, top logit 7.4 and the rest unchanged). Compute the surviving set under top-p 0.9 and under min-p 0.1 at temperatures 1.0, 1.5 and 2.0. Report the sizes. You should get 1, 156 and 34,818 for top-p against 1, 1 and 2 for min-p, and be able to state in one sentence why the second column is flat.</li>" +
+      "<li><strong>Trace.</strong> A generation has used <code> the</code> 12 times and <code> and</code> 7 times. Compute the logit change each receives under <code>frequency_penalty</code> 0.4, under <code>presence_penalty</code> 0.4, and under <code>repetition_penalty</code> 1.2, given starting logits of 3.1 and 2.4. Rank the three by how much damage they do to ordinary English and explain the ranking from the formulas.</li>" +
+      "<li><strong>Investigate.</strong> Take any chat API that exposes logprobs and ask it ten factual questions you know the answers to and ten you know it cannot answer. Record the first-token entropy for each. Plot or tabulate the two groups. You should see the unanswerable group sitting several bits higher, with an overlap region that tells you what a confidence threshold would actually cost you.</li>" +
+      "<li><strong>Investigate.</strong> Send the same prompt twenty times at temperature 0 to a hosted model, at a quiet hour and again at a busy one, and record how many distinct outputs you get. Then repeat against a local model with a batch size of 1. Report the counts. The hosted results will not be identical and the local ones will be, and you now have a measured version of section 7.</li>" +
+      "<li><strong>Build.</strong> Implement greedy, temperature, top-k, top-p and min-p as five functions over a logit vector, plus a loop that generates from any small model you can run. Generate 200 tokens from the same prompt under each, and report for each the number of distinct 4-grams and the count of the longest repeated span. Greedy should show the worst repeated span and the fewest distinct n-grams; min-p at temperature 1.5 should show the most diversity without the tail artefacts that top-p 0.95 at the same temperature produces.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "logits", d: "The model's raw, unnormalised score for every vocabulary entry, before a softmax turns them into probabilities; every decoding parameter is an edit to these." },
+    { t: "greedy decoding", d: "Taking the highest-probability token at every step; deterministic, free, and the strategy least able to escape a repetition loop." },
+    { t: "temperature", d: "A constant the logits are divided by before the softmax, which moves probability mass toward or away from the tail without changing what is in it." },
+    { t: "top-k sampling", d: "Truncating to a fixed number of highest-probability tokens, which is too many when the model is confident and too few when it is not." },
+    { t: "nucleus sampling", d: "Also called top-p: truncating to the smallest set of tokens whose probability sums to p, so the surviving set grows and shrinks with the model's uncertainty." },
+    { t: "min-p sampling", d: "Truncating at a threshold equal to a fraction of the top token's probability, so the cut moves with the model's confidence and survives high temperatures." },
+    { t: "entropy", d: "The number of bits of uncertainty in a distribution; 0.65 bits for a near-certain next token and over 4 for a genuinely open one." },
+    { t: "beam search", d: "Keeping the B highest-scoring partial sequences at each step, which finds higher-probability sequences than greedy decoding and is the wrong objective for open-ended text." },
+    { t: "length normalisation", d: "Dividing a beam's log-probability by its length, or a power of it, to counter the bias toward short sequences that multiplying probabilities creates." },
+    { t: "self-reinforcement", d: "The measured effect that a model raises the probability of a phrase each time it repeats it, which is why a repetition loop tightens rather than decays." },
+    { t: "presence penalty", d: "A one-off subtraction from the logit of any token that has already appeared, regardless of how many times." },
+    { t: "frequency penalty", d: "A subtraction from a token's logit proportional to how often it has already appeared, which damages function words and structured output first." },
+    { t: "repetition penalty", d: "Hugging Face's multiplicative penalty, dividing a seen token's positive logit by a factor and multiplying a negative one, which acts most weakly at the decision boundary." },
+    { t: "EOS token", d: "The token whose emission ends generation; chat models use a turn-terminating token from the chat template rather than the pretraining one." },
+    { t: "stop sequence", d: "A string that halts generation when it appears in the decoded text, which requires incremental decoding because it can straddle a token boundary." },
+    { t: "finish_reason", d: "The field distinguishing a generation that ended naturally from one cut off by the token limit; not reading it turns a truncation into a silent data bug." },
+    { t: "seed", d: "The value fixing the sampler's random draws, which reproduces output only within one model version, configuration and batching regime." },
+    { t: "batch invariance", d: "The property of a kernel whose numerical result does not depend on the batch it was computed in; the condition for bit-identical output across runs." },
+    { t: "logprob", d: "The log of the probability the model assigned to a token, returned per position by most providers and usable as a confidence and routing signal." },
+    { t: "calibration", d: "The degree to which a model's stated confidence matches how often it is right; degraded by preference training, which is why a high logprob means committed rather than correct." }
+  ],
+  quiz: [
+    { type: "mc", q: "A greedy generation starts repeating the same sentence. Why does it not recover on its own?", opts: ["The context window has filled and older text is being dropped", "The model has run out of high-probability tokens", "The temperature has drifted to zero", "Repetition is self-reinforcing, and escaping requires choosing a token that is not the argmax, which is the one thing greedy decoding cannot do"], a: 3,
+      why: "Holtzman and colleagues measured in 2019 that a model raises the probability of a phrase with each repetition of it, so the loop tightens rather than decays. Greedy decoding always takes the most likely token, and by construction that is now the repeated one. This is why the repair is a different decoder rather than a better model: sampling escapes on the first step." },
+    { type: "mc", q: "Raising temperature from 1.0 to 2.0 takes the top ten tokens from 78% of the mass to 15%. What has actually happened?", opts: ["The tail was always there holding 22%, and temperature has promoted it rather than created it", "The model has become less certain about the context", "New low-quality tokens have been added to the distribution", "The softmax has saturated"], a: 0,
+      why: "Temperature is a monotone reshaping of a fixed set of logits: it cannot add or remove candidates, only change how much mass each holds. The misspellings and wrong-language tokens were present at every temperature. What changes is how often you reach into them, which is why temperature alone is a poor diversity control and truncation exists." },
+    { type: "mc", q: "Top-k = 5 keeps 96.8% of the mass on a peaked distribution and 61.0% on an open one. What is the criticism this supports?", opts: ["Top-k is too slow to compute at every step", "A fixed count cannot track a distribution whose useful width changes every step: too permissive when the model is sure, too restrictive when it is not", "Top-k should always be paired with a temperature above 1", "Five is simply the wrong value and a larger k fixes it"], a: 1,
+      why: "On the peaked context the four alternatives to the correct answer are all wrong and are kept reachable. On the open context 39% of the mass, including good continuations, is discarded. No single k is right for both, because the quantity that varies is the shape of the distribution rather than a count. Top-p cuts on mass instead, which adapts automatically." },
+    { type: "mc", q: "With top-p fixed at 0.9, the surviving set for 'The capital of France is' grows from 1 token at T = 1.0 to 34,818 at T = 2.0. Why?", opts: ["The nucleus algorithm has a numerical instability at high temperature", "The model becomes genuinely less certain about France at high temperature", "Top-p cuts at a fixed amount of mass, and temperature moves mass into the tail, so the cut follows it there", "The vocabulary is being expanded"], a: 2,
+      why: "Nothing failed; top-p did exactly what it was told on a distribution that had been flattened underneath it. This is the interaction that makes high-temperature top-p output incoherent, and it is the reason min-p exists: a threshold defined as a fraction of the top token's probability shrinks when the peak shrinks, so the same setting keeps 1, 1 and 2 tokens at those three temperatures." },
+    { type: "blank", q: "Truncating to the smallest set of tokens whose probabilities sum to p is called top-p or ____ sampling.", a: ["nucleus", "nucleus sampling"],
+      why: "Holtzman, Buys, Du, Forbes and Choi introduced it in 2019 in the same paper that diagnosed neural text degeneration. The name refers to the dynamic nucleus of the distribution: one token when the model is certain, twenty-three on an open context, from a single setting that never has to be retuned per prompt." },
+    { type: "mc", q: "Beam search reliably finds sequences with higher probability than greedy decoding. Why is it nevertheless wrong for chat?", opts: ["Human text does not have high probability under the model, so maximising likelihood optimises for the wrong thing and produces bland output", "It is too expensive to run at B times the compute and KV cache", "It cannot be combined with temperature", "Beam search cannot handle stop sequences"], a: 0,
+      why: "The compute cost is real but it is not the argument. Holtzman and colleagues showed that real writing has per-token probabilities that fluctuate and frequently chooses the surprising word, while beam-search output is smooth and high-probability. Koehn and Knowles found the same shape in translation: quality falls beyond an optimal beam width of roughly 4 to 30. No width fixes a wrong objective." },
+    { type: "mc", q: "A frequency_penalty of 0.5 drops the probability of ' the' from 0.0774 to 0.0012 after it has appeared nine times. What is the lesson?", opts: ["The penalty should have been applied to presence rather than frequency", "0.5 is a reasonable setting and the model should be retrained", "A frequency penalty cannot distinguish a repeating phrase from a language having function words, so it makes text ungrammatical rather than less repetitive", "The logit scale of this model is unusual"], a: 2,
+      why: "The formula subtracts count times the coefficient from the logit, and nine appearances of the definite article is ordinary English rather than a defect. The damage is worst exactly where repetition is correct: code repeating brackets and keywords, JSON repeating key names, lists repeating their opening word. Sampling with min-p usually ends a loop with no penalty at all." },
+    { type: "order", q: "Order these decoding operations as they are applied to one step's logits:", items: ["The model produces raw logits for all 128,256 tokens", "Penalties subtract from the logits of tokens already seen", "Temperature divides every logit", "Truncation discards tokens outside the top-k, top-p or min-p set", "A token is drawn from the renormalised survivors"],
+      why: "Everything before the draw is an edit to the score vector, and the order matters: temperature applied before truncation is why a high temperature widens a top-p nucleus, while min-p's threshold is computed from the post-temperature peak and therefore tracks it. Implementations vary in small details, which is one reason the same settings behave differently across libraries." },
+    { type: "mc", q: "A program parses the model's JSON output and finds a missing field, intermittently and only on long conversations. What is the first thing to check?", opts: ["Whether the temperature is too high", "The finish_reason, since a truncation by the token limit returns a short, unparseable answer that looks like a short answer", "Whether the model version changed", "The stop sequence configuration"], a: 1,
+      why: "The prompt and the generation share the context window, so a growing conversation shrinks the space left for the answer and the limit starts firing. The provider reports this in a field alongside the text, and a program that does not read it treats a truncated object as a complete one. The symptom then surfaces far from the cause, as a missing field rather than a generation failure." },
+    { type: "mc", q: "You set temperature to 0 and a fixed seed, and a hosted model still occasionally returns different text. What explains it?", opts: ["Temperature 0 still samples, just from a narrow distribution", "The seed is being ignored by the provider", "The model is being retrained continuously", "Kernels reduce in an order that depends on the batch your request landed in, so nearly tied logits can flip the argmax"], a: 3,
+      why: "At temperature 0 decoding is a pure argmax, so no randomness remains in the sampler. What remains is numerical: floating-point addition is not associative and reduction order varies with batch shape, which varies with load. Thinking Machines Lab argued in 2025 that batch-dependent reduction kernels are the dominant cause and demonstrated bit-identical output with batch-invariant kernels, at about a 61.5% throughput cost." },
+    { type: "mc", q: "An extraction pipeline uses mean logprob per field to decide which outputs a human should review. What is the most important caveat?", opts: ["Logprobs are only available at temperature 0", "Preference training degrades calibration, so a high logprob from an aligned chat model means committed rather than correct", "Logprobs cannot be computed for multi-token values", "The mean is the wrong statistic and the sum should be used"], a: 1,
+      why: "OpenAI reported that GPT-4's pre-trained model was well calibrated and that calibration was reduced after post-training, and the effect is general across preference-aligned models. Logprobs remain useful for ranking and routing, where only the ordering matters. Treating one as an absolute probability of correctness requires calibrating it on your own labelled data first." },
+    { type: "mc", q: "Which pair of settings best fits open-ended creative writing, and why?", opts: ["Temperature 1.5 with min-p around 0.05 to 0.1, because the threshold tracks the peak so diversity rises without the tail becoming reachable", "Temperature 1.5 with top-p 0.95, because a wider nucleus at high temperature maximises variety", "Temperature 0 with a frequency penalty of 0.6, because determinism plus anti-repetition gives controlled variety", "Temperature 1.0 with top-k 5, because a small fixed set guarantees quality"], a: 0,
+      why: "The top-p option is the specific failure mode measured in section 3: at T = 1.5 a 0.9 nucleus admitted 156 candidates for a near-certain token. The temperature-0 option combines a deterministic decoder with a penalty that damages ordinary grammar, and top-k 5 discards 39% of the mass on open contexts. Min-p was designed for exactly this case and its surviving set stays small wherever the model is confident." }
+  ]
+});
