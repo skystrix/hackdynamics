@@ -162,6 +162,21 @@
    with 3.0 digits and a maximum of 65,504, bf16 1+8+7 with 2.1 digits and
    fp32's full exponent range. bf16's relative resolution near 1.0 is 2^-8 =
    0.0039, which is why an update of 1e-4 is lost without master weights.
+
+   Sources consulted for Chapter 15: Hestness et al. 2017 (early empirical
+   scaling); Kaplan et al. 2020 (Scaling Laws for Neural Language Models);
+   Hoffmann et al. 2022 (Training Compute-Optimal Language Models, the
+   Chinchilla result); Rae et al. 2021 (Gopher); Sardana et al. 2023
+   (inference-aware scaling); Wei et al. 2022 (emergent abilities) and
+   Schaeffer et al. 2023 (Are Emergent Abilities a Mirage?); Muennighoff et
+   al. 2023 (data-constrained scaling). Published model figures are Gopher at
+   280B parameters on 300B tokens and Chinchilla at 70B on 1.4T. Every
+   allocation and cost figure was recomputed on 2026-09-08: those two runs
+   cost 5.040e23 and 5.880e23 FLOPs; Corvid-8B's compute-optimal budget is
+   160.6B tokens, so a 15T-token run is 93x that; the same compute spent
+   compute-optimally would give 77.6B parameters on 1.55T tokens, costing
+   155.21 GFLOPs per token against 16.06; and the inference saving repays the
+   whole training run after 5.194e12 served tokens.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -3074,5 +3089,196 @@ CHAPTERS.push({
       why: "You must commit to a total step count before starting. Stop at half the planned steps and the rate is still high, giving a model measurably worse than one whose schedule was sized for that length. Warmup-stable-decay removes the constraint: hold a constant rate as long as you like, decay briefly whenever you decide to stop, and every point in the stable phase is a usable checkpoint." },
     { type: "mc", q: "Your run's loss is falling normally, but the gradient norm has trended upward over several thousand steps. What does this suggest?", opts: ["Nothing; the gradient norm is expected to grow as the model learns", "The learning rate schedule has a bug", "Gradient clipping is misconfigured", "The run may be becoming unstable, and the signal appears well before the loss shows it"], a: 3,
       why: "A steadily rising gradient norm is a recognized divergence signature that precedes trouble in the loss by a long way, which is why it belongs on the dashboard beside the loss. It is also what distinguishes a run becoming unstable from a single bad batch: the first has a trend, the second does not, and the two call for different responses." }
+  ]
+});
+
+/* ======================= CHAPTER 15 ======================= */
+CHAPTERS.push({
+  num: 15, part: 3, title: "How Big, How Long: Scaling Laws",
+  blurb: "Given a fixed pile of compute, how large should the model be and how many tokens should it see? For two years the field answered this wrong, and the correction reshaped every model released afterwards. You will fit a scaling law, use it to predict a larger run, and then work through the twist that governs 2026: if a model will serve billions of tokens after training, the compute-optimal answer is not the cost-optimal answer, which is why every model you can download is trained far past the point the law recommends.",
+  sections: [
+    { title: "Loss Is a Power Law",
+      html: "<p>Start with the empirical fact that makes the rest possible. Train a series of models of different sizes on different amounts of data, plot the loss against compute on logarithmic axes, and the points fall on a straight line.</p>" +
+      "<p>A straight line on log-log axes is a <strong>power law</strong>: loss falls as compute raised to some negative exponent. It is not a theorem and nobody has derived it from first principles. It is an observation that has held across many orders of magnitude, several architectures and several modalities, which is a different and weaker kind of confidence, and worth holding as such.</p>" +
+      "<p>Three things matter about the shape.</p>" +
+      "<p><strong>It is smooth.</strong> No cliffs, no plateaus, no thresholds. Every doubling of compute buys the same fixed reduction in loss, forever, within the range anyone has measured.</p>" +
+      "<p><strong>It has diminishing returns built in.</strong> A fixed <em>proportional</em> gain requires a fixed <em>multiplicative</em> increase in compute. Halving the distance to the floor costs the same factor every time, so progress feels linear while spending grows exponentially.</p>" +
+      "<p><strong>It does not go to zero.</strong> The fitted form includes a floor called the <strong>irreducible loss</strong>: the entropy of language itself. Even a perfect model cannot predict which word a writer chose when several were equally reasonable. Scaling closes the gap to that floor and never reaches it.</p>" +
+      "<p>The practical consequence is why anyone cares. If you can fit the law on runs you can afford, you can predict the loss of a run you cannot yet afford, and decide whether it is worth doing before spending the money. Pretraining is one of the few places in software where the outcome of a very expensive job can be forecast reasonably well in advance.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 208' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>loss against compute, on logarithmic axes</text>" +
+      "<line x1='70' y1='150' x2='700' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='34' x2='70' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='24' y='42' fill='#7d8fb0' font-size='9'>loss</text><text x='620' y='170' fill='#7d8fb0' font-size='9'>compute</text>" +
+      "<line x1='70' y1='128' x2='700' y2='128' stroke='#ff5d73' stroke-width='2' stroke-dasharray='5 4'/>" +
+      "<text x='90' y='144' fill='#ff5d73' font-size='9'>irreducible loss</text>" +
+      "<path d='M100 52 L220 74 L340 92 L460 106 L580 116 L680 122' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<circle cx='100' cy='52' r='3.5' fill='#3ddc97'/><circle cx='220' cy='74' r='3.5' fill='#3ddc97'/>" +
+      "<circle cx='340' cy='92' r='3.5' fill='#3ddc97'/><circle cx='460' cy='106' r='3.5' fill='#3ddc97'/>" +
+      "<text x='300' y='62' fill='#7d8fb0' font-size='9.5'>straight on log-log: every doubling of compute</text>" +
+      "<text x='300' y='78' fill='#7d8fb0' font-size='9.5'>buys the same proportional drop</text>" +
+      "<text x='20' y='192' fill='#c9d6ea' font-size='10.5'>Not a theorem. An observation that has held across many orders of magnitude, which is weaker confidence.</text>" +
+      "</svg><div class='fig-cap'>The curve approaches the red line and never reaches it. Scaling closes the gap to language's own entropy.</div></div>" },
+
+    { title: "The Answer the Field Acted On", viz: "llmScalingLaw", vizTitle: "Fix a compute budget, find the best split, then change the law",
+      html: "<p>Knowing loss falls with compute is not yet actionable, because compute can be spent two ways. Chapter 9's estimate says training costs about 6ND, so for a fixed budget C you may have a large model on few tokens, or a small model on many. Which?</p>" +
+      "<p>Jared Kaplan and colleagues answered this in 2020, and their answer was clear: <strong>spend it on parameters</strong>. Their fitted exponents put roughly three quarters of any increase into model size and a quarter into data. Scale the model aggressively; if data becomes tight, that is a lesser problem.</p>" +
+      "<p>The field acted on it, and the result is visible in the models of 2020 to 2022. GPT-3 was 175 billion parameters on 300 billion tokens. Gopher was 280 billion parameters on 300 billion tokens. Both are enormous models trained on data comparable to their own parameter count.</p>" +
+      "<h3>The correction</h3>" +
+      "<p>Jordan Hoffmann and colleagues re-ran the analysis in 2022 with a more careful experimental design, and got substantially different exponents. Their conclusion, now called the <strong>Chinchilla</strong> result: parameters and data should scale <em>together</em>, roughly equally. Under their fit, compute-optimal training uses about <strong>20 tokens per parameter</strong>.</p>" +
+      "<p>Then they demonstrated it, which is what made the paper decisive. Recomputing the compute of both runs:</p>" +
+      "<pre><code>model        parameters      tokens    D/N    compute (FLOPs)\nGopher             280B        300B    1.1          5.04e23\nChinchilla          70B        1.4T   20.0          5.88e23</code></pre>" +
+      "<p>Roughly the same compute, a model four times smaller, four times the data. Chinchilla outperformed Gopher across the board. The previous two years of scaling had been building models that were too large and too undertrained, and a 70-billion-parameter model beat a 280-billion-parameter one built by the same organization on the same budget.</p>" +
+      "<p>Take the machine, fix a budget, and find the allocation each law recommends. Then switch between them and watch the optimum move by a factor of several in model size for identical compute. That is the discovery, and it is what two years of the field's spending rode on.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one compute budget, two recommendations</text>" +
+      "<text x='20' y='48' fill='#ff5d73' font-size='10'>Kaplan 2020</text>" +
+      "<rect x='140' y='36' width='420' height='16' rx='3' fill='#ff5d73'/><text x='150' y='49' fill='#0b1120' font-size='9.5'>parameters</text>" +
+      "<rect x='564' y='36' width='140' height='16' rx='3' fill='#4f7cff'/><text x='574' y='49' fill='#c9d6ea' font-size='9.5'>data</text>" +
+      "<text x='140' y='70' fill='#7d8fb0' font-size='9'>spend on size; data is the lesser problem</text>" +
+      "<text x='20' y='104' fill='#3ddc97' font-size='10'>Chinchilla 2022</text>" +
+      "<rect x='140' y='92' width='196' height='16' rx='3' fill='#3ddc97'/><text x='150' y='105' fill='#0b1120' font-size='9.5'>parameters</text>" +
+      "<rect x='340' y='92' width='364' height='16' rx='3' fill='#4f7cff'/><text x='350' y='105' fill='#c9d6ea' font-size='9.5'>data</text>" +
+      "<text x='140' y='126' fill='#7d8fb0' font-size='9'>scale both together: about 20 tokens per parameter</text>" +
+      "<line x1='20' y1='146' x2='740' y2='146' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='168' fill='#c9d6ea' font-size='10.5'>Gopher: 280B on 300B tokens, 5.04e23 FLOPs. Chinchilla: 70B on 1.4T tokens, 5.88e23 FLOPs.</text>" +
+      "<text x='20' y='188' fill='#c9d6ea' font-size='10.5'>Same budget, quarter the size, four times the data, and the smaller model won on every measure.</text>" +
+      "<text x='20' y='208' fill='#7d8fb0' font-size='10'>Compute recomputed from the published parameter and token counts.</text>" +
+      "</svg><div class='fig-cap'>Two years of the field's spending followed the top bar. The bottom bar is what the same money should have bought.</div></div>" },
+
+    { title: "Fitting One Yourself",
+      html: "<p>The published laws were fitted on someone else's architecture, data and hyperparameters, and the exponents are not universal. If a scaling decision matters to you, fit your own, and the method is affordable.</p>" +
+      "<p>Train a series of small models spanning maybe two orders of magnitude in compute, holding everything constant except size and token count. For each, record the final loss. Fit a power law to those points. Then extrapolate.</p>" +
+      "<p>The standard experimental design is the <strong>isoFLOP</strong> sweep, and it is what Chinchilla did. Pick a compute budget. Train several models of different sizes at exactly that budget, which means larger models see proportionally fewer tokens. Plot final loss against model size and you get a U: too small underfits, too large is undertrained, and the bottom of the U is the optimum for that budget. Repeat for several budgets, and the line through the minima gives you the scaling relationship directly.</p>" +
+      "<p>Three cautions, all of which have caught real teams.</p>" +
+      "<p><strong>Extrapolation error is the point and the risk.</strong> A law fitted over two orders of magnitude and used to predict three beyond is doing real work, and its uncertainty grows with the distance. Report the interval, not just the estimate.</p>" +
+      "<p><strong>Hyperparameters must scale too.</strong> The optimal learning rate and batch size change with model size, so if you hold them fixed across the sweep, your large models are handicapped and the fit is wrong in a direction that flatters small models. Techniques for <strong>hyperparameter transfer</strong> across scales exist for exactly this reason, and using none of them is a common error.</p>" +
+      "<p><strong>The law says nothing about capabilities.</strong> It predicts loss. Whether a given loss corresponds to a model that can follow instructions, use tools or refuse appropriately is a separate question the law is silent on.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 212' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>isoFLOP curves: loss against model size, at three fixed budgets</text>" +
+      "<line x1='70' y1='160' x2='700' y2='160' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='34' x2='70' y2='160' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='30' y='40' fill='#7d8fb0' font-size='9'>loss</text><text x='620' y='178' fill='#7d8fb0' font-size='9'>model size</text>" +
+      "<path d='M110 62 L170 84 L230 92 L290 86 L350 70' fill='none' stroke='#ff5d73' stroke-width='2'/>" +
+      "<circle cx='230' cy='92' r='4' fill='#ff5d73'/><text x='356' y='66' fill='#ff5d73' font-size='9'>small budget</text>" +
+      "<path d='M210 96 L290 116 L370 124 L450 118 L530 102' fill='none' stroke='#ffd166' stroke-width='2'/>" +
+      "<circle cx='370' cy='124' r='4' fill='#ffd166'/><text x='536' y='98' fill='#ffd166' font-size='9'>medium</text>" +
+      "<path d='M330 126 L420 144 L500 152 L580 146 L660 132' fill='none' stroke='#3ddc97' stroke-width='2'/>" +
+      "<circle cx='500' cy='152' r='4' fill='#3ddc97'/><text x='666' y='128' fill='#3ddc97' font-size='9'>large</text>" +
+      "<path d='M230 92 L370 124 L500 152' fill='none' stroke='#2de2ff' stroke-width='2' stroke-dasharray='5 4'/>" +
+      "<text x='250' y='114' fill='#2de2ff' font-size='9.5'>the line through the minima is the scaling law</text>" +
+      "<text x='20' y='200' fill='#c9d6ea' font-size='10.5'>Left of a minimum the model underfits; right of it, the same budget leaves it undertrained.</text>" +
+      "</svg><div class='fig-cap'>Each curve is one fixed compute budget spent on models of different sizes. The dashed line is what you extrapolate.</div></div>" },
+
+    { title: "Why Nobody Follows Chinchilla", viz: "llmEmergence", vizTitle: "Change the metric and watch the sudden jump become a smooth curve",
+      html: "<p>Here is the puzzle. Chinchilla says roughly 20 tokens per parameter. Corvid-8B's compute-optimal budget is therefore 20 &#215; 8.03 billion = <strong>160.6 billion tokens</strong>. Real models of this size are trained on 15 trillion, which is <strong>93 times</strong> the compute-optimal amount.</p>" +
+      "<p>Every open-weights model you can download is, by Chinchilla's standard, drastically overtrained. This is not an oversight. It is a different optimization with a different objective.</p>" +
+      "<p>Chinchilla minimizes <em>training</em> compute for a given loss. It assumes training cost is what you care about, and it says nothing about what happens afterwards. But a model that is deployed is run billions of times, and Chapter 9 established that every one of those forward passes costs 2N. Parameters are a one-off cost at training and a permanent tax at inference.</p>" +
+      "<h3>Price it</h3>" +
+      "<p>Training Corvid-8B on 15 trillion tokens costs 7.227e23 FLOPs. Spend exactly that budget the compute-optimal way instead, and you get:</p>" +
+      "<pre><code>                    parameters      tokens   FLOPs per served token\nwhat the field ships      8.03B        15T                   16.06 G\nChinchilla-optimal        77.6B      1.55T                  155.21 G</code></pre>" +
+      "<p>The compute-optimal model is 9.7 times more expensive to run, on every token, for the life of the deployment. Now find where that repays the extra training. It does not take long:</p>" +
+      "<pre><code>after 5.19 trillion served tokens, the inference saving\nexceeds the entire cost of the training run</code></pre>" +
+      "<p>Five trillion tokens is a few months of a moderately successful product. Past that point the smaller, overtrained model is not merely cheaper to serve; it has saved more than it cost to make. Nicholas Sardana and colleagues formalized this in 2023 as <strong>inference-aware scaling</strong>: put expected serving volume into the objective and the optimum moves sharply toward smaller models trained much longer.</p>" +
+      "<p>So the rule is not that Chinchilla was wrong. It answered its question correctly, and almost nobody has that question. <strong>Chinchilla is the right answer if you will train the model and never serve it.</strong> Everyone else should train smaller and longer, and the field's apparent disregard for the law is actually agreement with a better-specified version of it.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 208' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>total cost over a deployment's life, same training budget</text>" +
+      "<line x1='70' y1='150' x2='700' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='34' x2='70' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='560' y='170' fill='#7d8fb0' font-size='9'>tokens served</text>" +
+      "<line x1='70' y1='120' x2='700' y2='58' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='540' y='56' fill='#ff5d73' font-size='9.5'>77.6B model: 155 GFLOPs/token</text>" +
+      "<line x1='70' y1='120' x2='700' y2='114' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='540' y='132' fill='#3ddc97' font-size='9.5'>8.03B model: 16 GFLOPs/token</text>" +
+      "<line x1='70' y1='120' x2='700' y2='120' stroke='#7d8fb0' stroke-width='1.5' stroke-dasharray='4 4'/>" +
+      "<text x='76' y='134' fill='#7d8fb0' font-size='9'>identical training cost</text>" +
+      "<line x1='168' y1='34' x2='168' y2='158' stroke='#ffd166' stroke-width='2' stroke-dasharray='4 4'/>" +
+      "<text x='176' y='46' fill='#ffd166' font-size='9.5'>5.19T tokens: the smaller model has repaid its whole training run</text>" +
+      "<text x='20' y='196' fill='#c9d6ea' font-size='10.5'>Chinchilla optimizes the y-intercept. Everyone who serves a model has to care about the slope.</text>" +
+      "</svg><div class='fig-cap'>Both lines start at the same place by construction. Beyond the gold line the overtrained model is not just cheaper to run, it is cheaper overall.</div></div>" },
+
+    { title: "When the Data Runs Out",
+      html: "<p>One more constraint that the original laws did not need to consider and now bind in practice.</p>" +
+      "<p>Chinchilla assumes fresh tokens are available on demand. <strong>Data-constrained scaling</strong> is what happens when they are not, and it now binds. At 15 trillion tokens a run, and with the highest-quality text a small fraction of the web, teams are now hitting the edge of what usable text exists. The scaling question becomes what to do when D cannot grow.</p>" +
+      "<p>Niklas Muennighoff and colleagues studied this in 2023 and the finding is more encouraging than expected: repeating data is not free but is far from worthless. Up to about four epochs, a repeated token is worth nearly as much as a fresh one. Past that the returns fall away quickly, and by around sixteen epochs additional repetition adds essentially nothing.</p>" +
+      "<p>That is a usable planning rule. If you are data-constrained, budget up to roughly four passes over your corpus before the compute is better spent elsewhere, and treat anything past that as approaching a waste. It also raises the value of Chapter 12's filtering work, since a corpus you will see four times deserves more care than one you will see once.</p>" },
+
+    { title: "Emergence, and the Argument About It",
+      html: "<p>Scaling laws describe loss, and loss is smooth. Capabilities do not always look smooth. Jason Wei and colleagues catalogued in 2022 a set of <strong>emergent abilities</strong>: tasks where models below some scale perform at chance and models above it perform well, with a sharp transition rather than a gradual improvement. Multi-step arithmetic and certain reasoning tasks are the standard examples.</p>" +
+      "<p>The claim is important because it would mean capability is not predictable from loss, and so scaling laws could not tell you what a larger model will be able to do.</p>" +
+      "<p>Rylan Schaeffer and colleagues offered a deflationary explanation in 2023, and it is worth understanding because it is a general lesson about measurement. Most of these tasks are scored with <strong>exact match</strong>: the answer is right or it is not. Consider multi-digit arithmetic. A model improving steadily at per-digit accuracy shows nothing at all on exact match until nearly every digit is right, at which point the score jumps from near zero to high. The underlying capability improved smoothly; the <em>metric</em> was discontinuous.</p>" +
+      "<p>Score the same outputs with a continuous measure, such as per-token log-likelihood of the correct answer or partial credit per digit, and the jump usually flattens into a curve.</p>" +
+      "<p>The honest position is that this explains a great deal of the phenomenon and possibly not all of it. What it definitely establishes is a methodological rule that outlives the debate: <strong>a sharp jump in a discontinuous metric is not evidence of a sharp change in the model.</strong> Chapter 32 builds on this directly.</p>" +
+      "<p>Use the emergence machine, look at the jump under exact match, then switch to partial credit and watch it become a smooth line. Nothing about the model changed between those two charts.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 206' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the same models, the same outputs, two metrics</text>" +
+      "<line x1='70' y1='150' x2='360' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='38' x2='70' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<path d='M80 148 L150 148 L220 147 L250 146 L268 60 L300 48 L350 44' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='84' y='34' fill='#ff5d73' font-size='9.5'>exact match: a jump</text>" +
+      "<text x='84' y='170' fill='#7d8fb0' font-size='9'>model scale</text>" +
+      "<line x1='420' y1='150' x2='710' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='420' y1='38' x2='420' y2='150' stroke='#1c2a45' stroke-width='2'/>" +
+      "<path d='M430 142 L490 124 L550 104 L610 82 L660 62 L700 48' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='434' y='34' fill='#3ddc97' font-size='9.5'>partial credit: a curve</text>" +
+      "<text x='434' y='170' fill='#7d8fb0' font-size='9'>model scale</text>" +
+      "<text x='20' y='196' fill='#c9d6ea' font-size='10.5'>A sharp jump in a discontinuous metric is not evidence of a sharp change in the model.</text>" +
+      "</svg><div class='fig-cap'>Multi-digit arithmetic scores nothing on exact match until nearly every digit is right, then leaps. The capability improved smoothly throughout.</div></div>" },
+
+    { title: "What the Laws Do Not Tell You",
+      html: "<p>Scaling laws are the closest thing this field has to an engineering forecast, and their limits are as important as their content.</p>" +
+      "<p><strong>They predict loss, not usefulness.</strong> A lower loss does not tell you the model follows instructions, refuses appropriately, or is safe to deploy. Everything in Part IV exists because the pretraining loss cannot express those things.</p>" +
+      "<p><strong>They are fitted to a setting.</strong> Change the architecture, the data mixture, or the hyperparameter scaling and the exponents move. Chinchilla's constant was measured on Chinchilla's setup; it is a good default and not a law of nature.</p>" +
+      "<p><strong>They assume the data is there.</strong> The previous section's constraint is now real for the largest runs.</p>" +
+      "<p><strong>They say nothing about post-training or test-time compute.</strong> Chapter 24 covers a third axis entirely, spending more compute at inference rather than at training, on which these laws are silent.</p>" +
+      "<p><strong>They do not price serving.</strong> Which was this chapter's main argument, and it is the one that changes what you actually build.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;Chinchilla says 20 tokens per parameter, so why is Llama-3-8B trained on 15 trillion?&#8221; The complete answer names the objectives: Chinchilla minimizes training compute for a target loss and is silent on inference, while a deployed model pays 2N FLOPs on every token forever. Numbers make it: the same compute spent compute-optimally would give a 77.6B model at 155 GFLOPs per token against 16, and the smaller model repays its entire training run after about five trillion served tokens. Chinchilla is right for a model you train and never serve.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> You have 1e23 FLOPs. Using 6ND and the 20-tokens-per-parameter rule, compute the compute-optimal parameter count and token count. Then compute what you would get if you instead fixed the model at a quarter of that size and spent the whole budget on data. State the tokens per parameter of the second option, and how many times over-trained it is by Chinchilla's standard.</li>" +
+      "<li><strong>Trace.</strong> Take those two models from the previous exercise and compute the FLOPs each spends per served token. Then find the number of served tokens at which the smaller model's total cost, training plus inference, drops below the larger one's. Compare that figure with the tokens a moderately used product serves in a year, and state which model you would build.</li>" +
+      "<li><strong>Investigate.</strong> Find three recent open-weights models and record their parameter counts and published training token counts. Compute D/N for each. Then compute how many times Chinchilla-optimal each one is. Plot them against release date if you have enough of them; the trend is the subject of section 4, visible in public data.</li>" +
+      "<li><strong>Investigate.</strong> Find a published claim of an emergent ability. Identify the metric used to score it. Determine whether that metric is discontinuous, and whether the authors report a continuous alternative. Then write two sentences on whether the claim survives Schaeffer's objection, and say honestly if you cannot tell from what was published.</li>" +
+      "<li><strong>Build.</strong> Train five small models spanning about an order of magnitude in compute, holding data, architecture and hyperparameters fixed apart from size and token count. Record the final validation loss of each and fit a power law to the points. Then use the fit to predict the loss of a sixth model at roughly three times the compute of your largest, train it, and compare. Report the prediction, the actual, and the error. That error, on a three-times extrapolation, is your honest estimate of what a hundred-times extrapolation is worth.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "scaling law", d: "An empirical power-law relationship between loss and compute, parameters or data, fitted from runs rather than derived." },
+    { t: "power law", d: "A relationship appearing as a straight line on logarithmic axes, in which a fixed multiplicative increase buys a fixed proportional gain." },
+    { t: "irreducible loss", d: "The floor term in a fitted scaling law, corresponding to the entropy of language itself, which no amount of scale removes." },
+    { t: "compute-optimal", d: "The allocation of a fixed training budget between parameters and tokens that minimizes final loss." },
+    { t: "Chinchilla", d: "The 2022 result that parameters and data should scale together, at roughly 20 tokens per parameter, correcting the previous parameter-heavy consensus." },
+    { t: "tokens per parameter", d: "The ratio D/N used to describe how heavily trained a model is; about 1 for Gopher, 20 for Chinchilla, and over 1,800 for a modern 8B model." },
+    { t: "isoFLOP curve", d: "Loss plotted against model size at a fixed compute budget, forming a U whose minimum is the optimum for that budget." },
+    { t: "extrapolation error", d: "The growing uncertainty in a fitted law as it is used further beyond the range of runs it was fitted on." },
+    { t: "hyperparameter transfer", d: "Scaling learning rate and batch size with model size, without which a scaling sweep handicaps its larger models and produces a wrong fit." },
+    { t: "inference-aware scaling", d: "Including expected serving volume in the objective, which moves the optimum toward smaller models trained far longer." },
+    { t: "overtrained", d: "Trained on far more tokens than the compute-optimal rule recommends; every current open-weights model is, deliberately." },
+    { t: "data-constrained scaling", d: "The regime where fresh tokens run out; repeated data holds most of its value to about four epochs and little past sixteen." },
+    { t: "emergent ability", d: "A capability appearing abruptly above some scale, much of which is explained by discontinuous scoring rather than by discontinuous learning." },
+    { t: "exact match", d: "Scoring an answer as right or wrong with no partial credit; a discontinuous metric that can turn smooth improvement into an apparent jump." }
+  ],
+  quiz: [
+    { type: "mc", q: "Gopher used 280B parameters on 300B tokens; Chinchilla used 70B on 1.4T at roughly the same compute, and won. What did that establish?", opts: ["That parameters and data should scale together, and the previous consensus had been building models too large and too undertrained", "That smaller models are always better", "That Gopher's training run had a bug", "That data quality matters more than data quantity"], a: 0,
+      why: "Recomputing from the published figures gives 5.04e23 and 5.88e23 FLOPs, so the budgets are comparable. A model a quarter the size, trained on four times the data, beat it across the board. The lesson is about allocation, not about size: at a different budget the compute-optimal model is larger, and the same 20-tokens-per-parameter ratio still applies." },
+    { type: "mc", q: "Corvid-8B's compute-optimal token budget is 160.6 billion, yet real models of that size are trained on 15 trillion. Why?", opts: ["The scaling law was found to be wrong", "Because more data always improves a model without limit", "Because Chinchilla minimizes training compute and is silent about inference, which costs 2N FLOPs on every token forever", "Because 8B models cannot reach compute-optimal loss"], a: 2,
+      why: "Chinchilla answered its question correctly; almost nobody has that question. Parameters are a one-off cost at training and a permanent tax at serving. Spending the same compute compute-optimally would give a 77.6B model costing 155.21 GFLOPs per token against 16.06, and the smaller model repays its entire training run after about 5.19 trillion served tokens." },
+    { type: "mc", q: "What does an isoFLOP sweep hold fixed, and what does it vary?", opts: ["Fixed model size, varying compute", "Fixed token count, varying model size", "Fixed loss target, varying architecture", "Fixed compute budget, varying model size with token count adjusted to match"], a: 3,
+      why: "Each curve is one budget spent on models of different sizes, so a larger model necessarily sees fewer tokens. The result is a U: too small underfits, too large is undertrained. Repeat at several budgets and the line through the minima gives the scaling relationship directly. It is the design Chinchilla used." },
+    { type: "mc", q: "A team runs a scaling sweep with a fixed learning rate across all model sizes. What is wrong with the resulting fit?", opts: ["Nothing; holding hyperparameters fixed is the correct control", "The larger models are handicapped, so the fit is biased in a direction that flatters small models", "The loss cannot be compared across sizes", "The sweep needs at least ten points to be valid"], a: 1,
+      why: "The optimal learning rate and batch size change with model size, so a rate tuned for the small end leaves the large models undertrained for reasons unrelated to scale. The fit then understates the benefit of size. This is a common enough error that techniques for transferring hyperparameters across scales exist specifically to avoid it." },
+    { type: "blank", q: "The floor term in a fitted scaling law, corresponding to the entropy of language itself, is called the ____ loss.", a: ["irreducible"],
+      why: "Even a perfect model cannot predict which of several equally reasonable words a writer chose. Scaling closes the gap toward that floor and never reaches it, which is why the fitted form has three terms rather than two and why a loss of zero is not a meaningful target." },
+    { type: "blank", q: "Including expected serving volume in the scaling objective, which moves the optimum toward smaller models trained much longer, is called ____-aware scaling.", a: ["inference"],
+      why: "Formalized by Sardana and colleagues in 2023. It explains why every downloadable model is drastically overtrained by Chinchilla's standard: the field is optimizing total lifetime cost rather than training cost, and past a few trillion served tokens the smaller model is cheaper overall, not merely cheaper to run." },
+    { type: "order", q: "Order the steps of fitting and using a scaling law:", items: ["train several models at each of several fixed compute budgets", "find the loss-minimizing model size within each budget", "fit a power law through those minima", "extrapolate to a larger budget and report the error bars"],
+      why: "Sweep, minimize, fit, extrapolate. The last step is where the value is and where the risk is: a law fitted over two orders of magnitude and used three beyond is doing real work, and its uncertainty grows with the distance. Reporting the interval rather than the point estimate is the difference between a forecast and a guess." },
+    { type: "mc", q: "A task's accuracy jumps from near zero to high at a certain model scale. What should you check before calling it emergent?", opts: ["Whether the training data contained the task", "Whether the models used the same tokenizer", "Whether the larger model was trained for more epochs", "Whether the metric is discontinuous, such as exact match, which can turn smooth improvement into an apparent jump"], a: 3,
+      why: "Schaeffer and colleagues showed that a model improving steadily at per-digit accuracy scores nothing on exact-match multi-digit arithmetic until almost every digit is right, at which point the score leaps. Scoring the same outputs with partial credit usually flattens the jump into a curve. The general rule outlives the debate: a sharp jump in a discontinuous metric is not evidence of a sharp change in the model." },
+    { type: "mc", q: "You are data-constrained and considering additional epochs over your corpus. What does the evidence suggest?", opts: ["Up to about four epochs a repeated token is worth nearly as much as a fresh one, with returns falling away sharply after that", "Repeating data provides no benefit and should be avoided", "Repeating data is equivalent to fresh data at any number of epochs", "Repetition helps only if the corpus is deduplicated first"], a: 0,
+      why: "Muennighoff and colleagues measured this in 2023, and the answer is more encouraging than expected. The practical rule is to budget up to roughly four passes before the compute is better spent elsewhere, and to treat anything approaching sixteen as nearly wasted. It also raises the value of Chapter 12's filtering, since a corpus you will see four times deserves more care than one you see once." },
+    { type: "mc", q: "Which question can a scaling law NOT answer?", opts: ["What loss a model of a given size trained on a given number of tokens will reach", "How to split a fixed compute budget between parameters and data", "Whether a model at a given loss will follow instructions or refuse appropriately", "Roughly how many GPU-days a target loss will require"], a: 2,
+      why: "The law predicts loss, and loss is a statement about next-token prediction on held-out text. Instruction-following, refusal and tool use are not what the objective rewarded, which is why Part IV exists as a separate half of this course. The other three are exactly what the law is for, and are the reason pretraining is one of the few very expensive jobs whose outcome can be forecast." }
   ]
 });
