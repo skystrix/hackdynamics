@@ -177,6 +177,19 @@
    compute-optimally would give 77.6B parameters on 1.55T tokens, costing
    155.21 GFLOPs per token against 16.06; and the inference saving repays the
    whole training run after 5.194e12 served tokens.
+
+   Sources consulted for Chapter 16: Williams, Waterman & Patterson 2009 (the
+   roofline model); the NVIDIA H100 and A100 architecture whitepapers for the
+   published bf16 throughput and HBM bandwidth figures used below; the CUDA
+   C++ Programming Guide on the memory hierarchy; the Triton language
+   documentation; Dao et al. 2022 (FlashAttention) as the worked example of an
+   I/O-bound kernel. Every intensity, ridge point and timing in this chapter
+   was computed on 2026-09-08 from those published specifications: H100 at
+   989 TFLOP/s bf16 over 3.35 TB/s gives a ridge point of 295 FLOPs per byte,
+   A100 at 312 TFLOP/s over 2.039 TB/s gives 153. One Corvid FFN matrix has an
+   arithmetic intensity of 1.0 at decode and 2,293.8 at an 8,192-token
+   prefill; whole-model decode reads 16.06 GB per token, which is 4.79 ms and
+   a 209 tokens/s ceiling on an H100 from bandwidth alone.
    Structure: window.PARTS + window.CHAPTERS.
    ========================================================================== */
 
@@ -3280,5 +3293,194 @@ CHAPTERS.push({
       why: "Muennighoff and colleagues measured this in 2023, and the answer is more encouraging than expected. The practical rule is to budget up to roughly four passes before the compute is better spent elsewhere, and to treat anything approaching sixteen as nearly wasted. It also raises the value of Chapter 12's filtering, since a corpus you will see four times deserves more care than one you see once." },
     { type: "mc", q: "Which question can a scaling law NOT answer?", opts: ["What loss a model of a given size trained on a given number of tokens will reach", "How to split a fixed compute budget between parameters and data", "Whether a model at a given loss will follow instructions or refuse appropriately", "Roughly how many GPU-days a target loss will require"], a: 2,
       why: "The law predicts loss, and loss is a statement about next-token prediction on held-out text. Instruction-following, refusal and tool use are not what the objective rewarded, which is why Part IV exists as a separate half of this course. The other three are exactly what the law is for, and are the reason pretraining is one of the few very expensive jobs whose outcome can be forecast." }
+  ]
+});
+
+/* ======================= CHAPTER 16 ======================= */
+CHAPTERS.push({
+  num: 16, part: 3, title: "The GPU: Where the Time Actually Goes",
+  blurb: "This is the one chapter about hardware, and it is here because the most important fact in Part V cannot be proved without it. A GPU is thousands of arithmetic units attached to memory that cannot feed them fast enough. Whether an operation is limited by arithmetic or by memory traffic is decided by a single number, and once you can compute it you can predict which optimizations will help before trying any of them. You will place real operations on a roofline and find that a matrix multiply and a matrix-vector multiply live in different worlds.",
+  sections: [
+    { title: "Arithmetic Units and a Straw",
+      html: "<p>Chapter 9 counted FLOPs and warned that FLOPs are not time. This chapter is that warning, made precise.</p>" +
+      "<p>A modern accelerator has two headline numbers, and the relationship between them is the whole subject. An H100 performs about <strong>989 trillion bfloat16 operations per second</strong> and moves about <strong>3.35 terabytes per second</strong> between its memory and its compute units. Divide one by the other and you get the exchange rate:</p>" +
+      "<pre><code>989e12 FLOP/s / 3.35e12 byte/s = 295 FLOPs per byte</code></pre>" +
+      "<p>The hardware can perform 295 arithmetic operations in the time it takes to fetch one byte. If your computation does fewer operations per byte than that, the arithmetic units sit idle waiting for data, and buying a faster GPU will not help. That ratio is called the <strong>ridge point</strong>, and it is the single most useful number about a piece of hardware.</p>" +
+      "<p>It is not constant across generations, and the direction of travel matters. On an A100 the same calculation gives 312 divided by 2.039, or <strong>153 FLOPs per byte</strong>. Compute grew faster than bandwidth, so the ridge point roughly doubled, so more kernels became memory-bound rather than fewer. Hardware progress has been making this problem worse, not better, and every optimization in Part V is a response to that.</p>" +
+      "<h3>The hierarchy underneath</h3>" +
+      "<p>The 3.35 TB/s figure is for <strong>HBM</strong>, the large memory holding your weights, and it is the slowest level of a hierarchy that gets faster and much smaller as you go in.</p>" +
+      "<ul>" +
+      "<li><strong>HBM</strong>, tens of gigabytes, terabytes per second. Everything lives here and every access is expensive.</li>" +
+      "<li><strong>L2 cache</strong>, tens of megabytes, several times faster, shared across the chip.</li>" +
+      "<li><strong>Shared memory</strong>, on the order of a hundred kilobytes per streaming multiprocessor, roughly an order of magnitude faster than HBM, and explicitly managed by the programmer rather than automatic.</li>" +
+      "<li><strong>Registers</strong>, kilobytes per thread, effectively free.</li>" +
+      "</ul>" +
+      "<p>That third level is the one to remember, because it is programmable. Every major kernel optimization in this course is a scheme for doing more work in shared memory and touching HBM less. FlashAttention in Chapter 28 is exactly that and nothing more.</p>" +
+      "<p>The compute side is organized as <strong>streaming multiprocessors</strong>, each running many threads in lockstep groups of 32 called <strong>warps</strong>. The practical consequence for this course is just that the machine is enormously parallel and prefers regular, predictable access patterns; the details belong to a CUDA course rather than this one.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the memory hierarchy: faster and smaller as you go in</text>" +
+      "<rect x='20' y='32' width='680' height='30' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='36' y='51' fill='#ff5d73' font-size='10'>HBM &#183; 80 GB &#183; 3.35 TB/s</text>" +
+      "<text x='420' y='51' fill='#7d8fb0' font-size='9'>weights, KV cache, activations all live here</text>" +
+      "<rect x='90' y='70' width='540' height='28' rx='5' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='106' y='88' fill='#ffd166' font-size='10'>L2 cache &#183; tens of MB</text>" +
+      "<text x='420' y='88' fill='#7d8fb0' font-size='9'>automatic, shared across the chip</text>" +
+      "<rect x='170' y='106' width='380' height='28' rx='5' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='186' y='124' fill='#3ddc97' font-size='10'>shared memory &#183; ~100 KB per SM</text>" +
+      "<text x='420' y='124' fill='#3ddc97' font-size='9'>you manage this one</text>" +
+      "<rect x='260' y='142' width='200' height='26' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='276' y='159' fill='#4f7cff' font-size='10'>registers &#183; effectively free</text>" +
+      "<text x='20' y='190' fill='#c9d6ea' font-size='10.5'>Every kernel optimization in this course is a scheme for staying in the green band and touching the red one less.</text>" +
+      "</svg><div class='fig-cap'>Shared memory is the level that matters, because it is the one a kernel author controls. FlashAttention is entirely an exercise in using it.</div></div>" },
+
+    { title: "One Number Decides Everything", viz: "llmRoofline", vizTitle: "Plot a matmul at batch 64, then set batch to 1",
+      html: "<p>For any operation, count two things: the floating-point operations it performs, and the bytes it must move between HBM and the compute units. Divide the first by the second and you have its <strong>arithmetic intensity</strong>, in FLOPs per byte.</p>" +
+      "<p>Compare it with the ridge point and you know which limit binds. Below the ridge, the operation is <strong>memory-bound</strong> and its time is bytes divided by bandwidth. Above, it is <strong>compute-bound</strong> and its time is FLOPs divided by throughput. Nothing else is needed.</p>" +
+      "<h3>The comparison that matters</h3>" +
+      "<p>Take one matrix from Corvid's feed-forward network, 4,096 by 14,336, in bfloat16. That matrix is 117.4 MB and must be read from HBM whatever you do with it. Now vary how many tokens you push through it, computed on 8 September 2026:</p>" +
+      "<pre><code>tokens        FLOPs      bytes moved    arithmetic intensity\n     1     0.1 GFLOP       117.5 MB                     1.0\n     8     0.9 GFLOP       117.7 MB                     8.0\n    32     3.8 GFLOP       118.6 MB                    31.7\n   128    15.0 GFLOP       122.2 MB                   123.1\n 8,192   962.1 GFLOP       419.4 MB                 2,293.8</code></pre>" +
+      "<p>Read the bytes column first. From one token to 128, the arithmetic grows by a factor of 128 and the traffic grows by 4%. The weights dominate the traffic and they are read once regardless. That is why the intensity climbs almost linearly with the number of tokens, and it is the entire economic argument for batching in Chapter 27.</p>" +
+      "<p>Now put those on an H100, whose ridge point is 295:</p>" +
+      "<pre><code>tokens    compute time    memory time      verdict\n     1        0.12 us        35.07 us      memory-bound\n    32        3.80 us        35.41 us      memory-bound\n 8,192      972.77 us       125.20 us      compute-bound</code></pre>" +
+      "<p>Processing one token takes 35 microseconds, and 34.95 of them are spent waiting for memory. Processing 32 tokens takes almost exactly the same 35 microseconds. <strong>Thirty-two tokens for the price of one</strong>, because the expensive part was never the arithmetic.</p>" +
+      "<p>Note also what the table does not show: even at 128 tokens the intensity is 123, still well below the H100's ridge point of 295. Batching walks you up the slope and does not necessarily get you off it.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 218' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>one 4,096 x 14,336 matrix: work grows, traffic does not</text>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='10'>1 token</text>" +
+      "<rect x='130' y='34' width='2' height='14' rx='1' fill='#3ddc97'/>" +
+      "<rect x='130' y='52' width='300' height='14' rx='3' fill='#ff5d73'/><text x='442' y='64' fill='#7d8fb0' font-size='9'>117.5 MB &#183; AI 1.0</text>" +
+      "<text x='20' y='96' fill='#7d8fb0' font-size='10'>32 tokens</text>" +
+      "<rect x='130' y='84' width='12' height='14' rx='2' fill='#3ddc97'/>" +
+      "<rect x='130' y='102' width='303' height='14' rx='3' fill='#ff5d73'/><text x='442' y='114' fill='#7d8fb0' font-size='9'>118.6 MB &#183; AI 31.7</text>" +
+      "<text x='20' y='146' fill='#7d8fb0' font-size='10'>8,192 tokens</text>" +
+      "<rect x='130' y='134' width='560' height='14' rx='3' fill='#3ddc97'/>" +
+      "<rect x='130' y='152' width='330' height='14' rx='3' fill='#ff5d73'/><text x='472' y='164' fill='#3ddc97' font-size='9'>419.4 MB &#183; AI 2,293.8</text>" +
+      "<rect x='130' y='180' width='12' height='9' rx='2' fill='#3ddc97'/><text x='150' y='188' fill='#7d8fb0' font-size='9'>arithmetic (log scale)</text>" +
+      "<rect x='320' y='180' width='12' height='9' rx='2' fill='#ff5d73'/><text x='340' y='188' fill='#7d8fb0' font-size='9'>bytes moved (linear)</text>" +
+      "<text x='20' y='210' fill='#c9d6ea' font-size='10.5'>The weights are 117.4 MB and are read once regardless. That is why intensity climbs with tokens.</text>" +
+      "</svg><div class='fig-cap'>From 1 token to 128 the arithmetic grows 128-fold and the traffic grows 4%. Batching is close to free until the ridge point.</div></div>" },
+
+    { title: "Two Operations, Two Worlds",
+      html: "<p>The table above is one matrix. Do it for the whole model and you have the fact Part V is built on.</p>" +
+      "<p>Generating one token requires reading every weight once. Corvid at bfloat16 is 16.06 GB of weights. On an H100 at 3.35 TB/s:</p>" +
+      "<pre><code>16.06 GB / 3.35 TB/s = 4.79 ms per token\n                     = 209 tokens per second, ceiling</code></pre>" +
+      "<p>And the arithmetic that token requires, from Chapter 9's 2N rule, is 16.06 GFLOPs, which at 989 TFLOP/s takes <strong>0.016 milliseconds</strong>. The memory time is 295 times the compute time, which is precisely the ridge point, because whole-model decode has an arithmetic intensity of almost exactly 1.</p>" +
+      "<p>Sit with what that means. During single-stream generation, an H100 is doing useful arithmetic for roughly one three-hundredth of the time. The rest is the machine reading 16 GB of weights out of memory to perform one pass of trivial arithmetic on a single vector. You are not renting a compute device; you are renting a memory-bandwidth device with some arithmetic attached.</p>" +
+      "<p>The general form is worth stating cleanly, because it is the shape of the whole field:</p>" +
+      "<ul>" +
+      "<li><strong>Matrix times matrix</strong> reuses each loaded value many times. Intensity is high, the operation is compute-bound, and the hardware is used well.</li>" +
+      "<li><strong>Matrix times vector</strong> uses each loaded weight exactly once. Intensity is about 1, the operation is memory-bound, and almost all the hardware idles.</li>" +
+      "</ul>" +
+      "<p>Prefill is the first. Decode is the second. That is Chapter 26 in two lines, and it is now derived rather than asserted.</p>" +
+      "<p>Every optimization in Part V is one of three moves against this: raise the intensity by processing more tokens per weight read, which is batching in Chapter 27; cut the bytes by making the weights smaller, which is quantization in Chapter 29; or get more tokens out of each pass, which is speculative decoding in Chapter 28. Knowing the intensity tells you which is worth trying.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 234' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>the roofline: achievable throughput against arithmetic intensity</text>" +
+      "<line x1='70' y1='170' x2='710' y2='170' stroke='#1c2a45' stroke-width='2'/>" +
+      "<line x1='70' y1='34' x2='70' y2='170' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='42' fill='#7d8fb0' font-size='9'>TFLOP/s</text>" +
+      "<text x='530' y='190' fill='#7d8fb0' font-size='9'>arithmetic intensity</text>" +
+      "<line x1='70' y1='170' x2='330' y2='56' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<line x1='330' y1='56' x2='710' y2='56' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='120' y='120' fill='#ff5d73' font-size='9.5'>bandwidth slope</text>" +
+      "<text x='470' y='48' fill='#3ddc97' font-size='9.5'>compute ceiling: 989 TFLOP/s</text>" +
+      "<line x1='330' y1='56' x2='330' y2='178' stroke='#ffd166' stroke-width='1.5' stroke-dasharray='4 4'/>" +
+      "<text x='290' y='196' fill='#ffd166' font-size='9'>ridge: 295</text>" +
+      "<circle cx='92' cy='161' r='5' fill='#ff5d73'/><text x='360' y='160' fill='#ff5d73' font-size='9'>decode, 1 token: AI 1.0</text>" +
+      "<circle cx='140' cy='140' r='4' fill='#ffd166'/><text x='360' y='140' fill='#ffd166' font-size='9'>batch 32: AI 32</text>" +
+      "<circle cx='210' cy='109' r='4' fill='#ffd166'/><text x='360' y='120' fill='#ffd166' font-size='9'>batch 128: AI 123, still on the slope</text>" +
+      "<circle cx='620' cy='56' r='5' fill='#3ddc97'/><text x='360' y='100' fill='#3ddc97' font-size='9'>prefill 8,192: AI 2,294</text>" +
+      "<text x='20' y='222' fill='#c9d6ea' font-size='10.5'>Same weights, same hardware. Only the tokens per weight read differ, and that moves you 2,000-fold.</text>" +
+      "</svg><div class='fig-cap'>The horizontal axis is logarithmic. Everything Part V does is an attempt to move a workload to the right, or to move the red line up.</div></div>" +
+      "<p>Take the roofline machine and plot a matmul at batch 64. Then set the batch to 1 and watch the point fall off the ceiling and onto the slope. That single transition is the prefill-decode story, one chapter early.</p>" },
+
+    { title: "Doing Less Travelling", viz: "llmFusion", vizTitle: "Toggle fusion and watch the bytes moved, not the FLOPs",
+      html: "<p>If bytes are the constraint, the obvious optimization is to move fewer of them, and the most common way is <strong>kernel fusion</strong>.</p>" +
+      "<p>Consider a sequence you meet constantly: normalize, then apply an activation. Written as two separate operations, the GPU reads the tensor from HBM, normalizes it, writes it back, reads it again, applies the activation, writes it again. Four trips for two cheap operations.</p>" +
+      "<p>Fused into one kernel, it reads once, does both, and writes once. Two trips instead of four, for identical arithmetic. Since both operations are elementwise and have an intensity near 1, they were entirely memory-bound, so halving the traffic roughly halves the time.</p>" +
+      "<p>The general rule follows from the last section: <strong>fusion helps memory-bound operations and does nothing for compute-bound ones.</strong> Fusing two large matrix multiplications saves an intermediate write and changes almost nothing, because the arithmetic was the constraint. This is why fusion effort concentrates on the small elementwise operations around the big matmuls rather than on the matmuls themselves, which is counterintuitive until you have the intensity number.</p>" +
+      "<p>Two related ideas you will meet in configs. <strong>Operator fusion</strong> in a compiler, such as <code>torch.compile</code>, finds these opportunities automatically and is usually worth enabling. <strong>CUDA graphs</strong> address a different overhead, the cost of launching many small kernels one at a time, by recording a whole sequence and replaying it as a unit; at decode, where each step launches hundreds of tiny kernels, this can be a substantial share of the time.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 196' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='18' fill='#2de2ff' font-size='11'>normalize then activate: trips to HBM</text>" +
+      "<text x='20' y='48' fill='#ff5d73' font-size='10'>unfused</text>" +
+      "<rect x='110' y='36' width='120' height='16' rx='3' fill='#ff5d73'/><text x='118' y='49' fill='#0b1120' font-size='9'>read</text>" +
+      "<rect x='236' y='36' width='120' height='16' rx='3' fill='#ff5d73'/><text x='244' y='49' fill='#0b1120' font-size='9'>write</text>" +
+      "<rect x='362' y='36' width='120' height='16' rx='3' fill='#ff5d73'/><text x='370' y='49' fill='#0b1120' font-size='9'>read</text>" +
+      "<rect x='488' y='36' width='120' height='16' rx='3' fill='#ff5d73'/><text x='496' y='49' fill='#0b1120' font-size='9'>write</text>" +
+      "<text x='622' y='49' fill='#ff5d73' font-size='9'>4 trips</text>" +
+      "<text x='20' y='88' fill='#3ddc97' font-size='10'>fused</text>" +
+      "<rect x='110' y='76' width='120' height='16' rx='3' fill='#3ddc97'/><text x='118' y='89' fill='#0b1120' font-size='9'>read</text>" +
+      "<rect x='236' y='76' width='120' height='16' rx='3' fill='#3ddc97'/><text x='244' y='89' fill='#0b1120' font-size='9'>write</text>" +
+      "<text x='378' y='89' fill='#3ddc97' font-size='9'>2 trips &#183; identical arithmetic &#183; about half the time</text>" +
+      "<line x1='20' y1='112' x2='740' y2='112' stroke='#1c2a45' stroke-width='2'/>" +
+      "<text x='20' y='136' fill='#c9d6ea' font-size='10.5'>This works because both operations have an intensity near 1, so time was traffic.</text>" +
+      "<text x='20' y='158' fill='#c9d6ea' font-size='10.5'>Fusing two large matmuls saves one intermediate write and changes almost nothing, because they were</text>" +
+      "<text x='20' y='176' fill='#c9d6ea' font-size='10.5'>compute-bound already.</text>" +
+      "</svg><div class='fig-cap'>Counterintuitive until you have the intensity number: the optimization targets the cheap operations, not the expensive ones.</div></div>" },
+
+    { title: "Writing One, at Survey Depth",
+      html: "<p>You do not need to write CUDA to work with language models, and knowing what a kernel looks like changes how you read performance claims. <strong>Triton</strong> is the usual entry point: a Python-embedded language where you write the computation for one block of data and the compiler handles the rest.</p>" +
+      "<p>The shape of every such kernel is the same three moves, and they map exactly onto the hierarchy from section 1.</p>" +
+      "<ol>" +
+      "<li><strong>Decide which block of the output this program instance computes</strong>, from its program id. The work is partitioned so each instance handles a tile.</li>" +
+      "<li><strong>Load that tile's inputs from HBM into fast memory</strong>, once. This is the expensive step and the whole point of the design.</li>" +
+      "<li><strong>Compute entirely in fast memory, then write the result back</strong>, once.</li>" +
+      "</ol>" +
+      "<p>The skill is not in the arithmetic, which is usually a few lines. It is in <strong>tiling</strong>: choosing tile sizes so that a tile fits in shared memory, so that the loads are contiguous, and so that enough instances run concurrently to keep the machine busy while some wait on memory. Those choices are where a fast kernel differs from a slow one by a factor of five.</p>" +
+      "<p>FlashAttention is the famous instance. Chapter 5 showed the attention score matrix is n by n and enormous. FlashAttention never writes it to HBM: it processes the computation in tiles that stay in shared memory, keeping a running softmax so the result is exact. The arithmetic is identical to standard attention. Only the traffic changed, and that was the whole win.</p>" },
+
+    { title: "Measuring Instead of Guessing",
+      html: "<p>Everything above is a prediction. Profilers tell you what happened, and three numbers answer most questions.</p>" +
+      "<p><strong>Achieved occupancy</strong> is what fraction of the machine's parallel capacity is in use. Low occupancy usually means the work was not divided into enough pieces, or each piece demanded too many registers.</p>" +
+      "<p><strong>Achieved bandwidth</strong> is bytes moved per second, compared with the hardware's peak. If a kernel is running at a high fraction of peak bandwidth and its intensity is below the ridge point, it is doing as well as it can and no amount of tuning will help; the fix has to change the algorithm, not the kernel.</p>" +
+      "<p><strong>Achieved FLOP/s against peak</strong> answers the same question from the other side. A matmul running at 30% of peak has a problem worth investigating; one at 80% is close to done.</p>" +
+      "<p>The discipline this chapter is really teaching is to compute the intensity <em>before</em> profiling. If the arithmetic says an operation is memory-bound at intensity 1, and the profiler says it is achieving 85% of peak bandwidth, there is no optimization left at that level and you should stop looking. Engineers without the intensity number spend days tuning kernels that were already at the hardware's limit.</p>" +
+      "<div class='callout'><strong>Interview lens.</strong> &#8220;You doubled your GPU's FLOP/s and generation speed barely changed. Why?&#8221; The answer is arithmetic intensity: single-stream decode reads every weight to produce one token, giving an intensity near 1 against a ridge point of 295, so it is bound by memory bandwidth and not by arithmetic. Doubling compute moves the ceiling the workload never reached. What would help is more tokens per weight read, fewer bytes per weight, or more tokens per pass, which are Chapters 27, 29 and 28.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A GPU delivers 200 TFLOP/s of bf16 and 800 GB/s of bandwidth. Compute its ridge point. Then compute the arithmetic intensity of multiplying a 4,096 by 4,096 weight matrix by a single vector, and by a batch of 64 vectors, both in bf16. State which side of the ridge each falls on, and what the time for each would be.</li>" +
+      "<li><strong>Trace.</strong> Corvid at 4-bit weights is 4.02 GB rather than 16.06 GB. Recompute the whole-model decode figures from section 3 at that size: bytes per token, milliseconds on an H100, and the tokens-per-second ceiling. Then state by what factor throughput improved and why quantization is a latency optimization at least as much as a memory one.</li>" +
+      "<li><strong>Investigate.</strong> Find the published bf16 throughput and memory bandwidth for two accelerators a generation apart. Compute both ridge points. Then state whether the newer one makes memory-bound workloads better or worse off, and what that implies about the direction the field's optimizations have to take.</li>" +
+      "<li><strong>Investigate.</strong> Profile a single matrix multiplication on any GPU you have, at batch 1 and at a batch large enough to be compute-bound. Record achieved bandwidth and achieved FLOP/s for each. Compare with your predicted intensity. If the batch-1 case is near peak bandwidth, you have confirmed by measurement that no kernel tuning would help it.</li>" +
+      "<li><strong>Build.</strong> Write a function that takes an operation's shapes and dtype and returns its FLOPs, its bytes moved, its arithmetic intensity, and a verdict against a GPU's ridge point. Run it over every operation in one Corvid transformer block, at batch 1 and at batch 256, and produce two ranked lists of where the time goes. The two lists will be almost entirely different, and the difference is why prefill and decode need separate chapters.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "HBM", d: "High-bandwidth memory: the large, comparatively slow store where weights, KV cache and activations live, and every access to which is expensive." },
+    { t: "shared memory", d: "A small, fast, explicitly managed store per streaming multiprocessor; the level a kernel author controls and the target of every major kernel optimization." },
+    { t: "streaming multiprocessor", d: "One of the many independent compute units on a GPU, each running threads in lockstep groups called warps." },
+    { t: "arithmetic intensity", d: "FLOPs performed per byte moved from memory; the single number that decides whether an operation is limited by compute or by bandwidth." },
+    { t: "ridge point", d: "A hardware's throughput divided by its bandwidth, in FLOPs per byte; 295 for an H100 and 153 for an A100." },
+    { t: "roofline", d: "A plot of achievable throughput against arithmetic intensity, with a bandwidth slope meeting a compute ceiling at the ridge point." },
+    { t: "memory-bound", d: "Below the ridge point: the time is bytes divided by bandwidth, and faster arithmetic units change nothing." },
+    { t: "compute-bound", d: "Above the ridge point: the time is FLOPs divided by throughput, and the hardware is being used as intended." },
+    { t: "kernel fusion", d: "Combining consecutive operations into one kernel so a tensor is read and written once rather than repeatedly." },
+    { t: "CUDA graphs", d: "Recording a sequence of kernel launches and replaying it as a unit, to remove per-launch overhead that dominates when each step launches many tiny kernels." },
+    { t: "Triton", d: "A Python-embedded language for writing GPU kernels, in which you describe the computation for one tile and the compiler handles the rest." },
+    { t: "tiling", d: "Partitioning a computation so each piece's data fits in fast memory, which is where most of a kernel's performance is decided." },
+    { t: "achieved occupancy", d: "The fraction of a GPU's parallel capacity actually in use; low values usually mean too few pieces of work or too many registers per piece." },
+    { t: "achieved bandwidth", d: "Bytes moved per second against the hardware peak; a memory-bound kernel near peak has no tuning headroom left." }
+  ],
+  quiz: [
+    { type: "mc", q: "An H100 delivers 989 TFLOP/s of bf16 and 3.35 TB/s of bandwidth. What does 295 FLOPs per byte represent?", opts: ["The efficiency of a well-written kernel", "The ridge point: below this arithmetic intensity a workload is limited by memory rather than by compute", "The maximum useful batch size", "The number of arithmetic units per memory channel"], a: 1,
+      why: "It is the exchange rate between the two headline numbers: the machine can do 295 operations in the time it takes to fetch one byte. An operation doing fewer than that per byte leaves the arithmetic units idle. It is the single most useful number about a piece of hardware, and it is a division you can do from a specification sheet." },
+    { type: "mc", q: "One Corvid FFN matrix has arithmetic intensity 1.0 at one token and 2,293.8 at an 8,192-token prefill. What changed?", opts: ["The arithmetic per weight read: the 117.4 MB of weights is fetched once either way, but prefill does 8,192 times as much work with it", "The matrix is stored differently for prefill", "Prefill uses a lower precision", "The prefill path skips some layers"], a: 0,
+      why: "The weight matrix must be read from HBM whatever you do with it, so the bytes barely move between the two cases: 117.5 MB against 419.4 MB. The FLOPs grow by a factor of 8,192. Intensity is FLOPs over bytes, so it climbs almost linearly with tokens processed per weight read, which is the entire economic argument for batching." },
+    { type: "mc", q: "Generating one token from Corvid at bf16 takes 4.79 ms on an H100, while the arithmetic would take 0.016 ms. What follows?", opts: ["The implementation is inefficient and should be optimized", "The kernel launch overhead dominates", "During single-stream decode the GPU does useful arithmetic about one three-hundredth of the time, because the operation is bandwidth-bound", "The model should be run at a higher precision"], a: 2,
+      why: "Nothing is wrong with the implementation. Producing one token requires reading all 16.06 GB of weights to do 16.06 GFLOPs of work, an arithmetic intensity of almost exactly 1 against a ridge point of 295. The ratio of the two times is therefore 295, which is the ridge point itself. You are renting a memory-bandwidth device with some arithmetic attached." },
+    { type: "mc", q: "Why does fusing two elementwise operations help, while fusing two large matrix multiplications does not?", opts: ["Elementwise operations are more numerous", "Matrix multiplications cannot be fused for numerical reasons", "Fusion only works on operations of the same shape", "Elementwise operations are memory-bound, so halving their traffic halves their time; matmuls are compute-bound, so traffic was never the constraint"], a: 3,
+      why: "A normalize followed by an activation reads, writes, reads and writes for two cheap operations, and both have intensity near 1. Fusing them halves the traffic and roughly halves the time. Two matmuls are already above the ridge point, so removing an intermediate write changes almost nothing. This is why fusion effort concentrates on the small operations around the big ones." },
+    { type: "blank", q: "FLOPs performed per byte moved from memory is called arithmetic ____.", a: ["intensity"],
+      why: "Compare it with the hardware's ridge point and you know which limit binds, and therefore which optimizations can possibly help. Computing it before profiling is the discipline this chapter teaches: engineers without the number spend days tuning kernels that were already at the hardware's limit." },
+    { type: "blank", q: "Combining consecutive operations into a single kernel, so a tensor is read and written once rather than repeatedly, is called kernel ____.", a: ["fusion"],
+      why: "It changes the traffic, not the arithmetic. A compiler such as torch.compile finds many of these automatically. The related but distinct trick is CUDA graphs, which removes the per-launch overhead of many small kernels rather than the memory traffic, and which matters most at decode where each step launches hundreds of tiny ones." },
+    { type: "order", q: "Order the steps for deciding whether an optimization will help:", items: ["count the FLOPs and the bytes the operation moves", "divide to get its arithmetic intensity", "compare that with the hardware's ridge point", "choose an optimization that changes the side you are on"],
+      why: "Count, divide, compare, act. The last step is what the number buys: if you are memory-bound, only more work per byte, fewer bytes, or more output per pass can help, which are batching, quantization and speculation. Tuning the kernel harder cannot move a workload across the ridge point." },
+    { type: "mc", q: "An A100's ridge point is 153 and an H100's is 295. What does that trend mean for language-model inference?", opts: ["Newer hardware makes memory-bound workloads relatively worse off, since compute grew faster than bandwidth", "Newer hardware fixes the memory bottleneck", "The ridge point is a property of the workload, not the hardware", "Larger models are needed to use newer hardware"], a: 0,
+      why: "Compute roughly tripled while bandwidth did not keep pace, so the ridge point almost doubled and more kernels fall below it. Hardware progress has been making this problem worse rather than better, which is why every optimization in Part V attacks bytes rather than arithmetic. It also explains why buying a faster GPU often does not speed up single-stream generation." },
+    { type: "mc", q: "A profiler shows a kernel at 85% of peak memory bandwidth, and you compute its arithmetic intensity as 1.2 against a ridge point of 295. What should you do?", opts: ["Tune the tile sizes to improve occupancy", "Rewrite it in Triton", "Stop: the kernel is near the hardware's limit for its intensity, so the fix must change the algorithm rather than the kernel", "Increase the register budget per thread"], a: 2,
+      why: "An intensity of 1.2 means the operation is firmly memory-bound, and 85% of peak bandwidth means it is already moving bytes about as fast as the machine can. There is no kernel-level headroom. The remaining options change what is computed rather than how: process more tokens per weight read, shrink the weights, or get more tokens per pass." },
+    { type: "mc", q: "Batching Corvid's FFN to 128 tokens gives an arithmetic intensity of 123 on hardware whose ridge point is 295. What does that show?", opts: ["Batching has fully solved the bandwidth problem at 128", "The measurement must be wrong, since batching should exceed the ridge point", "128 is past the useful batch size", "Batching moves a workload up the bandwidth slope but does not necessarily lift it off"], a: 3,
+      why: "Intensity climbs almost linearly with batch, from 1.0 at one token to 123 at 128, and 123 is still well under 295. The workload is faster but remains memory-bound. This is why serving stacks combine batching with quantization and speculation rather than relying on any one of them, and why the batch size that saturates a GPU is larger than people expect." }
   ]
 });
