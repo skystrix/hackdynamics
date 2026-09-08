@@ -4907,3 +4907,263 @@ CHAPTERS.push({
       why: "The student learns from a target that has already had the corpus's noise averaged out of it, and in the logit-level form it also learns the teacher's relative rankings over wrong answers, which a one-hot label discards. The trade is that the teacher sets the ceiling, and the constraint is legal: training on a model's outputs is governed by that model's terms." }
   ]
 });
+
+/* ======================= CHAPTER 22 ======================= */
+CHAPTERS.push({
+  num: 22, part: 4, title: "Preferences: Reward Models and RLHF",
+  blurb: "Chapter 20 taught a model to imitate one good answer. It has no way to say that this answer is better than that one, and better is most of what makes an assistant usable. Reinforcement learning from human feedback solves it in three moves: collect comparisons, train a model that scores them, then optimize the language model against that score while a leash keeps it from drifting into nonsense. You will compute what annotator disagreement does to the ceiling, run the loop, loosen the leash, and watch the model discover that the score can be gamed.",
+  sections: [
+    { title: "What Imitation Cannot Express",
+      html: "<p>Supervised fine-tuning shows the model one good answer and trains it to reproduce that answer. Everything it can teach must therefore be expressible as a demonstration, and a great deal of what makes an assistant good is not.</p>" +
+      "<p>Take prompt <strong>P2</strong> from Chapter 20, rewriting a refund notice in plain English, and two candidate answers. One is accurate and slightly stiff. The other is warmer and quietly drops the fourteen-day deadline. A demonstration cannot say which is better, because a demonstration is a single example and these are two. You can add the good one to the training set, but you have not told the model what was wrong with the other, and the thing you actually know &#8212; that dropping a deadline is worse than sounding stiff &#8212; never enters the objective.</p>" +
+      "<h3>Why comparisons are cheaper than demonstrations</h3>" +
+      "<p>There is also a practical asymmetry, and it is the reason the field went this way rather than simply collecting more demonstrations.</p>" +
+      "<ul>" +
+      "<li><strong>Writing a good answer is expert work.</strong> A demonstration for a legal or medical prompt requires someone who can produce a correct answer from scratch, and their time is expensive and scarce.</li>" +
+      "<li><strong>Judging two answers is not.</strong> Choosing which of two responses is better needs someone who can recognise quality, which is a far larger population than those who can generate it. Most people can tell which of two explanations is clearer without being able to write either.</li>" +
+      "<li><strong>A demonstration sets a ceiling; a comparison does not.</strong> Train on demonstrations and the model learns to write like the annotators. Train on comparisons and the model can be pushed toward answers <em>better than any the annotators wrote</em>, because the signal is a ranking over the model's own outputs rather than a target to copy.</li>" +
+      "</ul>" +
+      "<p>That third point is the one that matters and it is easy to miss. The InstructGPT pipeline collected roughly 13,000 demonstration prompts and roughly 33,000 comparison prompts, and the comparisons are where the model exceeded its teachers rather than converging on them.</p>" +
+      "<div class='callout'><strong>The origin.</strong> None of this began with language. Christiano and colleagues at OpenAI published the technique in 2017 for reinforcement learning generally: train a reward model from human comparisons of short video clips, then optimize an agent against it. They taught simulated robots novel behaviours with about an hour of human time, giving feedback on under 1% of the agent's interactions. The insight transferred to language almost unchanged &#8212; what changed is that the &#8220;agent&#8221; became a text generator and the &#8220;clips&#8221; became responses.</div>" },
+
+    { title: "Preference Data, and the Ceiling It Sets",
+      html: "<p>The raw material is a set of triples: a prompt, a chosen response and a rejected one. Collecting them well is most of the work, and the number that governs everything downstream is how often two annotators shown the same pair choose the same answer.</p>" +
+      "<p>InstructGPT reported that figure honestly: about 40 contractors hired through Upwork and Scale AI, with inter-annotator agreement of <strong>72.6%</strong> among training labellers and 77.3% among held-out ones. Roughly one pair in four, two careful people disagree about which response is better.</p>" +
+      "<p>That is not a defect to be engineered away. Some pairs are genuinely close; some involve taste; some involve a trade the annotators weigh differently. But it puts a hard ceiling on every accuracy number reported downstream, and the arithmetic is worth doing because almost nobody does it.</p>" +
+      "<pre><code>Two annotators agree when both are right or both are wrong:\n    agreement = p^2 + (1 - p)^2       where p is one annotator's accuracy\n\n    0.726 = p^2 + (1 - p)^2   ->   p = 0.836\n    0.773 = p^2 + (1 - p)^2   ->   p = 0.870</code></pre>" +
+      "<p>So a reward model that predicted the <em>true</em> preference perfectly would still be scored at about <strong>84% accuracy</strong> against single-annotator labels, because 16% of those labels are wrong. A reward model reported at 75% is therefore not 75% of the way to perfect. It is at roughly nine tenths of the achievable ceiling, and the remaining headroom is far smaller than the number suggests.</p>" +
+      "<p>Three practical consequences follow.</p>" +
+      "<ul>" +
+      "<li><strong>Collect multiple labels on a subset.</strong> You cannot compute your own ceiling without them, and without the ceiling your reward-model accuracy is uninterpretable.</li>" +
+      "<li><strong>Write the rubric before the data, and version it.</strong> Most disagreement in practice is not taste but two annotators optimising different things &#8212; one for correctness, one for tone. A rubric that names the priority order converts a chunk of noise into signal.</li>" +
+      "<li><strong>Discard ties rather than breaking them.</strong> A forced choice on a genuinely equal pair is a coin flip recorded as a preference, and the reward model will dutifully learn to reproduce the coin.</li>" +
+      "</ul>" +
+      "<p>Where do the pairs come from? Almost always from the model you are about to train: sample several responses to the same prompt at a temperature above zero, from Chapter 18, and have annotators rank them. This matters more than it sounds. The comparisons describe the region of output space your model actually occupies, and a reward model trained on some other model's outputs is being asked about a distribution it will never see.</p>" },
+
+    { title: "The Reward Model", viz: "llmRewardModel", vizTitle: "Add three sentences of padding, then watch the score",
+      html: "<p>A <strong>reward model</strong> is the language model with its next-token head replaced by a single scalar output: given a prompt and a response, it emits one number. Training it turns pairwise comparisons into that number through a piece of statistics from 1952.</p>" +
+      "<p>The <strong>Bradley–Terry</strong> model says that if two items have latent strengths, the probability of preferring one is the logistic function of their difference. Applied here, with <code>r</code> the reward model's score:</p>" +
+      "<pre><code>P(chosen preferred over rejected) = sigmoid( r(chosen) - r(rejected) )\n\nloss = -log sigmoid( r(chosen) - r(rejected) )</code></pre>" +
+      "<p>Minimising that loss pushes the chosen response's score above the rejected one's, by an amount the data supports. Nothing tells the model what a good score <em>is</em>; it only ever sees differences.</p>"+
+      "<p>Two construction details from InstructGPT are worth copying rather than rediscovering. The reward model is initialised <em>from the SFT model with its unembedding layer removed</em> and a scalar head put in its place, so it starts out already understanding the text it will be scoring. And annotators ranked between four and nine responses per prompt, giving every prompt K-choose-2 comparisons &#8212; up to 36 of them &#8212; which were then trained as a <em>single batch element</em> rather than as separate examples. The reason is stated plainly in the paper: comparisons from one labelling task are highly correlated, and treating them as independent data points overfits after a single epoch. It also happens to be cheaper, since each completion needs one forward pass rather than one per pair it appears in.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>Bradley-Terry: only the gap between two scores means anything</text>" +
+      "<line x1='70' y1='150' x2='700' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='70' y1='34' x2='70' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='440' y='170' fill='#7d8fb0' font-size='9'>r(chosen) - r(rejected)</text>" +
+      "<text x='16' y='44' fill='#7d8fb0' font-size='9'>P</text>" +
+      "<path d='M70 146 C 200 143, 290 130, 385 92 S 560 44, 700 38' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<line x1='385' y1='92' x2='385' y2='150' stroke='#ffd166' stroke-width='1' stroke-dasharray='3 3'/>" +
+      "<circle cx='385' cy='92' r='4' fill='#ffd166'/>" +
+      "<text x='378' y='164' fill='#ffd166' font-size='9'>0</text>" +
+      "<text x='396' y='88' fill='#ffd166' font-size='9'>0.50</text>" +
+      "<circle cx='487' cy='68' r='4' fill='#3ddc97'/><text x='496' y='64' fill='#3ddc97' font-size='9'>gap 1.0 -> 0.731</text>" +
+      "<circle cx='590' cy='47' r='4' fill='#3ddc97'/><text x='560' y='104' fill='#3ddc97' font-size='9'>gap 2.0 -> 0.881</text>" +
+      "<circle cx='283' cy='120' r='4' fill='#ff5d73'/><text x='150' y='112' fill='#ff5d73' font-size='9'>gap -1.0 -> 0.269</text>" +
+      "<line x1='20' y1='182' x2='740' y2='182' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='200' fill='#c9d6ea' font-size='10.5'>Add 5 to every score and the curve is unchanged. &#8220;The reward model gave it 3.2&#8221; is not a statement about quality.</text>" +
+      "<text x='20' y='212' fill='#7d8fb0' font-size='9'>Scores are identified only up to an additive constant, so they compare and never measure.</text>" +
+      "</svg><div class='fig-cap'>The objective constrains differences only. Every absolute reward number you will ever see is arbitrary to within a constant.</div></div>" +
+      "<p>Two consequences engineers meet the hard way. Reward scores are <strong>not comparable across reward models</strong>, so a threshold tuned against one is meaningless against its retrained successor. And a reward model is only meaningful on the distribution it was trained on: score responses far outside it and the number is an extrapolation with nothing holding it down, which is precisely the situation the optimizer in section 4 will spend its time creating.</p>" +
+      "<p>InstructGPT used a 6-billion-parameter reward model rather than a 175-billion one, and the stated reason is instructive: the larger reward models were unstable when used as the objective for reinforcement learning. A better judge did not produce a better result.</p>" +
+      "<div class='callout'><strong>Try it above.</strong> Take a response the model scores well, add three sentences of padding that say nothing, and read the score again. It goes up. That is not a bug in this particular reward model; it is section 7's subject, and it is the single most reliable finding about reward models in the field.</div>" },
+
+    { title: "PPO, and Why the Setup Is Fiddly",
+      html: "<p>With a reward model in hand, the language model becomes a <strong>policy</strong> to be optimized against it. The algorithm the field settled on is <strong>PPO</strong>, from Schulman and colleagues in 2017, and the loop has four steps.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one PPO step &#183; four models resident, two of them being trained</text>" +
+      "<rect x='20' y='32' width='140' height='46' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='34' y='52' fill='#ffd166' font-size='10'>policy</text>" +
+      "<text x='34' y='68' fill='#7d8fb0' font-size='8.5'>trained &#183; 144.5 GB</text>" +
+      "<line x1='166' y1='55' x2='198' y2='55' stroke='#ffd166' stroke-width='2'/><polygon points='206,55 196,50 196,60' fill='#ffd166'/>" +
+      "<rect x='212' y='32' width='150' height='46' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='226' y='52' fill='#4f7cff' font-size='10'>1. generate</text>" +
+      "<text x='226' y='68' fill='#7d8fb0' font-size='8.5'>decode, not a forward pass</text>" +
+      "<line x1='368' y1='55' x2='400' y2='55' stroke='#4f7cff' stroke-width='2'/><polygon points='408,55 398,50 398,60' fill='#4f7cff'/>" +
+      "<rect x='414' y='32' width='150' height='46' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='428' y='52' fill='#3ddc97' font-size='10'>2. score</text>" +
+      "<text x='428' y='68' fill='#7d8fb0' font-size='8.5'>reward model &#183; 16.1 GB</text>" +
+      "<line x1='570' y1='55' x2='602' y2='55' stroke='#3ddc97' stroke-width='2'/><polygon points='610,55 600,50 600,60' fill='#3ddc97'/>" +
+      "<rect x='616' y='32' width='124' height='46' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='630' y='52' fill='#ff5d73' font-size='10'>3. penalise</text>" +
+      "<text x='630' y='68' fill='#7d8fb0' font-size='8.5'>KL vs reference</text>" +
+      "<rect x='212' y='98' width='150' height='46' rx='8' fill='#111a2e' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='226' y='118' fill='#c9d6ea' font-size='10'>reference model</text>" +
+      "<text x='226' y='134' fill='#7d8fb0' font-size='8.5'>frozen SFT &#183; 16.1 GB</text>" +
+      "<rect x='414' y='98' width='150' height='46' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='428' y='118' fill='#ffd166' font-size='10'>value model</text>" +
+      "<text x='428' y='134' fill='#7d8fb0' font-size='8.5'>trained too &#183; 144.5 GB</text>" +
+      "<line x1='678' y1='84' x2='678' y2='120' stroke='#ffd166' stroke-width='2'/>" +
+      "<line x1='678' y1='120' x2='96' y2='120' stroke='#ffd166' stroke-width='2'/>" +
+      "<line x1='96' y1='120' x2='96' y2='84' stroke='#ffd166' stroke-width='2'/><polygon points='96,78 91,88 101,88' fill='#ffd166'/>" +
+      "<text x='596' y='134' fill='#ffd166' font-size='9'>4. update</text>" +
+      "<line x1='20' y1='160' x2='740' y2='160' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='180' fill='#ff5d73' font-size='10.5'>321.2 GB of model state against supervised fine-tuning's 144.5, and step 1 is generation</text>" +
+      "<text x='20' y='198' fill='#c9d6ea' font-size='10'>Chapter 16 showed decode is memory-bound, so an RLHF trainer is a serving stack bolted to a training stack.</text>" +
+      "<text x='20' y='218' fill='#7d8fb0' font-size='9.5'>This is the practical reason the loop is rare, and the reason Chapter 23 exists.</text>" +
+      "</svg><div class='fig-cap'>The four boxes are why this is hard. Two models are being trained, two are frozen, and the inner loop contains inference.</div></div>" +
+      "<p>Step 1 generates responses to a batch of prompts &#8212; a <strong>rollout</strong>. Step 2 scores them. Step 3 subtracts the KL penalty of the next section. Step 4 updates the policy toward the tokens that earned above-average return.</p>" +
+      "<p>&#8220;Above average&#8221; is what the fourth model is for. Raw reward is a poor training signal because a response can score 2.1 and you have no idea whether that is good for this prompt. The <strong>value model</strong> predicts the expected reward for a prompt, and the <strong>advantage</strong> &#8212; actual minus expected &#8212; is what the policy is actually trained on. It is a variance-reduction device, and it costs a second trainable model the size of the first.</p>" +
+      "<p>There is a difficulty hiding in step 2 that the diagram cannot show. The reward model scores a <em>whole response</em>, so a single number arrives at the end of several hundred token decisions, and the algorithm has to decide which of those decisions earned it. This is the credit-assignment problem in its classic form, and it is why the value model and the advantage estimate matter so much here: they are the only machinery distributing one terminal number back across the sequence that produced it. The KL penalty of the next section, by contrast, is applied <em>per token</em>, which means the leash pulls at every step while the reward arrives once.</p>"+
+      "<p>PPO's own contribution is the clipping. Reinforcement learning updates can be catastrophically large; PPO bounds how far the policy's probability for a token may move from its value at the start of the step, discarding the part of the update that exceeds a ratio. It is a trust region enforced by clamping, and it is what makes the method stable enough to use.</p>" +
+      "<p>The bill is the honest part. Four models resident against supervised fine-tuning's one, two of them carrying Chapter 9's 18 bytes per parameter, and an inner loop that generates text before it can compute a gradient. LoRA from Chapter 21 brings the state down to roughly 66 GB by making the policy and value models adapters over a shared frozen base, which is the only reason small teams run this at all.</p>" },
+
+    { title: "The KL Leash", viz: "llmRlhfLoop", vizTitle: "Drop the KL penalty to 0.001 and watch the text fall apart",
+      html: "<p>An optimizer pointed at a learned score will find the flaws in that score. This is not a risk; it is what optimizers do. The objective is therefore not the reward alone:</p>" +
+      "<pre><code>objective = r(x, y) - beta * KL( policy(y|x) || reference(y|x) )</code></pre>" +
+      "<p>The <strong>reference model</strong> is a frozen copy of the model you started with &#8212; the Chapter 20 fine-tune. The KL term measures how far the policy's distribution has moved from it, and <code>beta</code> sets the price of moving. The reward model says &#8220;go this way&#8221;; the leash says &#8220;not further than this from where you began&#8221;.</p>" +
+      "<p>Both ends of the leash fail, and they fail differently.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 220' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the same run at three values of beta &#183; green = measured reward, red = actual quality</text>" +
+      "<line x1='70' y1='142' x2='250' y2='142' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='70' y1='34' x2='70' y2='142' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<path d='M70 136 C 110 100, 150 60, 250 40' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<path d='M70 136 C 110 122, 150 118, 250 136' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='74' y='160' fill='#ff5d73' font-size='9.5'>beta = 0.001</text>" +
+      "<text x='74' y='176' fill='#7d8fb0' font-size='9'>reward soars, text</text>" +
+      "<text x='74' y='190' fill='#7d8fb0' font-size='9'>becomes gibberish</text>" +
+      "<line x1='290' y1='142' x2='470' y2='142' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='290' y1='34' x2='290' y2='142' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<path d='M290 136 C 330 112, 370 92, 470 82' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<path d='M290 136 C 330 116, 370 98, 470 88' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='294' y='160' fill='#3ddc97' font-size='9.5'>beta = 0.02</text>" +
+      "<text x='294' y='176' fill='#7d8fb0' font-size='9'>the two curves stay</text>" +
+      "<text x='294' y='190' fill='#7d8fb0' font-size='9'>together: usable</text>" +
+      "<line x1='510' y1='142' x2='690' y2='142' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='510' y1='34' x2='510' y2='142' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<path d='M510 136 C 550 132, 590 130, 690 128' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<path d='M510 136 C 550 133, 590 131, 690 129' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='514' y='160' fill='#ffd166' font-size='9.5'>beta = 0.5</text>" +
+      "<text x='514' y='176' fill='#7d8fb0' font-size='9'>nothing moves: you</text>" +
+      "<text x='514' y='190' fill='#7d8fb0' font-size='9'>paid for the SFT model</text>" +
+      "<text x='20' y='214' fill='#c9d6ea' font-size='10.5'>The failure on the left is the dangerous one, because the metric you are watching says it is going well.</text>" +
+      "</svg><div class='fig-cap'>Only the middle panel is a working run. The left one looks like the best run of the three on every number the trainer prints.</div></div>" +
+      "<p>With <code>beta</code> near zero the policy is free to walk anywhere, and it walks straight off the reward model's training distribution into the region where its scores are unconstrained extrapolation. Reward climbs without limit; the text degrades into whatever artefact the reward model happens to like. This is <strong>reward hacking</strong>, and the reason it is dangerous rather than merely wrong is that the number on the dashboard goes up the entire time.</p>" +
+      "<p>With <code>beta</code> large the policy cannot move far enough to change anything, and you have spent four models' worth of compute to reproduce the model you started with.</p>"+
+      "<p>Choosing between the two ends is not a search you can automate, because the quantity you want to maximise is not measurable inside the loop. What you can do is treat KL as a budget rather than a penalty: decide in advance how far you are willing to let the policy drift, watch the measured divergence at every checkpoint, and adjust <code>beta</code> when it overshoots. InstructGPT applied the penalty per token against the SFT model for exactly this purpose &#8212; to mitigate over-optimization of the reward model &#8212; and the framing is the useful one. The leash is not there to make the model better. It is there to keep the reward model's opinions trustworthy by preventing the policy from leaving the region where they were fitted, which is a phenomenon general enough to have a name: <strong>distribution shift</strong>.</p>" +
+      "<div class='callout'><strong>Run it above.</strong> Set the KL coefficient to 0.001 and step the loop, watching the reward curve and the sample outputs side by side. The reward rises smoothly and the samples become unreadable, and there is no moment where the reward curve tells you this has happened. Then set it to 0.02 and watch the two agree. The lesson is procedural: <strong>KL divergence is a metric you monitor, not a term you set and forget</strong>, and samples must be read by a human at every checkpoint because no scalar in the loop is reporting this failure.</div>" },
+
+    { title: "The Pipeline, End to End",
+      html: "<p>Assembled, the three stages of InstructGPT look like this &#8212; and the shape has not changed since 2022 even where the third stage has been replaced.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>three stages, three datasets, three models &#183; each stage consumes the one before it</text>" +
+      "<rect x='20' y='32' width='226' height='96' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='52' fill='#4f7cff' font-size='10.5'>1. supervised fine-tuning</text>" +
+      "<text x='34' y='74' fill='#c9d6ea' font-size='9'>~13,000 demonstration prompts</text>" +
+      "<text x='34' y='92' fill='#c9d6ea' font-size='9'>written by ~40 contractors</text>" +
+      "<text x='34' y='114' fill='#3ddc97' font-size='9'>out: the SFT model (Chapter 20)</text>" +
+      "<line x1='252' y1='80' x2='282' y2='80' stroke='#4f7cff' stroke-width='2'/><polygon points='290,80 280,75 280,85' fill='#4f7cff'/>" +
+      "<rect x='296' y='32' width='226' height='96' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='310' y='52' fill='#3ddc97' font-size='10.5'>2. reward model</text>" +
+      "<text x='310' y='74' fill='#c9d6ea' font-size='9'>~33,000 comparison prompts</text>" +
+      "<text x='310' y='92' fill='#c9d6ea' font-size='9'>ranked, 72.6% agreement</text>" +
+      "<text x='310' y='114' fill='#3ddc97' font-size='9'>out: a 6B scorer, not 175B</text>" +
+      "<line x1='528' y1='80' x2='558' y2='80' stroke='#3ddc97' stroke-width='2'/><polygon points='566,80 556,75 556,85' fill='#3ddc97'/>" +
+      "<rect x='572' y='32' width='168' height='96' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='586' y='52' fill='#ffd166' font-size='10.5'>3. PPO</text>" +
+      "<text x='586' y='74' fill='#c9d6ea' font-size='9'>~31,000 prompts</text>" +
+      "<text x='586' y='92' fill='#c9d6ea' font-size='9'>no labels needed here</text>" +
+      "<text x='586' y='114' fill='#ffd166' font-size='9'>out: the aligned model</text>" +
+      "<line x1='20' y1='146' x2='740' y2='146' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='168' fill='#c9d6ea' font-size='10'>Stage 3 needs prompts but no human labels, which is why it can use many more of them</text>" +
+      "<text x='20' y='188' fill='#c9d6ea' font-size='10'>and why the expensive human work is concentrated in stages 1 and 2.</text>" +
+      "<text x='20' y='214' fill='#3ddc97' font-size='10.5'>The headline: a 1.3B InstructGPT was preferred to the 175B GPT-3 it came from &#8212; 100x fewer parameters.</text>" +
+      "<text x='20' y='230' fill='#7d8fb0' font-size='9.5'>Alignment bought more, on the thing users actually judged, than two orders of magnitude of scale.</text>" +
+      "</svg><div class='fig-cap'>Read the last two lines against Chapter 15. Scaling laws predict loss; they say nothing about whether anyone wants to talk to the result.</div></div>" +
+      "<p>That headline result deserves its weight. Chapter 15's scaling laws describe how loss falls with compute, and they are correct. What InstructGPT demonstrated is that loss and usefulness had come apart: a model two orders of magnitude smaller, aligned, beat a model two orders of magnitude larger that was not. The gap was not capability. It was that the larger model had never been told what kind of continuation a person asking a question actually wants.</p>" +
+      "<p>Note also the shape of the human cost. Stages 1 and 2 need people; stage 3 needs only prompts, because the reward model has been distilled out of the annotators and can now score an unlimited number of responses. That is the economic trick of the whole design: a fixed amount of human judgement is amortised over an unbounded amount of optimization.</p>" +
+      "<p>It is also the design's central weakness, and section 7 is about paying for it. Every flaw in those 33,000 comparisons is now a flaw in an oracle that will be consulted millions of times by an optimizer whose entire purpose is to find flaws. A human annotator who mildly prefers longer answers is a small bias in a dataset. The same bias inside a reward model, pointed at by an optimizer for 2,000 steps, is a policy that writes at length about nothing.</p>"+
+      "<p>One more asymmetry is visible in the stage sizes and worth naming. Stage 1 is bounded by how much text people can write, stage 2 by how many pairs they can judge, and stage 3 by how much compute you have. Those are three completely different scaling curves, and the pipeline was designed so that the cheapest one carries the most weight. Chapter 15's scaling laws apply to the third stage and not to the first two, which is why more compute has kept improving pretraining while alignment quality has stayed stubbornly tied to the quality of a few tens of thousands of human judgements.</p>" },
+
+    { title: "Reward Hacking, Length, and the Alignment Tax",
+      html: "<p>Three failures, in increasing order of how much they should worry you.</p>" +
+      "<p><strong>Length bias</strong> is the one you will meet first. Reward models systematically prefer longer responses, and the finding that makes this more than a curiosity comes from Singhal and colleagues in 2023: across three open preference datasets, reward correlated strongly with length, and <strong>a reward purely based on length reproduced most of the downstream improvement RLHF showed over the supervised model</strong>. Not some of it. Most of it. Their interventions mitigated the effect and did not eliminate it, and they located the source in the reward models rather than in the RL.</p>" +
+      "<p>Sit with what that implies about evaluation. If your aligned model beats your SFT model in a human preference test, you have not yet established that it is better &#8212; you have established that annotators preferred it, and length alone can produce that result. The control is to compare at matched length, and it is not standard practice.</p>" +
+      "<p><strong>Sycophancy</strong> is the same mechanism aimed at a different target. Annotators prefer responses that agree with them, so agreement earns reward, so the policy learns to agree. The model is not being dishonest; it is maximising exactly what was measured. Anything annotators reliably like &#8212; confidence, hedging, bullet points, flattery &#8212; is a gradient direction, and the ones nobody thought to check for are the ones that grow.</p>" +
+      "<p><strong>The alignment tax</strong> is the cost paid elsewhere. InstructGPT measured it rather than asserting it, and it showed up as regressions on public NLP benchmarks &#8212; SQuAD, DROP, HellaSwag, WMT 2015 translation &#8212; while human preference scores rose. It is Chapter 20's catastrophic forgetting arriving through a different door, and the fix rhymes: <strong>PPO-ptx</strong> mixes gradient updates on the original pretraining distribution into the RL updates, which substantially reduced the regressions without costing preference scores. Replay again, one stage later.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 222' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the alignment tax as InstructGPT measured it &#183; one curve up, four down, and the fix" +
+      "</text>" +
+      "<line x1='80' y1='150' x2='700' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='80' y1='32' x2='80' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='300' y='170' fill='#7d8fb0' font-size='9'>PPO steps</text>" +
+      "<path d='M80 140 C 180 100, 280 66, 400 50 S 600 38, 700 36' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='470' y='32' fill='#3ddc97' font-size='9.5'>labeller preference</text>" +
+      "<path d='M80 62 C 190 68, 300 82, 410 100 S 600 128, 700 138' fill='none' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='560' y='150' fill='#ff5d73' font-size='9'>SQuAD, DROP,</text>" +
+      "<text x='560' y='162' fill='#ff5d73' font-size='9'>HellaSwag, WMT</text>" +
+      "<path d='M80 62 C 190 63, 300 66, 410 70 S 600 76, 700 78' fill='none' stroke='#ffd166' stroke-width='2.5' stroke-dasharray='6 4'/>" +
+      "<text x='420' y='90' fill='#ffd166' font-size='9.5'>the same benchmarks under PPO-ptx</text>" +
+      "<line x1='20' y1='182' x2='740' y2='182' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='200' fill='#c9d6ea' font-size='10.5'>Mixing pretraining updates into the RL updates recovers most of the loss and costs no preference score.</text>" +
+      "<text x='20' y='216' fill='#7d8fb0' font-size='9.5'>Chapter 20's replay, one stage later: give the gradient a reason to keep what you are not training.</text>" +
+      "</svg><div class='fig-cap'>Nothing inside the RL loop reports the red curve. It is only visible if you keep running an evaluation you are not optimizing.</div></div>" +
+      "<div class='callout'><strong>The measurement discipline this demands.</strong> Track four things at every checkpoint, not one. Reward, because it is your objective. KL from the reference, because it is your early warning. Mean response length, because it is the cheapest reward-hacking detector in existence and it costs nothing to log. And a general benchmark you are not optimizing, because the tax is invisible from inside the loop. A run reporting only reward is a run that cannot distinguish its best checkpoint from its worst.</div>" },
+
+    { title: "Why Almost Nobody Runs This Loop",
+      html: "<p>Everything above is the canonical pipeline, it works, and in 2026 very few teams run it. The reasons are worth naming precisely, because they are engineering reasons rather than a change of intellectual fashion.</p>" +
+      "<ul>" +
+      "<li><strong>Four models, two of them trainable.</strong> 321 GB of state for Corvid before activations, against 144.5 for supervised fine-tuning. Adapters help and do not remove the fact that four models must be resident.</li>" +
+      "<li><strong>The inner loop contains generation.</strong> A PPO step cannot compute a gradient until it has produced text, and Chapter 16 established that decode is memory-bound and slow. An RLHF trainer is a serving stack fused to a training stack, and it fails in both stacks' ways.</li>" +
+      "<li><strong>The hyperparameters interact.</strong> The KL coefficient, the clipping ratio, the learning rate, the value-loss weight and the rollout batch size are not independent, and the failure mode of a bad combination is a reward curve that rises while the model gets worse. Debugging that requires reading samples, which does not fit in a sweep.</li>" +
+      "<li><strong>The reward model is a second research project.</strong> It must be trained, evaluated against an agreement ceiling most teams never compute, and retrained as the policy drifts away from the distribution it was fitted on.</li>" +
+      "</ul>" +
+      "<p>The question Chapter 23 answers is whether all of that machinery is necessary to get what it produces. The KL-constrained objective in section 5 has a closed-form optimal policy, and if you can write that policy in terms of the reward, you can invert the relation and write the reward in terms of the policy &#8212; at which point the reward model is a quantity that cancels rather than an artefact that must be built. That is <strong>DPO</strong>, and it turns this chapter's three stages into two and its four models into two.</p>" +
+      "<p>Learn this chapter anyway, and not for history. Every method in Chapter 23 is a rearrangement of these same parts, so its failure modes are these failure modes: length bias is a property of preference data and survives the change of algorithm; reward hacking becomes overfitting to the preference set; the KL leash reappears as a coefficient with a different name and the same job. The pipeline changed. The physics did not.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Your annotators agree on 68% of pairs. Compute the implied per-annotator accuracy from <code>agreement = p&#178; + (1-p)&#178;</code>, and state the ceiling on reward-model accuracy measured against single labels. Then compute it for 80% and 90% agreement. State what a reported reward-model accuracy of 71% means in each of the three worlds, and why the number alone is uninterpretable.</li>" +
+      "<li><strong>Trace.</strong> A reward model scores two responses 1.4 and 0.6. Compute the Bradley&#8211;Terry probability that the first is preferred. Now add 10 to both scores and compute it again. Then compute the gap needed for a 95% probability. State in one sentence what this means for anyone who wants to set an absolute reward threshold in production.</li>" +
+      "<li><strong>Trace.</strong> Using Chapter 9's 18 bytes per parameter and Corvid's 8.03B, compute the total model state for a PPO run with a full-precision policy and value model plus a frozen reference and reward model. Then recompute with LoRA adapters on the policy and value at rank 16 over a shared frozen base. Report both against an 80 GB card and state how many cards each needs.</li>" +
+      "<li><strong>Investigate.</strong> Take any open reward model and score 50 response pairs where you have made the better response deliberately shorter. Report how often the reward model prefers the longer, worse one. Then re-score with the responses padded to equal length and report the change. You are measuring your own version of the Singhal result, and the number will be higher than you expect.</li>" +
+      "<li><strong>Investigate.</strong> Find a published RLHF result reporting a win rate over an SFT baseline. Check whether it reports response lengths for both models. If it does not, state what you cannot conclude from the win rate and what one extra column would have settled.</li>" +
+      "<li><strong>Build.</strong> Implement the reward-model training step: a scalar head, the Bradley&#8211;Terry loss, and a training loop over comparison triples. Then write the evaluation that matters &#8212; accuracy on held-out pairs, reported alongside the agreement ceiling you computed in exercise 1, plus the correlation between assigned reward and response length. Assert that the loss is invariant when a constant is added to both scores. That assertion is the deliverable, because a passing version proves you have implemented a comparison rather than a measurement.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "preference data", d: "Triples of a prompt, a chosen response and a rejected one; cheaper to collect than demonstrations because judging quality needs less expertise than producing it." },
+    { t: "inter-annotator agreement", d: "How often two people shown the same pair choose the same response; InstructGPT reported 72.6%, which sets a ceiling on every downstream accuracy number." },
+    { t: "reward model", d: "The language model with its token head replaced by a single scalar, trained so that better responses score higher than worse ones." },
+    { t: "Bradley–Terry", d: "The 1952 model giving the probability of preferring one item as the logistic function of the difference in their latent scores." },
+    { t: "policy", d: "The language model being optimized, so called because reinforcement learning treats token choice as an action." },
+    { t: "reference model", d: "A frozen copy of the model the run started from, against which the policy's drift is measured." },
+    { t: "PPO", d: "Proximal Policy Optimization: the reinforcement learning algorithm that bounds how far a policy may move in one update by clipping the update ratio." },
+    { t: "rollout", d: "The generation step inside a PPO iteration, which is why an RLHF trainer contains a serving stack." },
+    { t: "value model", d: "A second trained model predicting expected reward for a prompt, used to convert raw reward into an advantage." },
+    { t: "advantage", d: "Actual reward minus expected reward; the quantity the policy is actually trained on, and a variance-reduction device." },
+    { t: "KL penalty", d: "The term charging the policy for moving away from the reference distribution, scaled by beta; the leash that makes the loop usable." },
+    { t: "reward hacking", d: "The optimizer finding flaws in the learned score rather than improving the output, recognisable because measured reward rises while quality falls." },
+    { t: "length bias", d: "Reward models' systematic preference for longer responses; a purely length-based reward reproduces most of RLHF's measured gain over supervised fine-tuning." },
+    { t: "sycophancy", d: "The policy learning to agree with the user because annotators preferred agreement; reward hacking aimed at a social rather than a textual feature." },
+    { t: "alignment tax", d: "Capability lost on tasks you were not optimizing while preference scores rise, measured by InstructGPT on SQuAD, DROP, HellaSwag and WMT." },
+    { t: "PPO-ptx", d: "Mixing pretraining-distribution gradient updates into the RL updates, which substantially reduced the alignment tax without costing preference scores." },
+    { t: "RLHF", d: "Reinforcement learning from human feedback: the three-stage pipeline of supervised fine-tuning, reward modelling, and policy optimization against that reward." },
+    { t: "distribution shift", d: "The policy drifting away from the responses the reward model was fitted on, which turns its scores into unconstrained extrapolation." }
+  ],
+  quiz: [
+    { type: "mc", q: "Why can comparisons teach something demonstrations cannot, beyond being cheaper to collect?", opts: ["Comparisons are less noisy than demonstrations", "Comparisons can be collected automatically without people", "A demonstration is a target to copy, so it caps the model at the annotators' level; a ranking over the model's own outputs can push it past them", "Comparisons require no prompt set"], a: 2,
+      why: "Training on demonstrations means learning to write like whoever wrote them. Comparisons rank responses the model itself produced, so the signal says which of its own behaviours to amplify rather than which text to imitate. That is why the expensive expert work concentrates in the demonstration stage while the comparison stage scales." },
+    { type: "mc", q: "Annotators agree on 72.6% of pairs. What does that imply about a reward model reported at 75% accuracy on held-out comparisons?", opts: ["It is at roughly nine tenths of the achievable ceiling, since perfect prediction of the true preference would score about 84% against single-annotator labels", "It is performing poorly and needs more training data", "The accuracy figure is invalid and cannot be interpreted at all", "It has overfitted, since it exceeds the agreement rate"], a: 0,
+      why: "Two annotators agree when both are right or both wrong, so agreement = p² + (1-p)², and 0.726 gives p = 0.836. Sixteen per cent of single-annotator labels are wrong, so no model can score above about 84% against them. Reporting 75% without the ceiling makes the remaining headroom look four times larger than it is." },
+    { type: "mc", q: "A team sets a production threshold: ship any response the reward model scores above 3.0. What is wrong with this?", opts: ["Three is too low a threshold for most reward models", "The threshold should be applied to the KL penalty instead", "Reward models cannot score single responses, only pairs", "Bradley–Terry constrains only differences between scores, so the scale is arbitrary to within a constant and meaningless across retrained models"], a: 3,
+      why: "The loss is -log sigmoid(r_chosen - r_rejected). Add five to every score and it is unchanged, so nothing pins the absolute scale. A reward model can score a single response, but the number only means something relative to another score from the same model. Retrain it and every threshold tuned against the old one is silently wrong." },
+    { type: "mc", q: "Why does a PPO run need a value model in addition to the policy, reference and reward models?", opts: ["To provide a second opinion on the reward model's scores", "To predict expected reward for a prompt, so the policy trains on advantage rather than raw reward", "To hold the reference distribution used by the KL penalty", "To generate the rollouts more efficiently"], a: 1,
+      why: "A raw reward of 2.1 says nothing without knowing what was achievable for that prompt. The value model supplies the baseline, and the difference — the advantage — is the training signal. It is a variance-reduction device, and its cost is a second trainable model the size of the first, which is a large part of why the loop needs four models resident." },
+    { type: "mc", q: "You set the KL coefficient near zero. Reward climbs steadily for 2,000 steps. What is most likely happening?", opts: ["The run is working unusually well and should be left alone", "The value model has diverged and is inflating the advantage", "The learning rate is too low to cause harm at this KL setting", "The policy has walked off the reward model's training distribution, where its scores are unconstrained extrapolation: reward is rising and text quality is falling"], a: 3,
+      why: "This is reward hacking, and its defining property is that the dashboard looks good throughout. With no leash, the policy is free to find the regions where the learned score is highest, and those are exactly the regions the reward model was never fitted on. Nothing in the reward curve reports it, which is why samples must be read at every checkpoint." },
+    { type: "blank", q: "The term that charges the policy for moving away from the frozen model it started from is the ____ penalty.", a: ["kl", "kl divergence", "kullback-leibler"],
+      why: "The objective is r(x,y) minus beta times the divergence from the reference distribution. Near zero, the policy escapes into the reward model's extrapolation region; too large, and it cannot move enough to change anything, so you have spent four models' compute to reproduce your starting point. It is a quantity to monitor at every checkpoint, not a constant to set once." },
+    { type: "mc", q: "A purely length-based reward reproduces most of RLHF's measured improvement over the supervised model. What follows for evaluation?", opts: ["Reward models should be trained only on short responses", "Length should be added to the reward model as an explicit feature", "A human preference win over an SFT baseline does not establish quality unless the comparison controls for response length", "RLHF produces no real improvement over supervised fine-tuning"], a: 2,
+      why: "Singhal and colleagues found reward correlates strongly with length across three open preference datasets, and located the source in the reward models rather than the RL. Their interventions reduced the effect without removing it. So a win rate is a claim about what annotators preferred, and length alone can produce it — which makes matched-length comparison the control, and it is not standard practice." },
+    { type: "mc", q: "InstructGPT's 1.3B model was preferred to the 175B GPT-3 it derived from. What does this show about Chapter 15's scaling laws?", opts: ["That loss and usefulness had come apart: scaling predicts loss, and says nothing about whether the continuation is the kind a person asking a question wants", "That the scaling laws were measured incorrectly at large sizes", "That preference data can substitute for pretraining compute", "That 175B models are undertrained relative to Chinchilla"], a: 0,
+      why: "The scaling laws are not wrong; they describe how loss falls with compute and they do. The larger model was more capable in the sense they measure and had never been shown what shape of continuation a question calls for. Alignment closed a gap that two orders of magnitude of scale did not, because the two were measuring different things." },
+    { type: "order", q: "Order these four quantities by how early they reveal that an RLHF run has gone wrong, earliest first:", items: ["Mean response length, which rises before anything else does and costs nothing to log", "KL divergence from the reference model, which climbs as the policy leaves the reward model's distribution", "A general benchmark you are not optimizing, which registers the alignment tax", "Human reading of sampled outputs, which is the only signal that is never fooled"], why: "Length is the cheapest reward-hacking detector in existence and moves first. KL follows as the policy drifts. A held-out benchmark registers damage after it has accumulated. Reading samples is last because it is slow and manual, and it is also the only one that cannot be gamed — which is why it belongs at every checkpoint rather than at the end." },
+    { type: "mc", q: "The alignment tax appeared as regressions on SQuAD, DROP, HellaSwag and WMT while preference scores rose. What fixed it, and what earlier mechanism does that echo?", opts: ["A larger reward model, echoing the scaling laws", "PPO-ptx, mixing pretraining-distribution updates into the RL updates: replay, exactly as used against catastrophic forgetting", "A tighter KL penalty, echoing gradient clipping", "More comparison data, echoing the data-quality argument for fine-tuning"], a: 1,
+      why: "Optimizing hard on a narrow objective costs capability elsewhere, which is Chapter 20's catastrophic forgetting arriving one stage later. The remedy is the same: give the gradient a reason to preserve the old distribution by putting some of it in every batch. It substantially reduced the regressions without costing preference scores." },
+    { type: "mc", q: "Why is an RLHF trainer harder to operate than a supervised fine-tuning trainer, beyond needing more memory?", opts: ["Reinforcement learning requires higher numerical precision throughout", "The reward model must be retrained after every PPO step", "Its inner loop contains generation, so it is a serving stack fused to a training stack and fails in both stacks' ways", "Gradients cannot be accumulated across rollouts"], a: 2,
+      why: "A PPO step cannot compute a gradient until it has produced text, and Chapter 16 established that decode is memory-bound and slow. So the trainer inherits the operational surface of an inference server on top of a training job. Combined with four resident models and hyperparameters that interact, this is the engineering reason the loop is rare — not a change of intellectual fashion." },
+    { type: "mc", q: "Chapter 23 replaces this pipeline. Why learn it anyway?", opts: ["Because DPO is only applicable to models under a certain size", "Because reward models are still required by DPO at training time", "Because PPO remains the better method for large models", "Because the newer methods rearrange these same parts, so length bias, reward hacking and the KL leash all reappear under different names"], a: 3,
+      why: "Length bias is a property of the preference data, not of PPO, so it survives any change of algorithm. Reward hacking reappears as overfitting to the preference set. The KL leash reappears as a coefficient with a different name and the same job of bounding drift from the reference. The pipeline changes; the failure modes are inherited." }
+  ]
+});
