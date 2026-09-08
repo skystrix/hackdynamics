@@ -4075,3 +4075,309 @@ CHAPTERS.push({
       why: "The top-p option is the specific failure mode measured in section 3: at T = 1.5 a 0.9 nucleus admitted 156 candidates for a near-certain token. The temperature-0 option combines a deterministic decoder with a penalty that damages ordinary grammar, and top-k 5 discards 39% of the mass on open contexts. Min-p was designed for exactly this case and its surviving set stays small wherever the model is confident." }
   ]
 });
+
+/* ======================= CHAPTER 19 ======================= */
+CHAPTERS.push({
+  num: 19, part: 4, title: "Making the Model Act: Structured Output, Tools, and Agents",
+  blurb: "A model that emits free text cannot be wired into a program. Two mechanisms fix that, and underneath they are the same mechanism: constrain which tokens are legal at each step and you get JSON that always parses; describe your functions in that JSON and feed the results back and you get tool calling. You will mask a vocabulary against a schema token by token, read the tool-call wire format from two providers side by side, build the loop that turns a text predictor into something that queries a database, and see honestly where that loop fails.",
+  sections: [
+    { title: "Why Free Text Breaks Programs",
+      html: "<p>Prompt <strong>P3</strong> asks the model to extract the parties, dates and amounts from a contract as JSON. Ask it politely and you get JSON most of the time. Most of the time is the problem.</p>" +
+      "<p>Here are three real shapes of failure, none of which is the model being wrong about the contract:</p>" +
+      "<pre><code>Here is the JSON you requested:\n{\"parties\": [\"Acme Ltd\", \"Brill GmbH\"], \"amount\": 48200}\n\n```json\n{\"parties\": [\"Acme Ltd\"], \"date\": \"2026-03-01\", \"amount\": 48200}\n```\n\n{\"parties\": [\"Acme Ltd\", \"Brill GmbH\"], \"date\": \"2026-03-01\", \"amount\": 48</code></pre>" +
+      "<p>The first has a preamble and is missing a required field. The second is correct but wrapped in a code fence. The third is the token limit from Chapter 18 firing mid-number, which is the worst of the three because <code>48</code> parses.</p>" +
+      "<h3>The two bad fixes</h3>" +
+      "<p><strong>Parse it out with a regular expression.</strong> Find the first <code>{</code>, find the last <code>}</code>, hand the middle to a JSON parser. This works until a party's name contains a brace, until the model emits two objects, or until a nested array's closing bracket is the last one. It is a heuristic pretending to be a contract, and it fails silently rather than loudly.</p>" +
+      "<p><strong>Retry until it parses.</strong> Catch the exception, send the request again, give up after three attempts. This one is worse, because it appears to work. If a single call produces valid JSON 95% of the time, three attempts give you 99.99%, and a service doing ten thousand extractions a day still fails on one of them &#8212; while costing you 1.05 calls on average and an unbounded tail latency on the ones that retry. You have bought reliability with money and variance, and you have not made the failure impossible.</p>" +
+      "<div class='callout'><strong>The reframe.</strong> Both fixes treat invalid output as something to detect after the fact. The mechanism in the next section makes it unrepresentable: at every step, the tokens that would break the format are removed from the distribution before a token is chosen. A parse error stops being rare and starts being impossible, which is a different kind of guarantee and the only one a program can be built on.</div>" },
+
+    { title: "Constrained Decoding: Masking the Vocabulary", viz: "llmGrammarMask", vizTitle: "Generate with the schema off, then on, and watch the mask close in",
+      html: "<p>Chapter 18 established that a decoding step is: produce logits, reshape them, truncate, sample. <strong>Constrained decoding</strong> adds one operation to the reshaping stage. Before the softmax, set the logit of every token that cannot legally come next to negative infinity. Those tokens get probability zero, so no sampler at any temperature can produce them. The vector saying which entries survive is the <strong>token mask</strong>, and it is recomputed at every step.</p>" +
+      "<p>The question is what &#8220;legally&#8221; means, and the answer is a state machine. A JSON schema or a grammar is compiled once into an automaton whose states are positions in the format and whose transitions are characters. At any moment the generator is in one state, and the legal next tokens are exactly those whose text follows a valid transition path from it.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 250' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>schema, compiled once, becomes a mask applied at every step</text>" +
+      "<rect x='20' y='30' width='180' height='72' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='50' fill='#4f7cff' font-size='10'>1. the schema</text>" +
+      "<text x='34' y='68' fill='#c9d6ea' font-size='9'>parties: array of string</text>" +
+      "<text x='34' y='82' fill='#c9d6ea' font-size='9'>date: string</text>" +
+      "<text x='34' y='96' fill='#c9d6ea' font-size='9'>amount: number</text>" +
+      "<line x1='206' y1='66' x2='240' y2='66' stroke='#4f7cff' stroke-width='2'/><polygon points='248,66 238,61 238,71' fill='#4f7cff'/>" +
+      "<rect x='254' y='30' width='210' height='72' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='268' y='50' fill='#ffd166' font-size='10'>2. the automaton</text>" +
+      "<circle cx='288' cy='74' r='11' fill='#0c1425' stroke='#ffd166' stroke-width='1.5'/><text x='284' y='78' fill='#ffd166' font-size='9'>0</text>" +
+      "<line x1='300' y1='74' x2='322' y2='74' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<circle cx='334' cy='74' r='11' fill='#0c1425' stroke='#ffd166' stroke-width='1.5'/><text x='330' y='78' fill='#ffd166' font-size='9'>1</text>" +
+      "<line x1='346' y1='74' x2='368' y2='74' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<circle cx='380' cy='74' r='11' fill='#0c1425' stroke='#ffd166' stroke-width='1.5'/><text x='376' y='78' fill='#ffd166' font-size='9'>2</text>" +
+      "<text x='398' y='78' fill='#7d8fb0' font-size='9'>&#8230;</text>" +
+      "<text x='268' y='96' fill='#7d8fb0' font-size='8.5'>built once, reused for every request</text>" +
+      "<line x1='470' y1='66' x2='504' y2='66' stroke='#ffd166' stroke-width='2'/><polygon points='512,66 502,61 502,71' fill='#ffd166'/>" +
+      "<rect x='518' y='30' width='222' height='72' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='532' y='50' fill='#3ddc97' font-size='10'>3. the mask, per step</text>" +
+      "<text x='532' y='68' fill='#c9d6ea' font-size='9'>legal tokens keep their logit</text>" +
+      "<text x='532' y='84' fill='#ff5d73' font-size='9'>every other logit set to -inf</text>" +
+      "<text x='532' y='98' fill='#7d8fb0' font-size='8.5'>one array lookup, not a search</text>" +
+      "<line x1='20' y1='118' x2='740' y2='118' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='140' fill='#2de2ff' font-size='10.5'>P3 traced: what is legal at each position</text>" +
+      "<text x='34' y='162' fill='#c9d6ea' font-size='9.5'>state 0, nothing emitted</text>" +
+      "<text x='300' y='162' fill='#3ddc97' font-size='9.5'>only tokens beginning with {</text>" +
+      "<text x='34' y='182' fill='#c9d6ea' font-size='9.5'>after {</text>" +
+      "<text x='300' y='182' fill='#3ddc97' font-size='9.5'>only a quote, or whitespace</text>" +
+      "<text x='34' y='202' fill='#c9d6ea' font-size='9.5'>after {\"</text>" +
+      "<text x='300' y='202' fill='#3ddc97' font-size='9.5'>only prefixes of parties, date, amount</text>" +
+      "<text x='34' y='222' fill='#c9d6ea' font-size='9.5'>after {\"parties\": [\"Acme Ltd</text>" +
+      "<text x='300' y='222' fill='#3ddc97' font-size='9.5'>any string content, a quote, or an escape</text>" +
+      "<text x='34' y='242' fill='#ffd166' font-size='9.5'>after the last required field</text>" +
+      "<text x='300' y='242' fill='#ffd166' font-size='9.5'>the closing brace is the only legal token</text>" +
+      "</svg><div class='fig-cap'>The last row is the whole guarantee. When the object is complete, no token that fails to close it has any probability left.</div></div>" +
+      "<h3>The insight that made it cheap</h3>" +
+      "<p>The naive implementation checks all 128,256 tokens against the grammar at every step, which is far more expensive than the forward pass it is supposed to accompany. Willard and Louf showed in 2023, in the paper behind the Outlines library, that this is avoidable: because the automaton has a finite number of states, you can precompute for each state the set of vocabulary tokens that are legal in it, store it as an index, and reduce the per-step cost to a lookup. The mask stops being a search and becomes an array read.</p>" +
+      "<p>That is the idea underneath every implementation you will meet: <code>llama.cpp</code>'s GBNF grammars, vLLM's guided decoding, <code>llguidance</code>, XGrammar. They differ in how they compile and how they handle recursion, not in what they do to the logits.</p>" +
+      "<div class='callout'><strong>Step it above.</strong> Generate the P3 object with the constraint off and watch the model produce something that looks like JSON and then wander &#8212; a trailing comma, a missing brace, a field that is not in the schema. Turn the constraint on and step to the same position. The mask has closed to a single legal token, and the object cannot end any other way.</div>" },
+
+    { title: "What Constraining Costs",
+      html: "<p>Three costs, in increasing order of how much they surprise people.</p>" +
+      "<p><strong>Compilation and mask construction.</strong> Compiling a schema to an automaton is one-time and cheap to cache; the per-step mask, with the index above, is a lookup. But a grammar with recursion &#8212; arbitrarily nested JSON, a programming language &#8212; needs a pushdown automaton rather than a finite one, and the state count can explode. A schema that pins array lengths and forbids extra properties compiles small; one that allows anything anywhere does not.</p>" +
+      "<p><strong>Tokenizer alignment.</strong> This is the deep one, and Chapter 2 set it up. The grammar is defined over characters; the model emits tokens, which are multi-character chunks that do not respect the grammar's boundaries. A single token might be <code>\": \"</code> &#8212; a quote, a colon, a space and another quote &#8212; which crosses three grammar transitions at once. A token might be legal for its first two characters and illegal for its third, in which case it must be masked out entirely even though a shorter token spelling the same prefix is fine. So the automaton has to be advanced character by character through each candidate token, and the vocabulary has to be indexed by token rather than by character. Get this wrong and you produce a constrainer that is correct on ASCII and broken on the first multi-byte character, which is the most common bug in home-made implementations.</p>" +
+      "<p><strong>The quality effect.</strong> Forbidding the model's preferred token is not free. If the model wants to write an explanation before the object, the mask forces it into the object immediately, and the tokens it then produces were conditioned on a plan it was not allowed to carry out.</p>" +
+      "<div class='callout'><strong>Sources differ.</strong> Tam and colleagues measured this at EMNLP 2024 and reported a significant decline in reasoning performance under format restrictions, with stricter constraints costing more &#8212; while classification accuracy improved. Their recommendation was looser restriction: ask for the format without pinning a schema. Practitioners who ship constrained decoding disagree on the size of the effect and argue much of it comes from schemas that leave no room to think. The reconciliation both sides accept is structural: give the model a place to reason <em>inside</em> the schema. A required <code>reasoning</code> string field before the answer fields restores what the constraint took away, because the constraint was never on thinking, only on where thinking may appear.</div>" +
+      "<p>Which leaves a rule: constrain the output, not the process. If a task needs reasoning, put a free-text field first in the schema and constrain everything after it.</p>" },
+
+    { title: "Function Calling on the Wire",
+      html: "<p><strong>Function calling</strong> looks like a new capability and is not. It is the same mechanism as above, pointed at a different schema: you describe your functions in JSON Schema, the model emits an object naming one and supplying arguments, your code runs the function, and you put the result back into the conversation. The model never executes anything. It emits a request, and your program decides whether to honour it.</p><p>That last sentence is the whole security model of this chapter and it is worth stating flatly. What comes back from the model is a <strong>tool_use block</strong>: a name, an identifier, and an argument object. It has no more authority than a string in a text field. The generation stops with a reason that says a tool was requested, control returns to your program, and whether anything happens next is a decision your code makes. Every control in section 10 lives in that gap.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the round trip &#183; the model never touches your database</text>" +
+      "<rect x='20' y='34' width='150' height='150' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='54' fill='#4f7cff' font-size='10'>your program</text>" +
+      "<text x='34' y='78' fill='#c9d6ea' font-size='9'>1. sends tools + prompt</text>" +
+      "<text x='34' y='118' fill='#c9d6ea' font-size='9'>3. runs the function</text>" +
+      "<text x='34' y='134' fill='#ffd166' font-size='9'>and decides whether to</text>" +
+      "<text x='34' y='164' fill='#c9d6ea' font-size='9'>5. gets the answer</text>" +
+      "<rect x='560' y='34' width='180' height='150' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='574' y='54' fill='#4f7cff' font-size='10'>the model</text>" +
+      "<text x='574' y='90' fill='#c9d6ea' font-size='9'>2. emits a tool call</text>" +
+      "<text x='574' y='106' fill='#7d8fb0' font-size='8.5'>stop reason: tool_use</text>" +
+      "<text x='574' y='150' fill='#c9d6ea' font-size='9'>4. reads the result</text>" +
+      "<line x1='176' y1='72' x2='548' y2='72' stroke='#4f7cff' stroke-width='2'/><polygon points='556,72 546,67 546,77' fill='#4f7cff'/>" +
+      "<text x='250' y='66' fill='#7d8fb0' font-size='8.5'>tools: [{name, description, input_schema}]</text>" +
+      "<line x1='548' y1='104' x2='180' y2='104' stroke='#ffd166' stroke-width='2'/><polygon points='172,104 182,99 182,109' fill='#ffd166'/>" +
+      "<text x='250' y='98' fill='#ffd166' font-size='8.5'>{type: tool_use, id, name, input}</text>" +
+      "<line x1='176' y1='150' x2='548' y2='150' stroke='#3ddc97' stroke-width='2'/><polygon points='556,150 546,145 546,155' fill='#3ddc97'/>" +
+      "<text x='250' y='144' fill='#3ddc97' font-size='8.5'>{type: tool_result, tool_use_id, content}</text>" +
+      "<rect x='300' y='166' width='150' height='26' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='314' y='183' fill='#ff5d73' font-size='9'>the trust boundary</text>" +
+      "<text x='20' y='208' fill='#c9d6ea' font-size='10.5'>Everything on the right is a suggestion. Everything on the left is an action, and step 3 is where you decide.</text>" +
+      "</svg><div class='fig-cap'>Four messages and one decision. The arrows are all text; the only thing that happens in the world happens inside step 3.</div></div>" +
+      "<p>The two dominant wire formats express the same four steps differently, and the differences are where the bugs are:</p>" +
+      "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='anthropic'>Anthropic Messages API</button><button class='code-tab' data-lang='openai'>OpenAI Chat Completions</button></div>" +
+      "<pre data-lang='anthropic'><code>// the declaration\n\"tools\": [{\n  \"name\": \"lookup_invoice\",\n  \"description\": \"Fetch an invoice by its reference.\",\n  \"input_schema\": {\n    \"type\": \"object\",\n    \"properties\": {\"ref\": {\"type\": \"string\"}},\n    \"required\": [\"ref\"]\n  }\n}]\n\n// what the model emits, inside an assistant message\n{\"type\": \"tool_use\", \"id\": \"toolu_abc123\",\n \"name\": \"lookup_invoice\",\n \"input\": {\"ref\": \"INV-8812\"}}      // already an object\n\n// what you send back, inside a USER message\n{\"type\": \"tool_result\", \"tool_use_id\": \"toolu_abc123\",\n \"content\": \"{\\\"total\\\": 48200, \\\"paid\\\": false}\"}</code></pre>" +
+      "<pre data-lang='openai' hidden><code>// the declaration\n\"tools\": [{\n  \"type\": \"function\",\n  \"function\": {\n    \"name\": \"lookup_invoice\",\n    \"description\": \"Fetch an invoice by its reference.\",\n    \"parameters\": {\n      \"type\": \"object\",\n      \"properties\": {\"ref\": {\"type\": \"string\"}},\n      \"required\": [\"ref\"]\n    }\n  }\n}]\n\n// what the model emits, on the assistant message\n{\"id\": \"call_abc123\", \"type\": \"function\",\n \"function\": {\"name\": \"lookup_invoice\",\n              \"arguments\": \"{\\\"ref\\\": \\\"INV-8812\\\"}\"}}   // a STRING\n\n// what you send back, as its own message\n{\"role\": \"tool\", \"tool_call_id\": \"call_abc123\",\n \"content\": \"{\\\"total\\\": 48200, \\\"paid\\\": false}\"}</code></pre></div>" +
+      "<p>The <strong>tool_result block</strong> in the last stanza of each tab is the return path, and it is an ordinary part of the conversation rather than a special channel &#8212; which is why the model can read it, reason about it, and act on what it says.</p><p>Three differences matter in practice. The schema lives at <code>input_schema</code> in one and at <code>function.parameters</code> in the other. The arguments arrive as a parsed object in one and as a <em>JSON string you must parse yourself</em> in the other, which is where malformed-argument bugs hide. And the result goes back as a content block inside a user message in one and as a separate message with <code>role: \"tool\"</code> in the other, which is why porting an agent loop between providers is never a search and replace.</p>" +
+      "<p>Two rules hold across providers, and both are learned the hard way.</p><p><strong>Parallel tool use</strong> is the default: a model that can see three independent lookups will often request all three in one turn, and the results must be returned together in a single message. Splitting them across messages is accepted by the API and quietly trains the model out of asking, so a system that was making one round trip starts making three, and nobody connects the latency regression to the message-shaping code that caused it.</p><p>And when a tool fails, return the error as a result rather than dropping it or raising it to the caller. The model can read an error and try something else; it cannot read a silence. A result that says <code>no invoice with reference INV-8812; references look like INV-0000</code> gets recovered from. One that says <code>error</code> gets retried verbatim until the budget dies, which is the failure you will watch happen in the machine two sections down.</p>" },
+
+    { title: "The Agent Loop", viz: "llmAgentLoop", vizTitle: "Run the task, then break the search tool and run it again",
+      html: "<p>Once tool results feed back into the context, nothing stops you running the exchange more than once. That loop is an agent, and there is less to it than the word suggests.</p>" +
+      "<p>The pattern is <strong>ReAct</strong>, from Yao and colleagues in 2022: interleave reasoning and acting, so the model writes a thought, chooses an action, reads the observation, and repeats. The insight was that the two together beat either alone &#8212; reasoning without acting hallucinates facts, acting without reasoning cannot recover from a surprise.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the loop, and the three ways out of it</text>" +
+      "<rect x='40' y='34' width='140' height='40' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='54' y='58' fill='#c9d6ea' font-size='9.5'>reason</text>" +
+      "<line x1='186' y1='54' x2='222' y2='54' stroke='#4f7cff' stroke-width='2'/><polygon points='230,54 220,49 220,59' fill='#4f7cff'/>" +
+      "<rect x='236' y='34' width='140' height='40' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='250' y='58' fill='#ffd166' font-size='9.5'>act: call a tool</text>" +
+      "<line x1='382' y1='54' x2='418' y2='54' stroke='#ffd166' stroke-width='2'/><polygon points='426,54 416,49 416,59' fill='#ffd166'/>" +
+      "<rect x='432' y='34' width='150' height='40' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='446' y='58' fill='#3ddc97' font-size='9.5'>observe the result</text>" +
+      "<line x1='507' y1='80' x2='507' y2='98' stroke='#4f7cff' stroke-width='2'/>" +
+      "<line x1='507' y1='98' x2='110' y2='98' stroke='#4f7cff' stroke-width='2'/>" +
+      "<line x1='110' y1='98' x2='110' y2='80' stroke='#4f7cff' stroke-width='2'/><polygon points='110,72 105,82 115,82' fill='#4f7cff'/>" +
+      "<text x='240' y='112' fill='#7d8fb0' font-size='9'>and the whole transcript is resent every time</text>" +
+      "<line x1='20' y1='124' x2='740' y2='124' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='34' y='146' fill='#3ddc97' font-size='9.5'>1. the model answers instead of calling a tool</text>" +
+      "<text x='420' y='146' fill='#7d8fb0' font-size='9'>the only exit you want</text>" +
+      "<text x='34' y='166' fill='#ffd166' font-size='9.5'>2. the step budget is exhausted</text>" +
+      "<text x='420' y='166' fill='#7d8fb0' font-size='9'>the exit that saves you money</text>" +
+      "<text x='34' y='186' fill='#ff5d73' font-size='9.5'>3. the same action repeats with the same arguments</text>" +
+      "<text x='420' y='186' fill='#7d8fb0' font-size='9'>the exit you have to write yourself</text>" +
+      "</svg><div class='fig-cap'>Exits two and three are not optional. Without them a broken tool turns a task into a bill.</div></div>" +
+      "<p>Strip the vocabulary away and an agent is four lines of control flow: send the transcript, read the response, if it contains a tool call then run it and append the result, otherwise stop. Nothing in that is novel; what is new is that the branch condition is a model's judgement rather than a predicate you wrote. That is the whole promise and the whole difficulty, because a predicate you wrote fails the same way every time and a judgement does not.</p><p>The loop needs three things the papers rarely emphasise. A <strong>step budget</strong>, because a model that cannot make progress will keep trying. Loop detection, because the most common non-progress is the same call with the same arguments, and the model has no memory that it already failed except the transcript it is rereading. And a size limit on observations, because one tool returning a 200,000-token page ends the run by filling the window.</p>" +
+      "<div class='callout'><strong>Run it above.</strong> Run the task with working tools and note the step count and cost. Then break the search tool so it returns an error and run it again. Watch which happens: the agent reads the error and tries a different tool, or it retries the same call until the budget dies. Both are common, and which one you get depends on the wording of the error string &#8212; an error that says what to do instead is recovered from far more often than one that says only that something failed.</div>" },
+
+    { title: "MCP: What Is Standardised and What Is Not",
+      html: "<p>Every tool integration above is bespoke: your schema, your dispatch code, your process. The <strong>Model Context Protocol</strong> standardises the connection, so a tool provider writes a server once and any client can use it.</p>" +
+      "<p>MCP is JSON-RPC 2.0 over one of two transports: <strong>stdio</strong>, for a server the client launches as a child process, and <strong>Streamable HTTP</strong>, for a remote one. A server exposes three kinds of thing: <strong>tools</strong> (actions the model may invoke), <strong>resources</strong> (read-only data the client may fetch), and <strong>prompts</strong> (reusable templates a user may select). Each has list and call or get methods.</p>" +
+      "<pre><code>--&gt; {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n\n&lt;-- {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[\n      {\"name\":\"lookup_invoice\",\n       \"description\":\"Fetch an invoice by its reference.\",\n       \"inputSchema\":{\"type\":\"object\",\n                      \"properties\":{\"ref\":{\"type\":\"string\"}},\n                      \"required\":[\"ref\"]}}]}}\n\n--&gt; {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\n     \"params\":{\"name\":\"lookup_invoice\",\n               \"arguments\":{\"ref\":\"INV-8812\"}}}\n\n&lt;-- {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[\n      {\"type\":\"text\",\"text\":\"{\\\"total\\\":48200,\\\"paid\\\":false}\"}]}}</code></pre>" +
+      "<div class='fig'><svg viewBox='0 0 760 232' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one client, three servers &#183; what crosses the wire and what enters the prompt</text>" +
+      "<rect x='20' y='32' width='170' height='142' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='52' fill='#4f7cff' font-size='10'>your client</text>" +
+      "<text x='34' y='74' fill='#c9d6ea' font-size='9'>1. initialize</text>" +
+      "<text x='34' y='92' fill='#c9d6ea' font-size='9'>2. tools/list</text>" +
+      "<text x='34' y='110' fill='#ffd166' font-size='9'>3. paste every schema</text>" +
+      "<text x='34' y='124' fill='#ffd166' font-size='9'>into the prompt</text>" +
+      "<text x='34' y='146' fill='#c9d6ea' font-size='9'>4. tools/call</text>" +
+      "<text x='34' y='166' fill='#7d8fb0' font-size='8.5'>JSON-RPC 2.0</text>" +
+      "<line x1='196' y1='60' x2='300' y2='60' stroke='#3ddc97' stroke-width='2'/><polygon points='308,60 298,55 298,65' fill='#3ddc97'/>" +
+      "<text x='206' y='54' fill='#7d8fb0' font-size='8.5'>stdio &#183; child process</text>" +
+      "<rect x='314' y='38' width='190' height='44' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='328' y='56' fill='#3ddc97' font-size='9.5'>filesystem server</text>" +
+      "<text x='328' y='72' fill='#7d8fb0' font-size='8.5'>4 tools &#183; ~600 tokens</text>" +
+      "<line x1='196' y1='104' x2='300' y2='104' stroke='#ffd166' stroke-width='2'/><polygon points='308,104 298,99 298,109' fill='#ffd166'/>" +
+      "<text x='206' y='98' fill='#7d8fb0' font-size='8.5'>streamable HTTP</text>" +
+      "<rect x='314' y='90' width='190' height='44' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='328' y='108' fill='#ffd166' font-size='9.5'>ticketing server</text>" +
+      "<text x='328' y='124' fill='#7d8fb0' font-size='8.5'>19 tools &#183; ~2,900 tokens</text>" +
+      "<line x1='196' y1='150' x2='300' y2='150' stroke='#ff5d73' stroke-width='2'/><polygon points='308,150 298,145 298,155' fill='#ff5d73'/>" +
+      "<text x='206' y='144' fill='#7d8fb0' font-size='8.5'>streamable HTTP</text>" +
+      "<rect x='314' y='142' width='190' height='44' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='328' y='160' fill='#ff5d73' font-size='9.5'>a server you did not write</text>" +
+      "<text x='328' y='176' fill='#7d8fb0' font-size='8.5'>its descriptions are your prompt</text>" +
+      "<line x1='510' y1='104' x2='546' y2='104' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<rect x='552' y='38' width='188' height='148' rx='8' fill='#111a2e' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='566' y='58' fill='#c9d6ea' font-size='9.5'>the prompt, every turn</text>" +
+      "<text x='566' y='82' fill='#ffd166' font-size='9'>23 tool schemas</text>" +
+      "<text x='566' y='100' fill='#ffd166' font-size='9'>~3,500 tokens</text>" +
+      "<text x='566' y='124' fill='#c9d6ea' font-size='9'>before the task,</text>" +
+      "<text x='566' y='138' fill='#c9d6ea' font-size='9'>on every step</text>" +
+      "<text x='566' y='166' fill='#ff5d73' font-size='9'>and some of it is</text>" +
+      "<text x='566' y='180' fill='#ff5d73' font-size='9'>text you never read</text>" +
+      "<text x='20' y='206' fill='#c9d6ea' font-size='10.5'>Connecting a server is not calling an API. It is adding a dependency that also writes part of your prompt,</text>" +
+      "<text x='20' y='222' fill='#c9d6ea' font-size='10.5'>and pays for that privilege out of your context budget on every single step.</text>" +
+      "</svg><div class='fig-cap'>Discovery is what the protocol buys you. The context cost and the trust question are what it hands you.</div></div>" +
+      "<p>Read the first response against the previous section and the point of the protocol is obvious: the schema the server returns is the schema you would have written by hand, so the client can turn a server's tool list into a provider's tool declarations mechanically. Discovery is what MCP standardises. The client asks what exists and gets machine-readable answers, instead of a human reading documentation and writing a wrapper.</p>" +
+      "<h3>What it does not standardise</h3>" +
+      "<p>Three things, and each is a place where teams get surprised.</p>" +
+      "<ul>" +
+      "<li><strong>What the tools mean.</strong> Two servers can both expose <code>search</code> with the same schema and entirely different semantics. The protocol carries names and types, not contracts.</li>" +
+      "<li><strong>How much of the context a server may consume.</strong> Every tool a server exposes puts its name, description and schema into the prompt on every turn. A server with sixty tools costs you thousands of tokens per step before the model has done anything, and the model's accuracy at choosing among sixty tools is not the same as among six.</li>" +
+      "<li><strong>Trust.</strong> This is the important one. A server's tool descriptions are text written by whoever wrote the server, and that text goes into the model's context as instructions. Connecting to an MCP server is closer to installing a dependency that can also write your prompt than to calling an API. Chapter 33 treats this as the attack surface it is; the operational rule for now is that you audit a server's tool descriptions the way you audit a package's install script.</li>" +
+      "</ul>" },
+
+    { title: "Memory, and What a Step Actually Costs",
+      html: "<p>An agent's memory is mostly not a feature; it is the transcript. Every step resends the whole conversation, because the model is stateless and the only thing carrying context from step 3 to step 4 is the text of step 3. That has an arithmetic consequence people meet on their bill rather than in a design document.</p>" +
+      "<p>Take a system prompt plus tool declarations of 2,000 tokens, and suppose each step adds about 800 tokens of thought, call and observation. The input processed at step <code>n</code> is 2,000 + 800<code>n</code>, so the total input across a run is quadratic in the number of steps:</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>input tokens processed at each step of a 12-step run &#183; the transcript is only 11,600 tokens at the end</text>" +
+      "<rect x='60' y='150' width='40' height='14' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='108' y='144' width='40' height='20' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='156' y='139' width='40' height='25' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='204' y='133' width='40' height='31' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='252' y='128' width='40' height='36' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1'/>" +
+      "<rect x='300' y='122' width='40' height='42' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='348' y='117' width='40' height='47' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='396' y='111' width='40' height='53' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='444' y='106' width='40' height='58' fill='#2a2416' stroke='#ffd166' stroke-width='1'/>" +
+      "<rect x='492' y='100' width='40' height='64' fill='#2e1620' stroke='#ff5d73' stroke-width='1'/>" +
+      "<rect x='540' y='95' width='40' height='69' fill='#2e1620' stroke='#ff5d73' stroke-width='1'/>" +
+      "<rect x='588' y='89' width='40' height='75' fill='#2e1620' stroke='#ff5d73' stroke-width='1'/>" +
+      "<line x1='55' y1='164' x2='640' y2='164' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='60' y='178' fill='#7d8fb0' font-size='8.5'>1</text>" +
+      "<text x='300' y='178' fill='#7d8fb0' font-size='8.5'>6</text>" +
+      "<text x='588' y='178' fill='#7d8fb0' font-size='8.5'>12</text>" +
+      "<text x='60' y='143' fill='#7d8fb0' font-size='8.5'>2.0K</text>" +
+      "<text x='588' y='82' fill='#ff5d73' font-size='8.5'>10.8K</text>" +
+      "<rect x='650' y='89' width='90' height='75' rx='6' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='662' y='108' fill='#ff5d73' font-size='9.5'>76,800</text>" +
+      "<text x='662' y='124' fill='#c9d6ea' font-size='8.5'>total input</text>" +
+      "<text x='662' y='142' fill='#ffd166' font-size='9.5'>6.6x</text>" +
+      "<text x='662' y='156' fill='#c9d6ea' font-size='8.5'>the transcript</text>" +
+      "<text x='20' y='200' fill='#c9d6ea' font-size='10.5'>At 20 steps it is 192,000 input tokens against an 18,000-token transcript: 10.7 times.</text>" +
+      "<text x='20' y='216' fill='#7d8fb0' font-size='9.5'>The multiplier grows with the step count, which is why a step budget is a cost control and not just a safety rail.</text>" +
+      "</svg><div class='fig-cap'>Nothing here is waste in the sense of a bug. It is what statelessness costs, and it is why the interesting agent optimisations are all about what you can stop resending.</div></div>" +
+      "<p>Three mitigations, in the order you should reach for them. <strong>Prompt caching</strong> bills the unchanged prefix at a reduced rate, which shrinks the quadratic term rather than removing it, and requires that the prefix actually stay byte-identical &#8212; a timestamp in the system prompt silently defeats it. <strong>Summarisation</strong> replaces old steps with a compressed record, trading tokens for fidelity, and the fidelity you lose is usually the detail that would have prevented a repeat. <strong>Externalisation</strong> keeps the working state in a file or a database and puts a pointer in the context, which is the only one of the three that stops the growth rather than slowing it &#8212; and it turns memory into a tool call like any other, retrieved when needed.</p>" +
+      "<p>The distinction worth carrying: short-term memory is the transcript and its cost is per-step and quadratic. Long-term memory is storage the agent reads and writes deliberately, and its cost is the retrieval. Confusing the two produces an agent that remembers everything and can afford nothing.</p>" },
+
+    { title: "Multi-Agent Systems, and the Honest Case Against Them",
+      html: "<p>The obvious next move is more agents: a planner, a researcher, a critic, a writer, each with its own prompt and tools. Sometimes this works. Often it is a way of paying several times for a problem one loop had.</p>" +
+      "<p>The honest case for it is narrow and real. Anthropic reported that a research system with a lead agent delegating to subagents outperformed a single agent by a wide margin on their research evaluation, and that token usage explained about 80% of the performance variance. That second finding is the one to sit with: much of the gain came from spending more tokens, which a single agent could also do. The same report put the cost at roughly <strong>fifteen times the tokens of an ordinary chat interaction</strong>, and noted the approach suits problems that split into parallel independent strands and suits tightly coupled work &#8212; coding was their example &#8212; considerably less.</p>" +
+      "<p>The failure modes are structural rather than accidental.</p>" +
+      "<ul>" +
+      "<li><strong>Context does not survive the handoff.</strong> Agent A knows why it rejected an approach; agent B receives a summary that does not say so and proposes it again. Every boundary between agents is a lossy compression of the reasoning that crossed it.</li>" +
+      "<li><strong>Errors compound instead of cancelling.</strong> Four agents at 90% reliability in sequence give 66%, and a critic that reviews the writer's output is a fifth chance to be wrong, not a guarantee of correctness.</li>" +
+      "<li><strong>Debugging loses causality.</strong> A single transcript can be read top to bottom. Five interleaved transcripts with summarised handoffs cannot, and the question &#8220;why did it do that&#8221; often has no recoverable answer.</li>" +
+      "</ul>" +
+      "<p>The decision rule that follows: use multiple agents when the subtasks are genuinely independent, when each one's output can be validated on its own, and when the value of the answer absorbs a fifteen-fold token bill. Otherwise give one loop better tools. Most of the time the thing people want from a second agent is a tool the first one did not have.</p>" },
+
+    { title: "Evaluating an Agent",
+      html: "<p>An agent that completes the task is not the same as an agent you can deploy, and the gap is measurable.</p>" +
+      "<p>The measurement that makes the point is <strong>pass^k</strong>, introduced with <strong>&#964;-bench</strong> by Yao and colleagues in 2024: the probability that the agent succeeds on <em>all</em> of <code>k</code> independent attempts at the same task. On their retail domain a leading model scored about 61% on a single attempt and under 25% across eight. The agent is not 61% reliable; it is 61% likely to be right once, which is a different and much weaker claim, and it is the one that matters when a customer runs the same request twice.</p>" +
+      "<p>Four dimensions, then, not one.</p>" +
+      "<ul>" +
+      "<li><strong>Success</strong>, measured with pass^k rather than a single run, because variance is the property you are shipping.</li>" +
+      "<li><strong>Cost</strong>, in tokens and dollars per completed task, not per call &#8212; a cheaper model that needs three times the steps is not cheaper. The quadratic from the previous section means the cost distribution has a long right tail, so report the median and the 95th percentile.</li>" +
+      "<li><strong>Steps</strong>, because step count is the leading indicator of everything else and it degrades before success does. A run that used to take 5 steps and now takes 11 is telling you something a pass rate has not registered yet.</li>" +
+      "<li><strong>Recoverability</strong>, measured by deliberately breaking a tool. Does the agent notice, try something else, and finish, or does it retry until the budget dies? This is the dimension no benchmark leaderboard reports and the one that decides whether the thing survives a bad afternoon in production.</li>" +
+      "</ul>" +
+      "<div class='callout'><strong>Build the harness before the agent.</strong> Twenty tasks with checkable outcomes, run eight times each, reporting those four numbers, is a weekend of work and it is the difference between tuning and guessing. Without it every prompt change is a change you believe in rather than one you measured, and agent behaviour is variable enough that belief is unreliable.</div>" },
+
+    { title: "Sandboxing: An Agent With Tools Is an Attack Surface",
+      html: "<p>Everything in this chapter converges on one uncomfortable fact. The model decides which tool to call, and the model's decision is a function of its context, and its context contains text you did not write &#8212; retrieved documents, web pages, tool results, and the tool descriptions from every MCP server you connected. Anything that can put text in front of the model can attempt to steer what it does next.</p>" +
+      "<p>The shape of the risk is a conjunction. An agent that reads untrusted content is uninteresting to an attacker. An agent that can send data outward is uninteresting if it has nothing sensitive. An agent that has all three &#8212; access to something valuable, exposure to attacker-controlled text, and a way to communicate out &#8212; is exploitable, and removing any one of the three closes it.</p>" +
+      "<p>Four controls, ordered by how much they buy per unit of effort.</p>" +
+      "<ul>" +
+      "<li><strong>Least privilege per tool.</strong> The database tool gets a read-only role scoped to the tables the task needs. This survives a prompt injection because it does not depend on detecting one.</li>" +
+      "<li><strong>Confirmation on irreversible actions.</strong> Anything that sends, deletes, pays or publishes stops for a human. The step budget is not a substitute; a budget limits how much happens, not what.</li>" +
+      "<li><strong>Egress control.</strong> The sandbox reaches an allow-list of hosts. Most exfiltration attempts are a request to a URL the attacker controls, and a network that refuses unknown hosts stops the ones you never thought of.</li>" +
+      "<li><strong>Isolation of execution.</strong> If the agent runs code, it runs in a container with no credentials, a filesystem it cannot escape, and a lifetime measured in minutes.</li>" +
+      "</ul>" +
+      "<div class='callout'><strong>The control that does not work.</strong> Instructing the model to ignore instructions found in tool results is not a security measure. It is a request, made in the same channel as the attack, to a system that cannot distinguish the two, and it fails the first time an attacker writes a more persuasive paragraph than yours. Chapter 33 takes this apart properly; the rule that survives from here is that every control must hold when the model has been fully persuaded, because eventually one will be.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Write the JSON Schema for P3 with <code>parties</code>, <code>date</code> and <code>amount</code> required and no extra properties. Then hand-simulate the automaton for the first twelve characters of a valid output, listing at each position the set of legal <em>characters</em>. State the position at which exactly one character is legal, and the position at which the largest set is legal. You should find the largest set inside a string value and the smallest at a structural boundary.</li>" +
+      "<li><strong>Trace.</strong> A single extraction call returns valid JSON 95% of the time. Compute the failure rate after 1, 2 and 3 retries, the expected number of calls per extraction, and the number of failures per 10,000 documents in each case. Then state what constrained decoding changes about all four numbers and why the answer is not &#8220;it makes them smaller&#8221;.</li>" +
+      "<li><strong>Trace.</strong> Using the model in section 7 &#8212; 2,000 tokens of prefix and 800 tokens added per step &#8212; compute the total input tokens for runs of 5, 10 and 30 steps, and the ratio to the final transcript length in each case. Then compute the same for 400 tokens per step and state which of the two parameters the ratio actually depends on.</li>" +
+      "<li><strong>Investigate.</strong> Take any local model with grammar support and generate the P3 object twice from the same prompt: once unconstrained, once with a JSON schema. Record the parse-success rate over 20 runs each, and the mean tokens generated. You should see the unconstrained runs fail occasionally and emit more tokens, because the preamble and the code fence both cost tokens the schema forbids.</li>" +
+      "<li><strong>Investigate.</strong> Connect to any MCP server and call <code>tools/list</code> directly, without a model in the loop. Count the tools, and count the tokens in the concatenated names, descriptions and schemas. Multiply by the number of steps in a typical run. That number is what the server costs you per task before the model has done anything, and it is usually larger than people expect.</li>" +
+      "<li><strong>Build.</strong> Implement the agent loop end to end against two tools, with a step budget, loop detection on repeated identical calls, and a size cap on observations. Then write the harness: ten tasks, each run eight times, reporting pass^k, median and 95th-percentile cost, median steps, and the recovery rate when one tool is made to fail. Run it, then change one sentence in your system prompt and run it again. The four numbers will not move together, and learning which one your change actually affected is the point.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "constrained decoding", d: "Setting the logits of illegal tokens to negative infinity before sampling, so output that violates a schema or grammar has probability zero rather than low probability." },
+    { t: "grammar", d: "A formal description of which character sequences are valid, compiled into the automaton that decides which tokens may come next." },
+    { t: "token mask", d: "The per-step vector marking which vocabulary entries are legal in the automaton's current state; an index lookup rather than a search." },
+    { t: "tokenizer alignment", d: "The problem that a grammar is defined over characters while the model emits multi-character tokens, so a candidate token must be walked through the automaton character by character." },
+    { t: "JSON Schema", d: "The schema language used both to constrain output and to declare tool parameters; the same document serves both purposes." },
+    { t: "function calling", d: "Declaring functions as schemas, letting the model emit a structured request naming one, running it yourself, and returning the result into the conversation." },
+    { t: "tool_use block", d: "The content block in which a model names a tool and supplies arguments; a request for an action, never an action." },
+    { t: "tool_result block", d: "The message carrying a tool's output back into the conversation, including errors, which the model can read and act on." },
+    { t: "parallel tool use", d: "Several tool calls emitted in one turn, whose results must all be returned together or the model learns to stop requesting them." },
+    { t: "ReAct", d: "The loop that interleaves reasoning and acting, so the model writes a thought, takes an action, reads the observation and repeats." },
+    { t: "step budget", d: "The cap on how many loop iterations an agent may take; a cost control as much as a safety rail, because per-step input grows with the transcript." },
+    { t: "loop detection", d: "Terminating when the same action recurs with the same arguments, which is the most common form of an agent making no progress." },
+    { t: "MCP", d: "The Model Context Protocol: JSON-RPC 2.0 over stdio or Streamable HTTP, standardising how a client discovers and invokes what a server exposes." },
+    { t: "resources", d: "The MCP primitive for read-only data a client may fetch, as distinct from tools, which are actions the model may invoke." },
+    { t: "short-term memory", d: "The transcript itself, resent in full on every step, whose cost grows quadratically with the number of steps." },
+    { t: "long-term memory", d: "State the agent deliberately writes and reads back through a tool, whose cost is retrieval rather than per-step context." },
+    { t: "externalisation", d: "Keeping working state outside the context and holding only a pointer to it; the only memory strategy that stops context growth rather than slowing it." },
+    { t: "pass^k", d: "The probability that an agent succeeds on all k independent attempts at a task; the metric that exposes the gap between capable once and reliable." },
+    { t: "recoverability", d: "Whether an agent notices a failed tool and finds another route, measured by deliberately breaking a tool rather than by any leaderboard." },
+    { t: "least privilege", d: "Scoping each tool's credentials to exactly what the task needs, which holds under prompt injection because it does not depend on detecting one." }
+  ],
+  quiz: [
+    { type: "mc", q: "An extraction service retries until the JSON parses, up to three attempts, and a single call succeeds 95% of the time. Why is this not a solution?", opts: ["Three retries is too few; five would reach an acceptable rate", "Retrying changes the temperature and therefore the output distribution", "It leaves a residual failure rate, adds an unbounded latency tail, and treats invalid output as something to detect rather than to prevent", "The parser cannot distinguish a truncated object from a complete one"], a: 2,
+      why: "Three attempts take the failure rate to about one in ten thousand, which for a service doing ten thousand extractions a day is a failure every day, at 1.05 calls on average and a long latency tail on the retries. Constrained decoding is a different kind of claim: illegal tokens have probability zero, so the parse error is not rare, it is impossible." },
+    { type: "mc", q: "Constrained decoding sets illegal logits to negative infinity. What makes it cheap enough to use at every step?", opts: ["Precomputing, for each automaton state, the set of vocabulary tokens legal in it, so the per-step cost is an index lookup rather than a scan of 128,256 tokens", "Checking only the top-k tokens the model was likely to choose anyway", "Running the grammar check on the CPU in parallel with the forward pass", "Compiling the schema into the model's weights ahead of time"], a: 0,
+      why: "Willard and Louf's 2023 result behind Outlines: the automaton has finitely many states, so the legal-token set per state can be computed once and stored. Checking every token against the grammar at every step would cost more than the forward pass. Truncating to top-k first would be wrong, since the legal token may not be in it." },
+    { type: "mc", q: "Why does a grammar defined over characters create a problem for a model that emits tokens?", opts: ["Tokens are stored as integers and grammars operate on strings", "The vocabulary is too large to check against a grammar", "Grammars cannot express the recursive structure JSON needs", "A token is a multi-character chunk that can cross several grammar transitions, and may be legal for its first characters and illegal for a later one, so it must be walked through the automaton character by character"], a: 3,
+      why: "A single token might be a quote, a colon, a space and another quote, crossing three transitions at once. Any token whose later characters violate the grammar must be masked even though a shorter token spelling the same prefix is fine. Implementations that assume one token is one grammar step work on ASCII and break on the first multi-byte character." },
+    { type: "mc", q: "A team finds that reasoning quality drops when they force output into a strict schema. What is the structural fix both sides of that debate accept?", opts: ["Lower the temperature so the constrained tokens are more likely anyway", "Put a free-text reasoning field first in the schema, so the constraint governs where thinking appears rather than whether it happens", "Drop the schema and parse the output with a regular expression", "Use a larger model, which is less sensitive to constraints"], a: 1,
+      why: "Tam and colleagues measured a significant decline in reasoning under format restriction at EMNLP 2024, with classification improving. Practitioners dispute the size of the effect and attribute much of it to schemas that leave no room to think. Both readings are satisfied by a required reasoning string before the answer fields: constrain the output, not the process." },
+    { type: "mc", q: "Porting an agent loop between the two dominant tool-calling formats is never a search and replace. Which difference bites hardest?", opts: ["One format returns arguments as a parsed object and the other as a JSON string you must parse yourself, and the result goes back inside a user message in one and as its own role in the other", "One format supports parallel calls and the other does not", "The two use different HTTP methods", "One requires the tool result before the tool call in the message list"], a: 0,
+      why: "The schema also moves, from input_schema to function.parameters. But the argument encoding is where the silent bugs live: code that treats a JSON string as an object, or the reverse, fails only on the inputs that happen to differ. And the result placement changes the shape of the message list, which is the part people copy between codebases without reading." },
+    { type: "blank", q: "The loop that interleaves a thought, an action and an observation, from Yao and colleagues in 2022, is called ____.", a: ["react", "reactive", "re-act"],
+      why: "The finding was that reasoning and acting together beat either alone: reasoning without acting invents facts, and acting without reasoning cannot recover from a surprise. Everything called an agent framework today is this loop plus a step budget, loop detection, and a cap on how large an observation may be." },
+    { type: "mc", q: "An agent run has a 2,000-token prefix and adds 800 tokens per step. Over 12 steps it processes 76,800 input tokens against a final transcript of 11,600. What does the ratio depend on?", opts: ["The size of the prefix, since it is resent every time", "The tokens added per step, since that is what grows", "The number of steps, because the per-step input grows linearly and the total is therefore quadratic in step count", "The model, since context handling differs between them"], a: 2,
+      why: "Input at step n is 2,000 + 800n, so the sum over n steps grows with the square of the step count: 6.6 times the transcript at 12 steps and 10.7 times at 20. The prefix and per-step size scale the curve; the step count decides its shape. This is why a step budget is a cost control and not only a safety rail." },
+    { type: "mc", q: "What does MCP standardise, and what does it leave to you?", opts: ["It standardises tool semantics, so any two servers exposing search behave alike", "It standardises the model's tool-selection policy", "It standardises transport encryption and authentication, leaving discovery bespoke", "It standardises discovery and invocation over JSON-RPC, and leaves semantics, context cost, and trust in a server's tool descriptions entirely to you"], a: 3,
+      why: "A client can turn tools/list into a provider's tool declarations mechanically, which removes the bespoke wrapper per integration. It carries names, types and results, not contracts. And every tool a server exposes puts its description into the prompt on every turn, where it functions as instructions written by whoever wrote the server." },
+    { type: "mc", q: "A team reports that their multi-agent system beat a single agent by a wide margin, and separately that token usage explained about 80% of the performance variance. What should you conclude?", opts: ["Multi-agent architecture is the main source of the gain", "Much of the gain came from spending more tokens, which a single agent could also do, so the architecture must be justified against a single agent given the same budget", "The measurement is unsound because token usage is not a design choice", "The result generalises to tightly coupled tasks like coding"], a: 1,
+      why: "The same report put the cost at roughly fifteen times the tokens of an ordinary chat interaction and noted the approach suits parallel independent strands far better than tightly coupled work. The honest comparison is against one loop given the same token budget and better tools, which is usually what people actually want from a second agent." },
+    { type: "order", q: "Order these four controls for a tool-using agent, from the one that holds regardless of what the model was persuaded to do, to the weakest:", items: ["Least privilege: the database tool holds a read-only role scoped to the needed tables", "Egress control: the sandbox may reach only an allow-list of hosts", "Human confirmation before any irreversible action", "A system-prompt instruction to ignore instructions found in tool results"],
+      why: "The first three constrain what can happen no matter what the model decides; they are enforced outside the model. The fourth is a request made in the same channel as the attack, to a system that cannot distinguish the two. Every control must hold when the model has been fully persuaded, because eventually one will be." },
+    { type: "mc", q: "An agent scores 61% on a benchmark's single-attempt metric and under 25% on pass^8. What is the practical reading?", opts: ["It is 61% reliable, and the pass^8 figure measures a different capability", "The benchmark is too hard and the single-attempt number is the meaningful one", "It is 61% likely to be right once, which is much weaker than being reliable, and the gap is exactly what a customer sees when they run the same request twice", "The agent needs a larger step budget"], a: 2,
+      why: "This is the shape tau-bench was built to expose. Pass^k is the probability of succeeding on all k attempts, so a large gap between pass@1 and pass^8 means the agent is finding the answer by variance rather than by procedure. Variance is the property you ship, which is why an evaluation harness runs each task several times." },
+    { type: "mc", q: "You are asked to make an agent cheaper without shortening the task. Which memory strategy stops context growth rather than slowing it?", opts: ["Prompt caching, since the unchanged prefix is billed at a reduced rate", "Summarising older steps into a compressed record", "Externalising working state to a file or database and keeping only a pointer in the context", "Reducing the step budget"], a: 2,
+      why: "Caching scales the quadratic term down and requires a byte-identical prefix, which a timestamp in the system prompt silently defeats. Summarisation trades fidelity for tokens, and the detail lost is often what would have prevented a repeated action. Externalisation is the only one that removes text from the context permanently, and it turns memory into an ordinary tool call." }
+  ]
+});
