@@ -5605,9 +5605,9 @@ CHAPTERS.push({
       "<li><strong>Would a cheaper strategy get there?</strong> Chapter 23's ordering applies unchanged: best-of-n with a checker is free to try and often enough. Self-consistency on a small model may beat a reasoning model at the same total token spend, and it is one experiment to find out.</li>" +
       "</ol>" +
       "<p>The strongest pattern in practice is <strong>difficulty routing</strong> rather than choosing: classify the question, send the easy majority to a fast model, send the hard minority to a reasoning model with a generous budget. The compute-optimal result from section 6 is exactly this claim &#8212; the allocation should vary per prompt &#8212; and the difficulty of implementing it is that estimating difficulty before answering is itself a prediction problem. A usable proxy is Chapter 18's first-token entropy, or a cheap model's own confidence.</p>" +
-      "<h3>What Part IV built</h3>" +
-      "<p>This chapter closes the part, and the arc is worth naming. A pretrained model continues text. Chapter 18 chose which token to continue with; Chapter 19 constrained the choice so a program could consume it; Chapter 20 taught the model a job by demonstration; Chapters 21 through 23 taught it which of two answers is better, and made that affordable. This chapter added the last axis, which is not about the weights at all: <strong>let it write more before it answers</strong>.</p>" +
-      "<p>The through-line is that none of it changed the function from Chapter 1. It still returns a probability for every token in the vocabulary. Everything in Part IV is machinery around that function &#8212; choosing from it, constraining it, adjusting it, and calling it more times. Part V asks what all of that costs to run, and the first answer is Chapter 16's: less than you think in arithmetic, more than you think in bytes moved.</p>" },
+      "<h3>The last axis</h3>" +
+      "<p>The mechanisms of this part are now complete, and the arc is worth naming. A pretrained model continues text. Chapter 18 chose which token to continue with; Chapter 19 constrained the choice so a program could consume it; Chapter 20 taught the model a job by demonstration; Chapters 21 through 23 taught it which of two answers is better, and made that affordable. This chapter added the axis that is not about the weights at all: <strong>let it write more before it answers</strong>.</p>" +
+      "<p>The through-line is that none of it changed the function from Chapter 1. It still returns a probability for every token in the vocabulary. Everything here is machinery around that function &#8212; choosing from it, constraining it, adjusting it, and calling it more times. Chapter 25 closes the part by reading all of these decisions off the models you can actually download, and Part V then asks what running them costs.</p>" },
 
     { title: "Exercises",
       html: "<ol>" +
@@ -5662,5 +5662,263 @@ CHAPTERS.push({
       why: "A chat model's response length is predictable within a factor of two or three. A reasoning trace on two superficially similar questions can differ hundredfold, and the variance rather than the mean is what breaks a budget. The mitigations are planning on a high percentile, capping the per-request thinking budget, and logging thinking tokens separately from answer tokens." },
     { type: "mc", q: "What is the compute-optimal strategy in practice, and what makes it hard?", opts: ["Route by difficulty — easy questions to a fast path, hard ones to a large budget — and the hard part is estimating difficulty before you have answered", "Always use the largest thinking budget the latency allows", "Use self-consistency for every request and vote", "Train a larger model, since test-time compute cannot exceed parameter scaling"], a: 0,
       why: "A fixed budget is wrong on two of the three difficulty curves: wasted on easy questions and insufficient on hard ones. Routing is the allocation the compute-optimal result implies, and it needs a difficulty estimate produced before the answer exists. Usable proxies are a cheap model's first-token entropy from Chapter 18 or its own stated confidence." }
+  ]
+});
+
+/* ======================= CHAPTER 25 ======================= */
+CHAPTERS.push({
+  num: 25, part: 4, free: false, title: "A Field Guide to Open-Weights Models",
+  blurb: "You now know every design decision a model makes. This chapter reads them off the real ones. You will learn to take a release apart — the card, the config, the paper, and the parts that are marketing — then map each family's architecture onto the mechanisms of Part II, read a licence for the clause that actually binds you, and understand why the one architecture nobody deploys is instructive anyway. It ends with a decision procedure: given a task, a budget and a card, which model do you pick, and what would make you change your mind.",
+  sections: [
+    { title: "How to Read a Release",
+      html: "<p>A model release is four documents of very different reliability, and knowing which is which is most of the skill.</p>" +
+      "<p>The <strong>config file</strong> is the only one that cannot lie. It is what the code loads, so every number in it is load-bearing, and after Part II you can read it completely: layer count, <code>d_model</code>, head counts, <code>d_ff</code>, vocabulary size, position encoding and its base, context length. Chapter 9's arithmetic turns those into parameters, bytes and KV-cache cost, which is the first thing to compute and the last thing anyone mentions.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one config file, read with Part II &#183; every line answers a question you already know</text>" +
+      "<rect x='20' y='28' width='390' height='180' rx='8' fill='#0c1425' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='34' y='50' fill='#c9d6ea' font-size='9.5'>\"num_hidden_layers\": 32,</text>" +
+      "<text x='34' y='70' fill='#c9d6ea' font-size='9.5'>\"hidden_size\": 4096,</text>" +
+      "<text x='34' y='90' fill='#c9d6ea' font-size='9.5'>\"num_attention_heads\": 32,</text>" +
+      "<text x='34' y='110' fill='#ffd166' font-size='9.5'>\"num_key_value_heads\": 8,</text>" +
+      "<text x='34' y='130' fill='#c9d6ea' font-size='9.5'>\"intermediate_size\": 14336,</text>" +
+      "<text x='34' y='150' fill='#c9d6ea' font-size='9.5'>\"vocab_size\": 128256,</text>" +
+      "<text x='34' y='170' fill='#ffd166' font-size='9.5'>\"rope_theta\": 500000.0,</text>" +
+      "<text x='34' y='190' fill='#c9d6ea' font-size='9.5'>\"max_position_embeddings\": 8192</text>" +
+      "<text x='426' y='50' fill='#7d8fb0' font-size='9'>depth &#183; Chapter 8</text>" +
+      "<text x='426' y='70' fill='#7d8fb0' font-size='9'>the residual stream &#183; Chapter 8</text>" +
+      "<text x='426' y='90' fill='#7d8fb0' font-size='9'>query heads &#183; Chapter 6</text>" +
+      "<text x='426' y='110' fill='#3ddc97' font-size='9'>fewer than queries, so GQA: KV cache / 4</text>" +
+      "<text x='426' y='130' fill='#3ddc97' font-size='9'>not 4x hidden, so a gated FFN &#183; Chapter 8</text>" +
+      "<text x='426' y='150' fill='#7d8fb0' font-size='9'>embedding cost &#183; Chapter 2</text>" +
+      "<text x='426' y='170' fill='#3ddc97' font-size='9'>a large base, so context was extended</text>" +
+      "<text x='426' y='190' fill='#7d8fb0' font-size='9'>trained length, not the maximum usable</text>" +
+      "<text x='20' y='226' fill='#c9d6ea' font-size='10.5'>Two lines here were set to fix problems. Reading a config is noticing which ones.</text>" +
+      "</svg><div class='fig-cap'>The gold lines are the interesting ones: a KV-head count below the query count, and a rope base far above the original 10,000.</div></div>" +
+      "<p>The <strong>model card</strong> is a mixture. Its factual half &#8212; sizes, context length, languages, licence, intended use &#8212; is usually reliable. Its evaluation half is a selection, and the selection was made by the people being evaluated. Chapter 32 takes benchmarks apart properly; the field-guide version is that a card's numbers tell you what the authors were proud of, which is information about the authors as much as about the model.</p>" +
+      "<p>The <strong>paper or technical report</strong>, when one exists, is where the useful detail lives: data mixture, training tokens, the post-training pipeline from Part IV, what was ablated. Its absence is itself information.</p>" +
+      "<p>One check belongs in this pass and is almost always skipped: run your own text through the tokenizer before you commit. Chapter 2's fertility measurement takes minutes and tells you what a model will cost <em>you</em> rather than what it costs on English prose. A model whose tokenizer is inefficient on your domain &#8212; another language, a code dialect, heavy notation &#8212; charges you the difference on every request forever, and no benchmark reports it. Two models with identical specifications can differ by a third in real token consumption on the same corpus.</p>"+
+      "<p>The fourth document is the <strong>launch post</strong>, and it is marketing. Two habits keep you honest. Read the config before the benchmarks, because the config determines whether the model can run on your hardware and no benchmark score changes that. And find the context length in the config rather than the headline &#8212; the number that matters is the one the model was trained at, and a much larger advertised window usually means a Chapter 7 extension technique whose quality degrades with distance.</p>" },
+
+    { title: "The Families, and What Converged",
+      html: "<p>The most useful fact about the current families is one nobody advertises. There has been an <strong>architecture convergence</strong>: Every question Part II raised now has the same answer almost everywhere.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the choices Part II taught, and how much disagreement is left &#183; checked 9 September 2026</text>" +
+      "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='50' fill='#c9d6ea' font-size='9.5'>normalisation</text>" +
+      "<text x='250' y='50' fill='#3ddc97' font-size='9.5'>RMSNorm, pre-norm</text>" +
+      "<text x='560' y='50' fill='#7d8fb0' font-size='9'>universal</text>" +
+      "<text x='20' y='72' fill='#c9d6ea' font-size='9.5'>position</text>" +
+      "<text x='250' y='72' fill='#3ddc97' font-size='9.5'>RoPE, with an extended base</text>" +
+      "<text x='560' y='72' fill='#7d8fb0' font-size='9'>universal</text>" +
+      "<text x='20' y='94' fill='#c9d6ea' font-size='9.5'>feed-forward</text>" +
+      "<text x='250' y='94' fill='#3ddc97' font-size='9.5'>SwiGLU</text>" +
+      "<text x='560' y='94' fill='#7d8fb0' font-size='9'>universal</text>" +
+      "<text x='20' y='116' fill='#c9d6ea' font-size='9.5'>attention</text>" +
+      "<text x='250' y='116' fill='#3ddc97' font-size='9.5'>GQA, 4 to 8 queries per KV head</text>" +
+      "<text x='560' y='116' fill='#7d8fb0' font-size='9'>near-universal</text>" +
+      "<text x='20' y='138' fill='#ffd166' font-size='9.5'>dense or MoE</text>" +
+      "<text x='250' y='138' fill='#ffd166' font-size='9.5'>both ship, for different jobs</text>" +
+      "<text x='560' y='138' fill='#ffd166' font-size='9'>a real choice</text>" +
+      "<text x='20' y='160' fill='#ffd166' font-size='9.5'>data and post-training</text>" +
+      "<text x='250' y='160' fill='#ffd166' font-size='9.5'>undisclosed, and everything</text>" +
+      "<text x='560' y='160' fill='#ff5d73' font-size='9'>where models differ</text>" +
+      "<line x1='20' y1='172' x2='740' y2='172' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='192' fill='#c9d6ea' font-size='10.5'>Four rows are settled. Two are not, and the last one is the one nobody publishes.</text>" +
+      "<text x='20' y='208' fill='#7d8fb0' font-size='9.5'>Which means you cannot predict a model's quality from its config &#8212; only its cost.</text>" +
+      "</svg><div class='fig-cap'>Part II's questions have stopped being differentiators. Two models with near-identical configs can be far apart, and the config will not tell you which.</div></div>" +
+      "<p>That convergence is the single most useful thing to know when reading releases, and it has a sharp practical consequence: <strong>the config predicts cost, not quality</strong>. You can compute memory, KV-cache size and throughput exactly from Chapter 9. You cannot infer capability, because capability now comes from the data mixture and the Part IV pipeline, and neither is published.</p>" +
+      "<p>The families do have durable characters, which survive version changes better than their benchmark scores do.</p>" +
+      "<ul>" +
+      "<li><strong>Llama</strong> (Meta) is the ecosystem default. Whatever tool you use supports it first, which is a real operational advantage and the main reason to pick it. Its licence is the catch, and section 5 is about that.</li>" +
+      "<li><strong>Qwen</strong> (Alibaba) ships the widest size range and the strongest multilingual coverage, generally under permissive terms, and is usually the first family to have a model at whatever size you need.</li>" +
+      "<li><strong>Gemma</strong> (Google) targets the small end and single-accelerator deployment, and moved to Apache 2.0 with Gemma 4 on 2 April 2026 &#8212; a licence change worth noting as evidence that these terms are not fixed.</li>" +
+      "<li><strong>Mistral</strong> (Mistral AI) established the small-dense-model-that-punches-up pattern and popularised open MoE. Licences vary by model within the family, which is a trap.</li>" +
+      "<li><strong>DeepSeek</strong> pushed open MoE at frontier scale and published reasoning training openly, under MIT for its recent checkpoints.</li>" +
+      "<li><strong>Phi</strong> (Microsoft) is the data-quality argument made concrete: small models trained on heavily curated and synthetic data, strong on reasoning benchmarks and thinner outside them.</li>" +
+      "<li><strong>OLMo</strong> (Ai2) is the fully open one, and section 6 is why it matters even if you never serve it.</li>" +
+      "</ul>" +
+      "<div class='callout'><strong>On the shelf life of this section.</strong> Version numbers and benchmark scores in a field guide are wrong within months, and every specific in this chapter is a snapshot taken on 9 September 2026. What does not go stale is the reading procedure in section 1, the convergence above, the licence taxonomy in section 5, and the decision procedure in section 8. Learn those; re-check the rest.</div>" },
+
+    { title: "Dense or Sparse, in the Wild",
+      html: "<p>Chapter 10 built mixture of experts and showed the trade: an MoE model activates a fraction of its parameters per token, so it costs like a small model to compute and like a large one to hold. That trade decides which shape ships where, and the field has settled into a clear pattern.</p>" +
+      "<p><strong>Dense models dominate under about 30 billion parameters.</strong> At that scale the whole model fits on one accelerator, and MoE's advantage &#8212; cheaper arithmetic per token &#8212; is not the binding constraint, while its costs are. Chapter 17's expert parallelism, the all-to-all, the load-balancing loss and the routing instability all arrive whether or not you needed them.</p>" +
+      "<p><strong>MoE dominates at frontier scale.</strong> When the model will be sharded across many devices regardless, the memory penalty is already paid, and activating a tenth of the parameters per token is an enormous saving on the arithmetic. The largest open-weights models are mostly sparse for this reason.</p>" +
+      "<p>Two consequences follow for anyone deploying rather than training.</p>" +
+      "<p>First, <strong>a parameter count no longer describes a model</strong>. A sparse model with a large total and a small active count answers two different questions: total parameters tell you the memory bill, active parameters tell you the compute and, via Chapter 16, roughly the speed. A release quoting one without the other is quoting the flattering number. Always find both.</p>" +
+      "<p>Second, the memory is worse than the total suggests in one specific way. Every expert must be resident even though only a few run per token, so the weights cannot be paged by usage &#8212; the router's choice is data-dependent and arrives too late. This is why an MoE model that computes like a 3B model still needs the memory of its full size, and why it is often the wrong choice for the 16 GB budget despite looking cheap on a FLOPs table.</p>" +
+      "<div class='callout'><strong>The operational fact.</strong> MoE throughput is more variable than dense throughput at the same average load, because a batch whose tokens route unevenly leaves some experts idle and others queued &#8212; Chapter 17's stalled all-to-all, arriving at serving time. Capacity-plan an MoE deployment on a high percentile rather than a mean, and expect tail latency to be the thing that surprises you.</div>" },
+
+    { title: "Base, Instruct, and Reasoning Checkpoints",
+      html: "<p>A family ships several checkpoints with the same architecture and very different behaviour, and choosing the wrong one is the most common mistake in this chapter.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the same weights, three post-training histories &#183; the pattern rather than a calendar</text>" +
+      "<rect x='20' y='34' width='170' height='72' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='54' fill='#4f7cff' font-size='10'>base</text>" +
+      "<text x='34' y='74' fill='#c9d6ea' font-size='9'>pretraining only</text>" +
+      "<text x='34' y='90' fill='#7d8fb0' font-size='8.5'>continues text, no template</text>" +
+      "<line x1='196' y1='70' x2='226' y2='70' stroke='#4f7cff' stroke-width='2'/><polygon points='234,70 224,65 224,75' fill='#4f7cff'/>" +
+      "<rect x='240' y='34' width='190' height='72' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='254' y='54' fill='#3ddc97' font-size='10'>instruct</text>" +
+      "<text x='254' y='74' fill='#c9d6ea' font-size='9'>+ Chapters 20 and 22</text>" +
+      "<text x='254' y='90' fill='#7d8fb0' font-size='8.5'>answers, has a chat template</text>" +
+      "<line x1='436' y1='70' x2='466' y2='70' stroke='#3ddc97' stroke-width='2'/><polygon points='474,70 464,65 464,75' fill='#3ddc97'/>" +
+      "<rect x='480' y='34' width='260' height='72' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='494' y='54' fill='#ffd166' font-size='10'>reasoning</text>" +
+      "<text x='494' y='74' fill='#c9d6ea' font-size='9'>+ Chapter 24's verifiable rewards</text>" +
+      "<text x='494' y='90' fill='#7d8fb0' font-size='8.5'>thinks first, bills for it</text>" +
+      "<line x1='20' y1='124' x2='740' y2='124' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='144' fill='#c9d6ea' font-size='10'>Same config, same parameter count, same memory. Entirely different cost per answer and latency.</text>" +
+      "<text x='20' y='166' fill='#ff5d73' font-size='10'>The classic error: benchmarking a base model with chat prompts and concluding the family is weak.</text>" +
+      "<text x='20' y='188' fill='#7d8fb0' font-size='9.5'>The second classic error: fine-tuning the instruct checkpoint and wondering where its manners went.</text>" +
+      "</svg><div class='fig-cap'>Three checkpoints, one architecture. The config file is identical across all three and tells you nothing about which you have.</div></div>" +
+      "<p>A <strong>base model</strong> has had pretraining only. It continues text and has no chat template, so Chapter 3's warning applies in full: prompt it like an assistant and it will continue your question rather than answer it. Base models are what you want when you intend to fine-tune, because you are not fighting a post-training pipeline you cannot see.</p>" +
+      "<p>An <strong>instruct model</strong> has been through Part IV. It answers, refuses, follows a chat template, and carries whatever style and preferences its alignment stage instilled. This is what you want for almost every deployment, and it is what you should <em>not</em> fine-tune casually &#8212; Chapter 20's catastrophic forgetting applies to the alignment as much as to the capability, and the manners are the part that goes first.</p>" +
+      "<p>A <strong>reasoning checkpoint</strong> has additionally had Chapter 24's training on verifiable rewards. Same weights count, same memory, and a completely different cost profile: thinking tokens, higher latency, and the truncation failure that returns nothing. It is the same model in every respect the config records and a different product in every respect the bill records.</p>" +
+      "<p>A fourth kind now ships routinely: <strong>distilled</strong> small models, trained on a large reasoning model's traces by Chapter 21's sequence-level distillation. They are usually named after the teacher, which is a naming convention rather than an architectural claim &#8212; the weights are the small family's, and the behaviour is the large one's, and the capability ceiling is the teacher's rather than the size's. When a small model markedly outperforms its size class on reasoning benchmarks, this is almost always why.</p>"+
+      "<p>The practical rule is to check which checkpoint you have before drawing any conclusion about a family, and to check the chat template against Chapter 3's method before drawing any conclusion about an instruct model. A wrong template makes a good model look broken, and that mistake is made publicly and often.</p>" },
+
+    { title: "Licences That Are Not Open Source",
+      html: "<p>Almost every model called open source is not. The accurate term is <strong>open weights</strong>: you can download the finished parameters and run them. Open source, in the sense the phrase has meant for thirty years, would additionally mean the training code and enough about the data to rebuild the thing. The distinction is not pedantry, because the restrictions live in the gap.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the licence spectrum, by what it actually restricts</text>" +
+      "<rect x='20' y='30' width='230' height='96' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='34' y='50' fill='#3ddc97' font-size='10'>OSI-approved</text>" +
+      "<text x='34' y='70' fill='#c9d6ea' font-size='9'>Apache 2.0, MIT</text>" +
+      "<text x='34' y='88' fill='#c9d6ea' font-size='9'>no user cap, no field limits</text>" +
+      "<text x='34' y='106' fill='#7d8fb0' font-size='8.5'>your lawyers already know it</text>" +
+      "<rect x='262' y='30' width='230' height='96' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='276' y='50' fill='#ffd166' font-size='10'>community / custom</text>" +
+      "<text x='276' y='70' fill='#c9d6ea' font-size='9'>free until a threshold</text>" +
+      "<text x='276' y='88' fill='#c9d6ea' font-size='9'>attribution and naming rules</text>" +
+      "<text x='276' y='106' fill='#7d8fb0' font-size='8.5'>read it; it binds you</text>" +
+      "<rect x='504' y='30' width='236' height='96' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='518' y='50' fill='#ff5d73' font-size='10'>research-only</text>" +
+      "<text x='518' y='70' fill='#c9d6ea' font-size='9'>no commercial use at all</text>" +
+      "<text x='518' y='88' fill='#c9d6ea' font-size='9'>or a separate paid licence</text>" +
+      "<text x='518' y='106' fill='#7d8fb0' font-size='8.5'>fine for a prototype, fatal later</text>" +
+      "<line x1='20' y1='142' x2='740' y2='142' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='162' fill='#c9d6ea' font-size='10.5'>Four clauses to find in the middle box: a user or revenue threshold; a rule about naming derived</text>" +
+      "<text x='20' y='176' fill='#c9d6ea' font-size='10.5'>models; a ban on training competitors on the outputs; and a geography or field-of-use carve-out.</text>" +
+      "<text x='20' y='200' fill='#ffd166' font-size='10'>Licences change: Gemma moved from custom terms to Apache 2.0 in 2026. Re-read before you ship.</text>" +
+      "</svg><div class='fig-cap'>The middle box is where most models sit and where every unpleasant surprise comes from.</div></div>" +
+      "<p>The middle category is the <strong>community licence</strong>: free use granted broadly, subject to conditions no OSI-approved licence contains. The Llama family's terms are the clearest example, and worth knowing in specifics because they are the pattern others copy. A company with more than <strong>700 million monthly active users</strong> must request a separate licence, which Meta may grant or deny at its discretion. Derived models must carry <strong>&#8220;Llama&#8221; at the start of their name</strong>, and products must display &#8220;Built with Llama&#8221;. There is a restriction on using the model to improve competing models. Recent versions have also carried geographic carve-outs affecting EU developers for some capabilities.</p>" +
+      "<p>None of that makes Llama a bad choice. It makes it a choice with conditions, and the failure mode is not reading them until the product is built.</p>"+
+      "<p>Two procedural points before the questions. The licence field on a model card is a label, not the licence &#8212; a repository tagged with a short identifier may still carry a separate terms document and an acceptable-use policy that binds you, and both need reading. And the licence applies to the <em>artefact you are using</em>, so a fine-tune of a restricted model inherits its restrictions, as do that fine-tune's outputs where the terms say so. People discover this when they try to relicense a derived model.</p>"+
+      "<p>Four questions answer most of it:</p>" +
+      "<ul>" +
+      "<li><strong>Is there a threshold clause?</strong> A <strong>threshold clause</strong> caps free use at a stated scale. Find where it sits, and check it against your five-year plan rather than today's traffic.</li>" +
+      "<li><strong>Are there naming or attribution obligations?</strong> These reach into your product surface and your marketing, not just your repository.</li>" +
+      "<li><strong>Can you train on the outputs?</strong> This decides whether Chapter 21's distillation is available to you, and it is commonly forbidden.</li>" +
+      "<li><strong>Is there a field-of-use restriction?</strong> A limit on where or for what the model may be used, geography included. These appear late and cannot be engineered around.</li>" +
+      "</ul>" },
+
+    { title: "Fully Open Models, and Why They Matter",
+      html: "<p>One family sits outside the spectrum above, and it is the only <strong>fully open model</strong> family at scale. Ai2's <strong>OLMo</strong> publishes Apache 2.0 weights <em>and</em> the training data &#8212; the Dolma corpus, on the order of nine trillion tokens &#8212; <em>and</em> the training code, the evaluation suite, the training logs, and intermediate checkpoints from throughout the run. No other major family meets that bar.</p>" +
+      "<p>Most readers will never deploy one, because a model optimised for openness is rarely also the best model at a given size. It matters anyway, for four reasons that are hard to get any other way.</p>" +
+      "<ul>" +
+      "<li><strong>The data question becomes answerable.</strong> Chapter 12 taught corpus construction, filtering, deduplication and decontamination as things that shape a model profoundly. For every closed release, the honest answer to &#8220;what was it trained on&#8221; is that nobody outside the lab knows. With OLMo you can look, which makes Chapter 12 checkable rather than theoretical.</li>" +
+      "<li><strong>Contamination can be verified rather than trusted.</strong> Chapter 12 showed that decontamination is a threshold chosen by the people reporting the score. With published data you can run the check yourself, on their corpus, at your own n-gram setting. This is the only circumstance in which a benchmark number is fully auditable.</li>" +
+      "<li><strong>Intermediate checkpoints make training dynamics observable.</strong> Chapter 13's loss curves and Chapter 15's scaling laws are claims about what happens <em>during</em> a run. Final weights cannot test them. A sequence of checkpoints can, which is why nearly every empirical paper about how capabilities emerge uses a fully open family.</li>" +
+      "<li><strong>Supply chain.</strong> You can, in principle, rebuild the model from the published data and code and confirm you get the same thing. Nobody does this often. That it is possible at all is the difference between a dependency you can audit and one you are trusting.</li>" +
+      "</ul>" +
+      "<p>The practical use for most teams is as a <strong>reference implementation</strong>. When you need to know what a real pretraining mixture looks like, what a real learning-rate schedule was, or how a real run's loss behaved at the point yours is misbehaving, this is where you look &#8212; and it is the only place you can.</p>" +
+      "<div class='callout'><strong>Why this belongs in a field guide.</strong> Every other section of this chapter tells you what someone published about their model. This one is the only case where the claims can be checked. Keeping the distinction sharp &#8212; between a number a lab reported and a number anyone can reproduce &#8212; is the habit Chapter 32 is built on, and it starts here.</div>" },
+
+    { title: "The Architectures Nobody Deploys",
+      html: "<p>Part II built one architecture, and it is worth knowing what the alternatives offer, because the reason they have not displaced the transformer is a mechanism rather than an accident of adoption.</p>" +
+      "<p><strong>State space models</strong> &#8212; Mamba is the prominent line &#8212; and <strong>RWKV</strong> replace attention with a recurrence. Instead of every token attending to every earlier token, the model carries a fixed-size state forward and updates it. The consequences are exactly what you would predict from Chapter 6's arithmetic, and they are attractive: computation grows linearly with sequence length rather than quadratically, and there is <strong>no KV cache</strong> at all, so generation memory is constant in the sequence length rather than growing with it.</p>" +
+      "<p>That is a serious offer. Chapter 6 counted Corvid's KV cache at 1.07 GB, and Chapter 26 will show it dominating long-context serving. An architecture that removes it entirely should have won.</p>" +
+      "<h3>What the fixed state costs</h3>" +
+      "<p>It has not won because the fixed state is also a fixed <em>memory</em>. A transformer's KV cache holds a separate entry for every token, so any earlier token can be addressed exactly, however far back it is. A recurrent state compresses all history into a vector of constant size, so information must be discarded as the sequence grows, and which information gets discarded was decided at training time.</p>" +
+      "<p>The result is measurable and specific: these models are markedly worse at copying from context and at associative recall &#8212; finding the one earlier fact a question refers to. Jelassi and colleagues showed in 2024 that a two-layer transformer can copy strings of length exponential in its size, while a fixed-state model is bounded by that state. Chapter 6's prompt <strong>P4</strong>, the needle placed in a long document, is precisely the task the architecture is worst at.</p>" +
+      "<div class='callout'><strong>The trade, stated plainly.</strong> The KV cache is the cost <em>and</em> the capability. It is the reason long context is expensive and the reason long context works, and no architecture has yet removed the first without damaging the second. This is why the credible direction is the <strong>hybrid stack</strong> &#8212; mostly recurrent layers for cheap sequence processing, with attention layers inserted where exact recall is needed &#8212; rather than replacement. Watch that space; it is the one place a genuine architectural change might still arrive.</div>" },
+
+    { title: "Choosing", viz: "llmModelPicker", vizTitle: "Set hardware and licence constraints first, then look at what is left",
+      html: "<p>A decision procedure, ordered so that the constraints which eliminate models come before the preferences which rank them. Most people do this backwards, starting with benchmark scores and discovering the licence at the end.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>eliminate, then rank &#183; each gate is cheap to apply and removes most of the field</text>" +
+      "<rect x='20' y='32' width='150' height='46' rx='8' fill='#111a2e' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='34' y='52' fill='#ff5d73' font-size='10'>1. licence</text>" +
+      "<text x='34' y='68' fill='#7d8fb0' font-size='8.5'>binary, and permanent</text>" +
+      "<line x1='176' y1='55' x2='206' y2='55' stroke='#7d8fb0' stroke-width='2'/><polygon points='214,55 204,50 204,60' fill='#7d8fb0'/>" +
+      "<rect x='220' y='32' width='150' height='46' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='234' y='52' fill='#ffd166' font-size='10'>2. does it fit</text>" +
+      "<text x='234' y='68' fill='#7d8fb0' font-size='8.5'>Chapter 9 arithmetic</text>" +
+      "<line x1='376' y1='55' x2='406' y2='55' stroke='#7d8fb0' stroke-width='2'/><polygon points='414,55 404,50 404,60' fill='#7d8fb0'/>" +
+      "<rect x='420' y='32' width='150' height='46' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='434' y='52' fill='#ffd166' font-size='10'>3. is it fast enough</text>" +
+      "<text x='434' y='68' fill='#7d8fb0' font-size='8.5'>Chapter 16 arithmetic</text>" +
+      "<line x1='576' y1='55' x2='606' y2='55' stroke='#7d8fb0' stroke-width='2'/><polygon points='614,55 604,50 604,60' fill='#7d8fb0'/>" +
+      "<rect x='620' y='32' width='120' height='46' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='634' y='52' fill='#3ddc97' font-size='10'>4. is it good</text>" +
+      "<text x='634' y='68' fill='#7d8fb0' font-size='8.5'>on your own eval</text>" +
+      "<line x1='20' y1='96' x2='740' y2='96' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='118' fill='#c9d6ea' font-size='10'>Gates 1 to 3 are computed from documents and specifications. They cost an afternoon and remove</text>" +
+      "<text x='20' y='132' fill='#c9d6ea' font-size='10'>most candidates, which is why they come first.</text>" +
+      "<text x='20' y='158' fill='#ff5d73' font-size='10'>Gate 4 is the only expensive one, and it is the only one a leaderboard cannot answer for you.</text>" +
+      "<text x='20' y='184' fill='#7d8fb0' font-size='9.5'>Doing this in the usual order &#8212; benchmarks first &#8212; means evaluating models you cannot legally</text>" +
+      "<text x='20' y='198' fill='#7d8fb0' font-size='9.5'>or physically deploy, then discovering it after the demo.</text>" +
+      "</svg><div class='fig-cap'>Three cheap gates and one expensive one. The ordering is the entire method.</div></div>" +
+      "<ol>" +
+      "<li><strong>Licence.</strong> Answer section 5's four questions first. This is binary, it is permanent, and it is the only gate that can invalidate work already done.</li>" +
+      "<li><strong>Does it fit?</strong> Chapter 9's arithmetic on your hardware: weights at your chosen precision, KV cache at your context length and batch size, activations. If it does not fit at bf16, Chapter 21 and Chapter 29 are your options, and both cost something.</li>" +
+      "<li><strong>Is it fast enough?</strong> Chapter 16's roofline gives the decode ceiling from the weight bytes alone, before any serving stack exists. If the ceiling is below your latency target, no engineering recovers it &#8212; and for a reasoning checkpoint, add Chapter 24's thinking tokens to the count.</li>" +
+      "<li><strong>Is it good at your task?</strong> Only now, and on your own evaluation set rather than a leaderboard. Twenty examples you wrote yourself beat any public benchmark for this purpose, because the question is not which model is best but which is sufficient for you.</li>" +
+      "</ol>" +
+      "<p>Two tie-breakers when several survive. Prefer the family your tooling supports best, because an ecosystem advantage compounds daily and a two-point benchmark difference does not. And prefer the smallest model that passes gate 4, because everything in Part V &#8212; latency, batch size, cost per request, the number of machines you operate &#8212; gets better as the model gets smaller, and none of it gets better as the benchmark score rises.</p>" +
+      "<div class='callout'><strong>Try it above.</strong> Set commercial use, the 16 GB budget and a sub-second first token, then look at how few models remain before quality has been considered at all. Then relax one constraint at a time and watch which one was doing the eliminating. It is almost never the one people expect, and on the 16 GB budget it is almost always memory.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take the config in section 1 and compute, using Chapter 9's method: total parameters, weight bytes at bf16 and at 4-bit, KV-cache bytes per token, and the cache size at the full trained context. Then state which of the four numbers would change if <code>num_key_value_heads</code> were raised to 32, and by how much.</li>" +
+      "<li><strong>Trace.</strong> A release advertises a 128,000-token context. Its config lists a trained length of 8,192 and a rope base far above 10,000. State what has almost certainly been done, name the Chapter 7 mechanism, and say what you would measure before believing the headline number. Then state what prompt <strong>P4</strong> would tell you that a benchmark score would not.</li>" +
+      "<li><strong>Trace.</strong> Two models have identical configs except that one is sparse: 100B total parameters with 8B active, against a dense 30B. Compute weight memory at bf16 for both and forward FLOPs per token using Chapter 9's estimate. State which is cheaper to run, which is cheaper to hold, and which you would choose for the 16 GB budget.</li>" +
+      "<li><strong>Investigate.</strong> Pick three model families and read their licences end to end &#8212; not summaries. For each, answer section 5's four questions and record the exact clause number that answers each one. Report any clause that would bind your organisation. Most people have never done this for a model they are already running.</li>" +
+      "<li><strong>Investigate.</strong> Download a base checkpoint and its instruct sibling. Send both the same three chat-formatted prompts and record what each returns. Then send the base model a raw continuation prompt. Report the difference. You should be able to state, from the outputs alone, which failure a colleague was hitting when they said a family &#8220;could not follow instructions&#8221;.</li>" +
+      "<li><strong>Build.</strong> Write a tool that takes a model's config file and your hardware, and outputs the four gates from section 8 in order: licence (from a field you supply), memory fit, decode-ceiling latency at your context length, and a placeholder for your own evaluation. Run it over ten releases and produce the ranked shortlist. The value is in what it eliminates before you have downloaded anything.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "open weights", d: "Downloadable parameters you can run, as distinct from open source, which would also include the training code and data." },
+    { t: "model card", d: "The release document whose factual half is reliable and whose evaluation half is a selection made by the people being evaluated." },
+    { t: "config file", d: "The machine-read architecture description; the only release document that cannot misrepresent the model, because the code loads it." },
+    { t: "architecture convergence", d: "The settling of Part II's design questions on the same answers across families, so a config now predicts cost but not quality." },
+    { t: "base checkpoint", d: "A model with pretraining only: it continues text, has no chat template, and is what you want if you intend to fine-tune." },
+    { t: "instruct checkpoint", d: "A model that has been through Part IV's pipeline: it answers, refuses, and carries alignment behaviour you cannot inspect." },
+    { t: "reasoning checkpoint", d: "An instruct model further trained on verifiable rewards; identical in config and memory, different in latency and cost per answer." },
+    { t: "active parameters", d: "The fraction of a sparse model's weights used per token, which sets compute cost while the total sets the memory bill." },
+    { t: "community licence", d: "A custom licence granting free use below a threshold, with naming, attribution and field-of-use conditions that no OSI licence contains." },
+    { t: "threshold clause", d: "The user or revenue level above which a custom licence requires separate permission; the clause to check against a five-year plan rather than today." },
+    { t: "field-of-use restriction", d: "A limit on where or for what a model may be used, including geographic carve-outs; the restriction that appears late and cannot be engineered around." },
+    { t: "fully open model", d: "One publishing weights, training data, code, logs and intermediate checkpoints, which is the only case where a lab's claims can be independently checked." },
+    { t: "intermediate checkpoints", d: "Saved weights from throughout a training run, which make training dynamics and scaling claims testable rather than merely reported." },
+    { t: "state space model", d: "An architecture replacing attention with a recurrence over a fixed-size state, giving linear cost in sequence length and no KV cache." },
+    { t: "associative recall", d: "Finding the one earlier fact a question refers to; the task fixed-state architectures are measurably worst at, and what long context is usually for." },
+    { t: "hybrid stack", d: "Mostly recurrent layers with attention inserted where exact recall is needed; the credible direction, since removing the KV cache removes the capability with it." }
+  ],
+  quiz: [
+    { type: "mc", q: "Which release document should you read first, and why?", opts: ["The technical report, since it describes the data mixture", "The model card's benchmark table, since it summarises capability", "The config file, because it cannot misrepresent the model and it determines whether the thing can run on your hardware at all", "The launch post, since it states the intended use"], a: 2,
+      why: "The config is what the code loads, so every number in it is load-bearing, and Chapter 9's arithmetic turns it into memory, KV-cache size and throughput. No benchmark score changes whether a model fits your card. The card's evaluation half is a selection made by the people being evaluated, which is information about them as much as about the model." },
+    { type: "mc", q: "Part II's architecture questions now have the same answers across nearly every family. What follows?", opts: ["A config predicts a model's cost precisely and its quality not at all, because quality now comes from data and post-training, which are not published", "Model families are interchangeable and can be swapped freely", "Architecture research has stopped being useful", "Benchmark differences between families must be measurement noise"], a: 0,
+      why: "RMSNorm, RoPE, SwiGLU and GQA are effectively settled. You can compute memory, cache size and the decode ceiling exactly from the config. You cannot infer capability from it, because the differentiators moved to the data mixture and the Part IV pipeline — and neither is disclosed, which is exactly why gate 4 of the decision procedure has to be your own evaluation." },
+    { type: "mc", q: "A sparse model has 100B total parameters and 8B active per token. Which number tells you what?", opts: ["Active parameters determine both cost and memory; the total is a marketing figure", "The total determines the memory bill; the active count determines compute and roughly the speed", "The total determines speed; the active count determines memory", "Both determine memory equally, since experts are paged in on demand"], a: 1,
+      why: "Every expert must be resident because the router's choice is data-dependent and arrives too late to page weights in. So you pay the full total in memory while computing like a much smaller model. A release quoting one number without the other is quoting the flattering one, which is why an MoE that looks cheap on a FLOPs table is often wrong for a fixed memory budget." },
+    { type: "mc", q: "A colleague reports that a well-regarded family 'cannot follow instructions' in their tests. What is the most likely explanation?", opts: ["The family is genuinely weaker than its benchmarks suggest", "They used a reasoning checkpoint without a thinking budget", "The model needed a higher temperature", "They used a base checkpoint, or an instruct checkpoint with the wrong chat template"], a: 3,
+      why: "A base model has no chat template and continues text rather than answering, so an assistant-style prompt gets continued instead of answered. An instruct model given the wrong template is Chapter 3's failure, which makes a good model look broken. The config is identical across base, instruct and reasoning checkpoints and tells you nothing about which you have." },
+    { type: "mc", q: "Which licence clause is most likely to invalidate work that is already finished?", opts: ["A field-of-use or geographic restriction, since it cannot be engineered around and typically surfaces late", "An attribution requirement, since it affects marketing copy", "A naming requirement for derived models", "A monthly-active-user threshold, since it only applies at large scale"], a: 0,
+      why: "Thresholds and naming rules are known costs you can plan around, and attribution is a change to a footer. A restriction on where or for what the model may be used has no engineering remedy — you either qualify or you do not — and it tends to be discovered at legal review rather than at download. That is why licence is gate 1 rather than a final check." },
+    { type: "mc", q: "Why does a fully open model matter to someone who will never deploy one?", opts: ["Its weights are higher quality than closed models at the same size", "It has no licence restrictions on derived models", "It is the only family with published training code", "It is the only case where the data can be inspected, contamination checked at your own threshold, and training dynamics observed across intermediate checkpoints"], a: 3,
+      why: "For every closed release, the honest answer to what it was trained on is that nobody outside the lab knows, and Chapter 12 showed that decontamination is a threshold chosen by the people reporting the score. Published data makes that check yours to run. Intermediate checkpoints make Chapter 13's and Chapter 15's claims about what happens during a run testable rather than merely reported." },
+    { type: "blank", q: "Downloadable parameters without the training code or data are properly called open ____ rather than open source.", a: ["weights", "weight"],
+      why: "The distinction is not pedantry, because the restrictions live in the gap. Almost every model marketed as open source today grants you the finished parameters under a custom licence containing thresholds, naming rules and field-of-use limits that no OSI-approved licence contains. Reading which category a model falls into is the first gate of the decision procedure." },
+    { type: "mc", q: "State space models remove the KV cache entirely and cost linear rather than quadratic time in sequence length. Why have they not displaced transformers?", opts: ["They cannot be trained in parallel, so pretraining is impractical", "A fixed-size state must discard history as the sequence grows, so exact recall of an earlier token degrades — and long context is usually wanted precisely for recall", "They require specialised hardware that is not widely available", "Their quality on short sequences is substantially worse"], a: 1,
+      why: "A transformer's KV cache holds a separate entry per token, so any earlier token can be addressed exactly. A recurrent state compresses all history into a constant-size vector, and what gets discarded was decided at training time. Jelassi and colleagues showed a two-layer transformer can copy strings of length exponential in its size while a fixed-state model is bounded — and Chapter 6's needle prompt is exactly that task." },
+    { type: "mc", q: "What is the deeper lesson in the KV cache trade?", opts: ["The cache should be quantized rather than removed", "Attention is inefficient and better implementations will eventually remove the cost", "The cache is both the cost and the capability, so removing it removes long-context recall — which is why hybrid stacks rather than replacements are the credible direction", "Linear-time architectures are strictly worse and not worth studying"], a: 2,
+      why: "The per-token entries are why long context is expensive and why long context works. No architecture has removed the first without damaging the second. A hybrid — mostly recurrent layers with attention inserted where exact recall is needed — keeps the capability where it is needed and the cheapness everywhere else, which is why that is the direction to watch." },
+    { type: "order", q: "Order the four gates of the model-selection procedure as they should be applied:", items: ["Licence: thresholds, naming, training-on-outputs, field-of-use", "Memory fit: weights, KV cache and activations on your hardware", "Latency: the decode ceiling from weight bytes, plus any thinking tokens", "Quality: your own evaluation set, not a leaderboard"], why: "The first three are computed from documents and specifications in an afternoon, and each removes most of the remaining candidates. The fourth is the only expensive one and the only one a leaderboard cannot answer for you. Running it in the usual order means evaluating models you cannot legally or physically deploy, and finding out after the demo." },
+    { type: "mc", q: "Two models both pass every gate, and one scores two points higher on a public benchmark. What should decide it?", opts: ["Whichever is smaller, and whichever your tooling supports best, since ecosystem advantage compounds daily and everything in Part V improves as the model shrinks", "The higher benchmark score, since it is the only quantitative difference available", "The one with the more permissive licence, since licence quality is a proxy for maintenance", "The more recent release, since capability improves monotonically with release date"], a: 0,
+      why: "A two-point public benchmark difference may not survive contact with your own task and, per Chapter 32, may not survive contact with a decontamination check either. Meanwhile latency, batch size, cost per request and the number of machines you operate all improve as the model gets smaller, and none of them improves because a leaderboard number rose." },
+    { type: "mc", q: "A release advertises 128,000 tokens of context while its config lists a trained length of 8,192 and an unusually large rope base. What should you conclude?", opts: ["The advertised figure is a typographical error", "The model uses a sparse attention pattern beyond 8,192 tokens", "The config's max_position_embeddings field is not used at inference time", "The context was extended after training by a Chapter 7 technique, so quality at long distances is an empirical question you must measure"], a: 3,
+      why: "A rope base far above the original 10,000 is the signature of position-interpolation-style extension. Extension works, and its quality degrades with distance in ways a headline number does not report. The measurement that settles it is prompt P4 — a needle placed at 5%, 50% and 95% of the document — because a benchmark average hides exactly the position-dependence you are asking about." }
   ]
 });
