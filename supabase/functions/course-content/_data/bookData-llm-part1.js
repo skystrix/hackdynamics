@@ -5922,3 +5922,236 @@ CHAPTERS.push({
       why: "A rope base far above the original 10,000 is the signature of position-interpolation-style extension. Extension works, and its quality degrades with distance in ways a headline number does not report. The measurement that settles it is prompt P4 — a needle placed at 5%, 50% and 95% of the document — because a benchmark average hides exactly the position-dependence you are asking about." }
   ]
 });
+
+/* ======================= CHAPTER 26 ======================= */
+CHAPTERS.push({
+  num: 26, part: 5, title: "Two Machines: Prefill and Decode",
+  blurb: "Ask a model a question and the first token takes 300 milliseconds while the next hundred take 5 each. That is not a warm-up. Prefill and decode are different computations running against different limits, and every serving decision in the rest of this course follows from telling them apart. Using Chapter 16's roofline you will show that generating one token drags the entire model's weights through memory to perform a trivial amount of arithmetic, compute the exact prompt length at which prefill changes character, and price the KV cache to the byte.",
+  sections: [
+    { title: "Two Phases, Measured", viz: "llmPrefillDecode", vizTitle: "Lengthen the prompt and watch which number changes",
+      html: "<p>Send a 2,000-token prompt to Corvid on an H100 and ask for 200 tokens back. Two numbers describe what happens, and they behave completely differently.</p>" +
+      "<p><strong>Time to first token</strong> is how long you wait before anything appears. <strong>Time per output token</strong> is the gap between each token after that. On this request the first is around 80 milliseconds and the second is around 5, and the ratio is not a constant &#8212; it depends on the prompt in a way that is entirely predictable once you know why.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 202' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one request, two phases &#183; 2,000-token prompt, 200 tokens generated</text>" +
+      "<rect x='20' y='32' width='190' height='36' rx='6' fill='#1b2a4d' stroke='#4f7cff' stroke-width='2.5'/>" +
+      "<text x='34' y='55' fill='#4f7cff' font-size='10'>prefill &#183; 80 ms</text>" +
+      "<rect x='214' y='32' width='26' height='36' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='242' y='32' width='26' height='36' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='270' y='32' width='26' height='36' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='298' y='32' width='26' height='36' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='326' y='32' width='26' height='36' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='360' y='55' fill='#3ddc97' font-size='10'>decode &#183; 200 steps &#215; 5 ms = 1,000 ms</text>" +
+      "<line x1='20' y1='78' x2='210' y2='78' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<text x='20' y='94' fill='#4f7cff' font-size='9'>TTFT</text>" +
+      "<line x1='214' y1='78' x2='240' y2='78' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='214' y='94' fill='#3ddc97' font-size='9'>TPOT</text>" +
+      "<line x1='20' y1='112' x2='740' y2='112' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='132' fill='#c9d6ea' font-size='10'>one pass over 2,000 tokens at once</text>" +
+      "<text x='400' y='132' fill='#c9d6ea' font-size='10'>200 passes over one token each</text>" +
+      "<text x='20' y='150' fill='#ffd166' font-size='10'>compute-bound: lots of arithmetic</text>" +
+      "<text x='400' y='150' fill='#ff5d73' font-size='10'>bandwidth-bound: almost none</text>" +
+      "<text x='20' y='168' fill='#7d8fb0' font-size='9'>the same weights are read once</text>" +
+      "<text x='400' y='168' fill='#7d8fb0' font-size='9'>the same weights are read 200 times</text>" +
+      "<text x='20' y='194' fill='#c9d6ea' font-size='10.5'>92% of the wall clock is in the green blocks, and they are the ones doing almost no arithmetic.</text>" +
+      "</svg><div class='fig-cap'>The blue block does 2,000 tokens of work in one pass. Each green block does one token of work and reads the whole model to do it.</div></div>" +
+      "<p>The difference is in the shapes. Prefill has every prompt token available at once, so it can process them together: the input to each layer is a matrix with 2,000 rows. Decode has one token, because the token it needs next does not exist until the current one has been produced. Chapter 1's loop is inherently sequential, and that sequentiality is the whole subject of this chapter.</p>" +
+      "<p>Everything else follows. A matrix multiplied by a matrix and a matrix multiplied by a vector are different operations with different bottlenecks, and Chapter 16 gave the tool for telling them apart.</p>" +
+      "<h3>Measuring them</h3>"+
+      "<p>Both numbers require a streaming client, because a non-streaming request returns everything at once and collapses the two into a single duration that describes neither. Stream the response, timestamp the arrival of each chunk, and the first timestamp minus the request time is time to first token while the mean gap between the rest is time per output token. Every serving benchmark worth reading does this, and a surprising number of internal ones do not.</p>"+
+      "<p>One caveat belongs with the first number. Time to first token includes queueing, so it measures the server's load as much as the model's speed. On an idle machine it is prefill; on a busy one it is prefill plus however long your request waited for a slot, and the second term can dominate entirely. When TTFT degrades under load while TPOT holds steady, the problem is admission and scheduling rather than anything in this chapter &#8212; which is Chapter 27's subject.</p>"+
+      "<div class='callout'><strong>Try it above.</strong> Set the prompt to 100 tokens and note both numbers. Now raise it to 4,000 and look again. Time to first token grows by a factor of forty; time per output token barely moves. They are not two measurements of one process &#8212; they are measurements of two different machines that happen to run back to back.</div>" },
+
+    { title: "Prefill: One Pass Over Everything",
+      html: "<p>Prefill runs the model once over the whole prompt. Every layer's input is a matrix of shape (prompt tokens &#215; <code>d_model</code>), every weight matrix is multiplied by it, and the arithmetic is a matrix&#8211;matrix multiply &#8212; the operation GPUs exist for.</p>" +
+      "<p>Chapter 9 gave the estimate: a forward pass costs about <code>2N</code> FLOPs per token, so a prompt of <code>P</code> tokens costs <code>2NP</code>. The bytes moved are the weights, read once, which is <code>2N</code> bytes at bfloat16. So the arithmetic intensity is</p>" +
+      "<pre><code>intensity = 2NP FLOPs / 2N bytes = P FLOPs per byte</code></pre>" +
+      "<p>Read that again, because it is the cleanest result in the chapter. <strong>Prefill's arithmetic intensity, in FLOPs per byte, is the prompt length in tokens.</strong> The weights are read once no matter how long the prompt is, so every additional token is free arithmetic against a fixed byte cost.</p>" +
+      "<p>Which means Chapter 16's ridge point can be read as a prompt length. An H100's is 295 FLOPs per byte, so:</p>" +
+      "<pre><code>prompt tokens    intensity    verdict on an H100 (ridge point 295)\n         100          100      memory-bound, like decode\n         295          295      exactly at the ridge\n         500          500      compute-bound\n       2,000        2,000      firmly compute-bound\n       8,000        8,000      firmly compute-bound</code></pre>" +
+      "<p>A short prompt's prefill is <em>also</em> bandwidth-bound. The two-machines framing is real but the boundary is a prompt length, not a phase name. This is the <strong>ridge point as a prompt length</strong>: the hardware constant from Chapter 16, read in tokens &#8212; 295 on an H100, 153 on an A100. Below it, prefill and decode are the same kind of workload and the phase names mislead you.</p>" +
+      "<p>Above that line prefill behaves as GPUs are designed to: Pope and colleagues reported 76% model FLOPs utilisation during large-batch processing of input tokens on PaLM 540B, which is close to what a dense matrix multiply can achieve at all. Time to first token is then simply arithmetic divided by throughput:</p>" +
+      "<pre><code>TTFT at 400 TFLOP/s effective, Corvid-8B\n    100 tokens     1.61 TFLOP        4.0 ms\n    500 tokens     8.03 TFLOP       20.1 ms\n  2,000 tokens    32.12 TFLOP       80.3 ms\n  8,000 tokens   128.48 TFLOP      321.2 ms</code></pre>" +
+      "<p>Linear in prompt length, which is the shape users experience as &#8220;long prompts are slow to start&#8221;. Two refinements the estimate omits, in opposite directions: attention's cost grows with the square of the prompt, adding roughly a quarter more arithmetic at 8,000 tokens; and the KV cache being written adds bytes. Neither changes the verdict, and both are why measured TTFT runs somewhat above this line.</p>" },
+
+    { title: "Decode: One Token at a Time",
+      html: "<p>Decode produces one token per pass. The input to each layer is a single vector, so every matrix&#8211;matrix multiply of prefill becomes a <strong>matrix-vector multiply</strong>, and that one change is the entire performance story of language model serving.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the same weight matrix, two workloads &#183; the weights are read once either way</text>" +
+      "<text x='20' y='40' fill='#4f7cff' font-size='10'>prefill</text>" +
+      "<rect x='90' y='30' width='90' height='90' rx='4' fill='#1b2a4d' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='108' y='80' fill='#4f7cff' font-size='9'>2000 x</text>" +
+      "<text x='108' y='94' fill='#4f7cff' font-size='9'>4096</text>" +
+      "<text x='190' y='80' fill='#c9d6ea' font-size='12'>x</text>" +
+      "<rect x='210' y='30' width='90' height='90' rx='4' fill='#2a2416' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='232' y='80' fill='#ffd166' font-size='9'>W</text>" +
+      "<text x='316' y='60' fill='#3ddc97' font-size='9'>32.1 TFLOP of arithmetic</text>" +
+      "<text x='316' y='78' fill='#ffd166' font-size='9'>16.06 GB of weights read</text>" +
+      "<text x='316' y='96' fill='#3ddc97' font-size='9.5'>intensity 2,000 &#183; compute-bound</text>" +
+      "<line x1='20' y1='134' x2='740' y2='134' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='158' fill='#ff5d73' font-size='10'>decode</text>" +
+      "<rect x='90' y='150' width='90' height='6' rx='2' fill='#2e1620' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='108' y='176' fill='#ff5d73' font-size='9'>1 x 4096</text>" +
+      "<text x='190' y='158' fill='#c9d6ea' font-size='12'>x</text>" +
+      "<rect x='210' y='120' width='90' height='60' rx='4' fill='#2a2416' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='232' y='156' fill='#ffd166' font-size='9'>the same W</text>" +
+      "<text x='316' y='148' fill='#ff5d73' font-size='9'>0.016 GFLOP of arithmetic</text>" +
+      "<text x='316' y='164' fill='#ffd166' font-size='9'>16.06 GB of weights read</text>" +
+      "<text x='316' y='182' fill='#ff5d73' font-size='9.5'>intensity 1.0 &#183; bandwidth-bound</text>" +
+      "</svg><div class='fig-cap'>The gold box is identical in both rows. Only the left operand changed, and with it the ratio of arithmetic to bytes by a factor of two thousand.</div></div>" +
+      "<p>The numbers, from Chapter 16 and unchanged here: producing one token performs about <code>2N</code> = <strong>16.06 GFLOPs</strong> and reads all <code>2N</code> = <strong>16.06 GB</strong> of weights to do it. Arithmetic intensity is 16.06e9 divided by 16.06e9, which is <strong>1.0</strong>, against a ridge point of 295.</p>" +
+      "<p>So the time is bytes over bandwidth, and nothing else matters:</p>" +
+      "<pre><code>16.06 GB / 3.35 TB/s  =  4.79 ms per token  =  209 tokens/second\n\nthe arithmetic, meanwhile, would take   0.016 ms</code></pre>" +
+      "<p>The compute units are busy for one three-hundredth of the time. During single-stream generation you are renting an enormously expensive arithmetic engine and using it as a device for moving bytes out of memory in a particular order.</p>" +
+      "<h3>Why it cannot be batched away for one user</h3>"+
+      "<p>The obvious objection is that the machine should process several tokens at once. It cannot, for one request, because token 41 is an input to the computation that produces token 42. Chapter 1's loop is a genuine data dependency rather than an implementation choice, and no amount of parallel hardware removes it. What <em>can</em> be batched is several <em>different</em> requests, whose tokens are independent of each other &#8212; which is why the fix for this is a scheduling problem rather than a kernel problem, and why Chapter 27 is about serving many users rather than about making one user faster.</p>"+
+      "<p>Nor does the memory hierarchy rescue it. Chapter 16 listed the levels: tens of megabytes of L2, a hundred kilobytes or so of shared memory per multiprocessor. Corvid's weights are 16.06 GB. Nothing above HBM is within three orders of magnitude of holding them, so every decode step genuinely re-reads the model from the slowest level, every time, forever. A model small enough to live in cache would behave completely differently, and no model anyone deploys is.</p>"+
+      "<div class='callout'><strong>The consequence that surprises people.</strong> A newer GPU with twice the FLOPs and the same memory bandwidth generates tokens at exactly the same speed. Nothing in the decode path touches the number that improved. When someone reports that an upgrade did nothing for their generation latency, this is why, and the specification to compare is bandwidth &#8212; which is also why Chapter 16's observation that compute has been growing faster than bandwidth matters here rather than there.</div>" },
+
+    { title: "Where the Two Phases Sit", viz: "llmDecodeArithmetic", vizTitle: "Batch size 1. Look at the intensity. Now raise the batch.",
+      html: "<p>Both phases plotted on Chapter 16's roofline make the chapter's argument in one picture.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 242' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the roofline, with both phases and the batch path between them &#183; H100</text>" +
+      "<line x1='70' y1='170' x2='710' y2='170' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='70' y1='34' x2='70' y2='170' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='120' y='198' fill='#7d8fb0' font-size='9'>arithmetic intensity, FLOPs per byte, log scale</text>" +
+      "<text x='16' y='46' fill='#7d8fb0' font-size='9'>TFLOP/s</text>" +
+      "<line x1='70' y1='164' x2='430' y2='44' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<line x1='430' y1='44' x2='710' y2='44' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='104' y='140' fill='#ff5d73' font-size='9'>bandwidth slope</text>" +
+      "<text x='560' y='36' fill='#3ddc97' font-size='9'>compute roof &#183; 989 TFLOP/s</text>" +
+      "<line x1='430' y1='44' x2='430' y2='170' stroke='#ffd166' stroke-width='1.5' stroke-dasharray='4 4'/>" +
+      "<text x='412' y='184' fill='#ffd166' font-size='9'>295</text>" +
+      "<circle cx='84' cy='159' r='5' fill='#ff5d73'/>" +
+      "<text x='96' y='156' fill='#ff5d73' font-size='9'>decode, batch 1 &#183; intensity 1</text>" +
+      "<circle cx='196' cy='122' r='4.5' fill='#ffd166'/>" +
+      "<text x='208' y='118' fill='#ffd166' font-size='9'>decode, batch 32</text>" +
+      "<circle cx='300' cy='87' r='4.5' fill='#ffd166'/>" +
+      "<text x='312' y='83' fill='#ffd166' font-size='9'>decode, batch 128</text>" +
+      "<circle cx='300' cy='87' r='9' fill='none' stroke='#ffd166' stroke-width='1'/>" +
+      "<circle cx='560' cy='44' r='5' fill='#3ddc97'/>" +
+      "<text x='430' y='62' fill='#3ddc97' font-size='9'>prefill, 2,000 tokens</text>" +
+      "<line x1='90' y1='156' x2='292' y2='92' stroke='#ffd166' stroke-width='1' stroke-dasharray='3 3'/>" +
+      "<text x='20' y='218' fill='#c9d6ea' font-size='10.5'>Batching walks decode up the slope, and at 128 it is still left of the ridge. It does not move prefill.</text>" +
+      "<text x='20' y='236' fill='#7d8fb0' font-size='9.5'>The dashed climb is Chapter 27; the two other ways off the slope are Chapters 28 and 29.</text>" +
+      "</svg><div class='fig-cap'>Two workloads from one model on one machine, at opposite ends of the plot. Every optimization in Part V is a way of moving the red dot rightward or shortening the slope.</div></div>" +
+      "<p>The picture also shows what batching is for. Processing several sequences' tokens together means each weight read serves more arithmetic, so intensity rises roughly in proportion to batch size and the point walks up the bandwidth slope. Chapter 16 computed the honest version: at batch 128 the intensity of Corvid's feed-forward matrix reaches 123, which is a hundredfold improvement and <em>still below the ridge point</em>. Batching moves decode a long way up the slope and does not usually get it onto the roof.</p>" +
+      "<p>The plot also settles a question people ask about hardware. Moving a workload rightward is a software problem; raising the slope is a hardware one. The slope is bandwidth, and Chapter 16 recorded that compute has been growing faster than bandwidth across generations, which pushes the ridge point to the right and leaves <em>more</em> workloads under it. Decode has been getting relatively worse off with each hardware generation, not better, and every optimization in Part V is a response to that trend rather than to a fixed problem.</p>"+
+      "<p>One more reading. The distance between the red dot and the green one is roughly three orders of magnitude in intensity, from the same weights on the same machine. That is why a serving stack is not one optimized program but two, scheduled against each other &#8212; and why the next chapter's central difficulty is that a server must run both at once, on the same device, without letting either starve the other.</p>"+
+      "<div class='callout'><strong>Walk it up the slope.</strong> Start at batch size 1 and read the arithmetic intensity: it is 1, and the predicted tokens per second is bandwidth divided by weight bytes and nothing else. Now raise the batch and watch the point climb while predicted throughput rises and predicted per-request latency worsens &#8212; the trade this chapter's last section names. Find the batch size at which the point would reach the ridge, then check it against the KV-cache capacity from the next section. On Corvid it does not fit, and that collision between the batch you want and the memory you have is exactly what Chapter 27 exists to manage.</div>" },
+
+    { title: "The KV Cache, in Bytes",
+      html: "<p>Decode's second cost is the one that decides how many users fit on a machine. Chapter 6 built the KV cache and gave Corvid's figure; here is the arithmetic in full, because every serving decision in the next chapter depends on it.</p>" +
+      "<pre><code>bytes per token = 2 (K and V) x layers x kv_heads x head_dim x bytes\n                = 2 x 32 x 8 x 128 x 2\n                = 131,072 bytes  =  128 KB per token</code></pre>" +
+      "<p>One hundred and twenty-eight kilobytes for every token in every active request. At Corvid's 8,192-token context that is <strong>1.07 GB per request</strong>, which is a substantial fraction of a card before a second user arrives.</p>" +
+      "<p>Chapter 6's grouped-query attention is what makes that number survivable. With 32 key-value heads instead of 8 the same model would need 512 KB per token &#8212; <strong>four times as much</strong> &#8212; and 4.3 GB per request at full context. GQA's benefit is not in the forward pass, where it saves little arithmetic. It is entirely here, and it is what makes long context economically possible.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>what a card holds &#183; weights are fixed, everything else is users</text>" +
+      "<text x='20' y='44' fill='#c9d6ea' font-size='9.5'>H100, 80 GB</text>" +
+      "<rect x='150' y='32' width='108' height='20' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<text x='158' y='47' fill='#4f7cff' font-size='9'>weights 16.06</text>" +
+      "<rect x='258' y='32' width='432' height='20' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='300' y='47' fill='#3ddc97' font-size='9'>63.94 GB of KV cache = 60 concurrent requests at 8,192 tokens</text>" +
+      "<text x='20' y='86' fill='#c9d6ea' font-size='9.5'>16 GB, 4-bit</text>" +
+      "<rect x='150' y='74' width='27' height='20' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<text x='182' y='89' fill='#4f7cff' font-size='9'>4.01</text>" +
+      "<rect x='215' y='74' width='81' height='20' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='306' y='89' fill='#3ddc97' font-size='9'>11.98 GB = 11 concurrent requests</text>" +
+      "<line x1='20' y1='112' x2='740' y2='112' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='134' fill='#ffd166' font-size='10'>and the crossover: KV traffic exceeds weight traffic at 122,528 token-slots</text>" +
+      "<text x='20' y='152' fill='#c9d6ea' font-size='10'>which is batch 16 at 7,658 tokens each &#8212; an ordinary long-context workload</text>" +
+      "<text x='20' y='178' fill='#c9d6ea' font-size='10.5'>Below that line decode is dominated by reading weights. Above it, by reading the cache &#8212;</text>" +
+      "<text x='20' y='192' fill='#c9d6ea' font-size='10.5'>and quantizing the weights stops helping, because they are no longer the traffic.</text>" +
+      "</svg><div class='fig-cap'>Two regimes with a computable boundary. Which side you are on decides which optimization in Part V is worth doing.</div></div>" +
+      "<div class='fig'><svg viewBox='0 0 760 194' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>KV cache per token, four shapes &#183; 2 x layers x kv_heads x head_dim x bytes</text>" +
+      "<text x='20' y='44' fill='#c9d6ea' font-size='9.5'>3B: 28 layers, 4 KV heads</text>" +
+      "<rect x='260' y='32' width='47' height='18' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='316' y='45' fill='#3ddc97' font-size='9.5'>56 KB</text>" +
+      "<text x='20' y='76' fill='#c9d6ea' font-size='9.5'>Corvid-8B: 32 layers, 8 KV heads</text>" +
+      "<rect x='260' y='64' width='107' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='376' y='77' fill='#ffd166' font-size='9.5'>128 KB</text>" +
+      "<text x='20' y='108' fill='#c9d6ea' font-size='9.5'>70B: 80 layers, 8 KV heads</text>" +
+      "<rect x='260' y='96' width='267' height='18' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='536' y='109' fill='#ffd166' font-size='9.5'>320 KB</text>" +
+      "<text x='20' y='140' fill='#c9d6ea' font-size='9.5'>Corvid-8B without GQA: 32 KV heads</text>" +
+      "<rect x='260' y='128' width='427' height='18' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+      "<text x='696' y='141' fill='#ff5d73' font-size='9.5'>512 KB</text>" +
+      "<line x1='20' y1='158' x2='740' y2='158' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='176' fill='#c9d6ea' font-size='10.5'>Depth and KV-head count set it; parameter count does not. An 8B without GQA costs more per token</text>" +
+      "<text x='20' y='190' fill='#c9d6ea' font-size='10.5'>than a 70B with it, and storing the cache at int8 halves every bar.</text>" +
+      "</svg><div class='fig-cap'>The fourth bar is the same model as the second. One config line separates them, and it decides how many users fit.</div></div>" +
+      "<p>That <strong>KV crossover</strong> is worth carrying. Per decode step the model reads its weights once, 16.06 GB, plus the KV cache for every token of every active request. Setting those equal gives 122,528 token-slots &#8212; batch 16 at about 7,650 tokens each, which is an unremarkable long-context workload. Past it, <strong>the cache is the traffic</strong>, and an optimization aimed at the weights is aimed at the smaller half.</p>" +
+      "<p>It also explains a measurement that confuses people. Time per output token is not quite constant: it rises as the context grows, because each step reads a slightly larger cache. For Corvid a single request at full context adds 6.5% to the per-token time &#8212; small enough to look like noise, and the leading edge of the effect that dominates at scale.</p>" },
+
+    { title: "The Map of Part V",
+      html: "<p>Everything ahead is a response to one plot. Decode sits at intensity 1 on a machine whose ridge point is 295, and there are exactly four ways to improve a workload in that position. Each is a chapter.</p>" +
+      "<p><strong>Do more arithmetic per byte read.</strong> Serve many requests at once so a single weight read produces many tokens. This is batching, and Chapter 27 is about why the naive version wastes most of its benefit: requests arrive at different times and finish at different lengths, so a fixed batch spends much of its life waiting for its slowest member. Continuous batching fixes the scheduling; paged attention fixes the memory fragmentation that otherwise caps how many requests fit; prefix caching removes prefill work entirely for prompts that share a beginning. All three are consequences of this chapter's arithmetic.</p>" +
+      "<p><strong>Read fewer bytes.</strong> If decode time is weight bytes over bandwidth, halving the bytes halves the time. Chapter 29 is quantization: int8, 4-bit, and the question of where the error goes. Note from this chapter's crossover why it is not a universal answer &#8212; past 122,528 token-slots the cache is the traffic, and quantizing weights optimises the smaller half. Quantizing the cache itself is the other half of that chapter.</p>" +
+      "<p><strong>Get more tokens per pass.</strong> If a pass costs 16.06 GB whether it produces one token or several, produce several. Speculative decoding has a small model propose a few tokens and the large model verify them all in one pass, which is a matrix-matrix multiply again &#8212; the same shape prefill has. Chapter 28 covers it, along with the fourth move.</p>" +
+      "<p><strong>Move less within the kernel.</strong> Attention as written computes a matrix of scores, writes it to memory, reads it back for the softmax, and writes again. FlashAttention never writes it at all, tiling the computation so the intermediate stays in the fast memory Chapter 16 described. It is not on the roofline plot because it does not move the point &#8212; it shortens the bar by removing traffic the plot never counted.</p>" +
+      "<div class='callout'><strong>Why the order matters.</strong> These compose, and they compose unevenly. Batching is free until memory runs out, which is why it comes first and why the KV cache decides where it stops. Quantization helps a single user most and a saturated server least, because a busy server was already amortising its weight reads. Speculation helps when the draft model agrees often, which is task-dependent in a way the others are not. A serving stack applies all four; an engineer choosing among them starts from which side of this chapter's crossover their workload sits on.</div>" },
+
+    { title: "Saying It Precisely",
+      html: "<p>Part V is full of claims about speed, and the vocabulary is used loosely often enough to make published comparisons meaningless. Five terms, and the distinctions that matter.</p>" +
+      "<ul>" +
+      "<li><strong>TTFT</strong>, time to first token: the prefill phase plus queueing. Set by prompt length and by how busy the server is. This is what a user perceives as responsiveness.</li>" +
+      "<li><strong>TPOT</strong>, time per output token: the average decode step. Set by bandwidth, batch size and context length. This is what a user perceives as reading speed.</li>" +
+      "<li><strong>ITL</strong>, inter-token latency: the gap between two consecutive tokens as delivered. Related to TPOT and not the same, because a server that batches your request with others can pause yours while it serves them. TPOT is an average; ITL has a distribution, and the tail of that distribution is what makes streaming output stutter.</li>" +
+      "<li><strong>Throughput</strong>: tokens per second across the whole server. It rises with batch size, and it can rise while every individual user's experience gets worse.</li>" +
+      "<li><strong>Goodput</strong>: throughput counting only requests that met their latency target. This is the number that should govern capacity planning, because a server delivering 10,000 tokens per second where half the requests breach their deadline is delivering 5,000 tokens per second of anything anyone wanted.</li>" +
+      "</ul>" +
+      "<p>The distinction that matters most is the last one, and it exists because throughput and latency are in direct conflict here. Larger batches move decode up the roofline, so the server produces more tokens per second in total; larger batches also mean each request waits behind more work, so every individual TPOT gets worse. Optimising throughput alone produces a server that is excellent on a benchmark and unpleasant to use.</p>" +
+      "<div class='callout'><strong>Reading someone else's numbers.</strong> A throughput figure without a batch size is unusable, since batch size is the knob that trades the two quantities. A latency figure without a percentile is a mean, and the mean is the least interesting statistic of a distribution with a long tail. And any comparison that does not state prompt length, generated length and context is comparing two different workloads, because this chapter has shown that all three change the answer. Ask for those five numbers before believing a benchmark, including your own.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Compute the prompt length at which prefill becomes compute-bound on an A100, whose ridge point Chapter 16 gave as 153. Then do it for a hypothetical accelerator with twice an H100's compute and the same bandwidth. State what happens to the crossover, and what that implies about the direction hardware has been moving.</li>" +
+      "<li><strong>Trace.</strong> For Corvid on an H100, compute TTFT and total decode time for three requests: 100 tokens in and 500 out; 4,000 in and 50 out; 100 in and 2,000 out. Report the fraction of wall-clock time spent in each phase. State which of the three would benefit from a faster GPU with the same bandwidth, and why the answer is not the same for all three.</li>" +
+      "<li><strong>Trace.</strong> Derive the KV-cache crossover yourself: set the bytes of weights read per decode step equal to the bytes of KV cache read, and solve for total token-slots. Then compute it for the same model at int8 weights and at 4-bit. State what happens to the crossover as you quantize, and why that makes quantization and long context interact.</li>" +
+      "<li><strong>Investigate.</strong> Take any local model and measure TTFT and TPOT at prompt lengths of 128, 512, 2,048 and 8,192, generating 64 tokens each time. Plot both against prompt length. TTFT should be close to linear and TPOT close to flat with a slight upward drift. Report the drift and compare it with the 6.5% this chapter computes for Corvid at full context.</li>" +
+      "<li><strong>Investigate.</strong> Find a published throughput number for any serving stack. Check whether it states batch size, prompt length, generated length, context and a latency percentile. Report which of the five are missing, and state precisely what you cannot conclude from the number as published. Most published figures are missing at least two.</li>" +
+      "<li><strong>Build.</strong> Write a calculator that takes a config file, a precision, a GPU's bandwidth and compute, a prompt length, a generated length and a batch size, and returns predicted TTFT, TPOT, tokens per second, KV-cache bytes, and which side of the ridge point each phase sits on. Validate it against a real measurement on hardware you have. It will be optimistic; report by how much, and say which of the effects this chapter names as omitted accounts for the gap.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "prefill", d: "The single pass over the whole prompt, a matrix-matrix multiply whose arithmetic intensity equals the prompt length in tokens." },
+    { t: "decode", d: "The per-token generation phase, a matrix-vector multiply that reads every weight to produce one token, at an arithmetic intensity of one." },
+    { t: "TTFT", d: "Time to first token: prefill plus queueing, set by prompt length, and what a user perceives as responsiveness." },
+    { t: "TPOT", d: "Time per output token: the average decode step, set by bandwidth, batch size and context length." },
+    { t: "ITL", d: "Inter-token latency: the delivered gap between consecutive tokens, which unlike TPOT has a distribution whose tail makes streaming stutter." },
+    { t: "throughput", d: "Tokens per second across the whole server, which rises with batch size and can rise while every individual user's experience worsens." },
+    { t: "goodput", d: "Throughput counting only requests that met their latency target; the number capacity planning should use." },
+    { t: "matrix-vector multiply", d: "Decode's core operation, which reads a whole weight matrix to perform one row's worth of arithmetic." },
+    { t: "bandwidth-bound", d: "Limited by bytes moved rather than arithmetic performed, so a faster GPU with the same memory bandwidth changes nothing." },
+    { t: "ridge point as a prompt length", d: "Because prefill's intensity equals the prompt length, the hardware's ridge point is the prompt length at which prefill stops being bandwidth-bound: 295 tokens on an H100." },
+    { t: "KV cache", d: "The stored keys and values for every token of every active request, at 128 KB per token for Corvid, which decides how many users fit on a card." },
+    { t: "KV crossover", d: "The total token-slots at which cache traffic exceeds weight traffic per decode step; 122,528 for Corvid, or batch 16 at 7,650 tokens." },
+    { t: "model FLOPs utilisation", d: "The fraction of a machine's peak arithmetic actually used; high during prefill and around one three-hundredth during single-stream decode." },
+    { t: "token-slot", d: "One token of one request held in the cache; the unit in which serving capacity is actually measured." }
+  ],
+  quiz: [
+    { type: "mc", q: "A 2,000-token prompt takes 80 ms before the first token, then 5 ms per token after. Why are these so different?", opts: ["The first token requires loading the model from disk", "Prefill runs at a higher clock speed than decode", "The first token includes tokenizer and template overhead", "Prefill processes 2,000 tokens in one matrix-matrix multiply and is compute-bound; each decode step is a matrix-vector multiply that reads every weight to produce one token"], a: 3,
+      why: "The weights are read once in prefill and once per token in decode. Prefill has 2,000 rows of work per weight read; decode has one. Nothing is warming up and nothing is loading — they are two different computations against two different limits, which is why the two numbers respond to completely different changes." },
+    { type: "mc", q: "Prefill's arithmetic intensity, in FLOPs per byte, equals what?", opts: ["The prompt length in tokens, because the weights are read once regardless of how many tokens are pushed through them", "The batch size", "The model's parameter count divided by its layer count", "The ratio of d_ff to d_model"], a: 0,
+      why: "Prefill performs 2NP FLOPs and reads 2N bytes of weights, so the ratio is P. This is why the hardware's ridge point can be read directly as a prompt length: 295 on an H100 means prefill for a prompt under 295 tokens is bandwidth-bound like decode, and only longer prompts get the compute-bound behaviour people assume prefill always has." },
+    { type: "mc", q: "You upgrade to a GPU with twice the FLOPs and identical memory bandwidth. What happens to single-stream generation speed?", opts: ["It roughly doubles, since the arithmetic is twice as fast", "It improves by about 40%, the square root of the compute gain", "Nothing: decode time is bytes divided by bandwidth, and no part of that changed", "It worsens slightly, since more compute units contend for the same memory"], a: 2,
+      why: "Producing one token performs 16.06 GFLOPs and reads 16.06 GB of weights — an arithmetic intensity of 1 against a ridge point of 295. The compute units are busy about one three-hundredth of the time, so doubling them changes nothing at all. The specification to compare when buying for generation latency is bandwidth, not TFLOPs." },
+    { type: "mc", q: "Batching raises decode's arithmetic intensity roughly in proportion to batch size. Why is that not the end of Part V?", opts: ["Batching requires more memory than most servers have", "Larger batches reduce total throughput", "Batching only helps prefill, not decode", "Even at batch 128 the intensity reaches about 123, still well below the ridge point of 295, so the workload is faster and still bandwidth-bound"], a: 3,
+      why: "Batching walks the point a long way up the bandwidth slope without usually reaching the roof. That leaves three other moves, which are the next three chapters: read fewer bytes by quantizing, get more useful tokens per pass by speculating, and make the attention kernel itself touch memory less. Serving stacks combine all of them rather than betting on batching alone." },
+    { type: "mc", q: "Corvid's KV cache costs 128 KB per token. What would it cost without grouped-query attention, and what does that tell you about GQA?", opts: ["The same, since GQA changes the computation rather than the storage", "Twice as much, and GQA's benefit is mainly in the forward pass arithmetic", "Four times as much at 512 KB per token, and GQA's benefit is almost entirely in serving capacity rather than in compute", "Half as much, since GQA trades memory for arithmetic"], a: 2,
+      why: "The cache is 2 x layers x kv_heads x head_dim x bytes, and Corvid has 8 KV heads against 32 query heads. Restoring 32 KV heads multiplies the cache by four: 4.3 GB per request at full context instead of 1.07. GQA saves little arithmetic; what it buys is the number of concurrent users that fit on a card, which is why every recent model uses it." },
+    { type: "blank", q: "Throughput counting only the requests that met their latency target is called ____.", a: ["goodput"],
+      why: "Batch size trades throughput against per-request latency directly, so optimising throughput alone produces a server that benchmarks well and is unpleasant to use. A server delivering 10,000 tokens per second where half the requests breach their deadline is delivering 5,000 tokens per second of anything anyone asked for." },
+    { type: "mc", q: "Per decode step, at what point does reading the KV cache cost more bytes than reading the weights?", opts: ["At 122,528 token-slots — roughly batch 16 at 7,650 tokens each, which is an ordinary long-context workload", "Only at batch sizes above 1,000", "Never, since weights are always larger than the cache", "As soon as the context exceeds 8,192 tokens for any single request"], a: 0,
+      why: "Weights are 16.06 GB read once per step; the cache is 128 KB per token-slot read every step. Setting them equal gives about 122,500 slots. Past that boundary the cache is the traffic, which means an optimization aimed at the weights — quantizing them, for instance — is aimed at the smaller half of the problem." },
+    { type: "mc", q: "Why does time per output token drift upward as a single request's context grows?", opts: ["The attention computation becomes compute-bound at long context", "Each decode step reads a slightly larger KV cache, adding bytes to a bandwidth-bound operation — about 6.5% for Corvid at full context", "The sampler slows as the distribution sharpens", "Position encodings become more expensive to compute at higher indices"], a: 1,
+      why: "The weights read per step are constant, but the cache read grows with every token already generated or prompted. For one request at Corvid's full 8,192-token context the effect is small enough to look like measurement noise. It is the leading edge of the effect that dominates once batch size multiplies it, which is what the crossover computes." },
+    { type: "mc", q: "Someone reports 10,000 tokens per second for a serving stack. What must accompany that number for it to mean anything?", opts: ["The model's parameter count and the GPU model", "Batch size, prompt length, generated length, context, and a latency percentile", "The quantization scheme and the kernel library", "The framework version and the CUDA version"], a: 1,
+      why: "Batch size is the knob trading throughput against latency, so a throughput figure without it is unusable. Prompt and generated length decide the mix of the two phases, which this chapter has shown behave completely differently. And a figure without a percentile is a mean, which is the least informative statistic of a distribution with a long tail." },
+    { type: "order", q: "Order these by arithmetic intensity, lowest first:", items: ["Decode at batch 1", "Prefill of a 100-token prompt", "Decode at batch 128", "Prefill of a 2,000-token prompt"], why: "Decode at batch 1 has intensity 1. A 100-token prefill has intensity 100 — above decode but still below the H100's ridge point of 295, so it is bandwidth-bound too. Decode at batch 128 reaches about 123. A 2,000-token prefill has intensity 2,000 and sits firmly on the compute roof. The ordering shows that the phase name is a proxy and the intensity is the thing." },
+    { type: "mc", q: "TPOT and ITL are often used interchangeably. What is the difference, and why does it matter?", opts: ["TPOT excludes the first token and ITL includes it", "TPOT is measured server-side and ITL client-side, but they describe the same quantity", "TPOT is an average while ITL is a delivered gap with a distribution, and its tail is what makes streaming output stutter", "ITL applies only to batched requests"], a: 2,
+      why: "A server that batches your request with others can pause yours while it works on the batch, so consecutive tokens arrive unevenly even when the average is fine. Reporting only TPOT hides that entirely. If users complain that output feels jerky while your latency dashboard looks healthy, you are measuring the mean of a distribution whose tail is the actual complaint." },
+    { type: "mc", q: "Which single change would most improve generation speed for a single-user, bandwidth-bound deployment?", opts: ["Quantizing the weights, since decode time is bytes over bandwidth and quantization is the direct way to reduce the bytes", "Upgrading to a GPU with more compute units", "Increasing the batch size", "Using a longer prompt to raise arithmetic intensity"], a: 0,
+      why: "For one user there is no batch to grow, and more compute does nothing to a workload at intensity 1. Time is weight bytes divided by bandwidth, so halving the bytes halves the time — which is Chapter 29's subject and why quantization matters far more for single-stream latency than for throughput. A longer prompt changes prefill, not decode." }
+  ]
+});
