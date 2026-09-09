@@ -7957,3 +7957,270 @@ CHAPTERS.push({
     { type: "order", q: "Order these defences from weakest to strongest against indirect injection:", items: ["Instructing the model to ignore instructions in retrieved content", "Spotlighting untrusted content with delimiters", "A guardrail classifier on retrieved content", "Removing the capability the attack would use"], why: "The first is a sentence competing with a sentence and creates no boundary. Spotlighting is the same category with better odds. A classifier is a genuine probabilistic layer with a measurable operating curve and a false-positive cost. Removing the capability is the only one that survives the model being completely fooled, because it changes what a successful attack obtains rather than how often one succeeds. That ordering is the chapter's argument in four lines." }
   ]
 });
+
+/* ======================= CHAPTER 34 ======================= */
+CHAPTERS.push({
+  num: 34, part: 5, free: false, title: "Running It: The LLM Engineer's Handbook",
+  blurb: "Everything in this course, rewritten as what you do on a Tuesday and at 3am. You will work the unit economics of a single request and find the line item that quietly becomes most of the bill, instrument a served request with spans that survive the conventions changing under you, catch a provider swapping a model with a canary set, version the four things that must roll back together, and read twelve production symptoms straight to their cause. Every recommendation here names the mechanism that justifies it and the command that confirms it, which is what makes it a handbook rather than a list of tips.",
+  sections: [
+    { title: "The Unit Economics of One Request",
+      viz: "llmCostModel", vizTitle: "Set a 2,000-token system prompt, then turn prefix caching on",
+      html: "<p>The unit of cost is a token, and there are four line items. Input tokens, which are cheap. Output tokens, which are several times more expensive because Chapter 26 showed they are produced one at a time against the full weight read. <strong>Cached input tokens</strong>, which are much cheaper than input because Chapter 27's prefix cache means nobody recomputed them. And <strong>thinking tokens</strong>, which are output tokens the user never sees.</p>" +
+      "<p>Work one deployment. A chat product: a 2,000-token system prompt, a 300-token user turn, a 400-token reply, at 100,000 requests a day. Take illustrative rates of $0.30 per million input tokens, $0.03 per million cached input, and $2.50 per million output; the shape is what transfers, not the prices.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one deployment, three configurations &#183; 100,000 requests a day, illustrative rates</text>" +
+      "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='46' fill='#7d8fb0' font-size='9'>line item</text>" +
+      "<text x='300' y='46' fill='#7d8fb0' font-size='9'>tokens per day</text>" +
+      "<text x='500' y='46' fill='#7d8fb0' font-size='9'>cost per day</text>" +
+      "<text x='630' y='46' fill='#7d8fb0' font-size='9'>share</text>" +
+      "<line x1='20' y1='54' x2='740' y2='54' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='74' fill='#c9d6ea' font-size='9.5'>input, uncached</text>" +
+      "<text x='300' y='74' fill='#c9d6ea' font-size='9.5'>230M</text>" +
+      "<text x='500' y='74' fill='#c9d6ea' font-size='9.5'>$69.00</text>" +
+      "<text x='630' y='74' fill='#7d8fb0' font-size='9.5'>41%</text>" +
+      "<text x='20' y='96' fill='#c9d6ea' font-size='9.5'>output</text>" +
+      "<text x='300' y='96' fill='#c9d6ea' font-size='9.5'>40M</text>" +
+      "<text x='500' y='96' fill='#c9d6ea' font-size='9.5'>$100.00</text>" +
+      "<text x='630' y='96' fill='#7d8fb0' font-size='9.5'>59%</text>" +
+      "<text x='20' y='118' fill='#7d8fb0' font-size='9.5'>total, no caching</text>" +
+      "<text x='500' y='118' fill='#ff5d73' font-size='9.5'>$169.00</text>" +
+      "<line x1='20' y1='130' x2='740' y2='130' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='150' fill='#3ddc97' font-size='9.5'>same, prefix cache on</text>" +
+      "<text x='300' y='150' fill='#3ddc97' font-size='9.5'>200M cached + 30M</text>" +
+      "<text x='500' y='150' fill='#3ddc97' font-size='9.5'>$115.00</text>" +
+      "<text x='630' y='150' fill='#3ddc97' font-size='9.5'>-32%</text>" +
+      "<line x1='20' y1='162' x2='740' y2='162' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='182' fill='#ffd166' font-size='9.5'>reasoning, 5% of traffic</text>" +
+      "<text x='300' y='182' fill='#ffd166' font-size='9.5'>75M thinking tokens</text>" +
+      "<text x='500' y='182' fill='#ff5d73' font-size='9.5'>$187.50</text>" +
+      "<text x='630' y='182' fill='#ff5d73' font-size='9.5'>62%</text>" +
+      "<line x1='20' y1='196' x2='740' y2='196' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='216' fill='#c9d6ea' font-size='10'>One request in twenty is now most of the bill, and nobody reads a single one of those tokens.</text>" +
+      "<text x='20' y='236' fill='#7d8fb0' font-size='9.5'>Cost per request is not a number. It is a distribution, and the tail is where the money is.</text>" +
+      "</svg><div class='fig-cap'>The caching row is a configuration change. The reasoning row is a product decision that looks like a configuration change.</div></div>" +
+      "<p>Read the table in order and three lessons fall out. Output dominates input even though there are six times fewer output tokens, which is Chapter 26's asymmetry showing up on an invoice. Prefix caching removes a third of the bill for a one-line change, because the system prompt was being re-prefilled 100,000 times a day and Chapter 27 already built the machinery to stop that. And enabling reasoning on one request in twenty, at 15,000 thinking tokens each, makes those requests <strong>62 percent</strong> of the total &#8212; Chapter 24's thinking tokens are billed as output and are invisible to the person paying for them.</p>" +
+      "<p>The operational consequence is that the <strong>cost per request distribution</strong> is heavy-tailed, so a single figure describes nothing. A mean hides a tail in which a handful of long-context or long-reasoning requests cost a hundred times the median, and the mean is what every dashboard shows. Track the 95th percentile of cost per request beside the mean, and alert on the 95th, because that is the one that moves when someone changes a prompt or a router.</p>" +
+      "<div class='callout'><strong>Try it above.</strong> Set the system prompt to 2,000 tokens and turn prefix caching on, then off, and watch the input line move. Then turn reasoning on for 5 percent of traffic and increase the thinking budget until reasoning passes half the bill. Find that budget. It is smaller than most teams assume, and it is the number to put in front of whoever wants reasoning enabled by default.</div>" },
+
+    { title: "Observability: The Spans, and the Four Numbers",
+      html: "<p>A served request is a <strong>span tree</strong>, and the useful instrumentation records that tree rather than the total. OpenTelemetry's GenAI semantic conventions define the vocabulary: <code>gen_ai.operation.name</code> for what the span is doing, <code>gen_ai.request.model</code> for which model was asked, and <code>gen_ai.usage.input_tokens</code> and <code>gen_ai.usage.output_tokens</code> for the counts that section 1 turns into money.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one served request &#183; the span tree worth having, and where the time actually went</text>" +
+      "<rect x='20' y='32' width='620' height='22' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='32' y='47' fill='#4f7cff' font-size='9'>invoke_agent &#183; 4,120 ms</text>" +
+      "<rect x='44' y='62' width='150' height='22' rx='4' fill='#111a2e' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='56' y='77' fill='#c9d6ea' font-size='9'>retrieval &#183; 180 ms</text>" +
+      "<rect x='44' y='92' width='90' height='22' rx='4' fill='#111a2e' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='56' y='107' fill='#3ddc97' font-size='9'>guard &#183; 90 ms</text>" +
+      "<rect x='44' y='122' width='430' height='22' rx='4' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='56' y='137' fill='#ffd166' font-size='9'>chat &#183; 3,140 ms &#183; in 2,300, out 400, cached 2,000</text>" +
+      "<rect x='484' y='152' width='120' height='22' rx='4' fill='#111a2e' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='496' y='167' fill='#c9d6ea' font-size='9'>execute_tool &#183; 620 ms</text>" +
+      "<line x1='20' y1='186' x2='740' y2='186' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='206' fill='#c9d6ea' font-size='10'>Without the tree, this request is &#8220;4.1 seconds&#8221;. With it, the tool call after the model is the tail.</text>" +
+      "</svg><div class='fig-cap'>Token counts belong on the span, not in a separate metric, because that is where they can be joined to the latency and the model version.</div></div>" +
+      "<p>Two cautions before you standardise on those names. The GenAI conventions are still in development status rather than stable, and in June 2026 the <code>gen_ai.*</code> attributes moved out of the main semantic-conventions repository into a dedicated one. Instrument against them anyway, because a shared vocabulary beats a private one, but pin the version you built against and put the attribute names in a single mapping module so a rename is one file rather than a grep.</p>" +
+      "<p>Record per request: model identifier <em>and</em> its resolved version, the prompt version from section 4, input and output token counts, cached token count, time to first token, time per output token, the finish reason, and whether a guardrail fired. Do not log full prompts and completions by default. That is a data-protection incident with a delay fuse; log a hash, and sample content separately under whatever consent your product actually has.</p>" +
+      "<p>Four numbers belong on the dashboard, and they come from Chapters 26, 30 and 32: <strong>p95 time to first token</strong>, <strong>p95 time per output token</strong>, <strong>queue depth per replica</strong>, and <strong>p95 cost per request</strong>. The first two are the user's experience, the third is the leading indicator that predicts them, and the fourth is the one nobody puts up and everybody discusses at the end of the quarter.</p>" +
+      "<pre><code>$ curl -s localhost:8000/metrics | grep -E 'num_requests_(waiting|running)|gpu_cache_usage'\nvllm:num_requests_running 41.0\nvllm:num_requests_waiting 0.0\nvllm:gpu_cache_usage_perc 0.62</code></pre>" +
+      "<p>Waiting at zero with the cache at 62 percent is a healthy replica with headroom. A waiting count that is persistently above zero while cache usage sits near 1.0 is Chapter 27's preemption, and that reading is the <strong>preemption signature</strong> you will meet again in section 7.</p>" +
+      "<p>Timeouts and retries need their own treatment here, because the defaults from ordinary services are wrong. A single timeout is wrong for a streaming endpoint: the useful pair is a short deadline on the <em>first</em> token, where a stall means the request is queued or a replica is cold, and a much longer one on the total, which legitimately runs to minutes when reasoning is enabled. Retries are worse, because a retry after a timeout usually means the original request is still generating, so you have doubled the load on a replica that was already slow &#8212; the classic way a capacity incident becomes an outage. Retry only on connection failures and explicit rejections, never on a timeout, and always with a budget: a fixed number per user request, not per hop.</p>" +
+      "<div class='callout'><strong>The classic mistake.</strong> Alerting on average latency. Chapter 32's point applies to monitoring as much as to evaluation: the mean of a heavy-tailed distribution moves late and moves little. A p50 that looks fine while a fifth of your users wait eight seconds is the normal state of an unmonitored language-model product, and the p95 would have said so.</div>" },
+
+    { title: "Drift, and the Canary Set",
+      html: "<p>Three things drift, and they need different detectors.</p>" +
+      "<p><strong>Input drift</strong> is your users changing: new topics, longer pastes, a new language, a client that started sending markdown. It shows up first in token-count distributions, which is why they are worth charting even though they look boring. A step change in mean input tokens is either a client change or a prompt change, and one of them was yours.</p>" +
+      "<p><strong>Output drift</strong> is the model's behaviour moving with no change of your own, and the usual cause is the third one. <strong>A hosted model name is a pointer, not a checkpoint.</strong> The provider updates what it points at, sometimes with notice, and Chapter 25's point returns: the config you evaluated is not necessarily the weights you are calling today.</p>" +
+      "<p>The detector is a <strong>canary set</strong>: fifty fixed prompts, chosen to span your task, run on a schedule at the lowest temperature available, with the outputs stored. Compare each day against the baseline. The comparison must not be string equality, for a reason Chapter 18 explains and Chapter 27 completes: even at temperature zero, a served model is not bit-deterministic, because the batch a request lands in changes the order of floating-point reductions and can flip a near-tie. Compare embeddings, or compare a distribution of scores, and alert on a shift rather than a difference.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>a canary set over six weeks &#183; mean similarity to the day-one baseline</text>" +
+      "<line x1='80' y1='150' x2='700' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='80' y1='40' x2='80' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='30' y='46' fill='#7d8fb0' font-size='9'>1.00</text>" +
+      "<text x='30' y='150' fill='#7d8fb0' font-size='9'>0.80</text>" +
+      "<path d='M80 52 L 180 55 L 280 53 L 380 57 L 400 118 L 480 120 L 580 117 L 690 121' fill='none' stroke='#4f7cff' stroke-width='2.5'/>" +
+      "<line x1='390' y1='40' x2='390' y2='150' stroke='#ff5d73' stroke-width='1.5' stroke-dasharray='4 4'/>" +
+      "<text x='400' y='166' fill='#ff5d73' font-size='9'>no deploy of yours happened here</text>" +
+      "<text x='96' y='84' fill='#3ddc97' font-size='9'>ordinary noise, well inside the band</text>" +
+      "<line x1='80' y1='64' x2='690' y2='64' stroke='#3ddc97' stroke-width='1' stroke-dasharray='3 3'/>" +
+      "<text x='450' y='100' fill='#ff5d73' font-size='9'>a step, not a slope</text>" +
+      "<line x1='20' y1='182' x2='740' y2='182' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='202' fill='#c9d6ea' font-size='10'>A slope is your users changing. A step with no deploy is the model changing underneath you.</text>" +
+      "</svg><div class='fig-cap'>The shape distinguishes the cause, which is the whole reason to run the canary daily rather than to investigate after a complaint.</div></div>" +
+      "<pre><code>$ python canary.py --baseline baselines/2026-08-01.json --today\n50 prompts &#183; mean similarity 0.83 (baseline 0.97)\n31 prompts below threshold &#183; token counts +18% mean output\nALERT: step change, no local deploy in window</code></pre>" +
+      "<p>Two practicalities decide whether the canary survives its first month. Run it twice on the same day before you set any threshold: whatever difference appears between two identical runs is your <strong>noise floor</strong>, and an alert tuned below it will page for nothing and be muted within a fortnight. And chart token counts alongside similarity, because a provider changing a hidden system preamble or a tokenizer shows up as a step in input or output token counts <em>before</em> it shows up as a quality complaint, which buys you the days that matter.</p>" +
+      "<div class='callout'><strong>Why the shape matters more than the number.</strong> A slow decline is input drift and belongs in a backlog. A step change on a day you shipped nothing is a different incident with a different response: pin the model version if your provider offers one, re-run Chapter 32's evaluation against the new behaviour, and decide rather than discover. Teams that run canaries find these within a day; teams that do not find them in a support ticket three weeks later.</div>" },
+
+    { title: "Versioning, and Rollback That Works",
+      html: "<p>Five things determine what your system does, and a rollback that does not restore all five is not a rollback.</p>" +
+      "<ul>" +
+      "<li><strong>The prompt.</strong> It is code. It lives in version control, it ships with the deploy, and its hash goes on every request log. Prompts stored in a database and edited in an admin panel are the single most common cause of a rollback that changes nothing.</li>" +
+      "<li><strong>The adapter.</strong> Chapter 21's LoRA weights version independently of the base, which is the point of them, and that independence is exactly what makes an unversioned pairing dangerous. Record which adapter is loaded against which base.</li>" +
+      "<li><strong>The base checkpoint.</strong> Pin a revision, not a tag. A tag moves; section 3 is about what happens when it does.</li>" +
+      "<li><strong>The serving configuration.</strong> Chapter 30's engine version, quantization scheme, and the flags that change numerics. A different quantization is a different model, per Chapter 29.</li>" +
+      "<li><strong>The evaluation.</strong> Chapter 32's set and harness version, so a score comparison across a rollback means something.</li>" +
+      "</ul>" +
+      "<p>The discipline that makes this workable is one <strong>release identifier</strong>. A single version resolves to all five, the request log records that identifier, and rollback sets it. Without that, an incident becomes an archaeology exercise across three systems while the product is down, and the answer to &#8220;what was running at 14:20?&#8221; is a guess.</p>" +
+      "<p>Two properties distinguish a rollback that works. It must be <em>fast</em>, which for a model change means the previous version is already loaded somewhere rather than needing Chapter 30's cold start under load. And it must allow a <strong>partial rollback</strong>: reverting the prompt alone, without redeploying the service, is the difference between a two-minute fix and a release cycle, and it is worth building before the first incident that needs it.</p>" +
+      "<p>What that looks like in a log is one field that answers every question in section 8:</p>" +
+      "<pre><code>$ grep req_8f2a1c logs/app.jsonl | jq -r '.release, .model, .prompt_sha, .adapter'\nr2026.09.04-3\ncorvid-8b@a91f3d2\nsha256:4c1e9b&#8230;\nsupport-lora-v7</code></pre>" +
+      "<p>Without it, the same question is three systems and a guess, asked while the product is down.</p>" +
+      "<div class='callout'><strong>Traced to the mechanism.</strong> Why does the prompt need a version at all, when a config value does not? Because Chapter 32 measured it: formatting alone moves benchmark scores by more than the gap between models. A prompt edit is a model change in every respect that matters, so it gets the same ceremony &#8212; a version, an evaluation, and a rollback path.</div>" },
+
+    { title: "Feedback Without Poisoning the Well",
+      html: "<p>Thumbs-down is the cheapest signal you will ever collect and the easiest to misuse. The misuse is treating it as a label.</p>" +
+      "<p>It is not a label; it is a report that a user was unhappy, which conflates a wrong answer, a correct answer they disliked, a slow response, a refusal, and a misread of what they asked. Feed that stream into fine-tuning and you are optimising a target you have not defined. The pipeline that works adds a step: <strong>triage before use</strong>. Sort each item into Chapter 32's failure taxonomy, discard the ones that are not failures of the model, and for the ones that are, have a human write the output that should have been produced. Only then is it a case, and it goes into the evaluation set from Chapter 32 before it goes anywhere near training data.</p>" +
+      "<p>The poisoning failure is worth naming precisely, because it is subtle and it is common. Fine-tuning on thumbs-<em>up</em> data selects for what users approved of, and Chapter 22 established that human approval carries a length and agreeableness bias &#8212; <strong>approval bias</strong> &#8212; while Chapter 32's style control measured it. Train on that signal repeatedly and you get a model that is longer, more confident and more agreeable, which is what the signal rewarded, and less correct, which the signal never measured. The drift is invisible on the metric you optimised and obvious to anyone reading the outputs.</p>" +
+      "<p>Two further rules. Preserve provenance: model-generated text that re-enters training must be labelled as such, because Chapter 12's corpus problem and Chapter 33's watermark limits both say you will not reliably detect it later. And keep the evaluation set and the training set disjoint, forever, which is Chapter 32's held-out split applied to the one data source that arrives continuously and is easiest to leak.</p>" +
+      "<p>Explicit feedback is also rare and biased: a small, self-selected minority clicks either button, and they skew toward the extremes. The implicit signals are denser and often better &#8212; a user rephrasing the same question, abandoning a response mid-stream, copying an answer, or editing it before using it. Each is a weak label and all of them are free, and the same rule applies: they tell you which cases to examine, and they become data only after a person has decided what the right output was.</p>" +
+      "<div class='callout'><strong>The classic mistake.</strong> Wiring a feedback button to a fine-tuning job because both existed. The value of thumbs-down is almost entirely in what it tells you about <em>which cases to look at</em>, and almost none of it is in the gradient. Use it to grow the evaluation set, which compounds, rather than to nudge weights, which quietly optimises for approval.</div>" },
+
+    { title: "The Boring Three-Service Split",
+      html: "<p>When a system does need structure, the useful default is the <strong>FTI architecture</strong> from Iusztin and Labonne: a <em>feature</em> pipeline, a <em>training</em> pipeline, and an <em>inference</em> pipeline, communicating through stored artifacts rather than calls.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>three pipelines, three cadences, one shared feature path</text>" +
+      "<rect x='20' y='36' width='180' height='48' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='32' y='58' fill='#4f7cff' font-size='10'>feature</text>" +
+      "<text x='32' y='74' fill='#7d8fb0' font-size='8.5'>raw data to stored features</text>" +
+      "<line x1='206' y1='60' x2='232' y2='60' stroke='#7d8fb0' stroke-width='2'/><polygon points='240,60 230,55 230,65' fill='#7d8fb0'/>" +
+      "<rect x='246' y='36' width='180' height='48' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='258' y='58' fill='#ffd166' font-size='10'>training</text>" +
+      "<text x='258' y='74' fill='#7d8fb0' font-size='8.5'>features to a checkpoint</text>" +
+      "<line x1='432' y1='60' x2='458' y2='60' stroke='#7d8fb0' stroke-width='2'/><polygon points='466,60 456,55 456,65' fill='#7d8fb0'/>" +
+      "<rect x='472' y='36' width='180' height='48' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='484' y='58' fill='#3ddc97' font-size='10'>inference</text>" +
+      "<text x='484' y='74' fill='#7d8fb0' font-size='8.5'>features to a response</text>" +
+      "<line x1='110' y1='90' x2='110' y2='114' stroke='#3ddc97' stroke-width='2'/>" +
+      "<line x1='110' y1='114' x2='562' y2='114' stroke='#3ddc97' stroke-width='2'/>" +
+      "<line x1='562' y1='114' x2='562' y2='92' stroke='#3ddc97' stroke-width='2'/><polygon points='562,84 557,94 567,94' fill='#3ddc97'/>" +
+      "<text x='210' y='132' fill='#3ddc97' font-size='9.5'>the same feature code runs in both, which is what removes training-serving skew</text>" +
+      "<line x1='20' y1='152' x2='740' y2='152' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='172' fill='#c9d6ea' font-size='10'>Different hardware, different cadence, different owners. That is the argument, not the diagram.</text>" +
+      "<text x='20' y='192' fill='#7d8fb0' font-size='9.5'>If you are calling an API with a prompt, you have one pipeline. Building the other two is decoration.</text>" +
+      "</svg><div class='fig-cap'>The split earns its keep when the three parts genuinely differ in cadence and hardware. When they do not, it is three services doing one job.</div></div>" +
+      "<p>The reason to prefer it over a cleverer design is the shared feature path. <strong>Training-serving skew</strong> &#8212; the model performing worse in production than in evaluation because the inputs were prepared differently &#8212; is one of the oldest failures in machine learning, and it is caused by two implementations of the same transformation drifting apart. One feature pipeline used by both sides makes the failure structurally impossible rather than merely unlikely.</p>" +
+      "<p>The three parts also differ in every operational dimension. The training pipeline wants many accelerators for hours and runs weekly; the inference pipeline wants steady capacity and Chapter 30's autoscaling and runs constantly; the feature pipeline is ordinary data engineering on ordinary machines. Splitting them lets each be sized, scheduled and owned on its own terms, which is a stronger argument than modularity in the abstract.</p>" +
+      "<p>The artifacts between the stages are what make the independence real. The feature pipeline writes features to a store; the training pipeline reads them and writes a checkpoint to a registry; the inference pipeline reads both. Nothing calls anything synchronously, so a training run cannot take down serving, a feature backfill cannot stall a request, and each side can be rewritten without a coordinated deploy. That property, rather than the three boxes, is what people mean when they call the split boring, and boring is the compliment.</p>" +
+      "<p>It also gives a migration path rather than a rewrite. A product that starts with prompts and retrieval already has a feature pipeline in disguise: the thing that chunks, embeds and indexes documents. When fine-tuning arrives, the training pipeline attaches to the same feature store rather than growing its own extraction code, which is exactly the moment skew would otherwise be introduced. Building the seam early costs little; introducing it after two implementations exist costs a reconciliation.</p>" +
+      "<p>And the honest limit: if your product calls a hosted model with a prompt and retrieves some documents, you have an inference pipeline and a feature pipeline that is a document index, and no training pipeline at all. Creating the missing services because the diagram has three boxes is architecture as decoration. The split is a response to a real difference in cadence, and where there is no such difference there is nothing to split.</p>" },
+
+    { title: "The Incident Table",
+      viz: "llmIncidentTriage", vizTitle: "Read the symptom and guess the cause before revealing it",
+      html: "<p>Twelve symptoms, each with the mechanism behind it and the check that confirms it. The <strong>incident table</strong> is what turns an outage from an investigation into a lookup, and it is the thing to have open at 3am.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 330' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>symptom &#8594; cause &#8594; where it was explained</text>" +
+      "<line x1='20' y1='26' x2='740' y2='26' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='46' fill='#c9d6ea' font-size='9'>slow first token</text>" +
+      "<text x='300' y='46' fill='#ffd166' font-size='9'>prefill length, or a cold replica</text>" +
+      "<text x='650' y='46' fill='#7d8fb0' font-size='9'>Ch 26, 30</text>" +
+      "<text x='20' y='68' fill='#c9d6ea' font-size='9'>throughput collapses at peak</text>" +
+      "<text x='300' y='68' fill='#ff5d73' font-size='9'>KV cache exhaustion, not compute</text>" +
+      "<text x='650' y='68' fill='#7d8fb0' font-size='9'>Ch 27</text>" +
+      "<text x='20' y='90' fill='#c9d6ea' font-size='9'>gibberish after a deploy</text>" +
+      "<text x='300' y='90' fill='#ffd166' font-size='9'>wrong chat template or tokenizer</text>" +
+      "<text x='650' y='90' fill='#7d8fb0' font-size='9'>Ch 3, 25</text>" +
+      "<text x='20' y='112' fill='#c9d6ea' font-size='9'>refusals rising</text>" +
+      "<text x='300' y='112' fill='#ffd166' font-size='9'>guardrail threshold, or a model swap</text>" +
+      "<text x='650' y='112' fill='#7d8fb0' font-size='9'>Ch 33, 34</text>" +
+      "<text x='20' y='134' fill='#c9d6ea' font-size='9'>the bill doubled overnight</text>" +
+      "<text x='300' y='134' fill='#ff5d73' font-size='9'>reasoning on, or the cache stopped hitting</text>" +
+      "<text x='650' y='134' fill='#7d8fb0' font-size='9'>Ch 24, 27</text>" +
+      "<text x='20' y='156' fill='#c9d6ea' font-size='9'>a fine-tune did nothing</text>" +
+      "<text x='300' y='156' fill='#ffd166' font-size='9'>rank, target modules, or the eval</text>" +
+      "<text x='650' y='156' fill='#7d8fb0' font-size='9'>Ch 21, 32</text>" +
+      "<text x='20' y='178' fill='#c9d6ea' font-size='9'>out of memory at batch 9</text>" +
+      "<text x='300' y='178' fill='#ffd166' font-size='9'>activation peak, not weights</text>" +
+      "<text x='650' y='178' fill='#7d8fb0' font-size='9'>Ch 9, 30</text>" +
+      "<text x='20' y='200' fill='#c9d6ea' font-size='9'>one language degraded</text>" +
+      "<text x='300' y='200' fill='#ffd166' font-size='9'>tokenizer fertility, or data mixture</text>" +
+      "<text x='650' y='200' fill='#7d8fb0' font-size='9'>Ch 2, 12</text>" +
+      "<text x='20' y='222' fill='#c9d6ea' font-size='9'>an agent looping</text>" +
+      "<text x='300' y='222' fill='#ffd166' font-size='9'>no termination signal in the loop</text>" +
+      "<text x='650' y='222' fill='#7d8fb0' font-size='9'>Ch 19</text>" +
+      "<text x='20' y='244' fill='#c9d6ea' font-size='9'>JSON stopped parsing</text>" +
+      "<text x='300' y='244' fill='#ff5d73' font-size='9'>quantization, or constrained decoding off</text>" +
+      "<text x='650' y='244' fill='#7d8fb0' font-size='9'>Ch 19, 29</text>" +
+      "<text x='20' y='266' fill='#c9d6ea' font-size='9'>benchmark fell after quantizing</text>" +
+      "<text x='300' y='266' fill='#ffd166' font-size='9'>real, and perplexity did not show it</text>" +
+      "<text x='650' y='266' fill='#7d8fb0' font-size='9'>Ch 29, 32</text>" +
+      "<text x='20' y='288' fill='#c9d6ea' font-size='9'>answers changed, no deploy</text>" +
+      "<text x='300' y='288' fill='#ff5d73' font-size='9'>the provider moved the pointer</text>" +
+      "<text x='650' y='288' fill='#7d8fb0' font-size='9'>Ch 34 &#167;3</text>" +
+      "<line x1='20' y1='300' x2='740' y2='300' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='320' fill='#c9d6ea' font-size='10'>Red rows are the four that get misdiagnosed most, and all four look like something else first.</text>" +
+      "</svg><div class='fig-cap'>Every row is a chapter of this course seen from the wrong end, which is the end you meet it from.</div></div>" +
+      "<p>Four are worth walking, because each is routinely diagnosed as its neighbour.</p>" +
+      "<p><strong>Throughput collapses at peak</strong> looks like a compute limit and almost never is. Chapter 27's cache fills, the scheduler begins preempting, preempted requests are recomputed, and the recomputation consumes the capacity that would have cleared the queue. The confirming check is the one from section 2: cache usage near 1.0 with a rising waiting count while accelerator utilization is <em>not</em> pinned. The fix is more cache or fewer concurrent sequences, never a faster card.</p>" +
+      "<p><strong>The bill doubled overnight</strong> has two candidates, and one query separates them. Chart output tokens per request against input tokens per request: reasoning being switched on moves output tokens, while a cache-hit-rate collapse &#8212; a system prompt gaining a timestamp at the front, per Chapter 30 &#8212; moves billed input tokens with everything else unchanged.</p>" +
+      "<p><strong>JSON stopped parsing</strong> after a change that &#8220;should not affect quality&#8221; is Chapter 29's finding arriving in production: quantization damages preferences among near-tied tokens first, and constrained decoding is built on exactly those preferences. Check whether constrained decoding is still enabled, then check whether the weights changed precision.</p>" +
+      "<p><strong>Gibberish after a deploy</strong> is almost always Chapter 3 rather than the model: a chat template applied twice, or not at all, or a tokenizer that does not match the checkpoint. It is diagnosable in one step without any serving infrastructure, by rendering the exact string the model receives and reading it:</p>" +
+      "<pre><code>$ python -c \"from transformers import AutoTokenizer as T; \\\ntok=T.from_pretrained('./ckpt'); \\\nprint(tok.apply_chat_template([{'role':'user','content':'hi'}], tokenize=False))\"\n&lt;|begin_of_text|&gt;&lt;|start_header_id|&gt;user&lt;|end_header_id|&gt;\n\nhi&lt;|eot_id|&gt;</code></pre>" +
+      "<p>Doubled begin-of-text markers, or a template that renders as plain prose with no role markers at all, are the two failures, and both look like a broken model from the outside.</p>" +
+      "<p><strong>Out of memory at batch 9</strong> when batch 8 was fine is not the weights, which did not change between the two. It is the activation peak during prefill, which scales with the longest sequence in the batch as well as its size, so the true trigger is usually one long prompt arriving rather than the batch size itself. Chapter 30's startup reservation is the setting to check before anyone buys a larger card.</p>" +
+      "<p><strong>Answers changed with no deploy</strong> is section 3, and it is the one teams have no instrumentation for until the second time it happens.</p>" },
+
+    { title: "The On-Call Runbook",
+      html: "<p>The first five minutes decide whether the next hour is diagnosis or thrashing. Four questions, in this order, because each one eliminates a large fraction of causes.</p>" +
+      "<p><strong>Is it us or them?</strong> Check the provider's status page and your own canary from section 3 at the same time. A canary that is fine while users are not means the problem is in your path, not the model. A canary that has moved means it is the model, and section 3's runbook applies rather than this one.</p>" +
+      "<p><strong>Which of the four numbers moved?</strong> Time to first token rising alone points at prefill, cold replicas or queueing. Time per output token rising alone points at batch pressure or a serving change. Both rising with queue depth is capacity, and it is the incident table's second row. Cost moving without latency moving is a token-count change, which is a prompt or a router.</p>" +
+      "<p><strong>Did anything deploy?</strong> Section 4's single identifier answers this in one query, and the answer is more often yes than people expect, because prompt edits and provider updates both count as deploys and neither appears in a code changelog.</p>" +
+      "<p><strong>Is it all traffic or one segment?</strong> Split by language, by tenant, by whether retrieval ran, and by prompt length. A problem confined to one segment has a shorter list of causes than a problem affecting everything, and the segments that break first are the ones the incident table names: one language, long contexts, structured output.</p>" +
+      "<p>Then the standing moves, in increasing order of disruption: roll back the prompt version, which is fast and reversible; pin or roll back the model version; disable reasoning or reduce the thinking budget, which trades quality for cost and latency immediately; reduce concurrency to stop preemption, which trades throughput for stability; and apply deliberate <strong>load shedding</strong> at the edge rather than letting the queue do it, because a queue sheds the requests that waited longest.</p>" +
+      "<div class='callout'><strong>What to write down afterwards.</strong> Not a narrative. Three things: the symptom as it was first reported, the signal that actually identified the cause, and the check that would have caught it earlier. The third becomes a dashboard panel or an alert, which is how an incident stops being a story and becomes instrumentation. A team that adds one such check per incident converges; a team that writes good narratives does not.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Take section 1's deployment and recompute the daily cost when the system prompt grows to 6,000 tokens, first without prefix caching and then with it. Then compute the thinking-token budget at which reasoning on 5 percent of traffic equals the entire rest of the bill. State which of the three changes a product manager would notice and which two they would not.</li>" +
+      "<li><strong>Trace.</strong> Your replica reports a waiting count of 14, cache usage of 0.98, and accelerator utilization of 61 percent. Name the mechanism, name the chapter, and state which two remedies help and which two do not. Then state what the same three numbers would look like if the cause were genuinely compute.</li>" +
+      "<li><strong>Trace.</strong> Answers changed on a Tuesday with no deploy of yours. Walk section 8's four questions in order and say, at each step, what a yes and a no would eliminate. Then state the one instrument that would have told you on Monday.</li>" +
+      "<li><strong>Investigate.</strong> Build the canary set: fifty prompts spanning your task, run at the lowest temperature available, stored with their outputs and token counts. Run it twice on the same day and measure the similarity between the two runs. That number is your noise floor, and any alert threshold below it will page you for nothing. Report it.</li>" +
+      "<li><strong>Investigate.</strong> Audit your own request logs against section 2's list. For each field that is missing, state the incident-table row you could not diagnose without it. Then check whether full prompts are being logged, and if they are, find out who agreed to that.</li>" +
+      "<li><strong>Build.</strong> Implement the single release identifier from section 4: one version that resolves to prompt hash, adapter, base revision, serving configuration and evaluation version, recorded on every request. Then perform a rollback of the prompt alone, without redeploying the service, and time it. If it takes longer than two minutes, you have found the work worth doing before your first incident.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "thinking tokens", d: "Reasoning output the user never sees, billed at the output rate, and the line item most likely to dominate a bill without appearing in any product decision." },
+    { t: "cached input tokens", d: "Prompt tokens served from Chapter 27's prefix cache and billed far below the uncached rate; the reason a long shared system prompt is cheap or expensive depending on one flag." },
+    { t: "cost per request distribution", d: "The recognition that request cost is heavy-tailed, so the 95th percentile rather than the mean is the number to track and alert on." },
+    { t: "span tree", d: "The nested record of one served request, in which retrieval, guardrails, the model call and tool calls each carry their own timing and token counts." },
+    { t: "input drift", d: "A change in what users send, visible first as a shift in token-count distributions and usually a slope rather than a step." },
+    { t: "output drift", d: "A change in model behaviour with no change of your own, most often because a hosted model name is a pointer that the provider moved." },
+    { t: "canary set", d: "Fifty or so fixed prompts run on a schedule at low temperature, compared to a baseline by similarity rather than string equality, to detect drift within a day." },
+    { t: "noise floor", d: "The similarity between two canary runs on the same day, which bounds how tight an alert threshold can be before it pages for nothing." },
+    { t: "release identifier", d: "One version that resolves to prompt hash, adapter, base revision, serving configuration and evaluation version, recorded on every request so rollback restores all five." },
+    { t: "partial rollback", d: "The ability to revert the prompt alone without redeploying the service; the difference between a two-minute fix and a release cycle." },
+    { t: "triage before use", d: "Sorting feedback into a failure taxonomy and writing the correct output before it becomes data, so a complaint becomes an evaluation case rather than a gradient." },
+    { t: "approval bias", d: "The drift toward longer, more confident and more agreeable outputs that follows from training on what users upvoted, which measures approval rather than correctness." },
+    { t: "FTI architecture", d: "The feature, training and inference pipeline split, which removes training-serving skew by sharing one feature path and lets three different cadences be sized separately." },
+    { t: "training-serving skew", d: "A model performing worse in production than in evaluation because inputs were prepared by two implementations that drifted apart." },
+    { t: "incident table", d: "The mapping from production symptom to mechanism to confirming check, which turns an outage from an investigation into a lookup." },
+    { t: "preemption signature", d: "Cache usage near capacity with a rising waiting count while accelerator utilization is not pinned; the reading that identifies cache exhaustion rather than a compute limit." },
+    { t: "load shedding", d: "Refusing requests deliberately at the edge rather than letting a queue do it, since a queue sheds whichever requests have already waited longest." }
+  ],
+  quiz: [
+    { type: "mc", q: "A chat product spends $69 a day on input tokens and $100 on output, with six times more input tokens than output. Why?", opts: ["Output tokens are larger in bytes", "Output tokens are billed at several times the input rate, because Chapter 26 showed each one is produced individually against a full weight read", "Input tokens are discounted in bulk", "The provider charges a per-response surcharge"], a: 1,
+      why: "Prefill processes the whole prompt in one pass and is compute-bound; decode produces one token at a time and re-reads the weights for each, which is why it is bandwidth-bound and expensive. The pricing reflects the mechanism. It is also why the cheapest optimization available is usually to shorten outputs rather than prompts." },
+    { type: "mc", q: "Reasoning is enabled for 5 percent of traffic at 15,000 thinking tokens per request, and it becomes 62 percent of the bill. What makes this hard to notice?", opts: ["Thinking tokens are billed at a reduced rate and appear on a separate invoice line", "The requests are slower, so they are attributed to latency rather than cost", "Thinking tokens are billed as output but never shown to the user, so nothing in the product surfaces them", "Reasoning traffic is sampled and excluded from cost dashboards"], a: 2,
+      why: "The tokens are real, expensive and invisible: no one reads them, no product surface shows them, and a mean cost-per-request hides them inside a tail. This is why the chapter recommends alerting on the 95th percentile of cost per request. Cost is a distribution, and enabling reasoning changes the tail rather than the middle." },
+    { type: "mc", q: "Why should canary comparison use similarity rather than exact string matching, even at temperature zero?", opts: ["Because providers add random watermarking to outputs", "Because temperature zero still samples from the top of the distribution", "Because the canary prompts change between runs", "Because a served model is not bit-deterministic: the batch a request lands in changes the order of floating-point reductions and can flip a near-tie"], a: 3,
+      why: "Continuous batching means the same prompt shares a forward pass with different neighbours on different days, and reduction order affects the last bits. Exact-match canaries therefore alert constantly and get switched off. Comparing embeddings or score distributions and alerting on a shift is what makes the detector survive contact with production." },
+    { type: "mc", q: "In canary data, what distinguishes a slope from a step?", opts: ["A slope is input drift and belongs in a backlog; a step with no deploy of yours means the model changed underneath you", "A slope indicates a memory leak; a step indicates a restart", "A slope is measurement noise; a step is a real change", "A slope means the canary set is too small; a step means it is well chosen"], a: 0,
+      why: "The shape identifies the cause, which is why the canary runs daily rather than being consulted after a complaint. A gradual decline usually means your users changed. A discontinuity on a day you shipped nothing means a hosted model name pointed somewhere new, and the response is different: pin a version if one is offered, re-run the evaluation, and decide rather than discover." },
+    { type: "mc", q: "Why does a prompt need a version, an evaluation and a rollback path, when an ordinary config value does not?", opts: ["Because prompts are longer than config values and harder to review", "Because Chapter 32 measured formatting alone moving benchmark scores by more than the gap between models, so a prompt edit is a model change", "Because prompts are user-visible", "Because prompt changes invalidate the prefix cache"], a: 1,
+      why: "Prompt sensitivity is not a stylistic matter: the same model on the same benchmark moves several points from formatting. That makes an unversioned prompt edit an untested model change shipped without ceremony. It is also why prompts stored in a database and edited in an admin panel are the most common cause of a rollback that restores the code and changes nothing." },
+    { type: "mc", q: "What is wrong with routing thumbs-up data directly into a fine-tuning job?", opts: ["The volume is too low to affect the weights meaningfully", "Approval data is noisy and needs smoothing before use", "It selects for what users approved of, which carries a length and agreeableness bias, so the model gets longer and more confident rather than more correct", "It violates the held-out split by definition"], a: 2,
+      why: "Chapter 22 established the bias in human approval and Chapter 32's style control measured it. Training on approval optimises approval, and correctness was never in the signal. The drift is invisible on the metric you optimised and obvious to anyone reading outputs. Feedback's value is in telling you which cases to examine, which compounds as evaluation data." },
+    { type: "blank", q: "The similarity between two canary runs on the same day is your ____ floor, and no alert threshold below it is useful.", a: ["noise", "noise floor"],
+      why: "Run the set twice before you set a threshold. Whatever difference appears between two identical-configuration runs is variation you cannot act on, so an alert tuned tighter than it will page for nothing and be muted within a fortnight. Measuring it first is the difference between a detector people trust and one they route to a folder." },
+    { type: "mc", q: "Throughput collapses at peak while accelerator utilization sits at 61 percent, cache usage at 0.98 and the waiting count at 14. What is happening?", opts: ["A compute limit, since the queue is growing", "Network saturation between the API server and the engine", "A thermal limit reducing clock speed", "Cache exhaustion: the scheduler is preempting, and recomputing preempted requests consumes the capacity that would clear the queue"], a: 3,
+      why: "The three numbers together are the signature. Utilization well below saturation rules out compute; cache near capacity with a growing queue is Chapter 27's preemption, where work is repeated rather than progressed. The remedies are more cache or fewer concurrent sequences. A faster accelerator addresses a constraint that was not binding." },
+    { type: "mc", q: "The bill doubled overnight. Which single comparison separates the two likely causes?", opts: ["Output tokens per request against input tokens per request: reasoning moves the first, a cache-hit collapse moves the second", "p95 latency against p50 latency", "Request count against replica count", "Queue depth against cache usage"], a: 0,
+      why: "Reasoning being enabled adds output tokens; a system prompt gaining a timestamp at the front destroys the prefix cache and moves billed input tokens with nothing else changed. Charting the two token counts per request separates them in one query. Charting total spend, which is what most dashboards show, separates nothing." },
+    { type: "mc", q: "When is the FTI split the wrong architecture?", opts: ["When the training pipeline runs less than weekly", "When the model is hosted rather than self-served", "When you call a hosted model with a prompt and retrieve documents, so there is no training pipeline and the split has nothing to separate", "When one team owns all three pipelines"], a: 2,
+      why: "The split earns its keep because the three parts genuinely differ in cadence, hardware and ownership, and because a shared feature path makes training-serving skew structurally impossible. Where there is no training, there is no skew to prevent and no second cadence to separate, so creating the missing services is architecture as decoration." },
+    { type: "order", q: "Order the first four questions of the on-call runbook:", items: ["Is it us or them: check the provider status and your canary together", "Which of the four dashboard numbers moved", "Did anything deploy, including a prompt edit or a provider update", "Is it all traffic, or one language, tenant or prompt length"], why: "Each question eliminates a large fraction of causes, and the ordering is by how much they eliminate per second spent. Provider-versus-us splits the space in half immediately. The four numbers point at prefill, decode, capacity or token counts. The deploy question is answered in one query if section 4's identifier exists. Segmentation comes last because it is the slowest and only narrows what remains." },
+    { type: "mc", q: "What belongs in a post-incident write-up, according to this chapter?", opts: ["A timeline of the response, so the team can review decision-making", "The symptom as first reported, the signal that identified the cause, and the check that would have caught it earlier", "A root-cause statement and an owner for the fix", "A severity classification and customer impact estimate"], a: 1,
+      why: "The third item is the one that changes anything: it becomes a dashboard panel or an alert, which is how an incident turns into instrumentation. A team that adds one such check per incident converges on a system that reports its own failures. Narratives, timelines and severity labels are useful for other purposes and do not make the next incident shorter." }
+  ]
+});
