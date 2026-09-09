@@ -6155,3 +6155,251 @@ CHAPTERS.push({
       why: "For one user there is no batch to grow, and more compute does nothing to a workload at intensity 1. Time is weight bytes divided by bandwidth, so halving the bytes halves the time — which is Chapter 29's subject and why quantization matters far more for single-stream latency than for throughput. A longer prompt changes prefill, not decode." }
   ]
 });
+
+/* ======================= CHAPTER 27 ======================= */
+CHAPTERS.push({
+  num: 27, part: 5, title: "Serving Many at Once: Batching, Paging, and Prefix Caching",
+  blurb: "One user leaves a GPU almost idle. The whole art of serving is filling it without making anyone wait, and three mechanisms do the work. Continuous batching stops short requests queueing behind long ones. PagedAttention borrows an idea from operating systems so the KV cache stops wasting most of its memory to fragmentation. Prefix caching notices that a thousand requests share a system prompt and refuses to compute it a thousand times. You will run a scheduler, fragment a cache and fix it, and find the batch size that maximises goodput under a latency target.",
+  sections: [
+    { title: "Static Batching, and the Request That Holds Everyone Up",
+      html: "<p>Chapter 26 established the problem precisely: decode at batch 1 runs at an arithmetic intensity of 1 against a ridge point of 295, so a single user leaves the arithmetic units idle about 299 times out of 300. The fix is to serve many requests at once, and the naive version of that fix creates a worse problem than it solves.</p>" +
+      "<p><strong>Static batching</strong> collects requests until it has a batch, runs them together, and returns the results. It is how every other kind of batch inference works, and it fails here for a reason specific to generation: requests in a batch finish at different times. One asks for 20 tokens and another for 800, and because the batch is a unit, the short request's slot is held until the long one is done. Its answer was ready 780 steps ago and it is still waiting.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>four requests, two schedulers &#183; gold = producing tokens, dark = occupying a slot and doing nothing</text>" +
+      "<text x='20' y='38' fill='#ff5d73' font-size='10'>static batching</text>" +
+      "<text x='20' y='62' fill='#7d8fb0' font-size='9'>A &#183; 20 tok</text>" +
+      "<rect x='110' y='52' width='24' height='14' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='134' y='52' width='396' height='14' fill='#1a1116' stroke='#ff5d73' stroke-width='1'/>" +
+      "<text x='20' y='82' fill='#7d8fb0' font-size='9'>B &#183; 60 tok</text>" +
+      "<rect x='110' y='72' width='72' height='14' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='182' y='72' width='348' height='14' fill='#1a1116' stroke='#ff5d73' stroke-width='1'/>" +
+      "<text x='20' y='102' fill='#7d8fb0' font-size='9'>C &#183; 40 tok</text>" +
+      "<rect x='110' y='92' width='48' height='14' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='158' y='92' width='372' height='14' fill='#1a1116' stroke='#ff5d73' stroke-width='1'/>" +
+      "<text x='20' y='122' fill='#7d8fb0' font-size='9'>D &#183; 350 tok</text>" +
+      "<rect x='110' y='112' width='420' height='14' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='540' y='122' fill='#ff5d73' font-size='9'>everyone leaves when D does</text>" +
+      "<text x='20' y='152' fill='#3ddc97' font-size='10'>continuous batching</text>" +
+      "<text x='20' y='176' fill='#7d8fb0' font-size='9'>A &#183; 20 tok</text>" +
+      "<rect x='110' y='166' width='24' height='14' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='140' y='177' fill='#3ddc97' font-size='8.5'>done, slot reused</text>" +
+      "<text x='20' y='196' fill='#7d8fb0' font-size='9'>B &#183; 60 tok</text>" +
+      "<rect x='110' y='186' width='72' height='14' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<rect x='182' y='186' width='60' height='14' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/>" +
+      "<text x='248' y='197' fill='#4f7cff' font-size='8.5'>E joins here, mid-flight</text>" +
+      "<text x='20' y='216' fill='#7d8fb0' font-size='9'>D &#183; 350 tok</text>" +
+      "<rect x='110' y='206' width='420' height='14' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='540' y='216' fill='#3ddc97' font-size='9'>D takes exactly as long</text>" +
+      "</svg><div class='fig-cap'>The red blocks are the entire problem. D takes the same time in both schedulers; what changes is whether three other users wait for it.</div></div>" +
+      "<p>This is <strong>head-of-line blocking</strong>, and its cost lands where it hurts most: on the tail. Mean latency looks acceptable because most requests are short. The 99th percentile is set by the longest request in whatever batch you landed in, which has nothing to do with your own request at all. Two users sending identical prompts a second apart can see latencies differing tenfold, and no amount of investigation into their requests explains it.</p>" +
+      "<p>There is a second waste in the same picture. Once a request finishes, its slot is idle but reserved, so the batch is running at less than full width for most of its life &#8212; and Chapter 26 showed that batch width is exactly what buys arithmetic intensity. Static batching therefore degrades the throughput it exists to provide, continuously, as its members drop out.</p>" },
+
+    { title: "Continuous Batching", viz: "llmScheduler", vizTitle: "Run static batching with mixed lengths, then look at the p99",
+      html: "<p>The fix is to stop treating the batch as a unit. <strong>Continuous batching</strong> &#8212; introduced as iteration-level scheduling by Yu and colleagues in Orca in 2022 &#8212; makes the scheduling decision once per <em>token</em> rather than once per request.</p>" +
+      "<p>At every decode step the server asks which requests are active, runs one step for all of them, and then re-decides. A request that emitted its stop token leaves immediately and its slot is free on the very next step. A request that has been waiting in the queue joins on the next step without waiting for anything to finish. The batch is not a fixed group travelling together; it is whatever set of requests happens to be active at this instant.</p>" +
+      "<p>Two consequences follow, and the second is less obvious than the first.</p>" +
+      "<p><strong>The tail collapses.</strong> A short request now takes as long as a short request takes. Its latency depends on its own length and the server's load, and no longer on the unlucky presence of a long request beside it. This is the single largest improvement in p99 latency available to a serving stack, and it costs nothing but scheduler complexity.</p>" +
+      "<p><strong>The batch stays full.</strong> Because a finished request is replaced immediately from the queue, the running width stays near its cap instead of decaying. Chapter 26's roofline says that width is arithmetic intensity, so keeping it full is also the throughput optimisation &#8212; the same change improves the tail and the aggregate at once, which is rare enough to be worth noticing.</p>" +
+      "<p>The mechanism this requires is worth naming, because it is what makes the whole chapter possible. Every request in the batch is at a different position in its own sequence, so their KV caches are different lengths and cannot sit in one rectangular tensor. Continuous batching therefore <em>demands</em> a KV cache that can be allocated per request and addressed indirectly &#8212; which is the next two sections, and the reason those mechanisms arrived together historically rather than separately.</p>" +
+      "<div class='callout'><strong>Run it above.</strong> Set static batching with a mix of lengths, inject one 4,000-token request, and read the p99: every short request in that batch inherits the long one's duration. Now switch to continuous and watch the p99 fall while mean throughput rises. Then note what did <em>not</em> change &#8212; the long request takes exactly as long as before. Continuous batching does not make anything faster. It stops slow things from making fast things slow.</div>" },
+
+    { title: "Where the Cache Fragments",
+      html: "<p>Chapter 26 priced the KV cache at 128 KB per token and computed that an H100 running Corvid has 63.94 GB free for it &#8212; 487,823 token-slots. That is the capacity. What a naive implementation delivers is a small fraction of it, and the gap is pure waste.</p>" +
+      "<p>The problem is that a request's final length is unknown when it starts. It will generate until it emits a stop token or hits its limit, and the allocator has to commit before knowing. The safe choice is to reserve the maximum, so a request that might produce 8,192 tokens gets 8,192 tokens' worth of contiguous memory from the moment it arrives.</p>" +
+      "<pre><code>reserve 8,192 per request:   487,823 / 8,192  =   59 concurrent requests\nactual mean length 1,000:    the other 87.8% of each reservation is never used</code></pre>" +
+      "<p>Fifty-nine users on a machine with room for hundreds. And the waste has three distinct sources, which is why fixing it needs an idea rather than a tweak.</p>" +
+      "<ul>" +
+      "<li><strong>Internal fragmentation</strong>: the space reserved for a request and never used, because it stopped early. This is the 87.8% above and it is the largest by far.</li>" +
+      "<li><strong>External fragmentation</strong>: free memory that exists but is not contiguous, so a new request needing a contiguous block is refused while the total free space would have held it comfortably.</li>" +
+      "<li><strong>Reserved-but-not-yet-used</strong>: space held for tokens a still-running request has not generated yet, unavailable to anyone else in the meantime.</li>" +
+      "</ul>" +
+      "<div class='fig'><svg viewBox='0 0 760 190' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>contiguous reservation &#183; gold = tokens that exist, dark = reserved and empty</text>" +
+      "<text x='20' y='44' fill='#7d8fb0' font-size='9'>request A</text>" +
+      "<rect x='110' y='32' width='58' height='16' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='168' y='32' width='302' height='16' fill='#1a1116' stroke='#ff5d73' stroke-width='1' stroke-dasharray='3 3'/>" +
+      "<text x='486' y='45' fill='#ff5d73' font-size='9'>reserved for 8,192, used 1,000</text>" +
+      "<text x='20' y='74' fill='#7d8fb0' font-size='9'>request B</text>" +
+      "<rect x='110' y='62' width='24' height='16' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<rect x='134' y='62' width='336' height='16' fill='#1a1116' stroke='#ff5d73' stroke-width='1' stroke-dasharray='3 3'/>" +
+      "<text x='486' y='75' fill='#ff5d73' font-size='9'>stopped after 400 tokens</text>" +
+      "<text x='20' y='104' fill='#7d8fb0' font-size='9'>free</text>" +
+      "<rect x='110' y='92' width='90' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<rect x='230' y='92' width='70' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<rect x='340' y='92' width='60' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/>" +
+      "<text x='486' y='105' fill='#7d8fb0' font-size='9'>plenty free, none of it contiguous</text>" +
+      "<line x1='20' y1='126' x2='740' y2='126' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='148' fill='#c9d6ea' font-size='10.5'>Existing systems were measured wasting 60 to 80 percent of KV memory this way, which is the</text>" +
+      "<text x='20' y='162' fill='#c9d6ea' font-size='10.5'>finding that motivated PagedAttention.</text>" +
+      "<text x='20' y='184' fill='#3ddc97' font-size='10'>The fix is not a better allocator. It is to stop requiring contiguity at all.</text>" +
+      "</svg><div class='fig-cap'>Three kinds of waste in one picture. The dashed regions are memory nobody can use and nobody is using.</div></div>" +
+      "<p>Kwon and colleagues measured this across existing systems in 2023 and reported <strong>60 to 80 percent of KV memory wasted</strong> to fragmentation and over-reservation. That is the number that motivated the next section, and it is worth pausing on: the most expensive resource in the deployment was being used at roughly a quarter of its capacity, by every serving system in the field, for reasons nobody had looked at.</p>" },
+
+    { title: "PagedAttention", viz: "llmPagedCache", vizTitle: "Add requests of different lengths and watch the gaps appear",
+      html: "<p>The solution is fifty years old and comes from operating systems. A process does not get a contiguous slab of physical memory; it gets a virtual address space mapped through a page table onto physical pages that may be scattered anywhere. <strong>PagedAttention</strong>, introduced with vLLM by Kwon and colleagues in 2023, applies exactly that to the KV cache.</p>" +
+      "<p>The cache is divided into fixed-size <strong>blocks</strong>, each holding the keys and values for a small number of contiguous tokens &#8212; sixteen by default. Each request has a <strong>block table</strong> mapping its logical token positions onto physical blocks, which need not be adjacent or in order. A request is allocated one block at a time, as it generates, and returns them when it finishes.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 206' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>logical positions, a block table, and physical blocks that need not be adjacent</text>" +
+      "<text x='20' y='42' fill='#c9d6ea' font-size='9.5'>request A, logical</text>" +
+      "<rect x='150' y='30' width='42' height='16' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/><text x='160' y='42' fill='#4f7cff' font-size='8.5'>0-15</text>" +
+      "<rect x='194' y='30' width='42' height='16' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/><text x='202' y='42' fill='#4f7cff' font-size='8.5'>16-31</text>" +
+      "<rect x='238' y='30' width='42' height='16' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/><text x='246' y='42' fill='#4f7cff' font-size='8.5'>32-47</text>" +
+      "<text x='20' y='76' fill='#ffd166' font-size='9.5'>block table</text>" +
+      "<text x='150' y='76' fill='#ffd166' font-size='9'>0 -&gt; 7</text>" +
+      "<text x='200' y='76' fill='#ffd166' font-size='9'>1 -&gt; 2</text>" +
+      "<text x='250' y='76' fill='#ffd166' font-size='9'>2 -&gt; 9</text>" +
+      "<text x='320' y='76' fill='#7d8fb0' font-size='8.5'>one small table per request</text>" +
+      "<text x='20' y='114' fill='#c9d6ea' font-size='9.5'>physical blocks</text>" +
+      "<rect x='150' y='102' width='34' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/><text x='160' y='114' fill='#7d8fb0' font-size='8.5'>0</text>" +
+      "<rect x='186' y='102' width='34' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/><text x='196' y='114' fill='#7d8fb0' font-size='8.5'>1</text>" +
+      "<rect x='222' y='102' width='34' height='16' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/><text x='232' y='114' fill='#4f7cff' font-size='8.5'>2</text>" +
+      "<rect x='258' y='102' width='34' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/><text x='268' y='114' fill='#7d8fb0' font-size='8.5'>3</text>" +
+      "<rect x='294' y='102' width='34' height='16' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/><text x='304' y='114' fill='#ffd166' font-size='8.5'>4</text>" +
+      "<rect x='330' y='102' width='34' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/><text x='340' y='114' fill='#7d8fb0' font-size='8.5'>5</text>" +
+      "<rect x='366' y='102' width='34' height='16' fill='#2a2416' stroke='#ffd166' stroke-width='1.5'/><text x='376' y='114' fill='#ffd166' font-size='8.5'>6</text>" +
+      "<rect x='402' y='102' width='34' height='16' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/><text x='412' y='114' fill='#4f7cff' font-size='8.5'>7</text>" +
+      "<rect x='438' y='102' width='34' height='16' fill='#0c1425' stroke='#7d8fb0' stroke-width='1'/><text x='448' y='114' fill='#7d8fb0' font-size='8.5'>8</text>" +
+      "<rect x='474' y='102' width='34' height='16' fill='#1b2a4d' stroke='#4f7cff' stroke-width='1.5'/><text x='484' y='114' fill='#4f7cff' font-size='8.5'>9</text>" +
+      "<text x='524' y='114' fill='#7d8fb0' font-size='8.5'>blue = A, gold = another request</text>" +
+      "<line x1='20' y1='134' x2='740' y2='134' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='156' fill='#3ddc97' font-size='10'>internal waste is now at most 15 tokens per request &#8212; 1.5% instead of 87.8%</text>" +
+      "<text x='20' y='176' fill='#c9d6ea' font-size='10'>external fragmentation is gone entirely, because no allocation needs contiguity</text>" +
+      "<text x='20' y='196' fill='#ffd166' font-size='10'>59 concurrent requests becomes 487 on the same card: an 8.2x capacity gain</text>" +
+      "</svg><div class='fig-cap'>The block table is the whole trick. Indirection costs a lookup and buys back three quarters of the most expensive memory in the deployment.</div></div>" +
+      "<p>The arithmetic is decisive. Internal fragmentation is now bounded by the block size: a request wastes at most fifteen token-slots in its final partly-filled block, which against a thousand-token average is <strong>1.5% rather than 87.8%</strong>. External fragmentation disappears entirely, because any free block will do. On the same H100, capacity goes from 59 concurrent requests to about 487 &#8212; and since Chapter 26 showed that batch width is arithmetic intensity, that capacity is throughput. The paper reported 2 to 4 times the throughput of the systems it replaced.</p>" +
+      "<h3>Sharing, for free</h3>" +
+      "<p>Indirection buys a second thing that contiguous allocation cannot offer. If two requests begin with the same tokens, their block tables can point at the <em>same physical blocks</em>. Nothing is copied; two tables reference one block, with a count of how many.</p>" +
+      "<p>Sharing is safe while both requests only read. When one of them writes &#8212; generating a token into a shared block &#8212; the block is copied first and the writer gets its own version, exactly as an operating system does <strong>copy-on-write</strong> for a forked process.</p>"+
+      "<div class='fig'><svg viewBox='0 0 760 186' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>two requests, one shared prompt &#183; nothing is copied until something is written</text>" +
+      "<text x='20' y='44' fill='#c9d6ea' font-size='9.5'>before</text>" +
+      "<text x='110' y='38' fill='#4f7cff' font-size='9'>A: 0-&gt;3  1-&gt;5</text>" +
+      "<text x='110' y='56' fill='#3ddc97' font-size='9'>B: 0-&gt;3  1-&gt;5</text>" +
+      "<line x1='240' y1='40' x2='300' y2='46' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='240' y1='54' x2='300' y2='48' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<rect x='306' y='36' width='70' height='20' fill='#2a2416' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='318' y='50' fill='#ffd166' font-size='9'>block 3, 5</text>" +
+      "<text x='392' y='50' fill='#ffd166' font-size='9'>refcount 2 &#183; the prompt, stored once</text>" +
+      "<line x1='20' y1='78' x2='740' y2='78' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='106' fill='#c9d6ea' font-size='9.5'>B writes</text>" +
+      "<text x='110' y='100' fill='#4f7cff' font-size='9'>A: 0-&gt;3  1-&gt;5</text>" +
+      "<text x='110' y='118' fill='#3ddc97' font-size='9'>B: 0-&gt;3  1-&gt;8</text>" +
+      "<rect x='306' y='92' width='70' height='20' fill='#2a2416' stroke='#ffd166' stroke-width='2'/>" +
+      "<text x='318' y='106' fill='#ffd166' font-size='9'>block 5</text>" +
+      "<rect x='306' y='118' width='70' height='20' fill='#173328' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='318' y='132' fill='#3ddc97' font-size='9'>block 8</text>" +
+      "<text x='392' y='106' fill='#7d8fb0' font-size='9'>refcount 1 again, A keeps it unchanged</text>" +
+      "<text x='392' y='132' fill='#3ddc97' font-size='9'>one block copied, not the whole prefix</text>" +
+      "<text x='20' y='166' fill='#c9d6ea' font-size='10.5'>Block 3 is still shared. Only the block that diverged was duplicated, at the instant it diverged.</text>" +
+      "</svg><div class='fig-cap'>The same trick an operating system plays on a forked process, applied to a prompt two thousand users happen to share.</div></div>" +
+      "<p>The cost is one block copied at the moment of divergence rather than the entire prefix duplicated at the start. This is the mechanism behind the next section, and also behind parallel sampling: generating four candidates for one prompt shares the prompt's blocks and diverges only where the samples do.</p>" +
+      "<div class='callout'><strong>Fragment it above.</strong> Add requests of different lengths with paging off and watch the gaps open between them until an arriving request is refused while a third of the cache sits free. Turn paging on and watch the same requests fit, then read the fragmentation percentage: it should fall to roughly the block size divided by the mean length. Then share a prefix between two requests and watch allocated memory stay flat while used memory doubles.</div>" },
+
+    { title: "Prefix Caching", viz: "llmPrefixCache", vizTitle: "Find the system-prompt length where caching pays for its memory",
+      html: "<p>Copy-on-write blocks make an obvious optimisation possible. Production traffic is enormously repetitive at the front: every request carries the same system prompt, the same tool definitions from Chapter 19, the same few-shot examples. A thousand requests per minute may share their first two thousand tokens exactly.</p>" +
+      "<p><strong>Prefix caching</strong> keeps those blocks after the request that created them finishes, and hands them to the next request whose prompt starts the same way. The new request skips prefill for the shared portion entirely &#8212; the keys and values already exist &#8212; and computes only its own suffix.</p>" +
+      "<pre><code>2,000-token system prompt + 200-token user turn, Corvid on an H100\n\n  cold:  prefill 2,200 tokens        TTFT  88.3 ms\n  warm:  prefill    200 tokens        TTFT   8.0 ms      11x faster\n\n  GPU time saved per request                80.3 ms\n  memory held for the shared prefix          262 MB, once</code></pre>" +
+      "<p>An eleven-fold improvement in the number users actually perceive, for an optimisation that computes nothing new. And the memory arithmetic settles when it is worth doing: 262 MB is 2,000 token-slots, which is about two ordinary requests' worth of cache. So the cache pays for itself as soon as roughly <strong>two concurrent requests share the prefix</strong>, and at production hit rates it is not close.</p>" +
+      "<p>Three properties decide whether you get the benefit, and all three are about how you construct prompts rather than how you configure the server.</p>" +
+      "<ul>" +
+      "<li><strong>Matching is a prefix match, so order is everything.</strong> The shared content must come first, byte for byte. A timestamp, a request id or a user name placed at the top of the system prompt reduces the hit rate to zero, and this is the most common way teams lose the optimisation without noticing.</li>" +
+      "<li><strong>It is block-aligned.</strong> Sharing happens in units of sixteen tokens, so a prefix that diverges at token 1,001 shares 62 blocks and not 62.5. Small mismatches near the start cost more than their length suggests.</li>" +
+      "<li><strong>The cache is evicted under pressure.</strong> Blocks held for a prefix are blocks unavailable to active requests, so a busy server will drop them, usually least-recently-used. Hit rate therefore falls exactly when load rises, which is when you wanted it most.</li>" +
+      "</ul>" +
+      "<div class='callout'><strong>The economics, and why providers charge differently.</strong> Cached prefill is close to free for the server &#8212; no arithmetic, just blocks already resident &#8212; which is why providers price cached input tokens well below fresh ones. The engineering consequence is that a long system prompt is cheap if it is <em>stable</em> and expensive if it is not. Two designs with identical token counts can differ by an order of magnitude in cost, and the difference is entirely whether the variable parts were placed at the end.</div>" },
+
+    { title: "Scheduling Policy",
+      html: "<p>Continuous batching decides <em>when</em> to reconsider. It does not decide <em>what</em> to admit, and that policy is where the remaining latency problems live.</p>" +
+      "<p><strong>Prefill against decode.</strong> A server running decode steps for 200 users receives a new request with a 2,000-token prompt. Chapter 26 priced that prefill at 80 milliseconds, and during it no decode step runs. Every one of those 200 users sees an 80 ms gap between tokens &#8212; the inter-token latency spike that makes streaming output stutter, arriving from a request that is not theirs.</p>" +
+      "<p><strong>Chunked prefill</strong> is the fix: split the long prefill into pieces and interleave them with decode steps. A 512-token chunk costs about 20 ms and a 256-token chunk about 10, so the stall becomes a small ripple instead of a stop. The cost is that the arriving request's own TTFT rises, since its prefill is now spread across several scheduling slots. It is a direct transfer of latency from the many to the one, and it is almost always the right trade.</p>" +
+      "<p><strong>Admission and preemption.</strong> When the cache is full, the scheduler must either refuse new requests or evict a running one. Refusing protects the requests in flight and grows the queue, which shows up as TTFT. Preempting a running request &#8212; dropping its blocks and restarting it later, or swapping them to host memory &#8212; frees capacity immediately at the cost of throwing away work already done. Most servers preempt the most recently arrived request, on the reasoning that it has the least to lose.</p>" +
+      "<p><strong>Fairness.</strong> With a fixed cap on running requests, a scheduler maximising throughput will prefer short requests, because they free their slots sooner. Left alone this starves long requests indefinitely, and the symptom is a latency distribution that looks excellent up to p95 and catastrophic beyond it. The remedy is the ordinary one from any queueing system: bound the wait, and admit by age rather than by expected cost.</p>" +
+      "<div class='callout'><strong>The knob that matters most.</strong> Of everything in this section, the maximum number of running requests is the one to tune first, because it sets both the arithmetic intensity from Chapter 26 and the memory pressure that causes preemption. Set it from the cache arithmetic rather than from a default: capacity in token-slots, divided by your <em>measured</em> mean sequence length, with headroom for the tail. A cap chosen without that division is either leaving the GPU idle or thrashing.</div>" },
+
+    { title: "Goodput Under a Latency Target",
+      html: "<p>Chapter 26 introduced goodput &#8212; throughput counting only requests that met their latency target &#8212; and this is where it earns its place, because batch size trades the two quantities directly and the optimum is computable.</p>" +
+      "<p>Take Corvid on an H100 with a mean context of 1,000 tokens and a service-level objective of 20 milliseconds per output token. Each decode step reads the weights once plus the cache for every active token, so both numbers follow from Chapter 26's arithmetic:</p>" +
+      "<pre><code>batch   bytes per step   TPOT      throughput      cache      verdict\n    1        16.19 GB    4.83 ms      207 tok/s     0.1 GB     ok\n   32        20.25 GB    6.05 ms    5,293 tok/s     4.2 GB     ok\n  128        32.84 GB    9.80 ms   13,058 tok/s    16.8 GB     ok\n  256        49.61 GB   14.81 ms   17,285 tok/s    33.6 GB     ok\n  384        66.39 GB   19.82 ms   19,376 tok/s    50.3 GB     ok\n  512        83.17 GB   24.83 ms   20,623 tok/s    67.1 GB     breaches</code></pre>" +
+      "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>throughput rises smoothly; goodput falls off a cliff at the SLO</text>" +
+      "<line x1='70' y1='150' x2='700' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='70' y1='30' x2='70' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='320' y='170' fill='#7d8fb0' font-size='9'>batch size</text>" +
+      "<path d='M70 148 C 180 110, 300 74, 430 56 S 600 42, 700 38' fill='none' stroke='#7d8fb0' stroke-width='2' stroke-dasharray='4 3'/>" +
+      "<text x='560' y='34' fill='#7d8fb0' font-size='9'>throughput</text>" +
+      "<path d='M70 148 C 180 110, 300 74, 430 56' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<line x1='430' y1='56' x2='430' y2='150' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='300' y='96' fill='#3ddc97' font-size='9.5'>goodput</text>" +
+      "<line x1='470' y1='30' x2='470' y2='150' stroke='#ff5d73' stroke-width='1.5' stroke-dasharray='4 4'/>" +
+      "<text x='478' y='44' fill='#ff5d73' font-size='9'>SLO breached</text>" +
+      "<circle cx='430' cy='56' r='5' fill='#ffd166'/>" +
+      "<text x='226' y='46' fill='#ffd166' font-size='9.5'>384: 19,376 tok/s at 19.8 ms</text>" +
+      "<line x1='20' y1='182' x2='740' y2='182' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='200' fill='#c9d6ea' font-size='10.5'>Past the line every request is late, so throughput keeps rising and goodput is zero. Tuning for the</text>" +
+      "<text x='20' y='212' fill='#c9d6ea' font-size='10.5'>dashed curve is how servers get benchmarked well and used unhappily.</text>" +
+      "</svg><div class='fig-cap'>The gold point is the operating point. It is found by measuring, not by raising the batch until the throughput number stops improving.</div></div>" +
+      "<p>Batch 384 is the answer: the largest batch whose per-token latency stays inside the target, delivering 19,376 tokens per second. Going to 512 buys 6% more raw throughput and misses the objective on <em>every</em> request, taking goodput to zero.</p>" +
+      "<p>Note also what the objective has to be stated <em>on</em>. A target on time to first token and a target on time per output token pull in opposite directions: admitting a long prefill promptly protects the first and stalls the second, which is what chunked prefill exists to reconcile. A single latency number is therefore not a service-level objective for a generation service, and a stack tuned against one will quietly sacrifice the other.</p>"+
+      "<p>Two observations worth carrying. The throughput curve flattens well before the SLO does, so the last doublings of batch size buy very little even ignoring latency &#8212; a consequence of walking up a bandwidth slope that is itself flattening as the cache grows. And in this example the memory limit and the latency limit nearly coincide: batch 384 needs 50.3 GB of cache against 63.94 available, and batch 512 needs 67.1 GB, which does not fit either. That coincidence is specific to these numbers, and checking which of the two binds first on <em>your</em> configuration is the point of the exercise rather than a general result.</p>" },
+
+    { title: "Shrinking the Cache Itself",
+      html: "<p>Everything above manages the cache more efficiently. Two techniques make it smaller, and both are worth knowing as options with real costs rather than as free wins.</p>" +
+      "<p><strong>KV-cache quantization</strong> stores keys and values at lower precision. Moving from bf16 to int8 halves the cache: Corvid's 128 KB per token becomes 64, capacity doubles, and per-step cache traffic halves &#8212; which past Chapter 26's crossover of 122,528 token-slots is the dominant traffic, so it is a latency optimisation as well as a capacity one. Chapter 29 covers where quantization error lands in general; the specific finding for the cache is that <em>keys are more sensitive than values</em>, so implementations commonly quantize values more aggressively than keys, and quality degrades on long contexts before it degrades on short ones.</p>" +
+      "<p><strong>Cache eviction</strong> discards the entries for tokens judged unlikely to matter, keeping the rest. The observation it rests on is that attention is concentrated: most positions receive very little attention weight from most later tokens, so their keys and values could be dropped with little effect. Schemes differ in what they protect, and the common finding across them is that the first few tokens and a recent window matter disproportionately.</p>" +
+      "<p>The honest framing for both is that they trade an exact computation for an approximate one. Everything else in this chapter is <em>lossless</em>: continuous batching, paging and prefix caching change what is stored and when, and the tokens produced are identical to what the naive implementation would have produced. Quantizing or evicting the cache changes the output.</p>" +
+      "<div class='callout'><strong>The order to apply them.</strong> Exhaust the lossless mechanisms first, because they cost nothing but engineering: continuous batching, then paging, then prefix caching. Only when those are in place and capacity still binds should you reach for cache quantization, and only then for eviction. Reaching for an approximation while 80% of your cache is lost to fragmentation is optimising the wrong thing and paying quality for it.</div>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> A static batch of 8 requests generates 20, 25, 30, 40, 50, 60, 80 and 900 tokens. Compute each request's completion time in decode steps, the total slot-steps consumed, and the fraction wasted on finished-but-waiting requests. Then recompute under continuous batching with the same arrival times. Report the p99 in both cases and state which single request set it.</li>" +
+      "<li><strong>Trace.</strong> Using Chapter 26's 128 KB per token and 63.94 GB of free cache, compute concurrent capacity when reserving a 4,096-token maximum, and when paging with a block size of 16 against a measured mean of 600 tokens. Report both, and the internal waste per request in each case. Then repeat with a block size of 128 and state the trade that block size represents.</li>" +
+      "<li><strong>Trace.</strong> Build the goodput table yourself for a 10 ms TPOT objective rather than 20, using bytes per step of 16.06 GB plus batch times context times 128 KB, at a context of 2,000 tokens. Find the largest batch that meets it and the throughput there. Then state whether memory or latency binds first, and by how much.</li>" +
+      "<li><strong>Investigate.</strong> Run any paged serving stack and report its cache utilisation and preemption count under a load of mixed-length requests. Then set the maximum running requests far above what the cache can hold and repeat. You should see preemptions rise and throughput fall, and the point of the exercise is that the failure looks like a performance problem rather than a configuration one.</li>" +
+      "<li><strong>Investigate.</strong> Measure prefix caching on any stack that supports it. Send 50 requests sharing a 1,000-token system prompt and record TTFT for the first and the rest. Then move a timestamp from the end of the system prompt to the beginning and repeat. Report both hit rates. The second number should be zero, and finding that in your own service is worth more than reading about it here.</li>" +
+      "<li><strong>Build.</strong> Implement a block allocator for a KV cache: fixed-size blocks, a per-request block table, allocation on demand, reference counting, and copy-on-write when a shared block is written. Then write the assertions &#8212; that total allocated blocks never exceeds capacity; that a shared prefix allocates each block exactly once; that a write to a shared block leaves the other request's view unchanged; and that freeing a request returns every block it held and no block anyone else holds. The last two are where the bugs are.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "static batching", d: "Collecting requests into a fixed batch that runs to completion together, so every member waits for the longest one." },
+    { t: "head-of-line blocking", d: "Short requests held up behind a long one in the same batch, which inflates the tail latency without affecting the mean." },
+    { t: "continuous batching", d: "Making the scheduling decision once per token rather than once per request, so requests join and leave the running set mid-flight." },
+    { t: "iteration-level scheduling", d: "The name Orca gave continuous batching in 2022: reconsidering the active set at every decode iteration." },
+    { t: "internal fragmentation", d: "Memory reserved for a request and never used because it stopped early; the largest source of KV-cache waste under contiguous allocation." },
+    { t: "external fragmentation", d: "Free memory that exists but is not contiguous, so an allocation fails while the total free space would have sufficed." },
+    { t: "PagedAttention", d: "Managing the KV cache as fixed-size blocks addressed through a per-request block table, borrowing virtual memory from operating systems." },
+    { t: "block", d: "The unit of KV-cache allocation, holding keys and values for a small fixed number of contiguous tokens; sixteen by default in vLLM." },
+    { t: "block table", d: "The per-request map from logical token positions to physical blocks, which is what removes the need for contiguity." },
+    { t: "copy-on-write", d: "Sharing physical blocks between requests until one writes, then duplicating just that block; what makes prefix sharing and parallel sampling cheap." },
+    { t: "prefix caching", d: "Retaining the blocks of a shared prompt prefix so later requests skip prefill for it entirely, at roughly an eleven-fold TTFT improvement on a long system prompt." },
+    { t: "chunked prefill", d: "Splitting a long prefill into pieces interleaved with decode steps, transferring latency from the many waiting users to the one arriving request." },
+    { t: "preemption", d: "Evicting a running request's blocks to free capacity, discarding work already done; usually applied to the most recently arrived request." },
+    { t: "goodput", d: "Throughput counting only requests that met their latency target; zero past the batch size where the objective is breached, however high raw throughput goes." },
+    { t: "KV-cache quantization", d: "Storing keys and values at lower precision, which halves both capacity pressure and cache traffic at int8, with keys more sensitive than values." },
+    { t: "cache eviction", d: "Discarding the cache for tokens judged unlikely to receive attention; lossy, and the last thing to reach for rather than the first." }
+  ],
+  quiz: [
+    { type: "mc", q: "Under static batching, a user's identical request sees a tenfold latency difference between two attempts a second apart. Why?", opts: ["The server was warming up its kernels on the first attempt", "Head-of-line blocking: the request's completion is set by the longest request in whatever batch it landed in, which has nothing to do with its own length", "The KV cache was cold on the first attempt and warm on the second", "Different quantization paths were selected by the scheduler"], a: 1,
+      why: "A static batch is a unit, so a slot is held until every member finishes. A 20-token request beside an 800-token one waits 780 steps after its own answer was ready. The mean stays acceptable because most requests are short; the p99 is set by an unlucky pairing, and no investigation of the user's own request will explain it." },
+    { type: "mc", q: "Continuous batching improves both tail latency and throughput. Why does one change deliver both?", opts: ["It reduces the number of kernel launches per step", "It allows requests to be processed at lower precision when the batch is full", "Finished requests leave immediately so short requests are not delayed, and queued requests join immediately so the batch stays near full width — and width is arithmetic intensity", "It overlaps prefill and decode automatically"], a: 2,
+      why: "Under static batching the running width decays as members finish, and Chapter 26 showed width is exactly what buys arithmetic intensity. Replacing finished requests immediately keeps the intensity high while removing the wait that inflated the tail. Improving latency and throughput with one change is rare enough to be worth noticing." },
+    { type: "mc", q: "Why does a naive KV-cache allocator reserve the maximum sequence length per request?", opts: ["Because a request's final length is unknown when it starts, and contiguous allocation must commit before knowing", "Because the attention kernel requires a fixed tensor shape across the batch", "Because shorter reservations would fragment the cache more", "Because the maximum is cheaper to compute than the expected length"], a: 0,
+      why: "Generation stops at a stop token or a limit, neither known at admission. With contiguous allocation there is no way to grow a region later, so the safe choice is the maximum. Against a mean length of 1,000 and a maximum of 8,192 that wastes 87.8% of each reservation, and it is why existing systems were measured wasting 60 to 80 percent of KV memory." },
+    { type: "mc", q: "PagedAttention bounds internal fragmentation to what, and at what cost?", opts: ["To half a block on average, at the cost of halving the effective cache size", "To one block per layer, at the cost of a larger attention kernel", "To zero, at the cost of a compaction pass between requests", "To at most one block's worth of tokens per request — fifteen at the default block size of sixteen — at the cost of an indirection through a block table"], a: 3,
+      why: "A request wastes only the unfilled remainder of its final block, so 1.5% against a thousand-token mean instead of 87.8%. External fragmentation disappears entirely because any free block will serve. On the H100 example capacity goes from 59 concurrent requests to about 487, and the only price is a table lookup per block." },
+    { type: "mc", q: "Two requests share a system prompt and their block tables point at the same physical blocks. What happens when one generates a new token into a shared block?", opts: ["Both requests' caches are updated, since they reference the same memory", "The request is preempted and restarted with private blocks", "The whole shared prefix is duplicated for the writer", "That single block is copied and the writer gets its own version, leaving the reader's view unchanged"], a: 3,
+      why: "This is copy-on-write, borrowed from operating systems along with the paging idea. The cost is one block duplicated at the moment of divergence rather than the entire prefix duplicated at the start. The same mechanism makes parallel sampling cheap: four candidates for one prompt share the prompt's blocks and diverge only where the samples do." },
+    { type: "blank", q: "Splitting a long prefill into pieces interleaved with decode steps, so waiting users do not see a long stall, is called ____ prefill.", a: ["chunked", "chunked prefill"],
+      why: "A 2,000-token prefill costs about 80 ms during which no decode step runs, so every active user sees an 80 ms gap between tokens caused by someone else's request. Splitting it into 256-token chunks turns that into roughly 10 ms ripples. The arriving request's own TTFT rises in exchange — a transfer of latency from the many to the one." },
+    { type: "mc", q: "A team places a request id at the top of their system prompt for tracing. What does this cost them?", opts: ["The entire prefix cache hit rate, because matching is a prefix match and the first tokens now differ on every request", "Nothing, since the id is only a few tokens", "A small increase in prefill time proportional to the id's length", "Correctness, since the model may attend to the id"], a: 0,
+      why: "Prefix caching matches from the first token forward, byte for byte. Anything variable at the top — a timestamp, a user name, a request id — makes every request a miss, and the server silently recomputes a 2,000-token prefill it could have skipped. This is the most common way teams lose the optimisation without noticing, and the fix is to move variable content to the end." },
+    { type: "mc", q: "Raising batch size from 384 to 512 lifts throughput from 19,376 to 20,623 tokens per second while TPOT goes from 19.8 ms to 24.8 ms against a 20 ms objective. What is the goodput at 512?", opts: ["Slightly higher, since throughput rose", "About 20,623 minus the fraction of requests that were already late", "Zero, because every request now breaches the objective", "Unchanged, since goodput measures throughput independently of latency"], a: 2,
+      why: "Goodput counts only requests that met their target, and at a uniform 24.8 ms per token every request misses. Raw throughput rose 6% and useful throughput went to nothing. Tuning to the throughput curve rather than the goodput curve is precisely how a server ends up benchmarking well and being unpleasant to use." },
+    { type: "mc", q: "Which of these mechanisms changes the tokens the model produces?", opts: ["Continuous batching, because request ordering affects sampling", "KV-cache quantization and eviction, and only those", "PagedAttention, because block boundaries alter attention", "Prefix caching, because reused keys were computed in a different batch"], a: 1,
+      why: "Continuous batching, paging and prefix caching are lossless: they change what is stored and when, and produce identical output to a naive implementation. Quantizing the cache stores an approximation, and eviction discards entries entirely. That distinction sets the order — exhaust the lossless mechanisms before paying quality for capacity." },
+    { type: "order", q: "Order these capacity measures by what to try first when a server cannot hold enough concurrent requests:", items: ["Continuous batching, so slots are freed the moment a request finishes", "PagedAttention, so reservations stop wasting most of the cache", "Prefix caching, so shared prompts occupy memory once", "KV-cache quantization, halving the bytes per token at int8", "Cache eviction, discarding entries judged unlikely to be attended to"], why: "The first three are lossless and cost only engineering, and the second alone recovers roughly three quarters of the cache. The last two trade output quality for capacity. Reaching for an approximation while most of the cache is lost to fragmentation is paying quality for something the lossless mechanisms would have given free." },
+    { type: "mc", q: "Why do continuous batching and PagedAttention appear together historically rather than as independent optimisations?", opts: ["Both were introduced in the same paper", "PagedAttention is only correct when the batch composition is fixed", "Continuous batching requires per-request caches of differing lengths, which cannot live in one rectangular tensor and therefore need indirect allocation", "Both depend on the same CUDA kernel"], a: 2,
+      why: "Requests joining and leaving mid-flight are at different positions in their own sequences, so their caches differ in length and change independently. A contiguous rectangular allocation cannot express that without padding to the maximum, which is the waste paging exists to remove. The scheduler change makes the memory change necessary." },
+    { type: "mc", q: "A server's maximum-running-requests setting is left at a default well above what the cache can hold. What is the symptom?", opts: ["Throughput falls and preemptions rise, because admitted requests must be evicted and their completed work discarded", "Requests are refused at admission with a clear capacity error", "Time to first token improves while throughput is unaffected", "The cache silently quantizes to make room"], a: 0,
+      why: "The scheduler admits more requests than the cache can serve, so it must preempt — dropping blocks and restarting that work later. The wasted work shows up as reduced throughput and unstable latency, and it presents as a performance mystery rather than as a configuration error. Set the cap from capacity in token-slots divided by measured mean length, with headroom." }
+  ]
+});
