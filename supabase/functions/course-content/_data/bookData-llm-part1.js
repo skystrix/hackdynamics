@@ -5167,3 +5167,266 @@ CHAPTERS.push({
       why: "Length bias is a property of the preference data, not of PPO, so it survives any change of algorithm. Reward hacking reappears as overfitting to the preference set. The KL leash reappears as a coefficient with a different name and the same job of bounding drift from the reference. The pipeline changes; the failure modes are inherited." }
   ]
 });
+
+/* ======================= CHAPTER 23 ======================= */
+CHAPTERS.push({
+  num: 23, part: 4, title: "DPO and What Came After",
+  blurb: "Chapter 22 built four models and a generation loop to optimize a language model against human preferences. This chapter takes them apart. The RLHF objective has a closed-form optimal policy, and substituting it back turns the whole reinforcement-learning apparatus into a classification loss you can train with an ordinary optimizer. You will derive that in five steps rather than read it quoted, find the failure it hides, then meet the successors: GRPO, which brought reinforcement learning back for reasoning, and the cheap baselines that beat both more often than anyone admits.",
+  sections: [
+    { title: "The Objective, and Its Closed-Form Optimum",
+      html: "<p>Chapter 22's objective was a reward and a leash:</p>" +
+      "<pre><code>maximize over policies:   E[ r(x, y) ]  -  beta * KL( policy || reference )</code></pre>" +
+      "<p>Everything in that chapter &#8212; the rollouts, the value model, the clipping &#8212; existed to hill-climb this quantity approximately, because reinforcement learning is what you reach for when an objective can only be sampled. But this particular objective is unusual: it has an exact solution, and the solution can be written down.</p>" +
+      "<p>The policy maximising it is</p>" +
+      "<pre><code>pi*(y|x)  =  (1 / Z(x)) * pi_ref(y|x) * exp( r(x, y) / beta )</code></pre>" +
+      "<p>Read the shape before the symbols. The optimal policy is the reference policy <em>reweighted</em> by the exponentiated reward. A response the reference already found likely and the reward model likes gets pushed up; one the reward model dislikes gets pushed down; and <code>beta</code> controls how hard the reweighting bites, exactly as the leash did. At large <code>beta</code> the exponent flattens toward 1 and the optimum <em>is</em> the reference. That is the same behaviour section 5 of Chapter 22 described empirically, now falling out of algebra.</p>" +
+      "<p>Two limits check that the formula says what it should. As <code>beta</code> grows, <code>r/beta</code> goes to zero, the exponential goes to one, and the optimum becomes the reference policy exactly &#8212; an infinitely short leash. As <code>beta</code> shrinks toward zero, the exponential magnifies every difference in reward until all the mass collects on the single highest-scoring response, and the optimum becomes a point mass: argmax over the reward, with the language model's own preferences erased. Chapter 22 watched both of those happen on a training curve. They are properties of this expression.</p>"+
+      "<h3>The term that ruins it</h3>" +
+      "<p><code>Z(x)</code> is the normalising constant that makes the result a probability distribution:</p>" +
+      "<pre><code>Z(x)  =  sum over ALL possible responses y  of  pi_ref(y|x) * exp( r(x, y) / beta )</code></pre>" +
+      "<p>All possible responses. For a vocabulary of 128,256 and a length of 500 tokens, that sum has more terms than there are atoms in the observable universe, and no clever factorisation collapses it because the reward is a function of the whole sequence rather than of each token. This is the <strong>partition function</strong>, and its intractability is precisely why Chapter 22 needed reinforcement learning in the first place: you cannot compute the optimum, so you sample and climb toward it.</p>" +
+      "<p>So the formula above is correct, complete, and apparently useless. Everyone who worked on RLHF knew it; it appears in the papers as motivation. What nobody did until 2023 was ask a different question about it: not &#8220;how do I compute this policy&#8221; but <strong>&#8220;what if I use it to eliminate the reward instead?&#8221;</strong></p>" },
+
+    { title: "The Derivation", viz: "llmDpoDerive", vizTitle: "Step through the algebra and watch Z(x) disappear",
+      html: "<p>Rafailov and colleagues published <strong>DPO</strong> &#8212; Direct Preference Optimization &#8212; in 2023. The move is five steps of algebra and the whole chapter turns on the fourth.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 258' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the derivation, complete &#183; the reward model is eliminated at step 4</text>" +
+      "<text x='20' y='42' fill='#7d8fb0' font-size='9'>1</text>" +
+      "<text x='44' y='42' fill='#c9d6ea' font-size='10'>the KL-constrained optimum, from section 1</text>" +
+      "<text x='44' y='60' fill='#4f7cff' font-size='10'>pi*(y|x) = (1/Z(x)) pi_ref(y|x) exp( r(x,y) / beta )</text>" +
+      "<text x='20' y='90' fill='#7d8fb0' font-size='9'>2</text>" +
+      "<text x='44' y='90' fill='#c9d6ea' font-size='10'>solve it for r instead of for pi &#8212; the whole idea</text>" +
+      "<text x='44' y='108' fill='#4f7cff' font-size='10'>r(x,y) = beta log( pi*(y|x) / pi_ref(y|x) ) + beta log Z(x)</text>" +
+      "<text x='20' y='138' fill='#7d8fb0' font-size='9'>3</text>" +
+      "<text x='44' y='138' fill='#c9d6ea' font-size='10'>substitute into Bradley-Terry from Chapter 22</text>" +
+      "<text x='44' y='156' fill='#4f7cff' font-size='10'>P(w &gt; l) = sigmoid( r(x,y_w) - r(x,y_l) )</text>" +
+      "<text x='20' y='186' fill='#ffd166' font-size='9'>4</text>" +
+      "<text x='44' y='186' fill='#ffd166' font-size='10'>both responses share the same prompt x, so beta log Z(x) appears twice</text>" +
+      "<text x='44' y='204' fill='#3ddc97' font-size='10'>+ beta log Z(x) - beta log Z(x) = 0</text>" +
+      "<line x1='396' y1='200' x2='520' y2='200' stroke='#ff5d73' stroke-width='2'/>" +
+      "<text x='530' y='204' fill='#ff5d73' font-size='9.5'>the intractable term is gone</text>" +
+      "<text x='20' y='234' fill='#7d8fb0' font-size='9'>5</text>" +
+      "<text x='44' y='234' fill='#c9d6ea' font-size='10'>what remains is a loss over a fixed dataset of pairs</text>" +
+      "<text x='44' y='252' fill='#3ddc97' font-size='10'>L = -log sigmoid( beta log(pi/pi_ref)[chosen] - beta log(pi/pi_ref)[rejected] )</text>" +
+      "</svg><div class='fig-cap'>Step 4 is the entire result. Z(x) is a function of the prompt alone, so in a difference between two responses to that prompt it cancels identically.</div></div>" +
+      "<p>Step 2 is the conceptual move and step 4 is the payoff. Because <code>Z(x)</code> depends only on the prompt and not on the response, the difference of two rewards for the <em>same</em> prompt is free of it. The quantity that made the optimum incomputable never appears in the objective you actually optimize.</p>" +
+      "<p>Look at what is left. There is no reward model: the policy itself supplies the score. There is no rollout: the responses come from a fixed dataset collected once. There is no value model, no advantage estimate and no clipping, because nothing is being estimated from samples of a moving distribution. It is a binary classification loss over pairs, trained with the same optimizer, schedule and loss-masking machinery as Chapter 20.</p>" +
+      "<div class='callout'><strong>Step it above.</strong> Advance the derivation one press at a time and stop at step 4 with <code>Z(x)</code> highlighted in both terms. Everything that made Chapter 22 hard is attached to that symbol &#8212; the reward model exists to approximate it, and the rollouts exist because it cannot be summed. Watching it cancel is watching two of the four models in Chapter 22's diagram become unnecessary.</div>" +
+      "<p>The paper's subtitle states the reframing exactly: your language model is secretly a reward model. Any policy, compared against a reference, already defines a reward. DPO does not avoid the reward model so much as notice that you were training two copies of the same object.</p>"+
+      "<p>What the cancellation costs is worth naming now rather than discovering later. PPO is <em>on-policy</em>: it generates from the current model, so every gradient concerns text that model actually produces. DPO is <em>off-policy</em> by construction, because the dataset was fixed before training began. As the policy moves, the responses it is being taught about become less and less like the responses it would now generate, and the further it drifts the less its training data is about it. The rollout loop was not pure overhead; it was what kept the signal on-distribution. Removing it is the right trade for most work, and it is a trade.</p>" },
+
+    { title: "Reading the Loss",
+      html: "<p>The loss rewards making the chosen response more likely relative to the reference and the rejected response less likely relative to the reference. The quantity inside the sigmoid is a margin between two <strong>implicit rewards</strong>:</p>" +
+      "<pre><code>implicit reward:   r_hat(x, y)  =  beta * log( pi_theta(y|x) / pi_ref(y|x) )</code></pre>" +
+      "<p>This is a real, usable quantity and most people trained with DPO never look at it. It is positive when the policy has become more willing to say something than the reference was, negative when less, and its scale is set by <code>beta</code>. You can compute it for any response at any checkpoint, and the margin between chosen and rejected is the direct analogue of Chapter 22's reward gap.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 208' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>the implicit reward is a log-ratio against the reference, per response</text>" +
+      "<line x1='330' y1='34' x2='330' y2='150' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='300' y='166' fill='#7d8fb0' font-size='9'>0</text>" +
+      "<text x='150' y='166' fill='#ff5d73' font-size='9'>less likely than reference</text>" +
+      "<text x='420' y='166' fill='#3ddc97' font-size='9'>more likely than reference</text>" +
+      "<rect x='330' y='42' width='260' height='18' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/>" +
+      "<text x='600' y='55' fill='#3ddc97' font-size='9.5'>chosen &#183; +1.8</text>" +
+      "<rect x='190' y='72' width='140' height='18' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+      "<text x='84' y='85' fill='#ff5d73' font-size='9.5'>rejected &#183; -1.0</text>" +
+      "<line x1='190' y1='100' x2='590' y2='100' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<line x1='190' y1='96' x2='190' y2='104' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<line x1='590' y1='96' x2='590' y2='104' stroke='#ffd166' stroke-width='1.5'/>" +
+      "<text x='330' y='118' fill='#ffd166' font-size='9.5'>margin 2.8 &#8212; this is what the loss optimizes</text>" +
+      "<text x='20' y='186' fill='#c9d6ea' font-size='10.5'>The loss constrains only the width of the gold bar. Where the two ends sit is unconstrained,</text>" +
+      "<text x='20' y='198' fill='#7d8fb0' font-size='9.5'>which is the whole subject of the next section.</text>" +
+      "</svg><div class='fig-cap'>Both ends could slide left together and the margin would be unchanged. Nothing in the objective forbids it.</div></div>" +
+      "<p>The gradient has a property worth knowing because it explains how a DPO run spends its time. The update is scaled by the sigmoid of the <em>negative</em> margin &#8212; that is, by how badly the implicit reward model currently ranks that pair. A pair the model already gets right by a wide margin contributes almost nothing; a pair it ranks backwards contributes almost the full gradient. The loss automatically concentrates on the examples it is wrong about, which is why DPO tolerates a dataset containing many easy pairs, and also why a handful of mislabelled pairs can do outsized damage: a wrong label looks exactly like an important example.</p>"+
+      "<p><code>beta</code> plays the same role it did in Chapter 22 and it is worth seeing why, because the mechanism is no longer a penalty you added but a constant baked into the loss. A small <code>beta</code> divides the log-ratio by little, so a given amount of drift from the reference produces a small margin, so the optimizer must drift further to reduce the loss. A large <code>beta</code> means small drift already produces a large margin, and training stops early. The leash is still there; it has been folded into the objective rather than subtracted from it.</p>" +
+      "<p>Typical values run from 0.01 to 0.5, with 0.1 the common default. The useful reframing: <code>beta</code> is not a learning rate and not a regularisation strength in the usual sense. It is the exchange rate between &#8220;how far the model moved&#8221; and &#8220;how much preference that buys&#8221;, and it is the single knob that decides whether a DPO run is conservative or destructive.</p>" },
+
+    { title: "Running It, and the Failure It Hides", viz: "llmDpoBeta", vizTitle: "Lower beta until the margin looks great, then look at the absolute likelihoods",
+      html: "<p>The practical case for DPO is the cost. Chapter 22 needed four models resident and a generation loop inside every step. DPO needs two, and no generation at all:</p>" +
+      "<pre><code>PPO    policy 144.5 + value 144.5 + reference 16.1 + reward 16.1  =  321.2 GB\nGRPO   policy 144.5 +               reference 16.1 + reward 16.1  =  176.7 GB\nDPO    policy 144.5 +               reference 16.1                =  160.6 GB\nDPO with reference log-probabilities precomputed once             =  144.5 GB</code></pre>" +
+      "<p>That last line is the one that changed the field. The reference model's log-probabilities for a fixed dataset never change, so you compute them once in a single pass and throw the model away. What remains costs exactly what supervised fine-tuning costs, runs on the same infrastructure, and uses the same trainer with a different loss function.</p>" +
+      "<h3>Where the pairs come from</h3>"+
+      "<p>Section 2's off-policy warning becomes a practical instruction here. Pairs generated by <em>your</em> model, at a temperature above zero, describe the region of output space you are trying to move. Pairs downloaded from a public preference set describe some other model's region, and the policy is then being taught to prefer things it would not have said in either direction. Both work; the first works better, and the gap widens the longer you train.</p>"+
+      "<p>The other standard instruction is to run Chapter 20's supervised fine-tuning on the chosen responses first, then DPO from that checkpoint. The reference is meant to be a model that already assigns reasonable probability to the responses you are about to reward. Starting DPO from a base model asks it to raise the likelihood of text it finds unlikely, which is a much larger move and exactly the regime where the next failure appears.</p>"+
+      "<h3>The failure</h3>" +
+      "<p>Look again at the previous section's figure. The loss constrains the <em>margin</em> between two implicit rewards and says nothing about where either one sits. So there are two ways to increase the margin: raise the chosen response's likelihood, or lower the rejected one's faster than the chosen one falls. Gradient descent will happily take the second.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>a run that looks healthy on the metric people watch</text>" +
+      "<line x1='70' y1='120' x2='360' y2='120' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<line x1='70' y1='34' x2='70' y2='120' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<path d='M70 112 C 130 84, 200 56, 360 42' fill='none' stroke='#3ddc97' stroke-width='2.5'/>" +
+      "<text x='120' y='140' fill='#3ddc97' font-size='9.5'>margin: rising, looks perfect</text>" +
+      "<line x1='440' y1='60' x2='730' y2='60' stroke='#7d8fb0' stroke-width='1.5'/>" +
+      "<text x='400' y='64' fill='#7d8fb0' font-size='9'>0</text>" +
+      "<path d='M440 66 C 500 76, 570 88, 730 96' fill='none' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='560' y='112' fill='#ffd166' font-size='9.5'>log p(chosen): falling</text>" +
+      "<path d='M440 70 C 500 96, 570 128, 730 152' fill='none' stroke='#ff5d73' stroke-width='2.5'/>" +
+      "<text x='560' y='168' fill='#ff5d73' font-size='9.5'>log p(rejected): falling faster</text>" +
+      "<text x='20' y='192' fill='#c9d6ea' font-size='9.5'>the margin widens because the gap grows, not because the good answer got likelier</text>" +
+      "<line x1='20' y1='202' x2='740' y2='202' stroke='#1c2a45' stroke-width='1'/>" +
+      "<text x='20' y='218' fill='#c9d6ea' font-size='10'>The model has not learned to prefer the chosen response. It has learned to dislike both, unevenly.</text>" +
+      "</svg><div class='fig-cap'>Two panels from the same run. Only the left one appears on a default dashboard, and it is the one that lies.</div></div>" +
+      "<p>This is <strong>likelihood displacement</strong>, and it is well documented rather than folklore: the probability of the preferred response falls during DPO training, degrading generation quality and diversity even as the loss improves. It is worst when the two responses are similar, because then the gradient that pushes one down drags the other with it. The Smaug work proposed <strong>DPO-Positive</strong>, adding a term that penalises reducing the chosen response's likelihood, and reported that vanilla DPO decreases both probabilities while the corrected version decreases only the rejected one.</p>" +
+      "<div class='callout'><strong>Look at it above.</strong> Lower <code>beta</code> until the margin curve looks excellent, then switch the display to absolute log-probabilities. Both are falling. The rule that follows is one line and belongs in every DPO run: <strong>log the chosen response's absolute log-probability, not only the margin.</strong> If it is falling, the run is damaging the model no matter what the loss says.</div>" },
+
+    { title: "GRPO: Bringing Reinforcement Learning Back",
+      html: "<p>DPO removed reinforcement learning by requiring a fixed dataset of pairs. That is exactly what you cannot have when the thing you want to optimize is checkable rather than preferred &#8212; a maths answer that is right or wrong, code that compiles or does not. There is no annotator to ask, and no fixed set of comparisons: you need the model to attempt problems and be graded, which means generating, which means reinforcement learning again.</p>" +
+      "<p><strong>GRPO</strong> &#8212; Group Relative Policy Optimization, from Shao and colleagues in the 2024 DeepSeekMath work &#8212; is PPO with the expensive part removed. Recall Chapter 22's value model: a second trainable model the size of the policy, existing only to predict the expected reward so that raw reward could be converted into an advantage. GRPO deletes it and gets the baseline from the batch instead.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>one prompt, G sampled answers, and a baseline computed from the group itself</text>" +
+      "<rect x='20' y='34' width='120' height='120' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+      "<text x='34' y='58' fill='#4f7cff' font-size='10'>one prompt</text>" +
+      "<text x='34' y='82' fill='#c9d6ea' font-size='9'>sample G = 8</text>" +
+      "<text x='34' y='98' fill='#c9d6ea' font-size='9'>answers from</text>" +
+      "<text x='34' y='114' fill='#c9d6ea' font-size='9'>the policy</text>" +
+      "<line x1='146' y1='94' x2='180' y2='94' stroke='#4f7cff' stroke-width='2'/><polygon points='188,94 178,89 178,99' fill='#4f7cff'/>" +
+      "<text x='200' y='44' fill='#7d8fb0' font-size='9'>reward</text>" +
+      "<rect x='196' y='52' width='40' height='16' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/><text x='246' y='65' fill='#3ddc97' font-size='9'>1.0</text>" +
+      "<rect x='196' y='72' width='40' height='16' fill='#173328' stroke='#3ddc97' stroke-width='1.5'/><text x='246' y='85' fill='#3ddc97' font-size='9'>1.0</text>" +
+      "<rect x='196' y='92' width='40' height='16' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/><text x='246' y='105' fill='#ff5d73' font-size='9'>0.0</text>" +
+      "<rect x='196' y='112' width='40' height='16' fill='#2e1620' stroke='#ff5d73' stroke-width='1.5'/><text x='246' y='125' fill='#ff5d73' font-size='9'>0.0</text>" +
+      "<text x='196' y='146' fill='#7d8fb0' font-size='9'>... 8 in all</text>" +
+      "<line x1='290' y1='94' x2='324' y2='94' stroke='#ffd166' stroke-width='2'/><polygon points='332,94 322,89 322,99' fill='#ffd166'/>" +
+      "<rect x='340' y='52' width='210' height='84' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2.5'/>" +
+      "<text x='354' y='74' fill='#ffd166' font-size='10'>advantage, from the group</text>" +
+      "<text x='354' y='96' fill='#c9d6ea' font-size='9.5'>A_i = (r_i - mean) / std</text>" +
+      "<text x='354' y='118' fill='#7d8fb0' font-size='9'>no value model needed</text>" +
+      "<line x1='556' y1='94' x2='590' y2='94' stroke='#3ddc97' stroke-width='2'/><polygon points='598,94 588,89 588,99' fill='#3ddc97'/>" +
+      "<rect x='606' y='52' width='134' height='84' rx='8' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+      "<text x='620' y='74' fill='#3ddc97' font-size='10'>update the policy</text>" +
+      "<text x='620' y='96' fill='#c9d6ea' font-size='9'>176.7 GB, not</text>" +
+      "<text x='620' y='112' fill='#c9d6ea' font-size='9'>PPO's 321.2</text>" +
+      "<text x='20' y='182' fill='#c9d6ea' font-size='10.5'>The baseline PPO trained a whole second model to predict is here computed for free, from answers</text>" +
+      "<text x='20' y='198' fill='#c9d6ea' font-size='10.5'>you had to generate anyway.</text>" +
+      "<text x='20' y='210' fill='#7d8fb0' font-size='9'>And with a verifiable reward there is no reward model either &#8212; only a grader.</text>" +
+      "</svg><div class='fig-cap'>Sampling several answers to one prompt gives you a mean and a spread. That is all a baseline ever was.</div></div>" +
+      "<p>Sample <code>G</code> answers to the same prompt, grade them, and set each answer's advantage to its reward minus the group mean, divided by the group standard deviation. An answer better than its siblings gets a positive advantage; worse gets negative. The baseline PPO spent a second trainable model estimating is now a mean over samples you had to produce anyway.</p>" +
+      "<p>That quantity is the <strong>group advantage</strong>, and its definition contains a failure you will meet on the first run. If every answer in the group is wrong, or every one is right, the rewards are identical, the standard deviation is zero and the advantage is zero for all of them. The group produces no gradient at all. On a hard problem set that is most groups, and the practical consequence is that GRPO's effective batch size is not the number of prompts but the number of prompts on which the model is <em>partially</em> successful. Curriculum matters enormously for this reason: problems the model always fails and problems it always solves are both free of information, and a training set should be aimed at the band in between.</p>"+
+      "<p>This matters most where the reward is <em>verifiable</em>. If a grader can check the answer, there is no reward model to train, no annotator ceiling from Chapter 22, and nothing to hack in the usual sense &#8212; which is why GRPO became the standard for reasoning training and why Chapter 24 opens on it. The catch is the one thing it inherits: it still generates inside the loop, so the serving-plus-training problem of Chapter 22 remains, and it is why reasoning runs are expensive even though the algorithm is simpler.</p>" },
+
+    { title: "The Cheap Baselines",
+      html: "<p>Two methods sit beneath all of this, cost almost nothing to implement, and are skipped more often than they should be.</p>" +
+      "<p><strong>Best-of-n</strong> does the optimization at inference time: generate <code>n</code> responses, score them with a reward model, return the best. No training at all. Its properties are unusually well understood, because the divergence it induces from the base model has a closed form:</p>" +
+      "<pre><code>KL( best-of-n || reference )  =  log n  -  (n - 1)/n\n\n     n      KL (nats)    inference cost\n     2        0.193            2x\n     4        0.636            4x\n     8        1.204            8x\n    16        1.835           16x\n    64        3.175           64x\n   256        4.549          256x</code></pre>" +
+      "<p>Read that against Chapter 22's KL leash. There, the divergence was something you set a coefficient for and then monitored anxiously because it could run away. Here it is <em>known in advance from n alone</em> and cannot be exceeded. Best-of-n is the only method in these two chapters with a guaranteed KL budget, and the guarantee is why it is the right baseline: if your trained policy sits at a measured KL of 1.8 and does not beat best-of-16, the training bought you nothing that sampling would not have.</p>" +
+      "<p>The cost is that it is paid forever, on every request, in the memory-bound decode regime of Chapter 16. Sixteen candidates is sixteen generations. That is the trade: no training run, no reward hacking, no likelihood displacement &#8212; and a permanent multiple on your inference bill.</p>" +
+      "<p><strong>Rejection sampling fine-tuning</strong> converts that inference cost back into a training cost. Generate <code>n</code> responses per prompt, keep the best-scoring ones, and fine-tune on them with Chapter 20's ordinary supervised loss. It is best-of-n distilled into the weights: the model learns to produce directly what it previously needed sixteen attempts to find, and inference returns to a single pass. Llama 2's training used exactly this before its PPO stage.</p>" +
+      "<div class='callout'><strong>The order to try things in.</strong> Best-of-n first, because it needs no training and tells you immediately whether your reward model is worth anything &#8212; if best-of-16 is not better than best-of-1 by human judgement, the reward model is the problem and no amount of DPO or PPO will rescue it. Then rejection sampling, which is a supervised run. Then DPO. Then GRPO or PPO, if you have a verifiable reward or a reason the previous three failed. Most teams start at the bottom of this list.</div>" },
+
+    { title: "Replacing the Annotator",
+      html: "<p>Every method so far consumes human preferences, and Chapter 22 established what they cost: about 40 contractors, 33,000 prompts, and an agreement ceiling of 84% that bounds everything downstream. The obvious question is whether a model can supply them instead.</p>" +
+      "<p><strong>Constitutional AI</strong>, from Bai and colleagues at Anthropic in 2022, is the developed answer. Instead of asking humans which response is better, you write down the principles &#8212; a constitution &#8212; and have a model apply them. The process runs in two phases. First a supervised phase: the model generates a response, critiques its own response against a principle drawn from the constitution, revises it, and is then fine-tuned on the revisions. Then a preference phase, in which the model compares response pairs against the constitution to produce the preference labels a reward model is trained on. The general pattern of using model-generated preference labels is <strong>RLAIF</strong>, reinforcement learning from AI feedback.</p>" +
+      "<p>What it buys is real and specific. Preference labels stop being the bottleneck, so you can generate as many as you have compute for. Consistency improves, because a model applying a written rule does not get tired or drift the way a pool of annotators does across weeks. And the values become <em>inspectable</em>: the constitution is a document you can read, version and argue about, where the values in a human preference dataset are implicit in 33,000 judgements nobody can summarise.</p>" +
+      "<p>What it does not buy is independence. The labeller is a model with its own biases, and every one of them is now systematic rather than averaged out across a pool of people. A human annotator pool has noise, which is expensive; it also has diversity, which is a form of error correction. A single labelling model has neither. Its length preference, its stylistic habits and its blind spots are applied to every pair identically, and the policy trained on those labels inherits them exactly.</p>" +
+      "<div class='callout'><strong>The honest position.</strong> Use model labelling for scale and human labelling for calibration, not one or the other. Have humans label a few hundred pairs that the model has also labelled, measure the agreement between them the way Chapter 22 measured agreement between annotators, and report it. If the model agrees with your humans less than your humans agree with each other, you have replaced a noisy oracle with a confident one, which is worse.</div>" },
+
+    { title: "Measuring It on Your Own Model",
+      html: "<p>Chapter 22 named length bias, sycophancy and reward hacking. This section is how to measure them on your model rather than believe they apply, because all three are cheap to test and almost nobody does it.</p>" +
+      "<p><strong>Length bias.</strong> Take your evaluation set and compute the mean response length before and after alignment. Then re-run the human or automated comparison with the responses equalised in length &#8212; a <strong>matched-length comparison</strong>. If the win rate collapses, length was the win. This is one extra column in a table you already have, and Chapter 22's finding &#8212; that a purely length-based reward reproduces most of RLHF's measured gain &#8212; means it is the first thing to rule out rather than the last.</p>" +
+      "<p><strong>Sycophancy.</strong> Build fifty prompt pairs that differ only in a stated user belief: the same question asked neutrally, and asked with a wrong premise the user asserts confidently. Measure how often the model's answer changes to agree. Report the rate before and after alignment. A rise is sycophancy, and because the two prompts differ in one clause it is unambiguous.</p>" +
+      "<p><strong>Reward hacking, or its DPO equivalent.</strong> In an RL loop, watch the reward curve against a held-out human judgement on the same checkpoints. Where they diverge is where hacking started. In DPO there is no reward curve, and the analogous check is section 4's: track the absolute log-probability of chosen responses alongside the margin, plus the implicit reward on a held-out preference set the model never trained on. The margin can be widened by damaging the model; a held-out margin cannot.</p>" +
+      "<pre><code>the four columns that belong in every alignment run's report\n\n  win rate vs the base model          the thing you claim\n  win rate at matched length          the thing you can defend\n  mean response length, both models   the cheapest confound to rule out\n  a benchmark you did not optimize    the alignment tax from Chapter 22</code></pre>" +
+      "<p>None of this requires new infrastructure. It requires deciding that a win rate on its own is not a result &#8212; which is the same standard Chapter 20 applied to fine-tuning and Chapter 32 will apply to benchmarks generally. The reason to insist on it here is that preference optimization is the one place in the course where the training signal and the evaluation metric are the same kind of object, so a method that games one games the other, and the numbers agree with each other while being wrong together.</p>" },
+
+    { title: "Choosing Among Them", viz: "llmObjectiveCompare", vizTitle: "Pick a constraint and find where best-of-n wins",
+      html: "<p>Five methods, one decision procedure, checked in order.</p>" +
+      "<div class='fig'><svg viewBox='0 0 760 214' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+      "<text x='20' y='16' fill='#2de2ff' font-size='11'>what each one needs, and what it costs</text>" +
+      "<text x='230' y='38' fill='#7d8fb0' font-size='9'>reward model</text>" +
+      "<text x='356' y='38' fill='#7d8fb0' font-size='9'>generates in loop</text>" +
+      "<text x='506' y='38' fill='#7d8fb0' font-size='9'>state</text>" +
+      "<text x='556' y='38' fill='#7d8fb0' font-size='9'>reach for it when</text>" +
+      "<line x1='20' y1='46' x2='740' y2='46' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='68' fill='#3ddc97' font-size='9.5'>best-of-n</text>" +
+      "<text x='250' y='68' fill='#ffd166' font-size='9'>yes</text>" +
+      "<text x='396' y='68' fill='#3ddc97' font-size='9'>no</text>" +
+      "<text x='500' y='68' fill='#3ddc97' font-size='9'>none</text>" +
+      "<text x='556' y='68' fill='#c9d6ea' font-size='9'>always, first, as the baseline</text>" +
+      "<text x='20' y='92' fill='#3ddc97' font-size='9.5'>rejection sampling</text>" +
+      "<text x='250' y='92' fill='#ffd166' font-size='9'>yes</text>" +
+      "<text x='396' y='92' fill='#ffd166' font-size='9'>once</text>" +
+      "<text x='500' y='92' fill='#3ddc97' font-size='9'>144.5</text>" +
+      "<text x='556' y='92' fill='#c9d6ea' font-size='9'>best-of-n works and costs too much</text>" +
+      "<text x='20' y='116' fill='#3ddc97' font-size='9.5'>DPO</text>" +
+      "<text x='250' y='116' fill='#3ddc97' font-size='9'>no</text>" +
+      "<text x='396' y='116' fill='#3ddc97' font-size='9'>no</text>" +
+      "<text x='500' y='116' fill='#3ddc97' font-size='9'>144.5</text>" +
+      "<text x='556' y='116' fill='#c9d6ea' font-size='9'>you have preference pairs</text>" +
+      "<text x='20' y='140' fill='#ffd166' font-size='9.5'>GRPO</text>" +
+      "<text x='250' y='140' fill='#3ddc97' font-size='9'>grader</text>" +
+      "<text x='396' y='140' fill='#ff5d73' font-size='9'>yes</text>" +
+      "<text x='500' y='140' fill='#ffd166' font-size='9'>176.7</text>" +
+      "<text x='556' y='140' fill='#c9d6ea' font-size='9'>the reward is checkable</text>" +
+      "<text x='20' y='164' fill='#ff5d73' font-size='9.5'>PPO</text>" +
+      "<text x='250' y='164' fill='#ffd166' font-size='9'>yes</text>" +
+      "<text x='396' y='164' fill='#ff5d73' font-size='9'>yes</text>" +
+      "<text x='500' y='164' fill='#ff5d73' font-size='9'>321.2</text>" +
+      "<text x='556' y='164' fill='#c9d6ea' font-size='9'>the others failed and you know why</text>" +
+      "<line x1='20' y1='176' x2='740' y2='176' stroke='#1c2a45' stroke-width='1.5'/>" +
+      "<text x='20' y='196' fill='#c9d6ea' font-size='10.5'>The two columns that decide are the middle ones: needing a reward model, and generating inside the loop.</text>" +
+      "<text x='20' y='210' fill='#7d8fb0' font-size='9.5'>Everything expensive in Chapter 22 was a consequence of answering yes to both.</text>" +
+      "</svg><div class='fig-cap'>Read down the state column. The whole history of this subject is the effort to get back to the number supervised fine-tuning already had.</div></div>" +
+      "<ol>" +
+      "<li><strong>Is the reward checkable by a program?</strong> If yes &#8212; maths, code, format compliance &#8212; go to GRPO with a grader and skip preference collection entirely. This is Chapter 24's territory.</li>" +
+      "<li><strong>Do you have a reward model, or can you cheaply build one?</strong> If yes, run best-of-16 before anything else. It is free to try and it tells you whether the reward model has signal.</li>" +
+      "<li><strong>Did best-of-n help but cost too much at serving time?</strong> Rejection sampling fine-tuning distils it into the weights for one supervised run.</li>" +
+      "<li><strong>Do you have preference pairs and no verifiable reward?</strong> DPO. It costs what supervised fine-tuning costs and there is little reason not to.</li>" +
+      "<li><strong>Everything above failed and you understand why.</strong> Only then PPO, and expect the operational surface of Chapter 22.</li>" +
+      "</ol>" +
+      "<p>Two questions do most of the work in that list, and they are the two middle columns of the figure: does the method need a reward model, and does it generate inside the loop. Answering no to both is why DPO costs what supervised fine-tuning costs. Answering yes to both is why PPO needs four resident models and an inference server. Everything else is detail.</p>"+
+      "<p>A word on the ones this chapter did not cover. A steady stream of variants has followed DPO &#8212; reference-free losses, length-normalised losses, losses that work on unpaired thumbs-up data rather than pairs, losses that fold the supervised stage in. They are worth knowing about and they are not worth chasing. Each removes one inconvenience of DPO and inherits everything in section 8, and the honest way to choose among them is the harness from Chapter 20 rather than the recency of the paper.</p>"+
+      "<p>One thing survives every branch. All of these methods learn from a signal about which output is better, and every one of them inherits whatever bias is in that signal. Length bias is a property of the preference data, so it survives the change from PPO to DPO unchanged; sycophancy transfers for the same reason. The algorithm you pick decides what the run costs. It does not decide what the run learns.</p>" },
+
+    { title: "Exercises",
+      html: "<ol>" +
+      "<li><strong>Trace.</strong> Reproduce the derivation from section 2 on paper without looking: start from the KL-constrained optimum, solve for <code>r</code>, substitute into Bradley&#8211;Terry, and cancel. Then answer the question the algebra does not: <em>why</em> can <code>Z(x)</code> cancel here but not in the original RLHF objective? State the property of <code>Z(x)</code> that makes the difference in one sentence.</li>" +
+      "<li><strong>Trace.</strong> A DPO checkpoint reports margin 2.8, with chosen implicit reward +1.8 and rejected &#8722;1.0. A later checkpoint reports margin 3.4, chosen &#8722;0.6 and rejected &#8722;4.0. Compute both margins, state which checkpoint the loss prefers, and state which you would ship and why. Then say what single quantity you would have logged to see this in the first run.</li>" +
+      "<li><strong>Trace.</strong> Compute the KL budget of best-of-n from <code>log n - (n-1)/n</code> for n = 2, 8, 32 and 128. Then find the n whose KL matches a PPO run you are told reached a measured KL of 2.5 nats. State what it would mean if that PPO model did not beat best-of-n at the matching n.</li>" +
+      "<li><strong>Investigate.</strong> Run DPO on any small model and log four curves: the loss, the margin, and the absolute log-probabilities of chosen and rejected responses. Report the step at which the chosen log-probability starts falling, and whether the loss or margin gave any indication. Then rerun with beta raised fourfold and report how the step moved.</li>" +
+      "<li><strong>Investigate.</strong> Build the sycophancy probe from section 8: fifty questions asked neutrally and asked with a confidently stated wrong premise. Measure the agreement rate on a base model and on an aligned model of the same family. Report both numbers and three example prompts where the aligned model changed its answer and the base model did not.</li>" +
+      "<li><strong>Build.</strong> Implement the DPO loss from the formula in section 2, taking chosen and rejected sequences and a precomputed set of reference log-probabilities. Then write three assertions: that the loss is unchanged when a constant is added to all four log-probabilities; that it decreases when the chosen response's log-probability rises with the rejected one fixed; and that it <em>also</em> decreases when both fall with the rejected falling faster. The third assertion is the deliverable, because a passing test proves you have reproduced the failure mode rather than avoided it.</li>" +
+      "</ol>" }
+  ],
+  terms: [
+    { t: "partition function", d: "The normalising sum over all possible responses that makes the RLHF optimum a distribution; intractable, and the reason reinforcement learning was needed at all." },
+    { t: "DPO", d: "Direct Preference Optimization: substituting the KL-constrained optimal policy back into Bradley–Terry so the reward model cancels, leaving a classification loss over preference pairs." },
+    { t: "implicit reward", d: "Beta times the log-ratio of policy to reference for a response; the score DPO optimizes without ever building a reward model." },
+    { t: "margin", d: "The difference between the chosen and rejected implicit rewards; the only quantity the DPO loss constrains, which is why it can be widened destructively." },
+    { t: "likelihood displacement", d: "The DPO failure where the chosen response's probability falls during training while the margin improves, because only the gap is constrained." },
+    { t: "DPO-Positive", d: "A modified loss adding a penalty for reducing the chosen response's likelihood, which decreases only the rejected probability rather than both." },
+    { t: "GRPO", d: "Group Relative Policy Optimization: sampling several answers per prompt and taking the advantage from the group's mean and spread, removing PPO's value model." },
+    { t: "group advantage", d: "An answer's reward minus its group's mean, divided by the group's standard deviation; a baseline computed from samples you had to generate anyway." },
+    { t: "verifiable reward", d: "A reward a program can check rather than a model must predict, which removes the reward model, the annotator ceiling, and most reward hacking." },
+    { t: "best-of-n", d: "Generating n responses and returning the highest-scoring one; the only method here with a KL budget known in advance, at n times the inference cost." },
+    { t: "rejection sampling fine-tuning", d: "Keeping the best of n generated responses and training on them supervised; best-of-n distilled into the weights so inference returns to one pass." },
+    { t: "RLAIF", d: "Reinforcement learning from AI feedback: using a model rather than a person to produce the preference labels." },
+    { t: "Constitutional AI", d: "Training a model to critique and revise its own outputs against written principles, then using it to label preferences, making the values inspectable." },
+    { t: "sycophancy probe", d: "Paired prompts differing only in a confidently stated wrong premise, which measures how often alignment taught the model to agree rather than to answer." },
+    { t: "matched-length comparison", d: "Re-running a preference evaluation with responses equalised in length, which separates a genuine win from a length effect." },
+    { t: "reference log-probabilities", d: "The frozen model's scores for a fixed dataset; precomputing them once removes the reference model from memory and makes DPO cost what supervised fine-tuning costs." }
+  ],
+  quiz: [
+    { type: "mc", q: "The KL-constrained RLHF objective has a closed-form optimal policy. Why did that not immediately remove the need for reinforcement learning?", opts: ["The closed form is only valid for small models", "It contains a partition function summing over every possible response, which cannot be computed", "The optimum is a local rather than a global maximum", "It requires the reward model to be linear"], a: 1,
+      why: "The optimum is the reference policy reweighted by the exponentiated reward, divided by a normaliser Z(x). That normaliser sums over all sequences the model could produce, and no factorisation collapses it because the reward scores whole sequences. Being unable to compute the optimum is exactly why you sample and hill-climb toward it instead." },
+    { type: "mc", q: "In the DPO derivation, why does the partition function cancel?", opts: ["Because beta is chosen to make it equal to one", "Because it is approximated by a constant during training", "Because it is small enough to ignore in practice", "Because Z(x) depends only on the prompt, so in a difference between two responses to the same prompt it appears twice with opposite signs"], a: 3,
+      why: "Step 2 solves the optimum for r rather than for pi, giving r = beta log(pi/pi_ref) + beta log Z(x). Bradley–Terry uses only the difference of two rewards, and both responses condition on the same x, so the two beta log Z(x) terms are identical and subtract to zero. Nothing is approximated or bounded; the term is gone exactly." },
+    { type: "mc", q: "A DPO run shows a steadily rising margin. What does that alone tell you?", opts: ["Very little: the loss constrains only the gap between chosen and rejected, so both likelihoods can be falling with the rejected one falling faster", "That the model is learning the preferred responses correctly", "That beta is set too high", "That the reference model has drifted"], a: 0,
+      why: "This is likelihood displacement, and it is documented rather than folklore: the preferred response's probability falls during DPO training while the loss improves, degrading quality and diversity. It is worst when the two responses are similar. The fix in reporting is one line — log the chosen response's absolute log-probability alongside the margin." },
+    { type: "mc", q: "Why can DPO run at the same memory cost as supervised fine-tuning?", opts: ["Because it trains only the final layer", "Because the reference model is quantized to four bits", "Because the reference model's log-probabilities over a fixed dataset never change, so they are computed once and the model is discarded", "Because the policy and reference share weights"], a: 2,
+      why: "DPO already drops PPO's value and reward models, taking 321.2 GB to 160.6. The last step is that the reference is frozen and the dataset fixed, so its scores are a preprocessing pass rather than a resident model. What is left is 144.5 GB — the same trainer, schedule and masking as Chapter 20, with a different loss." },
+    { type: "mc", q: "GRPO removes PPO's value model. What replaces the baseline it provided?", opts: ["The mean and standard deviation of rewards across several answers sampled for the same prompt", "A running average of rewards across the whole training run", "The reference model's log-probability", "A fixed constant tuned per task"], a: 0,
+      why: "Sample G answers to one prompt, grade them, and set each answer's advantage to its reward minus the group mean over the group standard deviation. The baseline PPO trained a second full-size model to estimate is computed for free from generations you needed anyway. A global running average would not work, because it cannot say whether an answer was good for this particular prompt." },
+    { type: "mc", q: "Why did reinforcement learning return for reasoning training when DPO had displaced it for chat?", opts: ["Reasoning models are too large for DPO's memory requirements", "DPO cannot be applied to models trained with chain-of-thought", "The KL penalty is unnecessary when rewards are verifiable", "DPO needs a fixed dataset of preference pairs, and a checkable reward has no annotator to produce one: you must generate attempts and grade them"], a: 3,
+      why: "For maths or code the reward is a program's verdict, not a human's preference, so there is nothing to collect in advance and no comparisons to fix in a dataset. That forces generation into the loop, which is reinforcement learning by definition. GRPO is the cheap version of it, and Chapter 24 is where it goes." },
+    { type: "blank", q: "Generating n responses and returning the highest-scoring one is called ____-of-n sampling.", a: ["best", "best-of-n"],
+      why: "Its divergence from the base model is log n minus (n-1)/n, known in advance from n alone and impossible to exceed — the only method in these two chapters with a guaranteed KL budget. That makes it the right baseline: a trained policy at a measured KL of 1.8 that does not beat best-of-16 has bought nothing sampling would not have." },
+    { type: "mc", q: "Best-of-16 has a KL budget of 1.835 nats. Why does that make it the right first thing to try?", opts: ["Because it produces better output than any training method at the same KL", "Because it needs no training, and if it does not beat a single sample the reward model has no signal and no amount of DPO or PPO will rescue it", "Because its inference cost is negligible", "Because the KL budget can be tuned continuously"], a: 1,
+      why: "It is a free diagnostic for the component every other method depends on. Its cost is real and permanent — sixteen generations per request, in the memory-bound decode regime — which is exactly what rejection sampling fine-tuning converts back into a one-off training cost. Teams usually start at the expensive end of this list instead." },
+    { type: "mc", q: "What does replacing human annotators with a labelling model lose, beyond independence?", opts: ["The ability to use Bradley–Terry, which assumes human judgements", "Nothing measurable, provided the labelling model is stronger than the policy", "The diversity of a human pool, whose noise is expensive but is also a form of error correction against any single systematic bias", "The ability to compute inter-annotator agreement"], a: 2,
+      why: "A pool of people disagrees, which is costly and averages out idiosyncrasy. One model applies its length preference, stylistic habits and blind spots identically to every pair, so those biases become systematic rather than noisy and the policy inherits them exactly. The honest arrangement is model labelling for scale plus human labelling for calibration, with the agreement between them reported." },
+    { type: "order", q: "Order these alignment approaches by the model state they require, smallest first:", items: ["Best-of-n, which trains nothing at all", "DPO with reference log-probabilities precomputed, at 144.5 GB", "DPO with the reference model resident, at 160.6 GB", "GRPO, at 176.7 GB with no value model", "PPO, at 321.2 GB with four models resident"], why: "Reading the ladder downward is the history of the subject: every step after PPO was an effort to get back to the number supervised fine-tuning already had. Two questions decide where a method lands — does it need a reward model, and does it generate inside the loop — and everything expensive in Chapter 22 followed from answering yes to both." },
+    { type: "mc", q: "An aligned model wins 68% of head-to-head comparisons against its SFT baseline. What is the first thing to check?", opts: ["Whether the reward model was large enough", "Whether beta was tuned on a held-out set", "Whether the KL divergence stayed within budget", "The mean response length of both models, and the win rate recomputed at matched length"], a: 3,
+      why: "Chapter 22's finding was that a purely length-based reward reproduces most of RLHF's measured gain over supervised fine-tuning, and the effect comes from the preference data rather than the algorithm — so it survives the move to DPO unchanged. A win rate without a length column is a claim you cannot defend, and it is one extra column in a table you already have." },
+    { type: "mc", q: "Which statement about choosing between PPO, DPO and GRPO is correct?", opts: ["The algorithm decides what the run costs; it does not decide what the run learns, because the biases live in the preference signal", "GRPO is strictly better than DPO wherever preference pairs are available", "DPO produces the same policy as PPO given the same data", "PPO should be preferred whenever memory permits, since it optimizes the objective directly"], a: 0,
+      why: "Length bias is a property of the data, so it transfers unchanged across algorithms; sycophancy transfers for the same reason. What the choice actually decides is memory, whether you need a reward model, and whether you generate inside the loop. DPO and PPO optimize related objectives but do not converge to the same policy, and GRPO's advantage appears when the reward is verifiable." }
+  ]
+});
