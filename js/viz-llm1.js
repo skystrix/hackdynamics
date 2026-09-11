@@ -3,6 +3,7 @@
 
      llmNextToken   ch1  Playground real measured distributions; confidence is context
      llmBpeTrainer  ch2  Builder    byte-pair encoding, trained live, merge by merge
+     llmVocabTradeoff ch2 Tuner     three costs that move against each other
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -1388,5 +1389,222 @@
     reset();
     render();
     f.say("Press merge and watch the most common pair become one token. Do it 30 times.");
+  };
+
+  /* ========================================================================
+     7. llmVocabTradeoff — CH 2 — Tuner
+
+     The parameter arithmetic is exact and derived from Corvid's own card, and
+     it checks out against the course's stated total: 32 blocks of 218,112,000
+     plus two untied embedding tables of 128,256 x 4,096 comes to 8,030,261,248,
+     which is the 8.03B on the spec card. The four published model figures in
+     the section reproduce too, from 134M for Mistral to 1.05B for Gemma.
+
+     Tokens per word is measured, in two series that must not be confused.
+     The small end is this course's own BPE trained on 60,000 words of the
+     book's prose and scored on 10,000 held out; the large end is six real
+     tokenizers on the same held-out English. Different algorithms and
+     different training data, so they are drawn and labelled apart.
+
+     What the measurement says is the section's second point: English stops
+     getting shorter at a vocabulary of about five thousand. Everything above
+     that was bought for other languages.
+     ======================================================================== */
+  VIZ.llmVocabTradeoff = function (el) {
+    var f = frame(el);
+
+    var DM = 4096, DFF = 14336, KVD = 1024, LAYERS = 32;
+    var BLOCK = DM * DM + DM * KVD * 2 + DM * DM + 3 * DM * DFF + 2 * DM;   // 218,112,000
+    var MODELS = [
+      { n: "Mistral-7B-v0.3", v: 32768 }, { n: "Llama-3-8B", v: 128256 },
+      { n: "Qwen2.5-7B", v: 152064 }, { n: "Gemma-2-9B", v: 256000 }
+    ];
+    var OWN = [[28, 5.7875], [128, 3.115], [278, 2.4821], [528, 2.0436],
+               [1028, 1.6814], [2028, 1.3865], [4028, 1.1862], [5266, 1.1211]];
+    var REAL = [[49152, 1.117, "SmolLM2"], [50257, 1.117, "gpt2"],
+                [100277, 1.108, "cl100k"], [128000, 1.117, "Llama-3"],
+                [151643, 1.108, "Qwen2.5"], [200000, 1.117, "o200k"]];
+
+    var eV = 17, tied = false;                 // log2 vocab; Corvid's are untied
+    function V() { return Math.round(Math.pow(2, eV)); }
+    function tables() { return tied ? 1 : 2; }
+    function embed() { return tables() * V() * DM; }
+    function headFlops() { return 2 * V() * DM; }
+
+    /* Interpolate the measured series so the readout tracks the slider. */
+    function tpwAt(v) {
+      var all = OWN.concat(REAL.map(function (r) { return [r[0], r[1]]; }));
+      if (v <= all[0][0]) return all[0][1];
+      for (var i = 1; i < all.length; i++) {
+        if (v <= all[i][0]) {
+          var a = all[i - 1], b = all[i];
+          var t = (Math.log(v) - Math.log(a[0])) / (Math.log(b[0]) - Math.log(a[0]));
+          return a[1] + t * (b[1] - a[1]);
+        }
+      }
+      return all[all.length - 1][1];
+    }
+    function fmtP(n) {
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+      return (n / 1e6).toFixed(0) + "M";
+    }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "vocabulary size against three costs" }, f.body);
+
+    var AX0 = 70, AX1 = 430, AY0 = 46, AY1 = 250;      // parameter chart
+    var EMIN = 12, EMAX = 18, PMAX = 2.2e9;
+    function ax(e) { return AX0 + (e - EMIN) / (EMAX - EMIN) * (AX1 - AX0); }
+    function ay(p) { return AY1 - Math.min(p, PMAX) / PMAX * (AY1 - AY0); }
+
+    var TX0 = 70, TX1 = 740, TY0 = 288, TY1 = 352;     // tokens-per-word chart
+    var TVMIN = Math.log(16), TVMAX = Math.log(262144);
+    function tx(v) { return TX0 + (Math.log(v) - TVMIN) / (TVMAX - TVMIN) * (TX1 - TX0); }
+    function ty(w) { return TY1 - (Math.min(w, 6) - 1) / 5 * (TY1 - TY0); }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var v = V(), emb = embed(), i, e;
+      var overFour = emb > 4 * BLOCK;
+
+      T(svg, 8, 14, "Corvid-8B: d_model 4,096, 32 blocks of " + commas(BLOCK) + " parameters",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, tied ? "tied: one table" : "untied: two tables, as Corvid has them",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      /* ---- parameter chart ---- */
+      T(svg, 8, 34, "embedding parameters", { anchor: "start", size: 11, fill: C.faint });
+      line(svg, AX0, AY1, AX1, AY1, { stroke: C.line, sw: 1.5 });
+      line(svg, AX0, AY0, AX0, AY1, { stroke: C.line, sw: 1.5 });
+      for (i = 0; i <= 2000; i += 500) {
+        var yy = ay(i * 1e6);
+        if (i) line(svg, AX0, yy, AX1, yy, { stroke: C.line, sw: 0.5, op: 0.4 });
+        T(svg, AX0 - 6, yy, i >= 1000 ? (i / 1000) + "B" : i + "M",
+          { anchor: "end", size: 9, fill: C.faint });
+      }
+      for (e = EMIN; e <= EMAX; e++) {
+        var lv = Math.pow(2, e);
+        T(svg, ax(e), AY1 + 14, lv >= 1000 ? (lv / 1024) + "k" : String(lv),
+          { size: 9, fill: C.faint });
+      }
+      T(svg, AX1, AY1 + 30, "vocabulary", { anchor: "end", size: 10, fill: C.faint });
+
+      line(svg, AX0, ay(BLOCK), AX1, ay(BLOCK), { stroke: C.teal, sw: 1, dash: "4 3" });
+      T(svg, AX0 + 5, ay(BLOCK) - 7, "one block", { anchor: "start", size: 9, fill: C.teal });
+      line(svg, AX0, ay(4 * BLOCK), AX1, ay(4 * BLOCK), { stroke: C.orange, sw: 1.3, dash: "5 4" });
+      T(svg, AX0 + 5, ay(4 * BLOCK) - 7, "four blocks = " + fmtP(4 * BLOCK),
+        { anchor: "start", size: 9.5, fill: C.orange });
+
+      var pts = [];
+      for (e = EMIN; e <= EMAX; e += 0.25) {
+        pts.push(ax(e) + "," + ay(tables() * Math.pow(2, e) * DM));
+      }
+      S("polyline", { points: pts.join(" "), fill: "none", stroke: C.blue,
+        "stroke-width": 2 }, svg);
+
+      MODELS.forEach(function (m) {
+        var e2 = Math.log(m.v) / Math.LN2;
+        if (e2 < EMIN || e2 > EMAX) return;
+        S("circle", { cx: ax(e2), cy: ay(tables() * m.v * DM), r: 3, fill: C.dim }, svg);
+      });
+
+      S("circle", { cx: ax(eV), cy: ay(emb), r: 5.5, fill: overFour ? C.orange : C.blue }, svg);
+      // No floating value label: the chart is crowded with reference rules and
+      // tick labels, and the readout panel beside it already carries the number.
+      // The marker's colour is the only thing the chart needs to say.
+
+      /* ---- the three numbers ---- */
+      var rx = 470, ry = 56, stp = 24;
+      function row(label, value, tone) {
+        T(svg, rx, ry, label, { anchor: "start", size: 10.5, fill: C.faint });
+        T(svg, 752, ry, value, { anchor: "end", size: 11, fill: tone || C.text });
+        ry += stp;
+      }
+      row("vocabulary", commas(v));
+      ry += 4;
+      row("embedding parameters", fmtP(emb), overFour ? C.orange : C.text);
+      row("as blocks of Corvid", (emb / BLOCK).toFixed(2) + " blocks",
+        overFour ? C.orange : C.text);
+      row("output layer, per token", (headFlops() / 1e9).toFixed(2) + " GFLOP");
+      row("tokens per English word", tpwAt(v).toFixed(3), C.teal);
+      ry += 4;
+      line(svg, rx, ry - 14, 752, ry - 14, { stroke: C.line, sw: 0.8 });
+      MODELS.forEach(function (m) {
+        row(m.n, commas(m.v) + "  " + fmtP(tables() * m.v * DM),
+          Math.abs(Math.log(m.v) / Math.LN2 - eV) < 0.08 ? C.blue : C.dim);
+      });
+
+      /* ---- tokens per word, measured ---- */
+      T(svg, 8, 276, "tokens per English word, 10,000 held-out words",
+        { anchor: "start", size: 11, fill: C.faint });
+      S("circle", { cx: 456, cy: 272, r: 3, fill: C.teal }, svg);
+      T(svg, 464, 276, "this course's own BPE", { anchor: "start", size: 9.5, fill: C.teal });
+      S("circle", { cx: 610, cy: 272, r: 3.5, fill: C.purple }, svg);
+      T(svg, 618, 276, "six real tokenizers", { anchor: "start", size: 9.5, fill: C.purple });
+      line(svg, TX0, TY1, TX1, TY1, { stroke: C.line, sw: 1.5 });
+      line(svg, TX0, TY0, TX0, TY1, { stroke: C.line, sw: 1.5 });
+      [1, 2, 4, 6].forEach(function (w) {
+        T(svg, TX0 - 6, ty(w), String(w), { anchor: "end", size: 9, fill: C.faint });
+        if (w > 1) line(svg, TX0, ty(w), TX1, ty(w), { stroke: C.line, sw: 0.5, op: 0.4 });
+      });
+      [16, 256, 4096, 65536, 262144].forEach(function (vv) {
+        T(svg, tx(vv), TY1 + 13, vv >= 1024 ? (vv / 1024) + "k" : String(vv),
+          { size: 9, fill: C.faint });
+      });
+      S("polyline", { points: OWN.map(function (p) { return tx(p[0]) + "," + ty(p[1]); }).join(" "),
+        fill: "none", stroke: C.teal, "stroke-width": 2 }, svg);
+      OWN.forEach(function (p) {
+        S("circle", { cx: tx(p[0]), cy: ty(p[1]), r: 2.5, fill: C.teal }, svg);
+      });
+      REAL.forEach(function (p) {
+        S("circle", { cx: tx(p[0]), cy: ty(p[1]), r: 3.5, fill: C.purple }, svg);
+      });
+      line(svg, tx(v), TY0, tx(v), TY1, { stroke: C.blue, sw: 1, dash: "3 3" });
+
+      /* ---- what the two charts add up to ---- */
+      var cross = Math.round(4 * BLOCK / (tables() * DM));
+      T(svg, 8, 378, overFour
+          ? "At " + commas(v) + " the embedding costs " + (emb / BLOCK).toFixed(1) +
+            " blocks, more than four, and every one of those parameters learns one vector."
+          : "At " + commas(v) + " the embedding costs " + (emb / BLOCK).toFixed(2) +
+            " blocks. It passes four at a vocabulary of " + commas(cross) + ".",
+        { anchor: "start", size: 11, fill: overFour ? C.orange : C.dim });
+      T(svg, 8, 400,
+        "English stopped getting shorter at about 5,000: 1.121 tokens per word there, 1.117 at 200,000.",
+        { anchor: "start", size: 10.5, fill: C.teal });
+      T(svg, 8, 422,
+        "Everything above that was bought for other languages, which is what section 6 measures.",
+        { anchor: "start", size: 10.5, fill: C.faint });
+    }
+
+    function say() {
+      var v = V(), emb = embed();
+      f.say("Vocabulary " + commas(v) + ": " + fmtP(emb) + " of embedding, " +
+        (emb / BLOCK).toFixed(2) + " transformer blocks, " +
+        tpwAt(v).toFixed(3) + " tokens per English word.");
+    }
+    var sV = slider(f.controls, "vocab", EMIN, EMAX, eV, 0.25,
+      function (x) { return commas(Math.pow(2, x)); },
+      function (x) { eV = x; render(); say(); });
+    toggle(f.controls, "tied embeddings", false, function (on) {
+      tied = on; render();
+      f.say(on ? "Tied: one table shared by input and output, so the cost halves and the crossing "
+                 + "moves to " + commas(4 * BLOCK / DM) + "."
+               : "Untied, as Corvid is: two tables, and the crossing is at "
+                 + commas(4 * BLOCK / (2 * DM)) + ".");
+    });
+    f.btn("Gemma-2-9B", function () {
+      eV = Math.log(256000) / Math.LN2; sV.set(eV); render();
+      f.say("Gemma-2-9B's 256,000 is the largest vocabulary here: 1.05B parameters per table, " +
+            "which on Corvid's shape is more than four transformer blocks before a single one is built.");
+    });
+    f.btn("reset", function () {
+      eV = 17; tied = false; sV.set(17); render();
+      f.say("Move the vocabulary slider and find where the embedding table passes four blocks.");
+    });
+
+    render();
+    f.say("Move the vocabulary slider and find where the embedding table passes four blocks.");
   };
 })();
