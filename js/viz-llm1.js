@@ -3,6 +3,7 @@
 
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
+     llmAttentionCost ch5 Tuner     the quadratic term, against a 16 GB card
 
    Helpers come from js/viz-rag-kit.js, which must load first. The kit is
    course-neutral (SVG builders and a theme-following palette), so this course
@@ -14,7 +15,7 @@
   window.VIZ = window.VIZ || {};
   var K = window.RAGKIT;
   var C = K.C, S = K.S, T = K.T, rect = K.rect, line = K.line,
-      frame = K.frame, toggle = K.toggle, tipOn = K.tipOn;
+      frame = K.frame, toggle = K.toggle, tipOn = K.tipOn, slider = K.slider;
 
   /* ========================================================================
      1. llmAttention — CH 5 — Inspector
@@ -519,5 +520,179 @@
 
     render();
     f.say("Step a generation. Then remove the mask and see the model cheat.");
+  };
+
+  /* ========================================================================
+     3. llmAttentionCost — CH 5 — Tuner
+
+     Every number here is the section's own arithmetic: the score matrix is
+     n x n per head, held in fp16, for every head and every sequence in the
+     batch. The four rows of the chapter's table reproduce exactly, which is
+     the point — the learner should be able to check the machine against the
+     page before trusting it on settings the page does not cover.
+
+     The discovery the text asks for: find the sequence length where the
+     score matrices alone exceed 16 GB. At Corvid's shape that is n = 15,811,
+     and 16,384 is the first power of two past it — twice the context the
+     model is trained for, which is why Chapter 28 exists.
+     ======================================================================== */
+  VIZ.llmAttentionCost = function (el) {
+    var f = frame(el);
+
+    var FP16 = 2, DHEAD = 128, BUDGET = 16e9;     // bytes, and the course's 16 GB card
+    var eN = 13, eD = 12, eB = 0;                 // log2 of n, d_model, batch
+
+    function n()  { return 1 << eN; }
+    function dm() { return 1 << eD; }
+    function bs() { return 1 << eB; }
+    function heads() { return dm() / DHEAD; }
+    function scoresPerHead() { var v = n(); return v * v; }
+    function bytes() { return scoresPerHead() * FP16 * heads() * bs(); }
+    function flops() { return 4 * scoresPerHead() * dm() * bs(); }
+    function crossingN() {                        // n where the scores fill the card
+      return Math.sqrt(BUDGET / (FP16 * heads() * bs()));
+    }
+
+    function gb(b) { return b / 1e9; }
+    function fmtBytes(b) {
+      if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
+      if (b >= 1e6) return (b / 1e6).toFixed(1) + " MB";
+      return (b / 1e3).toFixed(1) + " kB";
+    }
+    function commas(v) { return v.toLocaleString("en-US"); }
+    function pct(b) {
+      var p = b / BUDGET * 100;
+      return p >= 1 ? p.toFixed(1) + "%" : p >= 0.01 ? p.toFixed(2) + "%" : "under 0.01%";
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 420", width: "100%",
+      role: "img", "aria-label": "attention score-matrix cost against a 16 GB budget" }, f.body);
+
+    /* log-log plot box */
+    var PX0 = 74, PX1 = 462, PY0 = 60, PY1 = 300;
+    var EMIN = 9, EMAX = 17;                      // n from 512 to 131,072
+    var DECMIN = -3, DECMAX = 4;                  // GB from 0.001 to 10,000
+    function px(e) { return PX0 + (e - EMIN) / (EMAX - EMIN) * (PX1 - PX0); }
+    function py(g) {
+      var d = Math.log(g) / Math.LN10;
+      d = Math.max(DECMIN, Math.min(DECMAX, d));
+      return PY1 - (d - DECMIN) / (DECMAX - DECMIN) * (PY1 - PY0);
+    }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var b = bytes(), over = b > BUDGET, i;
+
+      T(svg, 8, 14, "score matrices only — no weights, no activations, no KV cache",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "fp16, " + heads() + " heads of " + DHEAD + ", batch " + bs(),
+        { anchor: "end", size: 10.5, fill: C.faint });
+
+      /* --- axes --- */
+      line(svg, PX0, PY1, PX1, PY1, { stroke: C.line, sw: 1.5 });
+      line(svg, PX0, PY0, PX0, PY1, { stroke: C.line, sw: 1.5 });
+      for (i = DECMIN; i <= DECMAX; i++) {
+        var y = py(Math.pow(10, i));
+        if (i > DECMIN) line(svg, PX0, y, PX1, y, { stroke: C.line, sw: 0.5, op: 0.4 });
+        T(svg, PX0 - 8, y, i < 0 ? Math.pow(10, i).toFixed(-i) : commas(Math.pow(10, i)),
+          { anchor: "end", size: 9, fill: C.faint });
+      }
+      T(svg, 20, PY0 - 14, "GB", { anchor: "start", size: 9.5, fill: C.faint });
+      for (i = EMIN; i <= EMAX; i += 2) {
+        T(svg, px(i), PY1 + 14, commas(1 << i), { size: 9, fill: C.faint });
+      }
+      T(svg, PX1, PY1 + 32, "sequence length n", { anchor: "end", size: 10, fill: C.faint });
+
+      /* --- the 16 GB budget --- */
+      var by = py(gb(BUDGET));
+      line(svg, PX0, by, PX1, by, { stroke: C.orange, sw: 1.3, dash: "5 4" });
+      T(svg, PX0 + 6, by - 9, "16 GB card", { anchor: "start", size: 9.5, fill: C.orange });
+
+      /* --- the quadratic curve: slope 2 on log-log, by construction --- */
+      var pts = [];
+      for (i = EMIN; i <= EMAX; i += 0.25) {
+        var nn = Math.pow(2, i);
+        pts.push(px(i) + "," + py(gb(nn * nn * FP16 * heads() * bs())));
+      }
+      S("polyline", { points: pts.join(" "), fill: "none", stroke: C.blue, sw: 2,
+        "stroke-width": 2 }, svg);
+
+      /* --- where the curve crosses the card --- */
+      var cx = crossingN(), ce = Math.log(cx) / Math.LN2;
+      if (ce >= EMIN && ce <= EMAX) {
+        line(svg, px(ce), by, px(ce), PY1, { stroke: C.orange, sw: 0.9, dash: "3 3" });
+        T(svg, px(ce), PY1 - 8, "n = " + commas(Math.round(cx)),
+          { size: 9.5, fill: C.orange });
+      }
+
+      /* --- the learner's current point --- */
+      var cxp = px(eN), cyp = py(gb(b));
+      S("circle", { cx: cxp, cy: cyp, r: 5.5, fill: over ? C.pink : C.blue }, svg);
+      // Beside the point, never above it: above puts the label on the 16 GB
+      // dashed line exactly when the reading matters most.
+      var right = cxp > PX1 - 90;
+      T(svg, right ? cxp - 11 : cxp + 11, cyp, fmtBytes(b),
+        { size: 10.5, anchor: right ? "end" : "start", fill: over ? C.pink : C.blue });
+
+      /* --- the numbers --- */
+      var rx = 500, ry = 66, step = 25;
+      function row(label, value, tone) {
+        T(svg, rx, ry, label, { anchor: "start", size: 10.5, fill: C.faint });
+        T(svg, 752, ry, value, { anchor: "end", size: 11, fill: tone || C.text });
+        ry += step;
+      }
+      row("sequence length", commas(n()));
+      row("d_model", commas(dm()));
+      row("heads (d_model / " + DHEAD + ")", String(heads()));
+      row("batch", String(bs()));
+      ry += 6;
+      line(svg, rx, ry - 16, 752, ry - 16, { stroke: C.line, sw: 0.8 });
+      row("scores per head", commas(scoresPerHead()));
+      row("one head, fp16", fmtBytes(scoresPerHead() * FP16));
+      row("all " + heads() + " heads x batch", fmtBytes(b), over ? C.pink : C.text);
+      row("attention FLOPs", (flops() / 1e12).toFixed(2) + " TFLOP");
+
+      /* --- the verdict --- */
+      line(svg, 8, 334, 752, 334, { stroke: C.line, sw: 1 });
+      T(svg, 8, 354, over
+          ? "Exceeds the 16 GB card by " + (b / BUDGET).toFixed(1) + "x — and that is before a single weight is loaded."
+          : "Fits: " + fmtBytes(b) + " of 16 GB, which is " + pct(b) +
+            " of the card spent on numbers nobody keeps.",
+        { anchor: "start", size: 11, fill: over ? C.pink : C.dim });
+      T(svg, 8, 376, "this shape crosses 16 GB at n = " + commas(Math.round(crossingN())) +
+        "; the first power of two past it is " + commas(Math.pow(2, Math.ceil(Math.log(crossingN()) / Math.LN2))),
+        { anchor: "start", size: 11, fill: C.orange });
+      T(svg, 8, 402, "Note that number. Chapter 28 computes the same output without ever writing the matrix down.",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      T(svg, 752, 402, "double n, quadruple both", { anchor: "end", size: 10, fill: C.faint });
+    }
+
+    var sN = slider(f.controls, "n", EMIN, EMAX, eN, 1,
+      function (v) { return commas(1 << v); }, function (v) { eN = v; render(); say(); });
+    var sD = slider(f.controls, "d_model", 10, 14, eD, 1,
+      function (v) { return commas(1 << v); }, function (v) { eD = v; render(); say(); });
+    var sB = slider(f.controls, "batch", 0, 5, eB, 1,
+      function (v) { return String(1 << v); }, function (v) { eB = v; render(); say(); });
+
+    function say() {
+      var b = bytes();
+      f.say(b > BUDGET
+        ? "n = " + commas(n()) + ": " + fmtBytes(b) + " of score matrices, " +
+          (b / BUDGET).toFixed(1) + "x a 16 GB card."
+        : "n = " + commas(n()) + ": " + fmtBytes(b) + ", " + pct(b) + " of a 16 GB card.");
+    }
+
+    f.btn("Corvid at 8,192", function () {
+      eN = 13; eD = 12; eB = 0; sN.set(13); sD.set(12); sB.set(0); render();
+      f.say("Corvid's trained context: 4.29 GB of score matrices, a quarter of the card, " +
+            "before the weights. This row is in the chapter's table.");
+    });
+    f.btn("reset", function () {
+      eN = 13; eD = 12; eB = 0; sN.set(13); sD.set(12); sB.set(0); render();
+      f.say("Drag n until the score matrices pass the 16 GB line. Note where that happens.");
+    });
+
+    render();
+    f.say("Drag n until the score matrices pass the 16 GB line. Note where that happens.");
   };
 })();
