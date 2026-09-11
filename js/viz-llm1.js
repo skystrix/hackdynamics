@@ -5,6 +5,7 @@
      llmBpeTrainer  ch2  Builder    byte-pair encoding, trained live, merge by merge
      llmVocabTradeoff ch2 Tuner     three costs that move against each other
      llmTokenizerCompare ch2 Comparator one text, three real encodings, measured
+     llmChatTemplate ch3 Stepper    a conversation flattened, then broken on purpose
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -20,7 +21,8 @@
   window.VIZ = window.VIZ || {};
   var K = window.RAGKIT;
   var C = K.C, S = K.S, T = K.T, rect = K.rect, line = K.line,
-      frame = K.frame, toggle = K.toggle, tipOn = K.tipOn, slider = K.slider;
+      frame = K.frame, toggle = K.toggle, tipOn = K.tipOn, slider = K.slider,
+      tabs = K.tabs;
 
   /* ========================================================================
      1. llmAttention — CH 5 — Inspector
@@ -1843,6 +1845,213 @@
 
     render();
     f.say("Pick English, then Tamil. Same sentence, same meaning, and watch the token count go up eleven times.");
+  };
+
+
+  /* ========================================================================
+     9. llmChatTemplate — CH 3 — Stepper
+
+     A conversation is not a thing a model has. It is four messages rendered
+     into one flat string by a template that shipped with the weights, and
+     this machine shows that string as the model actually receives it: as
+     tokens, with every marker either a single control id or the rubble of
+     one.
+
+     Measured with transformers 5.17.0 against Llama-3-8B-Instruct's and
+     Qwen2.5-7B-Instruct's own tokenizer_config.json, 12 September 2026, and
+     the section's three published figures come out of it at step 2: 20
+     tokens for Llama through Llama, 18 for Qwen through Qwen, 67 for Llama
+     through Qwen. The fourth cell of that square, 40, the chapter does not
+     print, and the machine does.
+
+     The wrong-tokenizer toggle is the whole chapter in one control. Nothing
+     raises, nothing logs; the boxes just stop being solid.
+     ======================================================================== */
+  VIZ.llmChatTemplate = function (el) {
+    var f = frame(el);
+
+    var TPL = { L: "Llama 3", Q: "Qwen 2.5" };
+    var ROLES = ["system", "user", "assistant", "user"];
+    var SAID = ["You are terse.", "Hi", "Hello.", "Why?"];
+
+    var CELL = {
+      LL10: { k: "xx.x.....e", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>"] },
+      LL11: { k: "xx.x.....egggg", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n"] },
+      LL20: { k: "xx.x.....ex.x..e", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Hi", "<|eot_id|>"] },
+      LL21: { k: "xx.x.....ex.x..egggg", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Hi", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n"] },
+      LL30: { k: "xx.x.....ex.x..ex.x...e", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Hi", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n", "Hello", ".", "<|eot_id|>"] },
+      LL31: { k: "xx.x.....ex.x..ex.x...egggg", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Hi", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n", "Hello", ".", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n"] },
+      LL40: { k: "xx.x.....ex.x..ex.x...ex.x...e", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Hi", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n", "Hello", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Why", "?", "<|eot_id|>"] },
+      LL41: { k: "xx.x.....ex.x..ex.x...ex.x...egggg", t: ["<|begin_of_text|>", "<|start_header_id|>", "system", "<|end_header_id|>", "\n\n", "You", " are", " terse", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Hi", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n", "Hello", ".", "<|eot_id|>", "<|start_header_id|>", "user", "<|end_header_id|>", "\n\n", "Why", "?", "<|eot_id|>", "<|start_header_id|>", "assistant", "<|end_header_id|>", "\n\n"] },
+      LQ10: { k: "sssssssssssss.sssssss...sssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", ">"] },
+      LQ11: { k: "sssssssssssss.sssssss...sssssssssssssgsssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n"] },
+      LQ20: { k: "sssssssssssss.sssssss...sssssssssssss.sssssss.sssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hi", "<", "|", "e", "ot", "_id", "|", ">"] },
+      LQ21: { k: "sssssssssssss.sssssss...sssssssssssss.sssssss.sssssssssssssgsssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hi", "<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n"] },
+      LQ30: { k: "sssssssssssss.sssssss...sssssssssssss.sssssss.sssssssssssss.sssssss.sssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hi", "<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hello", ".<", "|", "e", "ot", "_id", "|", ">"] },
+      LQ31: { k: "sssssssssssss.sssssss...sssssssssssss.sssssss.sssssssssssss.sssssss.sssssssssssssgsssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hi", "<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hello", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n"] },
+      LQ40: { k: "sssssssssssss.sssssss...sssssssssssss.sssssss.sssssssssssss.sssssss.sssssssssssss.sssssss.sssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hi", "<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hello", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Why", "?<", "|", "e", "ot", "_id", "|", ">"] },
+      LQ41: { k: "sssssssssssss.sssssss...sssssssssssss.sssssss.sssssssssssss.sssssss.sssssssssssss.sssssss.sssssssssssssgsssssss", t: ["<", "|", "begin", "_of", "_text", "|", "><", "|", "start", "_header", "_id", "|", ">", "system", "<", "|", "end", "_header", "_id", "|", ">\n\n", "You", " are", " terse", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hi", "<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Hello", ".<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "user", "<", "|", "end", "_header", "_id", "|", ">\n\n", "Why", "?<", "|", "e", "ot", "_id", "|", "><", "|", "start", "_header", "_id", "|", ">", "assistant", "<", "|", "end", "_header", "_id", "|", ">\n\n"] },
+      QL10: { k: "ssssss.....ssssss", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n"] },
+      QL11: { k: "ssssss.....ssssssssssssgg", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n"] },
+      QL20: { k: "ssssss.....ssssssssssss...ssssss", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Hi", "<", "|", "im", "_end", "|", ">\n"] },
+      QL21: { k: "ssssss.....ssssssssssss...ssssssssssssgg", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Hi", "<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n"] },
+      QL30: { k: "ssssss.....ssssssssssss...ssssssssssss...ssssss", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Hi", "<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n", "Hello", ".<", "|", "im", "_end", "|", ">\n"] },
+      QL31: { k: "ssssss.....ssssssssssss...ssssssssssss...ssssssssssssgg", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Hi", "<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n", "Hello", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n"] },
+      QL40: { k: "ssssss.....ssssssssssss...ssssssssssss...ssssssssssss...ssssss", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Hi", "<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n", "Hello", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Why", "?<", "|", "im", "_end", "|", ">\n"] },
+      QL41: { k: "ssssss.....ssssssssssss...ssssssssssss...ssssssssssss...ssssssssssssgg", t: ["<", "|", "im", "_start", "|", ">", "system", "\n", "You", " are", " terse", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Hi", "<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n", "Hello", ".<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "user", "\n", "Why", "?<", "|", "im", "_end", "|", ">\n", "<", "|", "im", "_start", "|", ">", "assistant", "\n"] },
+      QQ10: { k: "x......e.", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n"] },
+      QQ11: { k: "x......e.ggg", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n"] },
+      QQ20: { k: "x......e.x...e.", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Hi", "<|im_end|>", "\n"] },
+      QQ21: { k: "x......e.x...e.ggg", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Hi", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n"] },
+      QQ30: { k: "x......e.x...e.x....e.", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Hi", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n", "Hello", ".", "<|im_end|>", "\n"] },
+      QQ31: { k: "x......e.x...e.x....e.ggg", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Hi", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n", "Hello", ".", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n"] },
+      QQ40: { k: "x......e.x...e.x....e.x....e.", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Hi", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n", "Hello", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Why", "?", "<|im_end|>", "\n"] },
+      QQ41: { k: "x......e.x...e.x....e.x....e.ggg", t: ["<|im_start|>", "system", "\n", "You", " are", " terse", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Hi", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n", "Hello", ".", "<|im_end|>", "\n", "<|im_start|>", "user", "\n", "Why", "?", "<|im_end|>", "\n", "<|im_start|>", "assistant", "\n"] },
+    };
+
+    var tpl = "L", wrong = false, step = 2, gen = true;
+    function tokr() { return wrong ? (tpl === "L" ? "Q" : "L") : tpl; }
+    function cell(t, k) { return CELL[tpl + t + step + (k ? 1 : 0)]; }
+
+    function show(s) {
+      return s.replace(/ /g, "·").replace(/\n/g, "⏎").replace(/\t/g, "⇥");
+    }
+    function markers(c) {
+      var n = 0;
+      c.t.forEach(function (s) { if (/^<\|.*\|>$/.test(s)) n++; });
+      return n;
+    }
+    function shards(c) { return c.k.split("s").length - 1; }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "a conversation rendered by a chat template" }, f.body);
+
+    var TY0 = 68, MAXLN = 7;
+
+    /* Same two-pass wrap as llmTokenizerCompare: measure, then place, so the
+       box is the size of the string rather than the size of the worst case. */
+    function wrap(c) {
+      var pos = [], x = 8, ln = 0, i, cut = -1;
+      for (i = 0; i < c.t.length; i++) {
+        var lab = show(c.t[i]), w = 8 + lab.length * 6.2;
+        var lim = ln + 1 >= MAXLN ? 690 : 752;
+        if (x + w > lim) {
+          if (ln + 1 >= MAXLN) { cut = i; break; }
+          ln++; x = 8;
+        }
+        pos.push({ x: x, ln: ln, lab: lab, w: w, c: c.k.charAt(i) });
+        x += w + 3;
+      }
+      return { pos: pos, lines: ln + 1, cut: cut };
+    }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var tk = tokr(), c = cell(tk, gen), mine = cell(tpl, gen), i;
+      var n = c.t.length, base = mine.t.length;
+
+      T(svg, 8, 14, "a conversation, flattened into one string",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "measured with transformers 5.17.0 — not running live",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      T(svg, 8, 36, "turns: " + ROLES.slice(0, step).join(", ") + "   (" + step + " of 4)",
+        { anchor: "start", size: 11, fill: C.dim });
+      T(svg, 752, 36, wrong
+          ? TPL[tpl] + "'s template through " + TPL[tk] + "'s tokenizer"
+          : TPL[tpl] + "'s template through its own tokenizer",
+        { anchor: "end", size: 11, fill: wrong ? C.pink : C.teal });
+      line(svg, 8, 48, 752, 48, { stroke: C.line, sw: 1 });
+
+      /* ---- the string, as tokens ---- */
+      var L = wrap(c);
+      L.pos.forEach(function (b) {
+        var yy = TY0 + b.ln * 21, fill = C.blue, op = 0.12, txt = C.text, st = "none", dash = "none";
+        if (b.c === "x") { fill = C.orange; op = 0.35; }
+        else if (b.c === "e") { fill = C.pink; op = 0.35; }
+        else if (b.c === "g") { fill = C.green; op = 0.35; }
+        else if (b.c === "s") { fill = "none"; st = C.pink; dash = "3 2"; txt = C.pink; }
+        rect(svg, b.x, yy - 9, b.w, 18, { rx: 3, fill: fill, stroke: st, sw: 1, dash: dash, op: op });
+        T(svg, b.x + b.w / 2, yy, b.lab, { size: 10, fill: txt });
+      });
+      if (L.cut >= 0) T(svg, 752, TY0 + (L.lines - 1) * 21, "+" + (n - L.cut) + " more",
+        { anchor: "end", size: 9, fill: C.faint });
+
+      /* ---- the count, and what it cost ---- */
+      var cy = TY0 + L.lines * 21 + 14;
+      T(svg, 8, cy, "tokens the model receives", { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, cy, n + (wrong ? "  (" + base + " with the matching tokenizer)" : ""),
+        { anchor: "end", size: 12, fill: wrong ? C.pink : C.teal });
+
+      T(svg, 8, cy + 24, wrong
+          ? markers(mine) + " control tokens became " + shards(c) +
+            " tokens of punctuation: " + n + " instead of " + base + ", " +
+            (n / base).toFixed(1) + "x, and no exception anywhere."
+          : "Every marker is one id: " + markers(c) +
+            " of them, and the model reads structure rather than punctuation.",
+        { anchor: "start", size: 11, fill: wrong ? C.pink : C.dim });
+      T(svg, 8, cy + 44, gen
+          ? "The green tail is the generation prompt, and it is what puts the model in the position of speaking next."
+          : "No generation prompt. Nothing tells the model it is its turn, so it carries on writing the user's.",
+        { anchor: "start", size: 10.5, fill: gen ? C.green : C.orange });
+
+      /* ---- legend ---- */
+      var lx = 8;
+      [[C.orange, "structure"], [C.pink, "end of turn"], [C.green, "generation prompt"],
+       [C.blue, "content"]].forEach(function (p) {
+        rect(svg, lx, cy + 60, 12, 10, { rx: 2, fill: p[0], stroke: "none", op: 0.35 });
+        T(svg, lx + 17, cy + 65, p[1], { anchor: "start", size: 9.5, fill: C.faint });
+        lx += 30 + p[1].length * 5.6;
+      });
+      rect(svg, lx, cy + 60, 12, 10, { rx: 2, fill: "none", stroke: C.pink, sw: 1, dash: "3 2" });
+      T(svg, lx + 17, cy + 65, "a marker that shattered into text",
+        { anchor: "start", size: 9.5, fill: C.pink });
+
+      svg.setAttribute("viewBox", "0 0 760 " + (cy + 84));
+    }
+
+    function say() {
+      var tk = tokr(), n = cell(tk, gen).t.length, base = cell(tpl, gen).t.length;
+      f.say(step + (step === 1 ? " turn" : " turns") + ", " + TPL[tpl] + "'s template" +
+        (wrong ? " through " + TPL[tk] + "'s tokenizer: " + n + " tokens against " + base +
+                 ", and the structure is gone."
+               : " through its own tokenizer: " + n + " tokens, every marker a single id."));
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tb = tabs(f.controls, ["Llama 3", "Qwen 2.5"], 0, function (i) {
+      tpl = i ? "Q" : "L"; render(); say();
+    });
+    var tgWrong = toggle(f.controls, "wrong tokenizer", false, function (v) {
+      wrong = v; render();
+      if (!v) { say(); return; }
+      var n = cell(tokr(), gen).t.length, base = cell(tpl, gen).t.length;
+      f.say("The template is still " + TPL[tpl] + "'s. Only the tokenizer changed, and the string " +
+        "went from " + base + " tokens to " + n + ". Nothing raised, nothing logged.");
+    });
+    f.btn("add turn", function () {
+      if (step >= 4) { f.say("All four turns are in. Now turn the wrong tokenizer on."); return; }
+      step++; render(); say();
+    });
+    f.btn("back", function () {
+      if (step <= 1) { f.say("The system message is the first thing the template writes."); return; }
+      step--; render(); say();
+    });
+    var tgGen = toggle(f.controls, "generation prompt", true, function (v) {
+      gen = v; render();
+      f.say(v ? "The assistant header is back on the end. That fragment is the whole cue."
+              : "Generation prompt off: the string stops after the last turn ended, and the model " +
+                "has no reason to think the next word is its own.");
+    });
+    f.btn("reset", function () {
+      tpl = "L"; wrong = false; step = 2; gen = true;
+      tb.sync(0); tgWrong.set(false); tgGen.set(true);
+      render();
+      f.say("Watch a conversation become one flat string. Then break the template on purpose.");
+    });
+
+    render();
+    f.say("Watch a conversation become one flat string. Then break the template on purpose.");
   };
 
 })();

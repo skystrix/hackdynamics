@@ -346,6 +346,11 @@ pre code { background: none; border: none; padding: 0; color: var(--text-seconda
   transition: all .15s;
 }
 .viz button:hover, .quiz button:hover { box-shadow: var(--shadow-1); border-color: var(--text-faint); }
+/* tabs() and toggle() both set aria-pressed; without this the selected tab of
+   every machine in both courses looked identical to the unselected ones. */
+.viz button[aria-pressed="true"] {
+  border-color: var(--primary); color: var(--primary); background: var(--bg-3);
+}
 .viz button:disabled { opacity: .4; cursor: default; box-shadow: none; }
 .viz input[type="text"], .viz input[type="number"] {
   font-family: var(--mono); font-size: 13px;
