@@ -2,6 +2,7 @@
    viz-llm1.js — LLM In Depth machines, batch 1: chapters 1–5.
 
      llmNextToken   ch1  Playground real measured distributions; confidence is context
+     llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
      llmAttentionCost ch5 Tuner     the quadratic term, against a 16 GB card
@@ -602,7 +603,7 @@
       for (i = EMIN; i <= EMAX; i += 2) {
         T(svg, px(i), PY1 + 14, commas(1 << i), { size: 9, fill: C.faint });
       }
-      T(svg, PX1, PY1 + 32, "sequence length n", { anchor: "end", size: 10, fill: C.faint });
+      T(svg, PX1, PY1 + 26, "sequence length n", { anchor: "end", size: 10, fill: C.faint });
 
       /* --- the 16 GB budget --- */
       var by = py(gb(BUDGET));
@@ -621,7 +622,7 @@
       /* --- where the curve crosses the card --- */
       var cx = crossingN(), ce = Math.log(cx) / Math.LN2;
       if (ce >= EMIN && ce <= EMAX) {
-        line(svg, px(ce), by, px(ce), PY1, { stroke: C.orange, sw: 0.9, dash: "3 3" });
+        line(svg, px(ce), by, px(ce), PY1 - 17, { stroke: C.orange, sw: 0.9, dash: "3 3" });
         T(svg, px(ce), PY1 - 8, "n = " + commas(Math.round(cx)),
           { size: 9.5, fill: C.orange });
       }
@@ -631,9 +632,15 @@
       S("circle", { cx: cxp, cy: cyp, r: 5.5, fill: over ? C.pink : C.blue }, svg);
       // Beside the point, never above it: above puts the label on the 16 GB
       // dashed line exactly when the reading matters most.
-      var right = cxp > PX1 - 90;
-      T(svg, right ? cxp - 11 : cxp + 11, cyp, fmtBytes(b),
-        { size: 10.5, anchor: right ? "end" : "start", fill: over ? C.pink : C.blue });
+      // Put the label on the side away from the crossing rule, and away from the
+      // right edge, so it never lies along a line the reader is trying to read.
+      var ce2 = Math.log(crossingN()) / Math.LN2;
+      var left = cxp > PX1 - 90 || (ce2 > eN && px(ce2) - cxp < 80);
+      // Near the crossing the point sits on the budget rule, which is exactly when
+      // the reading matters, so nudge the label clear of it.
+      var ly = Math.abs(cyp - by) < 14 ? cyp + (cyp <= by ? -12 : 12) : cyp;
+      T(svg, left ? cxp - 11 : cxp + 11, ly, fmtBytes(b),
+        { size: 10.5, anchor: left ? "end" : "start", fill: over ? C.pink : C.blue });
 
       /* --- the numbers --- */
       var rx = 500, ry = 66, step = 25;
@@ -839,7 +846,7 @@
           T(svg, bx + bw + 44, yy, tk[1].toFixed(3), { anchor: "end", size: 10.5,
             fill: i === 0 ? C.blue : C.text });
         }
-        T(svg, 8, y0 + 10 * rh + 12,
+        T(svg, 8, y0 + 10 * rh + 2,
           "everything else — " + (VOCAB - 10).toLocaleString("en-US") +
           " tokens — shares the remaining " +
           (1 - d.top.slice(0, 10).reduce(function (a, t) { return a + t[1]; }, 0)).toFixed(3),
@@ -976,5 +983,187 @@
 
     render();
     f.say("Edit the prompt. Watch which tokens the model thinks could come next, and how sure it is.");
+  };
+
+  /* ========================================================================
+     5. llmCourseMap — CH 1 — Inspector
+
+     Three lanes, one per machine, five stages each. Colour is the Part that
+     owns a stage, so before anything is clicked the reader can see that the
+     same orange box sits in the middle of all three lanes: the block of
+     Chapters 5 to 11 is the same block whether it is being trained or served.
+     That is the section's claim, drawn.
+
+     The blueprint's discovery is the arrows. Pretraining and post-training
+     run the block forwards and then backwards, at 6N FLOPs per token;
+     inference runs it forwards only, at 2N. Part III and Part V are the same
+     machine in two directions, and the third of the cost that the backward
+     pass does not spend is the whole reason serving is a different job.
+
+     N = 8.03e9 for Corvid-8B, so every FLOP figure here is 2N or 6N and
+     checkable by hand, which is what Chapter 9 asks the reader to do.
+     ======================================================================== */
+  VIZ.llmCourseMap = function (el) {
+    var f = frame(el);
+
+    var N = 8.03e9;
+    var FWD = 2 * N / 1e9, TRAIN = 6 * N / 1e9;      // GFLOP per token
+
+    var PART = {
+      1: { name: "Part I — What a Language Model Is", col: "sky", ch: "1–4" },
+      2: { name: "Part II — Inside the Block", col: "orange", ch: "5–11" },
+      3: { name: "Part III — Making a Model", col: "teal", ch: "12–17" },
+      4: { name: "Part IV — Making It Useful", col: "purple", ch: "18–25" },
+      5: { name: "Part V — Making It Fast, Correct and Safe", col: "green", ch: "26–34" },
+      6: { name: "Part VI — Build It: PocketLM", col: "pink", ch: "35–41" }
+    };
+
+    var LANES = [
+      { name: "Pretraining", cost: TRAIN, dir: "both", build: 37,
+        sub: "where the parameters come from",
+        stages: [
+          { t: "corpus", p: 3, ch: "12", d: "Trillions of tokens, filtered, deduplicated and decontaminated. The part nobody photographs." },
+          { t: "tokenizer", p: 1, ch: "2–3", d: "Text becomes token ids. Every cost in this course is counted in these, not in words." },
+          { t: "the block", p: 2, ch: "5–11", d: "Attention, the feed-forward, the residual stream. The same block in all three lanes." },
+          { t: "training loop", p: 3, ch: "13–14", d: "Predict the next token, measure the loss, step the optimizer. Millions of dollars, months of GPU time." },
+          { t: "scale & hardware", p: 3, ch: "15–17", d: "How big, how long, on what silicon, split across how many. The arithmetic behind the other four boxes." }
+        ] },
+      { name: "Post-training", cost: TRAIN, dir: "both", build: 40,
+        sub: "where a text continuer becomes an assistant",
+        stages: [
+          { t: "instruction data", p: 4, ch: "20", d: "Thousands of examples of the behaviour you want, with the loss mask that makes it supervised." },
+          { t: "chat template", p: 1, ch: "3", d: "The turn structure a model was tuned on. Get it wrong and the model answers a question you did not ask." },
+          { t: "the block", p: 2, ch: "5–11", d: "Unchanged. Post-training moves the weights, not the architecture." },
+          { t: "SFT + LoRA", p: 4, ch: "20–21", d: "Fine-tune the whole thing, or a low-rank update of it on one GPU. Thousands of dollars, not millions." },
+          { t: "preferences", p: 4, ch: "22–23", d: "Pairs of responses and which one a human preferred, learned as a signal examples cannot express." }
+        ] },
+      { name: "Inference", cost: FWD, dir: "fwd", build: 41,
+        sub: "where the model earns or loses money",
+        stages: [
+          { t: "tokenizer", p: 1, ch: "2–3", d: "The same tokenizer, now on the critical path of every request." },
+          { t: "the block", p: 2, ch: "5–11", d: "The same block again, run forwards only. No backward pass, so a third of the arithmetic disappears." },
+          { t: "KV cache", p: 5, ch: "26", d: "Keep every key and value so each new token reads the past instead of recomputing it." },
+          { t: "batching", p: 5, ch: "27", d: "How many requests share one pass. The lever that decides your bill." },
+          { t: "sampling", p: 4, ch: "18", d: "Turn the distribution into one token, over and over. Chapter 1's loop, closed." }
+        ] }
+    ];
+
+    var sel = { lane: 2, st: 1 };                    // the block, in the inference lane
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "the three machines and the six parts" }, f.body);
+
+    var BX = 112, BW = 118, BGAP = 10, BH = 44;
+    function bx(i) { return BX + i * (BW + BGAP); }
+    function laneY(l) { return 36 + l * 68; }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var cur = LANES[sel.lane].stages[sel.st], l, i;
+
+      T(svg, 8, 14, "three machines, one architecture", { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "colour = the Part that owns the stage",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      for (l = 0; l < LANES.length; l++) {
+        var L = LANES[l], y = laneY(l);
+        T(svg, 8, y + 14, L.name, { anchor: "start", size: 11,
+          fill: l === sel.lane ? C.text : C.dim });
+        T(svg, 8, y + 30, L.cost.toFixed(1) + " GFLOP/tok",
+          { anchor: "start", size: 9, fill: C.faint });
+
+        for (i = 0; i < L.stages.length; i++) {
+          var st = L.stages[i], on = (l === sel.lane && i === sel.st);
+          var same = st.p === cur.p;
+          var col = C[PART[st.p].col];
+          var box = rect(svg, bx(i), y, BW, BH, { rx: 6, fill: col,
+            stroke: on ? C.text : col, sw: on ? 2 : 1,
+            op: on ? 0.34 : same ? 0.22 : 0.09 });
+          T(svg, bx(i) + BW / 2, y + 18, st.t, { size: 10.5,
+            fill: same ? C.text : C.dim });
+          T(svg, bx(i) + BW / 2, y + 33, "ch " + st.ch, { size: 9, fill: C.faint });
+          if (i < L.stages.length - 1) {
+            line(svg, bx(i) + BW + 1, y + BH / 2, bx(i + 1) - 2, y + BH / 2,
+              { stroke: C.faint, sw: 1 });
+          }
+          (function (li, si, stage) {
+            box.style.cursor = "pointer";
+            box.addEventListener("click", function () { sel = { lane: li, st: si }; render(); note(); });
+            tipOn(box, stage.t, PART[stage.p].name + " &middot; chapters " + stage.ch +
+              "<br>" + stage.d);
+          })(l, i, st);
+        }
+
+        /* the direction of the pass: this is the blueprint's discovery */
+        var y2 = y + BH + 9;
+        if (L.dir === "both") {
+          line(svg, bx(4) + BW, y2 + 4, bx(0), y2 + 4, { stroke: C.teal, sw: 1, dash: "4 3" });
+          T(svg, bx(2) + BW / 2, y2 - 4, "backward pass — 4N more",
+            { size: 9, fill: C.teal });
+        } else {
+          T(svg, bx(2) + BW / 2, y2 - 1, "forward only — no backward pass",
+            { size: 9, fill: C.green });
+        }
+      }
+
+      /* --- the stage detail --- */
+      line(svg, 8, 252, 752, 252, { stroke: C.line, sw: 1 });
+      var P = PART[cur.p];
+      T(svg, 8, 274, cur.t, { anchor: "start", size: 14, fill: C[P.col], weight: 600 });
+      T(svg, 752, 274, P.name, { anchor: "end", size: 11, fill: C[P.col] });
+      T(svg, 8, 298, cur.d, { anchor: "start", size: 11, fill: C.dim });
+      T(svg, 8, 320, "opened in chapters " + cur.ch + "   ·   this Part runs " + P.ch +
+        "   ·   built yourself in Chapter " + LANES[sel.lane].build,
+        { anchor: "start", size: 10.5, fill: C.faint });
+
+      /* --- how many lanes share this Part --- */
+      var lanes = [];
+      LANES.forEach(function (L2, li) {
+        if (L2.stages.some(function (s2) { return s2.p === cur.p; })) lanes.push(L2.name);
+      });
+      T(svg, 8, 348, lanes.length === 3
+          ? "This Part appears in all three lanes: " + lanes.join(", ") + "."
+          : "Appears in: " + lanes.join(", ") + ".",
+        { anchor: "start", size: 11, fill: lanes.length === 3 ? C.orange : C.dim });
+
+      /* --- the cost contrast --- */
+      line(svg, 8, 364, 752, 364, { stroke: C.line, sw: 0.8 });
+      T(svg, 8, 384, "Corvid-8B, N = 8.03 billion parameters:", { anchor: "start", size: 10.5, fill: C.faint });
+      T(svg, 8, 404, "training a token costs 6N = " + TRAIN.toFixed(1) +
+        " GFLOP; serving one costs 2N = " + FWD.toFixed(1) + " GFLOP, exactly a third.",
+        { anchor: "start", size: 11, fill: C.dim });
+      T(svg, 8, 422, "What separates pretraining from post-training is not that cost. " +
+        "It is 15 trillion tokens against a few million.",
+        { anchor: "start", size: 10.5, fill: C.faint });
+    }
+
+    function note() {
+      var cur = LANES[sel.lane].stages[sel.st];
+      f.say("«" + cur.t + "» in " + LANES[sel.lane].name + " — " + PART[cur.p].name +
+        ", chapters " + cur.ch + ".");
+    }
+    function walk(d) {
+      var flat = [], l, i;
+      for (l = 0; l < LANES.length; l++)
+        for (i = 0; i < LANES[l].stages.length; i++) flat.push({ lane: l, st: i });
+      var at = 0;
+      flat.forEach(function (o, k) { if (o.lane === sel.lane && o.st === sel.st) at = k; });
+      sel = flat[(at + d + flat.length) % flat.length];
+      render(); note();
+    }
+    f.btn("◀ stage", function () { walk(-1); });
+    f.btn("stage ▶", function () { walk(1); });
+    f.btn("the block", function () {
+      sel = { lane: 0, st: 2 }; render();
+      f.say("The block, in the pretraining lane. Step through the lanes and it is the same box: " +
+            "Chapters 5 to 11 are what a training run and a served request have in common.");
+    });
+    f.btn("reset", function () {
+      sel = { lane: 2, st: 1 }; render();
+      f.say("Hover a stage to see which chapters open it.");
+    });
+
+    render();
+    f.say("Hover a stage to see which chapters open it.");
   };
 })();
