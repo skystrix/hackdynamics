@@ -1,6 +1,7 @@
 /* ==========================================================================
    viz-llm1.js — LLM In Depth machines, batch 1: chapters 1–5.
 
+     llmNextToken   ch1  Playground real measured distributions; confidence is context
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
      llmAttentionCost ch5 Tuner     the quadratic term, against a 16 GB card
@@ -694,5 +695,286 @@
 
     render();
     f.say("Drag n until the score matrices pass the 16 GB line. Note where that happens.");
+  };
+
+  /* ========================================================================
+     4. llmNextToken — CH 1 — Playground
+
+     The distributions here are real and they were measured, not drawn. What
+     they are not is live: no model runs in your browser, so the machine holds
+     the readings for a fixed set of prompts and says so when you leave it.
+
+     Corvid-8B is fictional, and a distribution cannot be derived from a
+     configuration the way Chapter 5's costs can, so this shows a real 0.5B
+     base model instead and names it on screen. A base model rather than an
+     instruct one, because Chapter 1 is about next-token prediction and that
+     is exactly what a base model does.
+
+     The discovery: "The capital of France is" puts 0.316 on " Paris" and
+     needs 37 tokens to cover 90% of the mass. Delete "of France" and the
+     same weights need 866. That is a 23x change in how many futures are
+     live, from deleting two words.
+     ======================================================================== */
+  VIZ.llmNextToken = function (el) {
+    var f = frame(el);
+
+    /* Measured Qwen/Qwen2.5-0.5B on an 8 GB M1, 2026-09-11. Real distributions, shipped with
+       the page: there is no model running in your browser. */
+    var MODEL = "Qwen/Qwen2.5-0.5B", VOCAB = 151936, MAXH = 11.9312;
+    var DATA = [
+      { q: "The capital of France is", H: 3.2579, n90: 37, tok: 5,
+        top: [[" Paris",0.315602], [" ______",0.114601], [" ____",0.063536], [" __",0.055125], [":\n",0.051322], [" located",0.035857], [" the",0.028052], ["\n",0.024568], [" (",0.019713], [" .\n",0.01877], [":\n\n",0.018764], [":",0.01557]],
+        at: [0.3156021535396576,0.018769532442092896,0.0003911969542969018,7.488376013498055e-06,1.2604672861016297e-07,1.7928548923240584e-10],
+        curve: [[1,0.316],[2,0.115],[3,0.0635],[4,0.0551],[6,0.0359],[8,0.0246],[11,0.0188],[15,0.0109],[20,0.00769],[27,0.00345],[36,0.00196],[48,0.00112],[65,0.000748],[88,0.000453],[118,0.000309],[159,0.000147],[215,9.05e-05],[289,5.57e-05],[390,3.27e-05],[525,2.01e-05],[708,1.31e-05],[954,8.28e-06],[1285,4.84e-06],[1732,2.9e-06],[2334,1.81e-06],[3145,1.08e-06],[4238,6.47e-07],[5711,3.71e-07],[7696,2.11e-07],[10370,1.17e-07],[13974,6.36e-08],[18831,3.3e-08],[25375,1.63e-08],[34194,7.62e-09],[46078,3.34e-09],[62092,1.31e-09],[83671,4.3e-10],[112750,8.53e-11],[151935,4.3e-15]] },
+      { q: "The capital is", H: 5.1501, n90: 866, tok: 3,
+        top: [[" the",0.226412], [" located",0.115853], [" a",0.045004], [" divided",0.018255], [" in",0.016831], [" situated",0.015525], [" known",0.011739], [" also",0.010841], [" Lahore",0.009426], [" surrounded",0.009159], [" one",0.008336], [" an",0.007694]],
+        at: [0.22641196846961975,0.009159380570054054,0.0010903241345658898,7.028609252301976e-05,1.043480210682901e-06,8.7800522408088e-10],
+        curve: [[1,0.226],[2,0.116],[3,0.045],[4,0.0183],[6,0.0155],[8,0.0108],[11,0.00834],[15,0.00442],[20,0.00389],[27,0.00317],[36,0.00287],[48,0.0023],[65,0.00169],[88,0.0012],[118,0.000892],[159,0.000696],[215,0.000484],[289,0.00034],[390,0.000252],[525,0.00018],[708,0.000115],[954,7.67e-05],[1285,4.83e-05],[1732,3.01e-05],[2334,1.79e-05],[3145,1.06e-05],[4238,6.25e-06],[5711,3.52e-06],[7696,1.88e-06],[10370,9.46e-07],[13974,4.71e-07],[18831,2.18e-07],[25375,9.85e-08],[34194,4.3e-08],[46078,1.78e-08],[62092,6.63e-09],[83671,2.08e-09],[112750,4.3e-10],[151935,2.67e-14]] },
+      { q: "The capital of", H: 4.6714, n90: 355, tok: 3,
+        top: [[" Ber",0.186373], [" the",0.140428], [" a",0.067826], [" France",0.041633], [" Russia",0.033038], [" Brazil",0.018033], [" Canada",0.014085], [" India",0.012], [" Australia",0.009617], [" Japan",0.00935], [" Finland",0.008252], [" Poland",0.007974]],
+        at: [0.18637333810329437,0.009349867701530457,0.0011699527967721224,3.5689936339622363e-05,6.022225420565519e-07,7.576075322646147e-10],
+        curve: [[1,0.186],[2,0.14],[3,0.0678],[4,0.0416],[6,0.018],[8,0.012],[11,0.00825],[15,0.00659],[20,0.0054],[27,0.0039],[36,0.00293],[48,0.00241],[65,0.00183],[88,0.00139],[118,0.000905],[159,0.000629],[215,0.000433],[289,0.000274],[390,0.000167],[525,0.000101],[708,6.27e-05],[954,3.89e-05],[1285,2.48e-05],[1732,1.54e-05],[2334,9.23e-06],[3145,5.6e-06],[4238,3.39e-06],[5711,1.93e-06],[7696,1.09e-06],[10370,5.57e-07],[13974,2.76e-07],[18831,1.28e-07],[25375,5.7e-08],[34194,2.51e-08],[46078,1.06e-08],[62092,4.36e-09],[83671,1.57e-09],[112750,4.28e-10],[151935,4.37e-14]] },
+      { q: "Once upon a", H: 0.257, n90: 1, tok: 3,
+        top: [[" time",0.975269], [" Time",0.002652], [" midnight",0.001394], [" summer",0.000944], [" night",0.000592], [" rainy",0.000574], [" spring",0.000505], [" great",0.000464], [" day",0.000437], [" point",0.000398], [" winter",0.000397], [" beautiful",0.00039]],
+        at: [0.9752694964408875,0.0003984857758041471,3.383825969649479e-05,1.604263502485992e-06,2.7761963394823397e-08,2.2032896340729025e-11],
+        curve: [[1,0.975],[2,0.00265],[3,0.00139],[4,0.000944],[6,0.000574],[8,0.000464],[11,0.000397],[15,0.000289],[20,0.000211],[27,0.000139],[36,0.000123],[48,8.83e-05],[65,6.33e-05],[88,3.96e-05],[118,2.81e-05],[159,1.63e-05],[215,1.1e-05],[289,7.92e-06],[390,5.43e-06],[525,3.86e-06],[708,2.6e-06],[954,1.7e-06],[1285,1.12e-06],[1732,7.26e-07],[2334,4.67e-07],[3145,2.77e-07],[4238,1.63e-07],[5711,9.23e-08],[7696,4.93e-08],[10370,2.56e-08],[13974,1.28e-08],[18831,6.06e-09],[25375,2.75e-09],[34194,1.18e-09],[46078,4.81e-10],[62092,1.77e-10],[83671,5.39e-11],[112750,1.02e-11],[151935,1.93e-16]] },
+      { q: "The quick brown fox jumps over the lazy", H: 0.8381, n90: 2, tok: 8,
+        top: [[" dog",0.886938], ["\n",0.016173], [" dogs",0.010253], [" (",0.009005], [" brown",0.007478], [" __",0.005022], [" ____",0.003792], [" turtle",0.003455], [" green",0.002689], [" gray",0.00258], [" grey",0.002528], [" cat",0.002485]],
+        at: [0.8869379758834839,0.0025795886758714914,6.894263788126409e-05,2.4205930913012708e-06,4.145562115809298e-08,4.662369448849013e-11],
+        curve: [[1,0.887],[2,0.0162],[3,0.0103],[4,0.00901],[6,0.00502],[8,0.00345],[11,0.00253],[15,0.00202],[20,0.00115],[27,0.000583],[36,0.000355],[48,0.000205],[65,0.000137],[88,8.06e-05],[118,5.66e-05],[159,3.87e-05],[215,2.71e-05],[289,1.78e-05],[390,1.14e-05],[525,7.07e-06],[708,4.42e-06],[954,2.63e-06],[1285,1.6e-06],[1732,9.87e-07],[2334,6.03e-07],[3145,3.65e-07],[4238,2.18e-07],[5711,1.26e-07],[7696,7.2e-08],[10370,3.88e-08],[13974,2.06e-08],[18831,1.05e-08],[25375,5.19e-09],[34194,2.38e-09],[46078,1.02e-09],[62092,3.87e-10],[83671,1.17e-10],[112750,2.14e-11],[151935,2.97e-16]] },
+      { q: "Monday, Tuesday, Wednesday,", H: 1.4798, n90: 3, tok: 6,
+        top: [[" and",0.521502], [" Thursday",0.300462], [" Friday",0.102243], [" &",0.016369], [" Saturday",0.007193], [" April",0.005625], [" Thurs",0.005089], [" Wednesday",0.002577], [" ",0.002535], [" Sunday",0.00189], [" or",0.001498], [" etc",0.001337]],
+        at: [0.5215016007423401,0.0018896183464676142,4.5390534069156274e-05,3.1711658721178537e-06,1.2620469647117716e-07,2.4597210379617707e-10],
+        curve: [[1,0.522],[2,0.3],[3,0.102],[4,0.0164],[6,0.00562],[8,0.00258],[11,0.0015],[15,0.00093],[20,0.00054],[27,0.000286],[36,0.000164],[48,0.000112],[65,8.13e-05],[88,5.6e-05],[118,3.83e-05],[159,2.76e-05],[215,2.04e-05],[289,1.38e-05],[390,9.86e-06],[525,6.92e-06],[708,4.94e-06],[954,3.41e-06],[1285,2.38e-06],[1732,1.67e-06],[2334,1.15e-06],[3145,7.86e-07],[4238,5.19e-07],[5711,3.31e-07],[7696,2.06e-07],[10370,1.18e-07],[13974,6.13e-08],[18831,3.01e-08],[25375,1.39e-08],[34194,6.29e-09],[46078,2.83e-09],[62092,1.26e-09],[83671,4.92e-10],[112750,1.39e-10],[151935,6.52e-14]] },
+      { q: "Attention is all you", H: 2.3623, n90: 13, tok: 4,
+        top: [[" need",0.47797], [" have",0.135476], [" get",0.053875], [" hear",0.038189], [" want",0.037174], [" see",0.031387], [" can",0.027454], [" know",0.026693], [" ever",0.021041], [" got",0.018315], [" are",0.01784], [" really",0.011077]],
+        at: [0.4779701828956604,0.0183151476085186,0.00014739346806891263,3.0450389658653876e-06,4.9016161796089364e-08,1.1057834509164977e-10],
+        curve: [[1,0.478],[2,0.135],[3,0.0539],[4,0.0382],[6,0.0314],[8,0.0267],[11,0.0178],[15,0.00454],[20,0.00289],[27,0.00139],[36,0.000823],[48,0.0005],[65,0.000318],[88,0.000188],[118,0.00011],[159,7.19e-05],[215,4.42e-05],[289,2.44e-05],[390,1.47e-05],[525,9.16e-06],[708,5.38e-06],[954,3.29e-06],[1285,2.02e-06],[1732,1.19e-06],[2334,7.4e-07],[3145,4.33e-07],[4238,2.53e-07],[5711,1.46e-07],[7696,8.21e-08],[10370,4.56e-08],[13974,2.52e-08],[18831,1.37e-08],[25375,7.13e-09],[34194,3.56e-09],[46078,1.66e-09],[62092,7.05e-10],[83671,2.49e-10],[112750,5.55e-11],[151935,6.97e-15]] },
+      { q: "The largest planet in our solar system is", H: 4.4723, n90: 117, tok: 8,
+        top: [[" __",0.099604], [" Jupiter",0.074925], [" the",0.063262], [" ____",0.042163], [" ______",0.038408], ["\n",0.035084], [" _____",0.032686], [" a",0.026315], [" known",0.025771], [" called",0.023196], [" approximately",0.023093], [" not",0.018675]],
+        at: [0.09960374981164932,0.023195752874016762,0.0009316294454038143,1.2357170817267615e-05,1.3574893387158227e-07,9.261038463881377e-11],
+        curve: [[1,0.0996],[2,0.0749],[3,0.0633],[4,0.0422],[6,0.0351],[8,0.0263],[11,0.0231],[15,0.0148],[20,0.0116],[27,0.00896],[36,0.00589],[48,0.00352],[65,0.00183],[88,0.00104],[118,0.000703],[159,0.00046],[215,0.000261],[289,0.000138],[390,7.67e-05],[525,4.14e-05],[708,2.53e-05],[954,1.35e-05],[1285,7.88e-06],[1732,4.54e-06],[2334,2.73e-06],[3145,1.54e-06],[4238,8.4e-07],[5711,4.54e-07],[7696,2.43e-07],[10370,1.24e-07],[13974,6.21e-08],[18831,2.99e-08],[25375,1.36e-08],[34194,5.94e-09],[46078,2.42e-09],[62092,8.63e-10],[83671,2.44e-10],[112750,3.9e-11],[151935,9.65e-16]] },
+      { q: "import numpy as", H: 0.0343, n90: 1, tok: 3,
+        top: [[" np",0.99671], [" n",0.00056], [" nm",0.000413], [" numpy",0.0003], [" num",0.000242], [" N",0.000217], [" ",0.000172], [" _",0.000166], [" py",0.000111], [" NP",6.2e-05], [" on",6e-05], [" m",4.1e-05]],
+        at: [0.9967097043991089,6.205820682225749e-05,1.7053534975275397e-06,3.7040937428400866e-08,4.243221884969728e-10,6.055063677019856e-13],
+        curve: [[1,0.997],[2,0.00056],[3,0.000413],[4,0.0003],[6,0.000217],[8,0.000166],[11,6.01e-05],[15,3.58e-05],[20,2.07e-05],[27,1.51e-05],[36,1.04e-05],[48,5.51e-06],[65,3.21e-06],[88,2.01e-06],[118,1.42e-06],[159,8.07e-07],[215,5.07e-07],[289,2.93e-07],[390,1.78e-07],[525,1.12e-07],[708,6.64e-08],[954,4e-08],[1285,2.28e-08],[1732,1.37e-08],[2334,7.86e-09],[3145,4.39e-09],[4238,2.47e-09],[5711,1.37e-09],[7696,7.31e-10],[10370,3.93e-10],[13974,2.1e-10],[18831,1.08e-10],[25375,5.43e-11],[34194,2.59e-11],[46078,1.15e-11],[62092,4.59e-12],[83671,1.47e-12],[112750,2.82e-13],[151935,1.73e-17]] },
+      { q: "She opened the door and", H: 4.4469, n90: 134, tok: 5,
+        top: [[" saw",0.17736], [" looked",0.058872], [" let",0.03893], [" walked",0.037116], [" stepped",0.032964], [" found",0.032472], [" ______",0.028616], [" I",0.027132], [" the",0.02642], [" there",0.024849], [" stood",0.020385], [" said",0.017066]],
+        at: [0.1773596554994583,0.02484918013215065,0.0010655832011252642,1.633200008654967e-05,2.4419065880465496e-07,3.5127939446155665e-10],
+        curve: [[1,0.177],[2,0.0589],[3,0.0389],[4,0.0371],[6,0.0325],[8,0.0271],[11,0.0204],[15,0.0141],[20,0.0126],[27,0.00632],[36,0.0043],[48,0.00296],[65,0.00192],[88,0.00125],[118,0.000763],[159,0.000419],[215,0.000252],[289,0.000155],[390,9.29e-05],[525,5.3e-05],[708,3.22e-05],[954,1.77e-05],[1285,1.08e-05],[1732,6.38e-06],[2334,3.81e-06],[3145,2.24e-06],[4238,1.26e-06],[5711,7.31e-07],[7696,4.14e-07],[10370,2.27e-07],[13974,1.22e-07],[18831,6.3e-08],[25375,3.12e-08],[34194,1.49e-08],[46078,6.56e-09],[62092,2.58e-09],[83671,8.33e-10],[112750,1.69e-10],[151935,4.34e-15]] },
+      { q: "I think the best thing about", H: 6.3812, n90: 3973, tok: 6,
+        top: [[" the",0.118802], [" this",0.104302], [" a",0.030333], [" my",0.027681], [" being",0.025501], [" having",0.013549], [" it",0.011979], [" learning",0.011922], [" working",0.010799], [" using",0.009844], [" our",0.009409], [" going",0.008982]],
+        at: [0.11880157887935638,0.009844080545008183,0.0008342074579559267,9.238996426574886e-05,5.47474382983637e-06,3.537192982960846e-09],
+        curve: [[1,0.119],[2,0.104],[3,0.0303],[4,0.0277],[6,0.0135],[8,0.0119],[11,0.00941],[15,0.0067],[20,0.0045],[27,0.00363],[36,0.00262],[48,0.0017],[65,0.00119],[88,0.000932],[118,0.000738],[159,0.000585],[215,0.000428],[289,0.000331],[390,0.00024],[525,0.000182],[708,0.00013],[954,9.61e-05],[1285,7.15e-05],[1732,5.21e-05],[2334,3.77e-05],[3145,2.67e-05],[4238,1.85e-05],[5711,1.25e-05],[7696,8.22e-06],[10370,5.14e-06],[13974,2.97e-06],[18831,1.47e-06],[25375,5.6e-07],[34194,1.45e-07],[46078,4.37e-08],[62092,1.74e-08],[83671,6.91e-09],[112750,2.04e-09],[151935,1.02e-12]] },
+      { q: "The three primary colours are red, blue and", H: 1.6653, n90: 7, tok: 9,
+        top: [[" yellow",0.542863], [" green",0.261315], [" __",0.033421], [" (",0.026621], [" white",0.016966], [" what",0.014938], ["\n",0.013061], [" cyan",0.011127], [" orange",0.005635], [" ___",0.005611], [" ____",0.005424], [" _____",0.005201]],
+        at: [0.5428628921508789,0.00561147928237915,5.579982462222688e-05,7.76239119204547e-07,7.453671457824385e-09,6.164727582580465e-12],
+        curve: [[1,0.543],[2,0.261],[3,0.0334],[4,0.0266],[6,0.0149],[8,0.0111],[11,0.00542],[15,0.00349],[20,0.00115],[27,0.000859],[36,0.000694],[48,0.000322],[65,0.000174],[88,6.72e-05],[118,4.38e-05],[159,2.55e-05],[215,1.41e-05],[289,7.68e-06],[390,4.46e-06],[525,2.57e-06],[708,1.43e-06],[954,8.33e-07],[1285,4.87e-07],[1732,2.79e-07],[2334,1.56e-07],[3145,8.51e-08],[4238,4.77e-08],[5711,2.53e-08],[7696,1.33e-08],[10370,6.89e-09],[13974,3.45e-09],[18831,1.68e-09],[25375,7.79e-10],[34194,3.44e-10],[46078,1.43e-10],[62092,5.31e-11],[83671,1.56e-11],[112750,2.77e-12],[151935,5.86e-17]] },
+      { q: "A language model predicts the next", H: 1.1464, n90: 5, tok: 6,
+        top: [[" word",0.798302], [" letter",0.039076], [" sentence",0.036296], [" character",0.01944], [" words",0.013023], [" ",0.012098], [" two",0.007165], [" number",0.00646], [" three",0.0062], [" few",0.00515], [" action",0.004373], [" utter",0.004363]],
+        at: [0.7983022332191467,0.005149770062416792,5.6359069276368245e-05,5.959042823633354e-07,4.14946699223151e-09,3.1229784383524084e-12],
+        curve: [[1,0.798],[2,0.0391],[3,0.0363],[4,0.0194],[6,0.0121],[8,0.00646],[11,0.00437],[15,0.0027],[20,0.00184],[27,0.000751],[36,0.000432],[48,0.000261],[65,0.000135],[88,7.52e-05],[118,3.79e-05],[159,2.1e-05],[215,1.23e-05],[289,6.76e-06],[390,3.62e-06],[525,2.24e-06],[708,1.25e-06],[954,6.52e-07],[1285,3.67e-07],[1732,2.07e-07],[2334,1.12e-07],[3145,5.9e-08],[4238,3.04e-08],[5711,1.61e-08],[7696,7.95e-09],[10370,3.79e-09],[13974,1.78e-09],[18831,8.22e-10],[25375,3.72e-10],[34194,1.63e-10],[46078,6.76e-11],[62092,2.53e-11],[83671,7.72e-12],[112750,1.44e-12],[151935,1.06e-16]] },
+      { q: "To be or not to", H: 0.1851, n90: 1, tok: 5,
+        top: [[" be",0.983188], ["-be",0.000987], [" Be",0.00093], [" ",0.000771], ["-",0.000593], [" bee",0.000459], ["...",0.000398], [" to",0.000384], [" ",0.000383], [" go",0.00027], [" bat",0.000252], ["...\n\n",0.000246]],
+        at: [0.9831883311271667,0.0002697708550840616,2.3964130377862602e-05,1.1711266552083544e-06,2.2559722978598984e-08,4.1618455209890826e-11],
+        curve: [[1,0.983],[2,0.000987],[3,0.00093],[4,0.000771],[6,0.000459],[8,0.000384],[11,0.000252],[15,0.000164],[20,0.000132],[27,9.74e-05],[36,7.66e-05],[48,6e-05],[65,4.36e-05],[88,2.95e-05],[118,1.94e-05],[159,1.28e-05],[215,8.93e-06],[289,6.52e-06],[390,4.22e-06],[525,2.79e-06],[708,1.86e-06],[954,1.25e-06],[1285,8.11e-07],[1732,5.18e-07],[2334,3.27e-07],[3145,1.98e-07],[4238,1.16e-07],[5711,6.67e-08],[7696,3.74e-08],[10370,2.1e-08],[13974,1.15e-08],[18831,6.02e-09],[25375,3.03e-09],[34194,1.46e-09],[46078,6.44e-10],[62092,2.59e-10],[83671,9.08e-11],[112750,2.15e-11],[151935,4.1e-15]] },
+    ];
+
+    var idx = 0, prev = null, full = false, unknown = "";
+
+    function norm(s) { return s.replace(/\s+/g, " ").trim().toLowerCase(); }
+    function find(s) {
+      var n = norm(s);
+      for (var i = 0; i < DATA.length; i++) if (norm(DATA[i].q) === n) return i;
+      return -1;
+    }
+    /* Tokens carry leading spaces and newlines that would otherwise vanish. */
+    function show(t) {
+      return t.replace(/ /g, "·").replace(/\n/g, "⏎").replace(/\t/g, "⇥");
+    }
+    function sig(v) {
+      if (v >= 0.001) return v.toFixed(3);
+      if (v === 0) return "0";
+      var e = Math.floor(Math.log(v) / Math.LN10);
+      return (v / Math.pow(10, e)).toFixed(1) + "e" + e;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "measured next-token distribution" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var d = DATA[idx], i;
+
+      T(svg, 8, 14, "one prompt in, " + VOCAB.toLocaleString("en-US") +
+        " probabilities out", { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "measured on " + MODEL + " — not running live",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      /* --- the prompt --- */
+      rect(svg, 8, 24, 744, 30, { rx: 6, stroke: unknown ? C.pink : C.line, sw: 1.2 });
+      T(svg, 18, 39, (unknown || d.q).replace(/\n/g, "⏎"),
+        { anchor: "start", size: 12, fill: unknown ? C.faint : C.text });
+      if (unknown) {
+        T(svg, 744, 39, "not measured", { anchor: "end", size: 10, fill: C.pink });
+        T(svg, 8, 70, "No reading was shipped for that prompt. The panel below is the last one that was.",
+          { anchor: "start", size: 10.5, fill: C.pink });
+      } else {
+        T(svg, 744, 39, d.tok + " tokens", { anchor: "end", size: 10, fill: C.faint });
+      }
+
+      if (!full) {
+        /* --- top ten, as bars --- */
+        T(svg, 8, 92, "top 10 of " + VOCAB.toLocaleString("en-US"),
+          { anchor: "start", size: 11, fill: C.faint });
+        var bx = 150, bw = 300, y0 = 110, rh = 25;
+        for (i = 0; i < 10; i++) {
+          var yy = y0 + i * rh, tk = d.top[i];
+          T(svg, 8, yy, String(i + 1), { anchor: "start", size: 9.5, fill: C.faint });
+          T(svg, 142, yy, show(tk[0]), { anchor: "end", size: 11,
+            fill: i === 0 ? C.blue : C.dim });
+          line(svg, bx, yy, bx + bw, yy, { stroke: C.line, sw: 0.6 });
+          S("rect", { x: bx, y: yy - 8, width: Math.max(0.8, tk[1] * bw), height: 16, rx: 2,
+            fill: C.blue, opacity: i === 0 ? 0.9 : 0.5 }, svg);
+          T(svg, bx + bw + 44, yy, tk[1].toFixed(3), { anchor: "end", size: 10.5,
+            fill: i === 0 ? C.blue : C.text });
+        }
+        T(svg, 8, y0 + 10 * rh + 12,
+          "everything else — " + (VOCAB - 10).toLocaleString("en-US") +
+          " tokens — shares the remaining " +
+          (1 - d.top.slice(0, 10).reduce(function (a, t) { return a + t[1]; }, 0)).toFixed(3),
+          { anchor: "start", size: 10, fill: C.faint });
+      } else {
+        /* --- the whole vocabulary, sorted, log-log --- */
+        var PX0 = 60, PX1 = 470, PY0 = 100, PY1 = 350;
+        var RMAX = Math.log(VOCAB) / Math.LN10, PMIN = -12;
+        function rx2(r) { return PX0 + Math.log(r) / Math.LN10 / RMAX * (PX1 - PX0); }
+        function ry2(v) {
+          var e = Math.max(PMIN, Math.log(Math.max(v, 1e-300)) / Math.LN10);
+          return PY1 - (e - PMIN) / (0 - PMIN) * (PY1 - PY0);
+        }
+        T(svg, 8, 92, "every token, sorted by probability — both axes log",
+          { anchor: "start", size: 11, fill: C.faint });
+        line(svg, PX0, PY1, PX1, PY1, { stroke: C.line, sw: 1.5 });
+        line(svg, PX0, PY0, PX0, PY1, { stroke: C.line, sw: 1.5 });
+        for (i = 0; i >= PMIN; i -= 3) {
+          var gy2 = ry2(Math.pow(10, i));
+          if (i < 0) line(svg, PX0, gy2, PX1, gy2, { stroke: C.line, sw: 0.5, op: 0.4 });
+          T(svg, PX0 - 8, gy2, i === 0 ? "1" : "1e" + i, { anchor: "end", size: 9, fill: C.faint });
+        }
+        [1, 10, 100, 1000, 10000, 100000].forEach(function (r) {
+          T(svg, rx2(r), PY1 + 14, r >= 1000 ? (r / 1000) + "k" : String(r),
+            { size: 9, fill: C.faint });
+        });
+        T(svg, PX1, PY1 + 32, "rank", { anchor: "end", size: 10, fill: C.faint });
+        var pts = d.curve.map(function (c) { return rx2(c[0]) + "," + ry2(c[1]); });
+        S("polyline", { points: pts.join(" "), fill: "none", stroke: C.blue,
+          "stroke-width": 2 }, svg);
+        // the 90% nucleus, drawn where it falls on the curve
+        line(svg, rx2(d.n90), PY0, rx2(d.n90), PY1, { stroke: C.orange, sw: 1, dash: "4 3" });
+        T(svg, rx2(d.n90) + 6, PY0 + 12, d.n90.toLocaleString("en-US") + " cover 90%",
+          { anchor: "start", size: 10, fill: C.orange });
+        T(svg, PX0 + 4, PY1 - 8, "rank 1,000 is already in the millionths",
+          { anchor: "start", size: 9.5, fill: C.faint });
+      }
+
+      /* --- the readout --- */
+      var rx = 508, ry = 96, stp = 24;
+      function row(label, value, tone) {
+        T(svg, rx, ry, label, { anchor: "start", size: 10.5, fill: C.faint });
+        T(svg, 752, ry, value, { anchor: "end", size: 11, fill: tone || C.text });
+        ry += stp;
+      }
+      row("top token", show(d.top[0][0]), C.blue);
+      row("its probability", d.top[0][1].toFixed(3), C.blue);
+      ry += 4;
+      row("entropy", d.H.toFixed(3) + " nats");
+      row("of a possible", MAXH.toFixed(2) + " nats");
+      row("tokens to cover 90%", d.n90.toLocaleString("en-US"), C.orange);
+      ry += 4;
+      line(svg, rx, ry - 14, 752, ry - 14, { stroke: C.line, sw: 0.8 });
+      ["1", "10", "100", "1,000", "10,000", "100,000"].forEach(function (lab, i) {
+        row("p at rank " + lab, sig(d.at[i]));
+      });
+
+      /* --- the comparison, which is the whole point --- */
+      line(svg, 8, 372, 752, 372, { stroke: C.line, sw: 1 });
+      if (prev !== null && prev !== idx) {      // 0 is a valid index, so test against null
+        var a = DATA[prev], b = d;
+        T(svg, 8, 392, "was «" + a.q + "»: entropy " + a.H.toFixed(2) + ", " +
+          a.n90.toLocaleString("en-US") + " tokens covered 90%",
+          { anchor: "start", size: 10.5, fill: C.faint });
+        var mult = b.n90 / a.n90;
+        T(svg, 8, 412, "now: entropy " + b.H.toFixed(2) + ", " +
+          b.n90.toLocaleString("en-US") + " tokens — " +
+          (mult >= 1 ? mult.toFixed(1) + "x wider" : (1 / mult).toFixed(1) + "x narrower") +
+          ". Same weights, different context.",
+          { anchor: "start", size: 11, fill: C.orange });
+      } else {
+        T(svg, 8, 392, "Pick another prompt, or edit this one. The readout below the fold " +
+          "compares it with the last.", { anchor: "start", size: 10.5, fill: C.faint });
+        T(svg, 8, 412, "Nothing here is looked up. These are the tokens the weights make probable.",
+          { anchor: "start", size: 10.5, fill: C.faint });
+      }
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var sel = document.createElement("select");
+    sel.setAttribute("aria-label", "prompt");
+    sel.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;max-width:290px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+    DATA.forEach(function (d, i) {
+      var o = document.createElement("option");
+      o.value = i; o.textContent = d.q.replace(/\n/g, "⏎");
+      sel.appendChild(o);
+    });
+    var input = document.createElement("input");
+    input.type = "text"; input.value = DATA[0].q;
+    input.setAttribute("aria-label", "edit the prompt");
+    input.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;min-width:230px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+
+    function pick(i, msg) {
+      prev = idx; idx = i; unknown = "";
+      input.value = DATA[i].q; sel.value = String(i);
+      render();
+      f.say(msg || ("«" + DATA[i].q + "» — top token " + show(DATA[i].top[0][0]) +
+        " at " + DATA[i].top[0][1].toFixed(3) + ", " + DATA[i].n90.toLocaleString("en-US") +
+        " tokens to cover 90% of the mass."));
+    }
+    sel.addEventListener("change", function () { pick(+sel.value); });
+    f.controls.appendChild(sel);
+    f.controls.appendChild(input);
+
+    function apply() {
+      var i = find(input.value);
+      if (i < 0) {
+        unknown = input.value; render();
+        f.say("No measurement shipped for that prompt. Nothing is running live here: " +
+              "the page carries readings for " + DATA.length +
+              " prompts, and the list beside the box has all of them.");
+      } else { pick(i); }
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); apply(); }
+    });
+    f.btn("read it", apply);
+
+    toggle(f.controls, "full vocabulary", false, function (v) {
+      full = v; render();
+      f.say(v ? "All " + VOCAB.toLocaleString("en-US") + " tokens, sorted, on log axes. " +
+                "The orange line is where 90% of the probability has been spent."
+              : "Back to the top ten.");
+    });
+
+    f.btn("reset", function () {
+      prev = null; unknown = ""; full = false;
+      idx = 0; input.value = DATA[0].q; sel.value = "0";
+      render();
+      f.say("Edit the prompt. Watch which tokens the model thinks could come next, and how sure it is.");
+    });
+
+    render();
+    f.say("Edit the prompt. Watch which tokens the model thinks could come next, and how sure it is.");
   };
 })();
