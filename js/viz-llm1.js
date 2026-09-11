@@ -6,6 +6,7 @@
      llmVocabTradeoff ch2 Tuner     three costs that move against each other
      llmTokenizerCompare ch2 Comparator one text, three real encodings, measured
      llmChatTemplate ch3 Stepper    a conversation flattened, then broken on purpose
+     llmTokenBoundaries ch3 Playground tokens with ids, and the classic traps flagged
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -23,6 +24,24 @@
   var C = K.C, S = K.S, T = K.T, rect = K.rect, line = K.line,
       frame = K.frame, toggle = K.toggle, tipOn = K.tipOn, slider = K.slider,
       tabs = K.tabs;
+
+  /* Break a row of boxes of the given widths into lines, keeping room on the
+     last line for a "+N more" tail. Every machine here that draws a row of
+     tokens needs this, and none of them needs its own copy: pass items that
+     carry a .w, get .x and .ln back on the ones that fit. */
+  var WX0 = 8, WX1 = 752, WTAIL = 690, WGAP = 3;
+  function wrapBoxes(items, maxLines) {
+    var x = WX0, ln = 0, i;
+    for (i = 0; i < items.length; i++) {
+      if (x + items[i].w > (ln + 1 >= maxLines ? WTAIL : WX1)) {
+        if (ln + 1 >= maxLines) return { pos: items.slice(0, i), lines: ln + 1, cut: i };
+        ln++; x = WX0;
+      }
+      items[i].x = x; items[i].ln = ln;
+      x += items[i].w + WGAP;
+    }
+    return { pos: items, lines: ln + 1, cut: -1 };
+  }
 
   /* ========================================================================
      1. llmAttention — CH 5 — Inspector
@@ -1709,21 +1728,14 @@
        leave three empty rows under each of the three encodings, and Tamil
        under gpt2 needs every row it can get. The viewBox follows. */
     function wrap(list) {
-      var pos = [], x = 8, ln = 0, i, cut = -1;
-      for (i = 0; i < list.length; i++) {
-        var t = list[i], raw = t.s === null;
+      var L = wrapBoxes(list.map(function (t) {
+        var raw = t.s === null, fs = bytesView ? 9 : 10;
         var lab = bytesView ? t.hex : (raw ? "" : show(t.s));
-        var fs = bytesView ? 9 : 10;
-        var w = lab ? 8 + lab.length * fs * 0.62 : 11;
-        var lim = ln + 1 >= MAXLN ? 690 : 752;   // room for the "+N more" tail
-        if (x + w > lim) {
-          if (ln + 1 >= MAXLN) { cut = i; break; }
-          ln++; x = 8;
-        }
-        pos.push({ x: x, ln: ln, lab: lab, fs: fs, w: w, raw: raw, n: t.n });
-        x += w + 3;
-      }
-      return { pos: pos, lines: ln + 1, cut: cut, total: list.length };
+        return { lab: lab, fs: fs, w: lab ? 8 + lab.length * fs * 0.62 : 11,
+                 raw: raw, n: t.n };
+      }), MAXLN);
+      L.total = list.length;
+      return L;
     }
 
     function render() {
@@ -1928,21 +1940,11 @@
 
     var TY0 = 68, MAXLN = 7;
 
-    /* Same two-pass wrap as llmTokenizerCompare: measure, then place, so the
-       box is the size of the string rather than the size of the worst case. */
     function wrap(c) {
-      var pos = [], x = 8, ln = 0, i, cut = -1;
-      for (i = 0; i < c.t.length; i++) {
-        var lab = show(c.t[i]), w = 8 + lab.length * 6.2;
-        var lim = ln + 1 >= MAXLN ? 690 : 752;
-        if (x + w > lim) {
-          if (ln + 1 >= MAXLN) { cut = i; break; }
-          ln++; x = 8;
-        }
-        pos.push({ x: x, ln: ln, lab: lab, w: w, c: c.k.charAt(i) });
-        x += w + 3;
-      }
-      return { pos: pos, lines: ln + 1, cut: cut };
+      return wrapBoxes(c.t.map(function (t, i) {
+        var lab = show(t);
+        return { lab: lab, w: 8 + lab.length * 6.2, c: c.k.charAt(i) };
+      }), MAXLN);
     }
 
     function render() {
@@ -2052,6 +2054,304 @@
 
     render();
     f.say("Watch a conversation become one flat string. Then break the template on purpose.");
+  };
+
+
+  /* ========================================================================
+     10. llmTokenBoundaries — CH 3 — Playground
+
+     Eight strings through four real tokenizers, with the ids, measured with
+     tiktoken 0.14.0 and transformers 5.17.0 on 12 September 2026. Every split
+     the chapter prints comes back out of this data: 3478 as 34|78 under gpt2
+     and 347|8 under cl100k and Llama, 1234567 as three tokens or seven,
+     1,234,567 as six or five or nine, the four-space indent as five tokens or
+     three, and \treturn as two.
+
+     The flags are computed from the token list rather than stored, so they
+     describe whatever is on screen. The rule that matters is the digit one: a
+     number split across tokens is red unless every piece is a single digit,
+     which is the one case where the boundaries and place value agree. That is
+     Qwen's deliberate choice, and it is the only row of the section's figure
+     that is not a failure.
+
+     Whitespace markers default to on. Turning them off is the demonstration:
+     the trailing space becomes invisible, which is how the bug survives.
+     ======================================================================== */
+  VIZ.llmTokenBoundaries = function (el) {
+    var f = frame(el);
+
+    var ENC = [
+      { k: "g", name: "gpt2" }, { k: "c", name: "cl100k_base" },
+      { k: "l", name: "Llama 3" }, { k: "q", name: "Qwen 2.5" }
+    ];
+
+    var DATA = [
+      { s: "3478 * 29",
+        g: [["34", 2682], ["78", 3695], [" *", 1635], [" 29", 2808]],
+        c: [["347", 17678], ["8", 23], [" *", 353], [" ", 220], ["29", 1682]],
+        l: [["347", 17678], ["8", 23], [" *", 353], [" ", 220], ["29", 1682]],
+        q: [["3", 18], ["4", 19], ["7", 22], ["8", 23], [" *", 353], [" ", 220], ["2", 17], ["9", 24]],
+      },
+      { s: "1234567",
+        g: [["123", 10163], ["45", 2231], ["67", 3134]],
+        c: [["123", 4513], ["456", 10961], ["7", 22]],
+        l: [["123", 4513], ["456", 10961], ["7", 22]],
+        q: [["1", 16], ["2", 17], ["3", 18], ["4", 19], ["5", 20], ["6", 21], ["7", 22]],
+      },
+      { s: "1,234,567",
+        g: [["1", 16], [",", 11], ["234", 24409], [",", 11], ["5", 20], ["67", 3134]],
+        c: [["1", 16], [",", 11], ["234", 11727], [",", 11], ["567", 19282]],
+        l: [["1", 16], [",", 11], ["234", 11727], [",", 11], ["567", 19282]],
+        q: [["1", 16], [",", 11], ["2", 17], ["3", 18], ["4", 19], [",", 11], ["5", 20], ["6", 21], ["7", 22]],
+      },
+      { s: "$1,234,567.00",
+        g: [["$", 3], ["1", 16], [",", 11], ["234", 24409], [",", 11], ["5", 20], ["67", 3134], [".", 13], ["00", 405]],
+        c: [["$", 3], ["1", 16], [",", 11], ["234", 11727], [",", 11], ["567", 19282], [".", 13], ["00", 410]],
+        l: [["$", 3], ["1", 16], [",", 11], ["234", 11727], [",", 11], ["567", 19282], [".", 13], ["00", 410]],
+        q: [["$", 3], ["1", 16], [",", 11], ["2", 17], ["3", 18], ["4", 19], [",", 11], ["5", 20], ["6", 21], ["7", 22], [".", 13], ["0", 15], ["0", 15]],
+      },
+      { s: "    return x",
+        g: [[" ", 220], [" ", 220], [" ", 220], [" return", 1441], [" x", 2124]],
+        c: [["   ", 262], [" return", 471], [" x", 865]],
+        l: [["   ", 262], [" return", 471], [" x", 865]],
+        q: [["   ", 262], [" return", 470], [" x", 856]],
+      },
+      { s: "\treturn x",
+        g: [["\t", 197], ["return", 7783], [" x", 2124]],
+        c: [["\treturn", 862], [" x", 865]],
+        l: [["\treturn", 862], [" x", 865]],
+        q: [["\treturn", 853], [" x", 856]],
+      },
+      { s: "The capital of France is",
+        g: [["The", 464], [" capital", 3139], [" of", 286], [" France", 4881], [" is", 318]],
+        c: [["The", 791], [" capital", 6864], [" of", 315], [" France", 9822], [" is", 374]],
+        l: [["The", 791], [" capital", 6864], [" of", 315], [" France", 9822], [" is", 374]],
+        q: [["The", 785], [" capital", 6722], [" of", 315], [" France", 9625], [" is", 374]],
+      },
+      { s: "The capital of France is ",
+        g: [["The", 464], [" capital", 3139], [" of", 286], [" France", 4881], [" is", 318], [" ", 220]],
+        c: [["The", 791], [" capital", 6864], [" of", 315], [" France", 9822], [" is", 374], [" ", 220]],
+        l: [["The", 791], [" capital", 6864], [" of", 315], [" France", 9822], [" is", 374], [" ", 220]],
+        q: [["The", 785], [" capital", 6722], [" of", 315], [" France", 9625], [" is", 374], [" ", 220]],
+      },
+    ];
+
+    var idx = 0, ei = 0, marks = true, unknown = "";
+
+    function show(s) {
+      return marks ? s.replace(/ /g, "·").replace(/\n/g, "⏎").replace(/\t/g, "⇥") : s;
+    }
+    function digits(s) { return /^[0-9]+$/.test(s); }
+    function toks() { return DATA[idx][ENC[ei].k]; }
+
+    /* Flags are read off the token list, not stored, so they describe exactly
+       what is drawn. Each returns the class it paints a token. */
+    function classify(list) {
+      var cls = list.map(function () { return ""; }), notes = [], i, j;
+
+      /* Every run of adjacent all-digit tokens is one number the tokenizer
+         broke up. One note per kind, not one per run, or 1,234,567 says the
+         same sentence twice. */
+      var worst = null, single = 0;
+      for (i = 0; i < list.length; i++) {
+        if (!digits(list[i][0])) continue;
+        for (j = i; j < list.length && digits(list[j][0]); j++) { /* find the run */ }
+        if (j - i > 1) {
+          var one = true, k;
+          for (k = i; k < j; k++) if (list[k][0].length > 1) one = false;
+          for (k = i; k < j; k++) cls[k] = one ? "ok" : "bad";
+          if (one) single += j - i;
+          else if (!worst || j - i > worst[1] - worst[0]) worst = [i, j];
+        }
+        i = j - 1;
+      }
+      if (worst) {
+        var pieces = [];
+        for (i = worst[0]; i < worst[1]; i++) pieces.push(list[i][0]);
+        notes.push(["bad", "A number cut into " + pieces.length + ": " + pieces.join(" · ") +
+                           ". Not one of those boundaries is a place value."]);
+      }
+      if (single) notes.push(["ok", "One token per digit: the boundaries agree with place " +
+                                    "value, and " + single + " tokens is what that costs."]);
+
+      var sp = 0;
+      for (i = 0; i < list.length; i++) if (list[i][0] === " ") sp++;
+      if (sp > 1) {
+        for (i = 0; i < list.length; i++) if (list[i][0] === " ") cls[i] = "warn";
+        notes.push(["warn", sp + " single-space tokens: this tokenizer has no entry for a run " +
+                            "of spaces, so indentation costs one token each."]);
+      }
+
+      for (i = 1; i < list.length - 1; i++) {
+        if (list[i][0] === "," && digits(list[i - 1][0]) && digits(list[i + 1][0])) {
+          cls[i] = "warn";
+          notes.push(["warn", "A comma inside a number: it takes a token of its own and splits " +
+                              "the digits on either side into separate ones."]);
+          break;
+        }
+      }
+
+      for (i = 0; i < list.length; i++) {
+        if (list[i][0].charAt(0) === "\t" && list[i][0].length > 1) {
+          cls[i] = "ok";
+          notes.push(["ok", "«" + show(list[i][0]) + "» is one entry here: the tab merged into the " +
+                            "word, so this line costs two tokens rather than three."]);
+          break;
+        }
+        if (list[i][0] === "\t") {
+          cls[i] = "warn";
+          notes.push(["warn", "The tab is a token all by itself here. The modern three hold «⇥return» " +
+                              "as one entry and spend two tokens on this line."]);
+          break;
+        }
+      }
+      for (i = 0; i < list.length; i++) {
+        if (/^ {2,}$/.test(list[i][0])) {
+          cls[i] = "ok";
+          notes.push(["ok", "«" + show(list[i][0]) + "» is one entry: a run of spaces costs one " +
+                            "token here rather than one token per space."]);
+          break;
+        }
+      }
+
+      var last = list[list.length - 1][0];
+      if (/\s$/.test(last)) {
+        cls[list.length - 1] = "bad";
+        notes.push(["bad", "The text ends in whitespace, so the next word must arrive without its " +
+                           "leading space: «Paris», not «·Paris»."]);
+        notes.push(["bad", "Under cl100k «hello» is id 15339 and «·hello» is 24748: two unrelated " +
+                           "rows of the embedding table."]);
+      }
+      return { cls: cls, notes: notes };
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "tokens with ids, and the classic traps flagged" }, f.body);
+
+    var TY0 = 82, PITCH = 40, MAXLN = 4;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var list = toks(), e = ENC[ei], i;
+      var fl = classify(list);
+
+      T(svg, 8, 14, "one text, one tokenizer, every boundary",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "measured with tiktoken 0.14.0 and transformers 5.17.0",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      rect(svg, 8, 24, 744, 30, { rx: 6, stroke: unknown ? C.pink : C.line, sw: 1.2 });
+      T(svg, 18, 39, show(unknown || DATA[idx].s) || "(empty)",
+        { anchor: "start", size: 12.5, fill: unknown ? C.faint : C.text });
+      T(svg, 744, 39, unknown ? "not measured"
+          : list.length + " tokens under " + e.name,
+        { anchor: "end", size: 10.5, fill: unknown ? C.pink : C.teal });
+
+      T(svg, 8, 68, "token, and the id the model actually reads",
+        { anchor: "start", size: 10.5, fill: C.faint });
+
+      var L = wrapBoxes(list.map(function (t, i2) {
+        var lab = show(t[0]) || "·", id = String(t[1]);
+        return { lab: lab, id: id, c: fl.cls[i2],
+                 w: 12 + Math.max(lab.length * 6.4, id.length * 5.6) };
+      }), MAXLN);
+      L.pos.forEach(function (b) {
+        var yy = TY0 + b.ln * PITCH, tone = C.blue, op = 0.12;
+        if (b.c === "bad") { tone = C.pink; op = 0.3; }
+        else if (b.c === "warn") { tone = C.orange; op = 0.3; }
+        else if (b.c === "ok") { tone = C.teal; op = 0.3; }
+        rect(svg, b.x, yy, b.w, 21, { rx: 3, fill: tone, stroke: "none", op: op });
+        T(svg, b.x + b.w / 2, yy + 10, b.lab, { size: 10.5, fill: C.text });
+        T(svg, b.x + b.w / 2, yy + 30, b.id, { size: 9, fill: C.faint });
+      });
+      if (L.cut >= 0) T(svg, 752, TY0 + (L.lines - 1) * PITCH + 10,
+        "+" + (list.length - L.cut) + " more", { anchor: "end", size: 9, fill: C.faint });
+
+      /* ---- the flags ---- */
+      var fy = TY0 + L.lines * PITCH + 8;
+      if (!fl.notes.length) {
+        T(svg, 8, fy, "Nothing to flag here: every boundary falls between words, which is the case " +
+          "byte-pair encoding was built for.", { anchor: "start", size: 10.5, fill: C.dim });
+        fy += 20;
+      }
+      fl.notes.slice(0, 3).forEach(function (n) {
+        var tone = n[0] === "bad" ? C.pink : n[0] === "warn" ? C.orange : C.teal;
+        rect(svg, 8, fy - 5, 5, 11, { rx: 2, fill: tone, stroke: "none", op: 0.85 });
+        T(svg, 20, fy, n[1].slice(0, 114), { anchor: "start", size: 10.5, fill: tone });
+        fy += 20;
+      });
+
+      T(svg, 8, fy + 8, marks
+          ? "Middle dots are spaces. The model does not see them either, but it does see which token they belong to."
+          : "Markers off. The trailing space is now invisible, which is how this bug gets through review.",
+        { anchor: "start", size: 10, fill: marks ? C.faint : C.orange });
+
+      svg.setAttribute("viewBox", "0 0 760 " + (fy + 26));
+    }
+
+    function say() {
+      var list = toks(), fl = classify(list);
+      f.say("«" + show(DATA[idx].s) + "» is " + list.length + " tokens under " + ENC[ei].name +
+        (fl.notes.length ? ". " + fl.notes[0][1] : ", and nothing here is a trap."));
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tb = tabs(f.controls, ["gpt2", "cl100k", "Llama 3", "Qwen 2.5"], 0, function (i) {
+      ei = i; render(); say();
+    });
+
+    var sel = document.createElement("select");
+    sel.setAttribute("aria-label", "text");
+    sel.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;max-width:200px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+    DATA.forEach(function (d, i) {
+      var o = document.createElement("option");
+      o.value = i;
+      o.textContent = d.s.replace(/\t/g, "⇥").replace(/ /g, "·");
+      sel.appendChild(o);
+    });
+    var input = document.createElement("input");
+    input.type = "text"; input.value = DATA[0].s;
+    input.setAttribute("aria-label", "text to tokenize");
+    input.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;min-width:170px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+
+    function pick(i) {
+      idx = i; unknown = "";
+      input.value = DATA[i].s; sel.value = String(i);
+      render(); say();
+    }
+    sel.addEventListener("change", function () { pick(+sel.value); });
+    f.controls.appendChild(sel);
+    f.controls.appendChild(input);
+
+    function apply() {
+      var v = input.value, i;
+      for (i = 0; i < DATA.length; i++) if (DATA[i].s === v) { pick(i); return; }
+      unknown = v; render();
+      f.say("No reading shipped for that exact text — trailing spaces count. Four merge tables " +
+            "are far too large to ship, so the page carries " + DATA.length +
+            " strings and the list beside the box has all of them.");
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); apply(); }
+    });
+    f.btn("tokenize it", apply);
+
+    var tgMarks = toggle(f.controls, "show whitespace", true, function (v) {
+      marks = v; render();
+      f.say(v ? "Spaces are dots again."
+              : "Markers off. Look at the last box: there is a token there you cannot see, and " +
+                "that is the whole trailing-space bug.");
+    });
+    f.btn("reset", function () {
+      ei = 0; marks = true; tb.sync(0); tgMarks.set(true);
+      pick(0);
+      f.say("Type a big number. Then type it with commas.");
+    });
+
+    render();
+    f.say("Type a big number. Then type it with commas.");
   };
 
 })();
