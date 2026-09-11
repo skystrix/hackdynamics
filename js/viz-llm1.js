@@ -4,6 +4,7 @@
      llmNextToken   ch1  Playground real measured distributions; confidence is context
      llmBpeTrainer  ch2  Builder    byte-pair encoding, trained live, merge by merge
      llmVocabTradeoff ch2 Tuner     three costs that move against each other
+     llmTokenizerCompare ch2 Comparator one text, three real encodings, measured
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -1607,4 +1608,241 @@
     render();
     f.say("Move the vocabulary slider and find where the embedding table passes four blocks.");
   };
+
+  /* ========================================================================
+     8. llmTokenizerCompare — CH 2 — Comparator
+
+     Six texts, three real encodings, measured with tiktoken 0.14.0 on
+     12 September 2026 and shipped with the page: nothing is tokenizing live
+     here, because the three merge tables together are several megabytes and
+     this file is 92 kilobytes.
+
+     The four language rows reproduce the section's published table exactly —
+     53/51/56/49 characters and 12/11/11, 20/16/11, 85/56/17, 133/69/17 — so
+     the machine and the chapter cannot drift apart.
+
+     What the render adds over the table is where the boundaries fall. Under
+     gpt2 the Tamil sentence is 133 tokens of which almost none is a
+     character: they are raw bytes, drawn narrow and pink, because byte-level
+     BPE that never learned Tamil has nothing left to fall back to. The same
+     sentence under o200k is 17 tokens, most of them syllables.
+
+     The pre-tokenizer probe answers all three of exercise 4's predictions at
+     once: four spaces, 1234567, and don't.
+     ======================================================================== */
+  VIZ.llmTokenizerCompare = function (el) {
+    var f = frame(el);
+
+    var ENC = [
+      { k: "g", name: "gpt2",        v: 50257,  c: C.green },
+      { k: "c", name: "cl100k_base", v: 100277, c: C.blue },
+      { k: "o", name: "o200k_base",  v: 200019, c: C.orange }
+    ];
+
+    var DATA = [
+      { lab: "English", s: "The library closes at six in the evening on weekdays.",
+        g: "546865 206c696272617279 20636c6f736573 206174 20736978 20696e 20746865 206576656e696e67 206f6e 207765656b 64617973 2e",
+        c: "546865 206c696272617279 20636c6f736573 206174 20736978 20696e 20746865 206576656e696e67 206f6e 207765656b64617973 2e",
+        o: "546865 206c696272617279 20636c6f736573 206174 20736978 20696e 20746865 206576656e696e67 206f6e 207765656b64617973 2e",
+      },
+      { lab: "French", s: "La bibliothèque ferme à dix-huit heures en semaine.",
+        g: "4c61 2062 69626c69 6f7468 c3a8 717565 20666572 6d65 20c3a0 2064 6978 2d 68 756974 206865 75726573 20656e 2073656d 61696e65 2e",
+        c: "4c61 206269626c69 6f7468 c3a8 717565 20666572 6d65 20c3a0 2064 6978 2d68 756974 20686575726573 20656e 2073656d61696e65 2e",
+        o: "4c61 206269626c696f7468c3a8717565 206665726d65 20c3a0 20646978 2d68 756974 20686575726573 20656e 2073656d61696e65 2e",
+      },
+      { lab: "Hindi", s: "पुस्तकालय सप्ताह के दिनों में शाम छह बजे बंद हो जाता है।",
+        g: "e0a4 aa e0a5 81 e0a4 b8 e0a5 8d e0a4 a4 e0a4 95 e0a4be e0a4 b2 e0a4 af 20e0a4 b8 e0a4 aa e0a5 8d e0a4 a4 e0a4be e0a4 b9 20e0a4 95 e0a5 87 20e0a4 a6 e0a4 bf e0a4 a8 e0a5 8b e0a4 82 20e0a4 ae e0a5 87 e0a4 82 20e0a4 b6 e0a4be e0a4 ae 20e0a4 9b e0a4 b9 20e0a4 ac e0a4 9c e0a5 87 20e0a4 ac e0a4 82 e0a4 a6 20e0a4 b9 e0a5 8b 20e0a4 9c e0a4be e0a4 a4 e0a4be 20e0a4 b9 e0a5 88 e0a5 a4",
+        c: "e0a4aa e0a581 e0a4b8 e0a58de0a4 a4 e0a495 e0a4bee0a4 b2 e0a4 af 20e0a4b8 e0a4aa e0a58de0a4 a4 e0a4bee0a4 b9 20e0a495 e0a587 20e0a4 a6 e0a4bfe0a4 a8 e0a58b e0a482 20e0a4ae e0a587e0a4 82 20e0a4 b6 e0a4bee0a4 ae 20e0a4 9b e0a4b9 20e0a4 ac e0a4 9c e0a587 20e0a4 ac e0a482 e0a4 a6 20e0a4b9 e0a58b 20e0a4 9c e0a4bee0a4 a4 e0a4be 20e0a4b9 e0a5 88 e0a5 a4",
+        o: "e0a4aa e0a581 e0a4b8e0a58de0a4a4 e0a495 e0a4bee0a4b2e0a4af 20e0a4b8e0a4aae0a58de0a4a4e0a4bee0a4b9 20e0a495e0a587 20e0a4a6e0a4bfe0a4a8e0a58be0a482 20e0a4aee0a587e0a482 20e0a4b6e0a4bee0a4ae 20e0a49be0a4b9 20e0a4ace0a49ce0a587 20e0a4ace0a482e0a4a6 20e0a4b9e0a58b 20e0a49ce0a4bee0a4a4e0a4be 20e0a4b9e0a588 e0a5a4",
+      },
+      { lab: "Tamil", s: "நூலகம் வார நாட்களில் மாலை ஆறு மணிக்கு மூடப்படும்.",
+        g: "e0 ae a8 e0 af 82 e0 ae b2 e0 ae 95 e0 ae ae e0 af 8d 20 e0 ae b5 e0 ae be e0 ae b0 20 e0 ae a8 e0 ae be e0 ae 9f e0 af 8d e0 ae 95 e0 ae b3 e0 ae bf e0 ae b2 e0 af 8d 20 e0 ae ae e0 ae be e0 ae b2 e0 af 88 20 e0 ae 86 e0 ae b1 e0 af 81 20 e0 ae ae e0 ae a3 e0 ae bf e0 ae 95 e0 af 8d e0 ae 95 e0 af 81 20 e0 ae ae e0 af 82 e0 ae 9f e0 ae aa e0 af 8d e0 ae aa e0 ae 9f e0 af 81 e0 ae ae e0 af 8d 2e",
+        c: "e0ae a8 e0af 82 e0ae b2 e0ae 95 e0ae ae e0af8d 20e0ae b5 e0ae be e0ae b0 20e0ae a8 e0ae be e0ae 9f e0af8de0ae 95 e0ae b3 e0aebfe0ae b2 e0af8d 20e0ae ae e0ae be e0ae b2 e0af 88 20e0ae 86 e0ae b1 e0af81 20e0ae ae e0ae a3 e0aebfe0ae 95 e0af8de0ae 95 e0af81 20e0ae ae e0af 82 e0ae 9f e0ae aa e0af8de0ae aa e0ae 9f e0af81 e0ae ae e0af8d 2e",
+        o: "e0aea8 e0af82 e0aeb2e0ae95 e0aeaee0af8d 20e0aeb5e0aebee0aeb0 20e0aea8e0aebee0ae9f e0af8de0ae95e0aeb3e0aebfe0aeb2e0af8d 20e0aeae e0aebee0aeb2e0af88 20e0ae86 e0aeb1e0af81 20e0aeaee0aea3 e0aebfe0ae95e0af8de0ae95e0af81 20e0aeaee0af82 e0ae9f e0aeaae0af8de0aeaae0ae9fe0af81e0aeaee0af8d 2e",
+      },
+      { lab: "pre-tokenizer probe", s: "don't    stop 1234567",
+        n: "Four spaces, a 7-digit number, an apostrophe: gpt2 spends one token per space, o200k keeps don't whole.",
+        g: "646f6e 2774 20 20 20 2073746f70 20313233 3435 3637",
+        c: "646f6e 2774 202020 2073746f70 20 313233 343536 37",
+        o: "646f6e2774 202020 2073746f70 20 313233 343536 37",
+      },
+      { lab: "code", s: "for i in range(10):\n    print(i)",
+        n: "Indentation: gpt2 spends one token per space, cl100k and o200k have one token for the whole run.",
+        g: "666f72 2069 20696e 2072616e6765 28 3130 293a 0a 20 20 20 207072696e74 28 69 29",
+        c: "666f72 2069 20696e 2072616e6765 28 3130 293a0a 202020 207072696e74 2869 29",
+        o: "666f72 2069 20696e 2072616e6765 28 3130 293a0a 202020 207072696e74 2869 29",
+      },
+    ];
+
+    var idx = 0, bytesView = false, unknown = "";
+    var DEC = window.TextDecoder ? new TextDecoder("utf-8", { fatal: true }) : null;
+
+    /* One token: its bytes, and its text if those bytes happen to be a whole
+       character. Under gpt2 most Tamil tokens are half of one. */
+    function toks(row, k) {
+      var cache = row["_" + k];
+      if (cache) return cache;
+      cache = row[k].split(" ").map(function (hex) {
+        var b = new Uint8Array(hex.length / 2), i;
+        for (i = 0; i < b.length; i++) b[i] = parseInt(hex.substr(i * 2, 2), 16);
+        var s = null;
+        try { s = DEC ? DEC.decode(b) : null; } catch (e) { s = null; }
+        return { hex: hex, s: s, n: b.length };
+      });
+      row["_" + k] = cache;
+      return cache;
+    }
+    function show(t) {
+      return t.replace(/ /g, "·").replace(/\n/g, "⏎").replace(/\t/g, "⇥");
+    }
+    function commas(v) { return v.toLocaleString("en-US"); }
+    function chars(s) { return Array.from ? Array.from(s).length : s.length; }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "one text, three tokenizers, token by token" }, f.body);
+
+    var BARX = 250, BARMAX = 140, BARW = 300, MAXLN = 4;
+
+    /* Measure the wrap before drawing any of it: a one-line text should not
+       leave three empty rows under each of the three encodings, and Tamil
+       under gpt2 needs every row it can get. The viewBox follows. */
+    function wrap(list) {
+      var pos = [], x = 8, ln = 0, i, cut = -1;
+      for (i = 0; i < list.length; i++) {
+        var t = list[i], raw = t.s === null;
+        var lab = bytesView ? t.hex : (raw ? "" : show(t.s));
+        var fs = bytesView ? 9 : 10;
+        var w = lab ? 8 + lab.length * fs * 0.62 : 11;
+        var lim = ln + 1 >= MAXLN ? 690 : 752;   // room for the "+N more" tail
+        if (x + w > lim) {
+          if (ln + 1 >= MAXLN) { cut = i; break; }
+          ln++; x = 8;
+        }
+        pos.push({ x: x, ln: ln, lab: lab, fs: fs, w: w, raw: raw, n: t.n });
+        x += w + 3;
+      }
+      return { pos: pos, lines: ln + 1, cut: cut, total: list.length };
+    }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var row = DATA[idx], i;
+
+      T(svg, 8, 14, "one text, three real encodings", { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "measured with tiktoken 0.14.0 \u2014 not running live",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      rect(svg, 8, 24, 744, 30, { rx: 6, stroke: unknown ? C.pink : C.line, sw: 1.2 });
+      T(svg, 18, 39, show(unknown || row.s).slice(0, 78),
+        { anchor: "start", size: 12, fill: unknown ? C.faint : C.text });
+      T(svg, 744, 39, unknown ? "not measured" : row.lab + ", " + chars(row.s) + " characters",
+        { anchor: "end", size: 10, fill: unknown ? C.pink : C.faint });
+
+      var lay = ENC.map(function (e) { return wrap(toks(row, e.k)); });
+      var tops = [], top = 66;
+      lay.forEach(function (L) { tops.push(top); top += 55 + (L.lines - 1) * 21; });
+
+      var anyRaw = false;
+      ENC.forEach(function (e, p) {
+        var L = lay[p], t0 = tops[p], y = t0 + 10;
+
+        T(svg, 8, y, e.name, { anchor: "start", size: 11.5, fill: e.c });
+        T(svg, 120, y, commas(e.v) + " entries", { anchor: "start", size: 9.5, fill: C.faint });
+        rect(svg, BARX, y - 5, Math.min(L.total, BARMAX) / BARMAX * BARW, 10,
+          { rx: 3, fill: e.c, stroke: "none", op: 0.5 });
+        T(svg, 752, y, L.total + " tokens", { anchor: "end", size: 11, fill: e.c });
+
+        L.pos.forEach(function (b) {
+          if (b.raw) anyRaw = true;
+          var yy = t0 + 32 + b.ln * 21;
+          rect(svg, b.x, yy - 9, b.w, 18, { rx: 3, stroke: "none",
+            fill: b.raw ? C.pink : e.c,
+            op: b.raw ? 0.3 : 0.12 + Math.min(0.55, (b.n - 1) * 0.11) });
+          if (b.lab) T(svg, b.x + b.w / 2, yy, b.lab, { size: b.fs, fill: C.text });
+        });
+        if (L.cut >= 0) T(svg, 752, t0 + 32 + (L.lines - 1) * 21,
+          "+" + (L.total - L.cut) + " more", { anchor: "end", size: 9, fill: C.faint });
+      });
+
+      /* ---- what the three rows add up to ---- */
+      var en = DATA[0], g = lay[0].total, o = lay[2].total;
+      var eg = toks(en, "g").length, eo = toks(en, "o").length;
+      var fy = top + 8;
+      T(svg, 8, fy, row.n ? row.n : idx === 0
+          ? "The English sentence: 53 characters, and the three encodings disagree by one token. Now pick Tamil."
+          : chars(row.s) + " characters of " + row.lab + ": " + g + " tokens under gpt2, " +
+            (g / eg).toFixed(1) + "x the English sentence, and " + o + " under o200k, " +
+            (o / eo).toFixed(1) + "x.",
+        { anchor: "start", size: 11, fill: row.n || idx === 0 ? C.dim : C.orange });
+      T(svg, 8, fy + 20, anyRaw
+          ? "A pink box is not a character but part of one: raw bytes, all byte-level BPE has left for a script it never learned."
+          : "Box shading is byte length: the darker a token, the more of the text one entry of the vocabulary covered.",
+        { anchor: "start", size: 10, fill: anyRaw ? C.pink : C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 " + (fy + 36));
+    }
+
+    function say() {
+      var row = DATA[idx];
+      f.say(row.lab + ", " + chars(row.s) + " characters: " +
+        ENC.map(function (e) { return toks(row, e.k).length + " under " + e.name; }).join(", ") + ".");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var sel = document.createElement("select");
+    sel.setAttribute("aria-label", "text");
+    sel.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;max-width:250px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+    DATA.forEach(function (d, i) {
+      var o = document.createElement("option");
+      o.value = i; o.textContent = d.lab + ": " + d.s.replace(/\n/g, "⏎").slice(0, 30);
+      sel.appendChild(o);
+    });
+    var input = document.createElement("input");
+    input.type = "text"; input.value = DATA[0].s;
+    input.setAttribute("aria-label", "text to encode");
+    input.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;min-width:220px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+
+    function pick(i) {
+      idx = i; unknown = "";
+      input.value = DATA[i].s; sel.value = String(i);
+      render(); say();
+    }
+    sel.addEventListener("change", function () { pick(+sel.value); });
+    f.controls.appendChild(sel);
+    f.controls.appendChild(input);
+
+    function norm(s) { return s.replace(/\s+/g, " ").trim().toLowerCase(); }
+    function apply() {
+      var n = norm(input.value), i;
+      for (i = 0; i < DATA.length; i++) if (norm(DATA[i].s) === n) { pick(i); return; }
+      unknown = input.value; render();
+      f.say("No tokenization shipped for that text. The three merge tables are several megabytes, " +
+            "so nothing runs live here: the page carries readings for " + DATA.length +
+            " texts, and the list beside the box has all of them.");
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); apply(); }
+    });
+    f.btn("encode it", apply);
+
+    var tgBytes = toggle(f.controls, "byte view", false, function (v) {
+      bytesView = v; render();
+      f.say(v ? "Every token as the bytes it actually is. A gpt2 token of Tamil is one byte: e0, or ae, "
+              + "which is a third of a character."
+              : "Back to text. A token with no label is bytes that are not a whole character.");
+    });
+
+    f.btn("Tamil", function () { pick(3); });
+    f.btn("reset", function () {
+      bytesView = false; unknown = ""; tgBytes.set(false);
+      pick(0);
+      f.say("Pick English, then Tamil. Same sentence, same meaning, and watch the token count go up eleven times.");
+    });
+
+    render();
+    f.say("Pick English, then Tamil. Same sentence, same meaning, and watch the token count go up eleven times.");
+  };
+
 })();
