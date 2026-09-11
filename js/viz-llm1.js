@@ -2,6 +2,7 @@
    viz-llm1.js — LLM In Depth machines, batch 1: chapters 1–5.
 
      llmNextToken   ch1  Playground real measured distributions; confidence is context
+     llmBpeTrainer  ch2  Builder    byte-pair encoding, trained live, merge by merge
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -1165,5 +1166,227 @@
 
     render();
     f.say("Hover a stage to see which chapters open it.");
+  };
+
+  /* ========================================================================
+     6. llmBpeTrainer — CH 2 — Builder
+
+     Byte-pair encoding, trained live in the page. Nothing here is canned: the
+     four lines the section states are the four lines below, and on the
+     chapter's corpus the first twelve merges it produces are the twelve the
+     chapter prints, counts included. That is the check to run before trusting
+     it on a corpus you paste in.
+
+     Ties are broken by first appearance while scanning the corpus, which is
+     what makes merges 6 through 12 come out in the chapter's order: seven
+     pairs all occur three times, and the order is the order they were seen.
+     ======================================================================== */
+  VIZ.llmBpeTrainer = function (el) {
+    var f = frame(el);
+
+    var EOW = "</w>";
+    var DEFAULT = "the lower newer wider tower flower power lower newer wider " +
+                  "slower newest widest lowest towered flowered powered";
+
+    var corpus = DEFAULT, seqs = [], merges = [], alphabet = 0, stalled = false;
+
+    function reset() {
+      var freq = {}, words = corpus.toLowerCase().match(/[^ ]+/g) || [], letters = {};
+      words.forEach(function (w) { freq[w] = (freq[w] || 0) + 1; });
+      seqs = Object.keys(freq).map(function (w) {
+        var sym = w.split("").concat([EOW]);
+        sym.forEach(function (c) { letters[c] = 1; });
+        return { w: w, sym: sym, n: freq[w] };
+      });
+      alphabet = Object.keys(letters).length;
+      merges = []; stalled = false;
+      return words.length;
+    }
+
+    /* The four lines of the section: count pairs, take the most frequent,
+       record it, merge it everywhere. */
+    function step() {
+      var counts = {}, seen = {}, k = 0;
+      seqs.forEach(function (s) {
+        for (var i = 0; i + 1 < s.sym.length; i++) {
+          var key = s.sym[i] + " " + s.sym[i + 1];
+          if (!(key in counts)) { counts[key] = 0; seen[key] = k++; }
+          counts[key] += s.n;
+        }
+      });
+      var best = null;
+      Object.keys(counts).forEach(function (key) {
+        if (best === null || counts[key] > counts[best] ||
+            (counts[key] === counts[best] && seen[key] < seen[best])) best = key;
+      });
+      if (best === null || counts[best] < 2) { stalled = true; return false; }
+      var parts = best.split(" "), a = parts[0], b = parts[1], ab = a + b;
+      merges.push({ a: a, b: b, c: counts[best] });
+      seqs.forEach(function (s) {
+        var out = [];
+        for (var i = 0; i < s.sym.length; i++) {
+          if (i + 1 < s.sym.length && s.sym[i] === a && s.sym[i + 1] === b) { out.push(ab); i++; }
+          else out.push(s.sym[i]);
+        }
+        s.sym = out;
+      });
+      return true;
+    }
+    function run(n) { for (var i = 0; i < n; i++) if (!step()) break; }
+
+    /* Encode a word with the merges learned so far, in the order learned. */
+    function encode(word) {
+      var sym = word.toLowerCase().split("").concat([EOW]);
+      merges.forEach(function (m) {
+        var out = [];
+        for (var i = 0; i < sym.length; i++) {
+          if (i + 1 < sym.length && sym[i] === m.a && sym[i + 1] === m.b) { out.push(m.a + m.b); i++; }
+          else out.push(sym[i]);
+        }
+        sym = out;
+      });
+      return sym;
+    }
+    function pretty(s) { return s === EOW ? "." : s.split(EOW).join("."); }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "byte-pair encoding trained live" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, j;
+
+      T(svg, 8, 14, "corpus: " + seqs.length + " distinct words, alphabet " + alphabet +
+        " symbols, vocabulary " + (alphabet + merges.length),
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, merges.length + " merges", { anchor: "end", size: 11,
+        fill: merges.length ? C.orange : C.faint });
+
+      T(svg, 8, 40, "merges, in the order learned", { anchor: "start", size: 11, fill: C.faint });
+      var show = merges.slice(-12), off = merges.length - show.length;
+      if (!show.length) {
+        T(svg, 8, 64, "none yet, press merge", { anchor: "start", size: 11, fill: C.dim });
+      }
+      if (off > 0) T(svg, 392, 40, off + " earlier not shown",
+        { anchor: "end", size: 9, fill: C.faint });
+      for (i = 0; i < show.length; i++) {
+        var m = show[i], yy = 62 + i * 21, last = (i === show.length - 1);
+        T(svg, 34, yy, String(off + i + 1) + ".", { anchor: "end", size: 10, fill: C.faint });
+        T(svg, 42, yy, pretty(m.a) + " + " + pretty(m.b),
+          { anchor: "start", size: 11, fill: last ? C.orange : C.dim });
+        T(svg, 250, yy, "= " + pretty(m.a + m.b),
+          { anchor: "start", size: 11, fill: last ? C.orange : C.text });
+        T(svg, 392, yy, "count " + m.c, { anchor: "end", size: 10,
+          fill: last ? C.orange : C.faint });
+      }
+
+      T(svg, 412, 40, "the corpus, split by what has been learned",
+        { anchor: "start", size: 11, fill: C.faint });
+      var wsh = seqs.slice(0, 12);
+      for (i = 0; i < wsh.length; i++) {
+        var s2 = wsh[i], yy2 = 62 + i * 21, x = 412;
+        for (j = 0; j < s2.sym.length && x < 720; j++) {
+          var lab = pretty(s2.sym[j]), w = 7 + lab.length * 6.4;
+          rect(svg, x, yy2 - 9, w, 18, { rx: 3, fill: C.blue, stroke: "none",
+            op: 0.1 + Math.min(0.5, (s2.sym[j].length - 1) * 0.16) });
+          T(svg, x + w / 2, yy2, lab, { size: 10, fill: C.text });
+          x += w + 3;
+        }
+        T(svg, 752, yy2, "x" + s2.n, { anchor: "end", size: 9, fill: C.faint });
+      }
+      if (seqs.length > 12) T(svg, 412, 62 + 12 * 21 + 4,
+        "and " + (seqs.length - 12) + " more distinct words",
+        { anchor: "start", size: 9, fill: C.faint });
+
+      line(svg, 8, 330, 752, 330, { stroke: C.line, sw: 1 });
+      var probe = "lowest", enc = encode(probe);
+      T(svg, 8, 350, "encode the word lowest with " + merges.length + " merges:",
+        { anchor: "start", size: 11, fill: C.faint });
+      var px2 = 260;
+      for (j = 0; j < enc.length && px2 < 700; j++) {
+        var lab2 = pretty(enc[j]), w2 = 8 + lab2.length * 6.6;
+        rect(svg, px2, 341, w2, 18, { rx: 3, stroke: C.orange, sw: 1 });
+        T(svg, px2 + w2 / 2, 350, lab2, { size: 10.5, fill: C.orange });
+        px2 += w2 + 4;
+      }
+      T(svg, 752, 350, enc.length + (enc.length === 1 ? " piece" : " pieces"),
+        { anchor: "end", size: 10, fill: C.faint });
+
+      T(svg, 8, 378, stalled
+          ? "No pair occurs twice any more: this corpus is exhausted. A real tokenizer runs tens of thousands of merges."
+          : "A dot marks the end of a word, so a word-final er is a different symbol from one in the middle.",
+        { anchor: "start", size: 10.5, fill: stalled ? C.pink : C.faint });
+      /* The discovery, made findable. The merge table only shows the last
+         twelve, so after 200 merges the interesting symbols have scrolled
+         away; this asks the vocabulary directly. */
+      T(svg, 8, 402, "morphemes it found on its own:",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      var learned = {};
+      merges.forEach(function (m, k) {
+        var sym = m.a + m.b;
+        if (!(sym in learned)) learned[sym] = k + 1;
+      });
+      var TARGETS = ["the", "ing", "tion", "er", "est", "ed", "ly", "re"];
+      var mx = 208, found = 0;
+      TARGETS.forEach(function (t) {
+        var at = learned[t] || learned[t + EOW], hit = !!at;
+        if (hit) found++;
+        var lab = hit ? t + " @" + at : t;
+        var w3 = 10 + lab.length * 6.4;
+        rect(svg, mx, 393, w3, 18, { rx: 3, stroke: hit ? C.teal : C.line, sw: 1,
+          fill: hit ? C.teal : "none", op: hit ? 0.16 : 1 });
+        T(svg, mx + w3 / 2, 402, lab, { size: 10, fill: hit ? C.teal : C.faint });
+        mx += w3 + 5;
+      });
+      T(svg, 8, 424, found
+          ? "Found " + found + ", and nobody wrote a rule: a suffix is a character sequence that repeats."
+          : "None yet on this corpus. Paste a paragraph of real English and run 200 merges.",
+        { anchor: "start", size: 10.5, fill: found ? C.teal : C.faint });
+    }
+
+    function say() {
+      if (!merges.length) { f.say("No merges yet. Press merge."); return; }
+      var m = merges[merges.length - 1];
+      f.say("Merge " + merges.length + ": " + pretty(m.a) + " + " + pretty(m.b) + " = " +
+        pretty(m.a + m.b) + ", which occurred " + m.c + " times. Vocabulary is now " +
+        (alphabet + merges.length) + ".");
+    }
+
+    f.btn("merge", function () {
+      if (step()) { render(); say(); }
+      else { render(); f.say("Nothing left to merge: no pair occurs twice in this corpus."); }
+    });
+    f.btn("run 50", function () { run(50); render(); say(); });
+    f.btn("run 200", function () { run(200); render(); say(); });
+
+    var input = document.createElement("input");
+    input.type = "text"; input.value = "";
+    input.placeholder = "paste a paragraph of your own";
+    input.setAttribute("aria-label", "training corpus");
+    input.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;min-width:240px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+    f.controls.appendChild(input);
+
+    function useCorpus() {
+      var t = input.value.replace(/[^A-Za-z0-9' ]+/g, " ").trim();
+      if (!t) { f.say("Type or paste some text first, then press train on this."); return; }
+      corpus = t;
+      var n = reset(); render();
+      f.say(n + " words, " + seqs.length + " distinct, alphabet " + alphabet +
+        ". Now run 200 merges and look for the, ing and tion appearing on their own.");
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); useCorpus(); }
+    });
+    f.btn("train on this", useCorpus);
+
+    f.btn("reset", function () {
+      corpus = DEFAULT; input.value = ""; reset(); render();
+      f.say("Press merge and watch the most common pair become one token. Do it 30 times.");
+    });
+
+    reset();
+    render();
+    f.say("Press merge and watch the most common pair become one token. Do it 30 times.");
   };
 })();
