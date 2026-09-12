@@ -8,6 +8,7 @@
      llmChatTemplate ch3 Stepper    a conversation flattened, then broken on purpose
      llmTokenBoundaries ch3 Playground tokens with ids, and the classic traps flagged
      llmEmbeddingSpace ch4 Playground real GPT-2 rows, three metrics, one Gram matrix
+     llmContrastive ch4 Stepper     InfoNCE and its gradients, evaluated live
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -2745,6 +2746,221 @@
     fillSel();
     render();
     f.say("Add two sentences that mean the same thing. Then add one that only shares words.");
+  };
+
+
+  /* ========================================================================
+     12. llmContrastive — CH 4 — Stepper
+
+     Nothing is precomputed here: the InfoNCE loss and its gradients are the
+     real thing, evaluated in the browser every step.
+
+     The one simplification, and it is deliberate: the embeddings live on a
+     circle and gradient descent runs on the angles themselves rather than
+     through an encoder's weights. Normalized embeddings really are points on
+     a sphere, cosine similarity really is cos of the angle between them, and
+     the derivative of the loss with respect to a point is exact — so what
+     moves on screen is what the gradient says, not an animation of it. What
+     a real bi-encoder adds is that the points can only move as far as shared
+     weights allow them to.
+
+     The section's claim is the readout on the right: an easy negative is
+     already correct, so its softmax weight is near zero and it contributes
+     almost no gradient. Slide the hard negative up against an anchor and its
+     bar grows past the sum of the three random ones put together.
+     ======================================================================== */
+  VIZ.llmContrastive = function (el) {
+    var f = frame(el);
+
+    var TAU = 0.1, LR = 0.02, NP = 3, NN = 3;
+    var A0 = [0.00, 2.09, 4.19], P0 = [0.18, 2.27, 4.37];
+    var N0 = [5.33, 1.13, 3.23];              // negative 0 is the one that moves
+
+    var A, P, N, loss = [], steps = 0, inBatch = true;
+    function init() {
+      A = A0.slice(); P = P0.slice(); N = N0.slice();
+      loss = []; steps = 0;
+    }
+
+    /* InfoNCE over cosine similarities, which on a circle is cos of the angle
+       difference. Returns the mean loss and the gradient on every point. */
+    function pass() {
+      var gA = [0, 0, 0], gP = [0, 0, 0], gN = [0, 0, 0], total = 0, i, k;
+      var work = [0, 0, 0], ib = 0;           // |gradient| each negative earned
+      for (i = 0; i < NP; i++) {
+        var cand = [{ a: P[i], g: gP, j: i }];
+        if (inBatch) for (k = 0; k < NP; k++) if (k !== i) cand.push({ a: P[k], g: gP, j: k, ib: 1 });
+        for (k = 0; k < NN; k++) cand.push({ a: N[k], g: gN, j: k, neg: k });
+
+        var lg = cand.map(function (c) { return Math.cos(A[i] - c.a) / TAU; });
+        var m = Math.max.apply(null, lg), z = 0;
+        var w = lg.map(function (v) { var e = Math.exp(v - m); z += e; return e; });
+        for (k = 0; k < w.length; k++) w[k] /= z;
+        total += -Math.log(Math.max(w[0], 1e-12));
+
+        for (k = 0; k < cand.length; k++) {
+          var c = cand[k], d = (w[k] - (k === 0 ? 1 : 0)) / TAU, sn = Math.sin(A[i] - c.a);
+          gA[i] += d * -sn;
+          c.g[c.j] += d * sn;
+          if (c.neg !== undefined) work[c.neg] += Math.abs(d * sn);
+          else if (c.ib) ib += Math.abs(d * sn);
+        }
+      }
+      return { L: total / NP, gA: gA, gP: gP, gN: gN, work: work, ib: ib };
+    }
+
+    function step() {
+      var r = pass(), i;
+      for (i = 0; i < NP; i++) { A[i] -= LR * r.gA[i]; P[i] -= LR * r.gP[i]; }
+      for (i = 0; i < NN; i++) N[i] -= LR * r.gN[i];
+      var TWO = Math.PI * 2;                  // keep the slider's number readable
+      for (i = 0; i < NP; i++) { A[i] = (A[i] % TWO + TWO) % TWO; P[i] = (P[i] % TWO + TWO) % TWO; }
+      for (i = 0; i < NN; i++) N[i] = (N[i] % TWO + TWO) % TWO;
+      steps++;
+      loss.push(pass().L);
+      if (loss.length > 120) loss.shift();
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 360", width: "100%",
+      role: "img", "aria-label": "contrastive training on a circle" }, f.body);
+
+    var CX = 176, CY = 170, R = 100;
+    function px(t) { return CX + R * Math.cos(t); }
+    function py(t) { return CY - R * Math.sin(t); }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var r = pass(), i;
+
+      T(svg, 8, 14, "InfoNCE on normalized embeddings, computed here, not replayed",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "temperature " + TAU + ", step " + LR + ", " + steps + " steps taken",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      S("circle", { cx: CX, cy: CY, r: R, fill: "none", stroke: C.line,
+        "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+
+      /* The gradient on a point is tangent to the circle, so draw it as one. */
+      function arrow(t, g, tone) {
+        var len = Math.max(-26, Math.min(26, -g * 2.2));
+        if (Math.abs(len) < 1.5) return;
+        var tx = -Math.sin(t), ty = -Math.cos(t);          // tangent, screen y down
+        line(svg, px(t), py(t), px(t) + tx * len, py(t) + ty * len,
+          { stroke: tone, sw: 2, op: 0.9 });
+      }
+      function dot2(t, tone, rad, lab, labTone) {
+        S("circle", { cx: px(t), cy: py(t), r: rad, fill: tone }, svg);
+        if (lab) T(svg, CX + (R + 20) * Math.cos(t), CY - (R + 20) * Math.sin(t), lab,
+          { size: 9.5, fill: labTone || tone });
+      }
+      for (i = 0; i < NP; i++) {
+        line(svg, px(A[i]), py(A[i]), px(P[i]), py(P[i]),
+          { stroke: C.teal, sw: 1, dash: "3 3", op: 0.7 });
+        arrow(A[i], r.gA[i], C.blue);
+        arrow(P[i], r.gP[i], C.teal);
+        dot2(A[i], C.blue, 5, "a" + (i + 1));
+        dot2(P[i], C.teal, 5, "p" + (i + 1));
+      }
+      for (i = 0; i < NN; i++) {
+        arrow(N[i], r.gN[i], C.pink);
+        dot2(N[i], i ? C.dim : C.pink, i ? 4 : 5.5, "n" + (i + 1), i ? C.faint : C.pink);
+      }
+      T(svg, CX, CY - 6, "loss " + r.L.toFixed(3), { size: 13, fill: C.text });
+      T(svg, CX, CY + 12, steps ? "after " + steps + " steps" : "before training",
+        { size: 9.5, fill: C.faint });
+
+      /* ---- the work each negative did ---- */
+      var RX = 372, ry = 44;
+      T(svg, RX, ry - 14, "gradient each negative produced",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      var bars = [["hard negative n1", r.work[0], 1], ["random negative n2", r.work[1], 0],
+                  ["random negative n3", r.work[2], 0],
+                  [inBatch ? "the other pairs' positives" : "in-batch negatives, off", r.ib, 0]];
+      var wmax = 0.02, rest = r.work[1] + r.work[2] + r.ib;
+      bars.forEach(function (b2) { wmax = Math.max(wmax, b2[1]); });
+      bars.forEach(function (b2) {
+        T(svg, RX, ry, b2[0], { anchor: "start", size: 10, fill: b2[2] ? C.pink : C.dim });
+        rect(svg, RX + 150, ry - 6, b2[1] / wmax * 130, 12,
+          { rx: 3, fill: b2[2] ? C.pink : C.dim, stroke: "none", op: b2[2] ? 0.85 : 0.45 });
+        T(svg, 752, ry, b2[1].toFixed(2), { anchor: "end", size: 10,
+          fill: b2[2] ? C.pink : C.faint });
+        ry += 20;
+      });
+      var onTop = A.some(function (t) { return Math.abs(Math.sin(t - N[0])) < 0.03; });
+      T(svg, RX, ry + 6, r.work[0] > rest
+          ? "n1 alone out-produces every other negative combined."
+          : onTop
+            ? "n1 sits on an anchor: no direction left to push it."
+            : "n1 is easy: the softmax gives it almost no weight.",
+        { anchor: "start", size: 10, fill: r.work[0] > rest ? C.pink : C.faint });
+
+      /* ---- the loss curve ---- */
+      var LX = 372, LY0 = 176, LY1 = 268, LW = 380;
+      T(svg, LX, LY0 - 8, "InfoNCE, mean over the three anchors",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      line(svg, LX, LY1, LX + LW, LY1, { stroke: C.line, sw: 1 });
+      line(svg, LX, LY0, LX, LY1, { stroke: C.line, sw: 1 });
+      var lmax = Math.max.apply(null, loss.concat([r.L, 0.5])) * 1.05;
+      T(svg, LX - 4, LY0, lmax.toFixed(1), { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, LX - 4, LY1, "0", { anchor: "end", size: 8.5, fill: C.faint });
+      if (loss.length > 1) {
+        var pts = loss.map(function (v, k) {
+          return (LX + k / (loss.length - 1) * LW) + "," + (LY1 - v / lmax * (LY1 - LY0));
+        });
+        S("polyline", { points: pts.join(" "), fill: "none", stroke: C.orange,
+          "stroke-width": 2 }, svg);
+        T(svg, LX + LW, LY0 - 8, "from " + loss[0].toFixed(3) + " to " +
+          loss[loss.length - 1].toFixed(3), { anchor: "end", size: 9.5, fill: C.orange });
+      } else {
+        T(svg, LX + 8, (LY0 + LY1) / 2, "press step", { anchor: "start", size: 10, fill: C.faint });
+      }
+
+      /* ---- what it is saying ---- */
+      T(svg, 8, 312, inBatch
+          ? "In-batch negatives are on: every other pair's positive is also a negative, which is why they are free."
+          : "In-batch negatives are off: only the three explicit negatives are in each anchor's softmax.",
+        { anchor: "start", size: 10.5, fill: C.dim });
+      T(svg, 8, 332, "An arrow is the gradient on that point, tangent to the circle. A negative already " +
+        "far away has almost none.", { anchor: "start", size: 10, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 348");
+    }
+
+    function say() {
+      var r = pass(), rest = r.work[1] + r.work[2] + r.ib;
+      f.say("Loss " + r.L.toFixed(3) + " after " + steps + " steps. The hard negative is producing " +
+        r.work[0].toFixed(2) + " of gradient against " + rest.toFixed(2) +
+        " from every other negative in the softmax.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    f.btn("step", function () { step(); sN.set(N[0]); render(); say(); });
+    f.btn("run 20", function () {
+      var i; for (i = 0; i < 20; i++) step();
+      sN.set(N[0]); render(); say();
+    });
+    var sN = slider(f.controls, "hard negative", 0, 6.28, N0[0], 0.02,
+      function (v) { return (v / Math.PI).toFixed(2) + "π"; },
+      function (v) {
+        N[0] = v; render();
+        var r = pass();
+        f.say("n1 at " + (v / Math.PI).toFixed(2) + "π: gradient " + r.work[0].toFixed(2) +
+          ", loss " + r.L.toFixed(3) + ".");
+      });
+    var tgB = toggle(f.controls, "in-batch negatives", true, function (v) {
+      inBatch = v; render();
+      f.say(v ? "Every other pair's positive is a negative again: more negatives for no extra encoding."
+              : "Only the four explicit negatives now. Fewer terms in the softmax, and a smaller loss " +
+                "that means less than it looks.");
+    });
+    f.btn("reset", function () {
+      init(); inBatch = true; tgB.set(true); sN.set(N0[0]); render();
+      f.say("Step the training. Watch positives pull together and negatives push apart.");
+    });
+
+    init();
+    render();
+    f.say("Step the training. Watch positives pull together and negatives push apart.");
   };
 
 })();
