@@ -13,6 +13,7 @@
      llmKvBudget    ch6 Tuner      the cache formula, live, against a 16 GB card
      llmRope        ch7 Inspector  one subspace, and a score that ignores where
      llmContextStretch ch7 Tuner   64 pairs, and the angles training never showed
+     llmNeedle      ch7 Playground P4, actually run, with and without decoys
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -3736,6 +3737,184 @@
 
     render();
     f.say("Push the target context past the training length with no scaling. Then turn scaling on.");
+  };
+
+
+  /* ========================================================================
+     17. llmNeedle — CH 7 — Playground
+
+     P4, actually run. Qwen2.5-0.5B-Instruct, a haystack built from this
+     course's own prose, and the score in each cell is the probability the
+     model puts on the answer's digits — one forward pass per cell, so no
+     cell depends on decoding luck.
+
+     Two tasks on the same grid, because one of them is the chapter's point.
+     The plain version hides one passcode and asks for it. The second hides
+     four passcodes of identical shape and asks for one, which is the
+     interference a RULER-style test adds.
+
+     The scale is honest about itself: P4 as the chapter defines it hides a
+     fact in 100,000 tokens, and this is 8,192 on a laptop. What transfers is
+     the comparison between the two tasks, not the absolute length.
+
+     What came back: the plain task averages 0.98 and never really fails, and
+     adding three decoys drops the average to 0.82 with cells as low as 0.05.
+     The ends stay reliable and the interior does not, which is the shape the
+     section describes — but it is scattered rather than a tidy U at this
+     model size, and the machine reports the numbers rather than smoothing
+     them.
+     ======================================================================== */
+  VIZ.llmNeedle = function (el) {
+    var f = frame(el);
+
+    var ND = {
+      model: "Qwen2.5-0.5B-Instruct",
+      depths: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      A: [
+        { len: 1024, p: [0.99784, 0.99815, 0.99878, 0.99718, 0.99665, 0.99782, 0.9973, 0.99622, 0.98838, 0.99757, 0.99552] },
+        { len: 2048, p: [0.99842, 0.99921, 0.99492, 0.99707, 0.99214, 0.99602, 0.98653, 0.99582, 0.99672, 0.99176, 0.98793] },
+        { len: 4096, p: [0.99664, 0.98582, 0.98537, 0.98922, 0.99391, 0.99304, 0.99157, 0.99476, 0.9958, 0.99535, 0.47381] },
+        { len: 8192, p: [0.99806, 0.99298, 0.99754, 0.99374, 0.98692, 0.98798, 0.99815, 0.9981, 0.99481, 0.98903, 0.98553] },
+      ],
+      B: [
+        { len: 1024, p: [0.99871, 0.99811, 0.9976, 0.98613, 0.8764, 0.98804, 0.98409, 0.86839, 0.58508, 0.9916, 0.99861] },
+        { len: 2048, p: [0.99702, 0.86802, 0.84069, 0.82015, 0.37915, 0.65642, 0.79083, 0.26627, 0.65891, 0.95189, 0.97767] },
+        { len: 4096, p: [0.97502, 0.89174, 0.79675, 0.8741, 0.29447, 0.96624, 0.8834, 0.65452, 0.51089, 0.99105, 0.98468] },
+        { len: 8192, p: [0.99598, 0.37726, 0.04981, 0.45014, 0.81791, 0.99609, 0.99788, 0.88854, 0.99831, 0.99779, 0.99623] },
+      ],
+    };
+
+    var task = 0, di = 5, li = 0;                  // depth 50%, shortest document
+    function rows() { return task ? ND.B : ND.A; }
+    function cell(l, d) { return rows()[l].p[d]; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 400", width: "100%",
+      role: "img", "aria-label": "needle retrieval by depth and document length" }, f.body);
+
+    var GX = 104, GY = 62, CW = 55, CH = 28;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var R = rows(), nd = ND.depths.length, i, j;
+      if (li >= R.length) li = R.length - 1;
+
+      T(svg, 8, 14, task ? "four passcodes hidden, one asked for"
+          : "one passcode hidden, and asked for",
+        { anchor: "start", size: 11.5, fill: task ? C.orange : C.teal });
+      T(svg, 752, 14, ND.model + " — probability on the answer, one pass per cell",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      /* ---- the heatmap ---- */
+      T(svg, GX - 8, GY - 26, "depth of the needle in the document",
+        { anchor: "start", size: 10, fill: C.faint });
+      for (j = 0; j < nd; j++) {
+        T(svg, GX + j * CW + CW / 2, GY - 10, ND.depths[j] + "%",
+          { size: 8.5, fill: j === di ? C.orange : C.faint });
+      }
+      T(svg, GX - 10, GY - 10, "tokens", { anchor: "end", size: 8.5, fill: C.faint });
+      for (i = 0; i < R.length; i++) {
+        T(svg, GX - 10, GY + i * CH + CH / 2, commas(R[i].len),
+          { anchor: "end", size: 9.5, fill: i === li ? C.orange : C.dim });
+        for (j = 0; j < nd; j++) {
+          var p = R[i].p[j], on = (i === li && j === di);
+          rect(svg, GX + j * CW, GY + i * CH, CW - 2, CH - 2,
+            { rx: 2, fill: C.pink, stroke: "none", op: 0.5 });
+          rect(svg, GX + j * CW, GY + i * CH, CW - 2, CH - 2,
+            { rx: 2, fill: C.teal, stroke: "none", op: p });
+          var c = rect(svg, GX + j * CW, GY + i * CH, CW - 2, CH - 2,
+            { rx: 2, fill: "none", stroke: on ? C.orange : "none", sw: on ? 2 : 0 });
+          T(svg, GX + j * CW + (CW - 2) / 2, GY + i * CH + CH / 2, p.toFixed(2),
+            { size: 8.5, fill: C.text });
+          (function (ii, jj, pp) {
+            c.style.cursor = "pointer";
+            c.addEventListener("click", function () {
+              li = ii; di = jj; sD.set(jj); sL.set(ii); render(); say();
+            });
+            tipOn(c, commas(R[ii].len) + " tokens, needle at " + ND.depths[jj] + "%",
+              "probability on the answer: " + pp.toFixed(4));
+          })(i, j, p);
+        }
+      }
+
+      /* ---- averaged over lengths: the depth profile ---- */
+      var PY0 = GY + R.length * CH + 40, PY1 = PY0 + 74;
+      T(svg, 8, PY0 - 12, "averaged over every document length, both tasks",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      line(svg, GX, PY1, GX + nd * CW - 2, PY1, { stroke: C.line, sw: 1 });
+      line(svg, GX, PY0, GX, PY1, { stroke: C.line, sw: 1 });
+      T(svg, GX - 6, PY0, "1.0", { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, GX - 6, PY1, "0", { anchor: "end", size: 8.5, fill: C.faint });
+      [["A", C.teal], ["B", C.orange]].forEach(function (t) {
+        var set = ND[t[0]], pts = [];
+        for (j = 0; j < nd; j++) {
+          var s2 = 0;
+          for (i = 0; i < set.length; i++) s2 += set[i].p[j];
+          pts.push((GX + j * CW + CW / 2 - 1) + "," + (PY1 - s2 / set.length * (PY1 - PY0)));
+        }
+        S("polyline", { points: pts.join(" "), fill: "none", stroke: t[1],
+          "stroke-width": t[0] === (task ? "B" : "A") ? 2.4 : 1.2,
+          opacity: t[0] === (task ? "B" : "A") ? 1 : 0.4 }, svg);
+      });
+      rect(svg, 470, PY0 - 16, 14, 3, { rx: 1, fill: C.teal, stroke: "none" });
+      T(svg, 490, PY0 - 12, "one needle", { anchor: "start", size: 9.5, fill: C.teal });
+      rect(svg, 580, PY0 - 16, 14, 3, { rx: 1, fill: C.orange, stroke: "none" });
+      T(svg, 600, PY0 - 12, "four needles", { anchor: "start", size: 9.5, fill: C.orange });
+
+      /* ---- what the grid says ---- */
+      var lo = 1, loAt = "", hi = 0, all = 0, n = 0;
+      for (i = 0; i < R.length; i++) for (j = 0; j < nd; j++) {
+        var v = R[i].p[j];
+        all += v; n++;
+        if (v < lo) { lo = v; loAt = commas(R[i].len) + " tokens at " + ND.depths[j] + "%"; }
+        if (v > hi) hi = v;
+      }
+      var fy = PY1 + 30;
+      T(svg, 8, fy, "selected: " + commas(R[li].len) + " tokens, needle at " +
+        ND.depths[di] + "% — the model puts " + cell(li, di).toFixed(4) + " on the answer",
+        { anchor: "start", size: 11, fill: C.orange });
+      /* the section's claim, tested: are the two ends better than the middle? */
+      var ends = 0, en = 0, mid = 0, mn = 0;
+      for (i = 0; i < R.length; i++) for (j = 0; j < nd; j++) {
+        if (j === 0 || j === nd - 1) { ends += R[i].p[j]; en++; }
+        else { mid += R[i].p[j]; mn++; }
+      }
+      T(svg, 8, fy + 20, "Mean " + (all / n).toFixed(2) + ": " + (ends / en).toFixed(2) +
+        " at the two ends against " + (mid / mn).toFixed(2) + " in between, worst " +
+        lo.toFixed(2) + " at " + loAt + ".",
+        { anchor: "start", size: 10.5, fill: task ? C.pink : C.teal });
+      T(svg, 8, fy + 40, "P4 hides its fact in 100,000 tokens; this is " +
+        commas(R[R.length - 1].len) + " on a laptop. Read the gap between the curves, not the length.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 " + (fy + 56));
+    }
+
+    function say() {
+      var R = rows();
+      f.say(commas(R[li].len) + " tokens, needle at " + ND.depths[di] + "%: " +
+        cell(li, di).toFixed(4) + " on the answer" +
+        (task ? ", with three decoys in the document." : ", with nothing else to confuse it."));
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tb = tabs(f.controls, ["one needle", "four needles"], 0, function (i) {
+      task = i; render(); say();
+    });
+    var sD = slider(f.controls, "depth", 0, ND.depths.length - 1, 5, 1,
+      function (v) { return ND.depths[v] + "%"; },
+      function (v) { di = v; render(); say(); });
+    var sL = slider(f.controls, "document", 0, ND.A.length - 1, 0, 1,
+      function (v) { return commas(ND.A[v].len); },
+      function (v) { li = v; render(); say(); });
+    f.btn("reset", function () {
+      task = 0; di = 5; li = 0;
+      tb.sync(0); sD.set(5); sL.set(0); render();
+      f.say("Sweep the depth. Then switch to four needles and sweep it again.");
+    });
+
+    render();
+    f.say("Sweep the depth. Then switch to four needles and sweep it again.");
   };
 
 })();
