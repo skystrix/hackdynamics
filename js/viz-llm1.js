@@ -14,6 +14,8 @@
      llmRope        ch7 Inspector  one subspace, and a score that ignores where
      llmContextStretch ch7 Tuner   64 pairs, and the angles training never showed
      llmNeedle      ch7 Playground P4, actually run, with and without decoys
+     llmBlock       ch8 Inspector  32 blocks, real backprop, skips on and off
+     llmActivations ch8 Comparator curves, matched parameters, and an ablation run
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -36,6 +38,27 @@
      last line for a "+N more" tail. Every machine here that draws a row of
      tokens needs this, and none of them needs its own copy: pass items that
      carry a .w, get .x and .ln back on the ones that fit. */
+
+  /* A deterministic RNG, so every reader sees the same "random" weights and a
+     screenshot means something. Three machines want it; it lives here once. */
+  function hash32(str) {
+    var h = 2166136261 >>> 0, i;
+    for (i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h >>> 0;
+  }
+  function mulberry(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function gauss(r) {              // Box-Muller, unit variance
+    var u = 1 - r(), v = r();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
   var WX0 = 8, WX1 = 752, WTAIL = 690, WGAP = 3;
   function wrapBoxes(items, maxLines) {
     var x = WX0, ln = 0, i;
@@ -77,25 +100,6 @@
     var DEFAULT = "the cat sat on the mat because it was warm";
 
     /* ---- deterministic vectors -------------------------------------- */
-    function hash32(s) {
-      var h = 2166136261 >>> 0;
-      for (var i = 0; i < s.length; i++) {
-        h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0;
-      }
-      return h >>> 0;
-    }
-    function mulberry(a) {
-      return function () {
-        a |= 0; a = (a + 0x6D2B79F5) | 0;
-        var t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-    }
-    function gauss(r) {           // Box-Muller: unit-variance components
-      var u = 1 - r(), v = r();
-      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-    }
     var vcache = {};
     function vec(seed) {
       if (vcache[seed]) return vcache[seed];
@@ -359,20 +363,6 @@
     var VOCAB = WORDS.filter(function (w, i) { return WORDS.indexOf(w) === i; });
     var N = WORDS.length, LAST = N - 2;
 
-    function hash32(s) {
-      var h = 2166136261 >>> 0;
-      for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
-      return h >>> 0;
-    }
-    function mulberry(a) {
-      return function () {
-        a |= 0; a = (a + 0x6D2B79F5) | 0;
-        var t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-    }
-    function gauss(r) { var u = 1 - r(), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
     var vc = {};
     function vec(seed) {
       if (vc[seed]) return vc[seed];
@@ -3915,6 +3905,443 @@
 
     render();
     f.say("Sweep the depth. Then switch to four needles and sweep it again.");
+  };
+
+
+  /* ========================================================================
+     18. llmBlock — CH 8 — Inspector
+
+     A real stack, forward and backward. Thirty-two blocks of width 32, each
+     one x -> x + W2 GELU(W1 LayerNorm(x)) with fixed deterministic weights,
+     and the backward pass is the actual transposed Jacobian of every piece,
+     LayerNorm's included, rather than an animation of one.
+
+     That matters because the section's claim is a claim about arithmetic. The
+     residual path contributes an identity term to every Jacobian, so the
+     product that carries the gradient down the stack is a product of (I + J)
+     rather than of J. Turn the skips off and the same weights, the same
+     input and the same loss give a gradient at layer 1 that is orders of
+     magnitude smaller — and the machine computes both, so the difference is
+     measured on screen rather than asserted underneath it.
+
+     Post-LN is the third setting and it is not a strawman: the normalization
+     moves to after the addition, which is exactly the 2017 arrangement, and
+     the gradient decays because every block's output is rescaled on the way
+     down. That decay is the reason post-LN needed warmup.
+     ======================================================================== */
+  VIZ.llmBlock = function (el) {
+    var f = frame(el);
+
+    var D = 32, L = 32;                        // width and depth of the toy stack
+    var mode = 0, sel = 16;
+    var MODES = ["pre-LN, with residual", "post-LN, with residual",
+                 "no residual, norm kept", "no residual, no norm"];
+    function skip() { return mode < 2; }
+    function normAt() { return mode === 1 ? "post" : mode === 3 ? "none" : "pre"; }
+
+    /* fixed weights: the reader and the author see the same numbers */
+    var W1 = [], W2 = [], i0, j0, r0 = mulberry(hash32("block"));
+    for (i0 = 0; i0 < L; i0++) {
+      var a = new Float64Array(D * D), b = new Float64Array(D * D);
+      for (j0 = 0; j0 < D * D; j0++) {
+        a[j0] = gauss(r0) / Math.sqrt(D);
+        b[j0] = gauss(r0) / Math.sqrt(D);
+      }
+      W1.push(a); W2.push(b);
+    }
+    var X0 = new Float64Array(D);
+    for (i0 = 0; i0 < D; i0++) X0[i0] = gauss(r0);
+
+    function nrm(v) { var s = 0, i; for (i = 0; i < D; i++) s += v[i] * v[i]; return Math.sqrt(s); }
+    function mat(W, v) {
+      var o = new Float64Array(D), i, j;
+      for (i = 0; i < D; i++) { var s = 0; for (j = 0; j < D; j++) s += W[i * D + j] * v[j]; o[i] = s; }
+      return o;
+    }
+    function matT(W, v) {
+      var o = new Float64Array(D), i, j;
+      for (i = 0; i < D; i++) { var s = 0; for (j = 0; j < D; j++) s += W[j * D + i] * v[j]; o[i] = s; }
+      return o;
+    }
+    function ln(v) {
+      var m = 0, i; for (i = 0; i < D; i++) m += v[i];
+      m /= D;
+      var s = 0; for (i = 0; i < D; i++) s += (v[i] - m) * (v[i] - m);
+      var sd = Math.sqrt(s / D + 1e-5), o = new Float64Array(D);
+      for (i = 0; i < D; i++) o[i] = (v[i] - m) / sd;
+      return { y: o, sd: sd };
+    }
+    /* LayerNorm's Jacobian is symmetric: (I - 11'/D - yy'/D) / sd */
+    function lnBack(g, y, sd) {
+      var i, gs = 0, gy = 0;
+      for (i = 0; i < D; i++) { gs += g[i]; gy += g[i] * y[i]; }
+      var o = new Float64Array(D);
+      for (i = 0; i < D; i++) o[i] = (g[i] - gs / D - y[i] * gy / D) / sd;
+      return o;
+    }
+    function gelu(v) {
+      var o = new Float64Array(D), i;
+      for (i = 0; i < D; i++) o[i] = 0.5 * v[i] * (1 + Math.tanh(0.7978845608 * (v[i] + 0.044715 * v[i] * v[i] * v[i])));
+      return o;
+    }
+    function geluP(v) {
+      var o = new Float64Array(D), i;
+      for (i = 0; i < D; i++) {
+        var x = v[i], t = Math.tanh(0.7978845608 * (x + 0.044715 * x * x * x));
+        o[i] = 0.5 * (1 + t) + 0.5 * x * (1 - t * t) * 0.7978845608 * (1 + 3 * 0.044715 * x * x);
+      }
+      return o;
+    }
+
+    /* one forward pass, keeping what the backward pass needs */
+    function forward() {
+      var x = X0.slice(), tape = [], i, np = normAt();
+      for (i = 0; i < L; i++) {
+        var pre = x.slice(), rec = {}, h = pre;
+        if (np === "pre") { var n1 = ln(pre); h = n1.y; rec.ny = n1.y; rec.nsd = n1.sd; }
+        rec.a1 = mat(W1[i], h);
+        var a2 = mat(W2[i], gelu(rec.a1));
+        var sum = new Float64Array(D), k;
+        for (k = 0; k < D; k++) sum[k] = (skip() ? pre[k] : 0) + a2[k];
+        if (np === "post") { var n2 = ln(sum); rec.oy = n2.y; rec.osd = n2.sd; x = n2.y.slice(); }
+        else x = sum;
+        rec.norm = nrm(x);
+        tape.push(rec);
+      }
+      return { x: x, tape: tape };
+    }
+
+    /* and the exact transposed Jacobian back down the stack */
+    function backward(fw) {
+      var g = fw.x.slice(), out = new Array(L + 1), i, np = normAt();
+      out[L] = nrm(g);
+      for (i = L - 1; i >= 0; i--) {
+        var r = fw.tape[i], gs = g;
+        if (np === "post") gs = lnBack(g, r.oy, r.osd);
+        var gff = matT(W2[i], gs), gp = geluP(r.a1), k;
+        for (k = 0; k < D; k++) gff[k] *= gp[k];
+        gff = matT(W1[i], gff);
+        if (np === "pre") gff = lnBack(gff, r.ny, r.nsd);
+        var gn = new Float64Array(D);
+        for (k = 0; k < D; k++) gn[k] = (skip() ? gs[k] : 0) + gff[k];
+        g = gn;
+        out[i] = nrm(g);
+      }
+      return out;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 400", width: "100%",
+      role: "img", "aria-label": "a stack of blocks, forward and backward" }, f.body);
+
+    var GX0 = 62, GX1 = 744, NY0 = 68, NY1 = 158, GY0 = 208, GY1 = 306;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var fw = forward(), gr = backward(fw), i;
+
+      T(svg, 8, 14, L + " blocks of width " + D + ", forward and backward, computed here",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, MODES[mode], { anchor: "end", size: 11,
+        fill: mode === 0 ? C.teal : mode === 1 ? C.orange : C.pink });
+      var TONE = mode === 0 ? C.teal : mode === 1 ? C.orange : C.pink;
+
+      function bx(i) { return GX0 + i / (L - 1) * (GX1 - GX0 - 10); }
+
+      /* ---- the stream's norm, layer by layer ---- */
+      var nmax = 1e-9;
+      fw.tape.forEach(function (r) { nmax = Math.max(nmax, r.norm); });
+      T(svg, 8, NY0 - 12, "norm of the residual stream after each block",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      line(svg, GX0, NY1, GX1, NY1, { stroke: C.line, sw: 1 });
+      T(svg, GX0 - 6, NY0, nmax.toFixed(0), { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, GX0 - 6, NY1, "0", { anchor: "end", size: 8.5, fill: C.faint });
+      for (i = 0; i < L; i++) {
+        var h = fw.tape[i].norm / nmax * (NY1 - NY0);
+        var c = rect(svg, bx(i), NY1 - h, (GX1 - GX0 - 10) / L - 2, h,
+          { rx: 1, fill: i === sel ? C.orange : C.blue, stroke: "none",
+            op: i === sel ? 0.9 : 0.45 });
+        (function (k) {
+          c.style.cursor = "pointer";
+          c.addEventListener("click", function () { sel = k; render(); say(); });
+          tipOn(c, "block " + (k + 1), "stream norm " + fw.tape[k].norm.toFixed(3) +
+            "<br>gradient reaching its input: " + gr[k].toExponential(2));
+        })(i);
+      }
+
+      /* ---- the gradient, log scale ---- */
+      T(svg, 8, GY0 - 12, "gradient magnitude arriving at each block's input, log scale",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      var lo = Infinity, hi = 0;
+      gr.forEach(function (v) { if (v > 0) { lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+      if (!isFinite(lo) || lo <= 0) lo = 1e-30;
+      var span = Math.max(1, Math.log10(hi / lo));
+      function gy(v) {
+        return GY1 - Math.min(1, Math.max(0, Math.log10(Math.max(v, lo) / lo) / span)) * (GY1 - GY0);
+      }
+      line(svg, GX0, GY1, GX1, GY1, { stroke: C.line, sw: 1 });
+      line(svg, GX0, GY0, GX0, GY1, { stroke: C.line, sw: 1 });
+      T(svg, GX0 - 6, GY0, hi.toExponential(0), { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, GX0 - 6, GY1, lo.toExponential(0), { anchor: "end", size: 8.5, fill: C.faint });
+      var pts = [];
+      for (i = 0; i <= L; i++) pts.push((GX0 + i / L * (GX1 - GX0 - 10)) + "," + gy(gr[i]));
+      S("polyline", { points: pts.join(" "), fill: "none",
+        stroke: TONE, "stroke-width": 2.2 }, svg);
+      S("circle", { cx: GX0 + sel / L * (GX1 - GX0 - 10), cy: gy(gr[sel]), r: 4,
+        fill: C.orange }, svg);
+      T(svg, GX0 + 4, GY1 + 14, "block 1", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, GX1 - 10, GY1 + 14, "block " + L, { anchor: "end", size: 9, fill: C.faint });
+
+      /* ---- the number the section is about ---- */
+      var ratio = gr[L] > 0 ? gr[0] / gr[L] : 0;
+      T(svg, 8, 336, "block " + (sel + 1) + ": stream norm " + fw.tape[sel].norm.toFixed(2) +
+        ", gradient at its input " + gr[sel].toExponential(2),
+        { anchor: "start", size: 11, fill: C.orange });
+      T(svg, 8, 356, "The gradient reaching block 1 is " +
+        (ratio >= 0.01 ? ratio.toFixed(2) + "x" : ratio.toExponential(1) + "x") +
+        " the one at the top.", { anchor: "start", size: 11, fill: TONE });
+      T(svg, 8, 376,
+        mode === 0 ? "The identity path in x + F(x) is why a 32-deep stack trains at all."
+        : mode === 1 ? "Post-LN rescales every block's output on the way down: that is what warmup was for."
+        : mode === 2 ? "Worse, but the norm layer is still rescaling and holding it up."
+        : "Skips and norm both gone, and now it is the vanishing gradient the textbooks draw.",
+        { anchor: "start", size: 10.5, fill: TONE });
+      T(svg, 8, 396, "Every number here is a real forward and backward pass over fixed weights, " +
+        "LayerNorm's Jacobian included.", { anchor: "start", size: 9.5, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 412");
+    }
+
+    function say() {
+      var fw = forward(), gr = backward(fw);
+      f.say("Block " + (sel + 1) + ": stream norm " + fw.tape[sel].norm.toFixed(2) +
+        ", gradient " + gr[sel].toExponential(2) + ". At block 1 it is " +
+        gr[0].toExponential(2) + " against " + gr[L].toExponential(2) + " at the top.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tb = tabs(f.controls, ["pre-LN", "post-LN", "no residual", "neither"], 0, function (i) {
+      mode = i; render(); say();
+    });
+    var sB = slider(f.controls, "block", 0, L - 1, 16, 1,
+      function (v) { return String(v + 1); },
+      function (v) { sel = v; render(); say(); });
+    f.btn("reset", function () {
+      mode = 0; sel = 16; tb.sync(0); sB.set(16); render();
+      f.say("Follow one vector through the block. Then remove the residual connections.");
+    });
+
+    render();
+    f.say("Follow one vector through the block. Then remove the residual connections.");
+  };
+
+
+  /* ========================================================================
+     19. llmActivations — CH 8 — Comparator
+
+     Three things, none of them asserted.
+
+     The curves are the functions, evaluated. The parameter arithmetic is the
+     section's, live: a two-matrix feed-forward at 4x on Corvid's 4,096 costs
+     2 x 4,096 x 16,384 = 134,217,728, and matching that with three matrices
+     needs 134,217,728 / (3 x 4,096) = 10,923, which is 2.667x — four times
+     two thirds. The real-model ratios are the section's own table.
+
+     The third thing is an ablation, run here on 12 September 2026 because
+     Chapter 38's table records this variant as "not measured, the run did not
+     finish in budget". Four layers, width 128, 400 steps from one seed on
+     identical batches, 256 held-out sequences, paired:
+
+       GELU 4x           823,296 params   val 2.4823
+       SwiGLU 2.667x     822,784 params   val 2.4868   +0.0045 [+0.0014, +0.0076]
+       SwiGLU 4x       1,085,440 params   val 2.4750   -0.0073 [-0.0105, -0.0041]
+
+     Read honestly, that is not Shazeer's result and the machine says so. At
+     823,296 parameters and 400 steps of character prediction, matched SwiGLU
+     is very slightly worse and the interval excludes zero. What the run does
+     demonstrate is the arithmetic of fairness: the version that wins is the
+     one carrying 32% more parameters, which is exactly the comparison the
+     two-thirds correction exists to prevent.
+     ======================================================================== */
+  VIZ.llmActivations = function (el) {
+    var f = frame(el);
+
+    var DM = 4096, MULT = 4;
+    var REAL = [
+      { n: "GPT-2", d: 768, ff: 3072, a: "GELU" },
+      { n: "Llama-2-7B", d: 4096, ff: 11008, a: "SwiGLU" },
+      { n: "Llama-3-8B", d: 4096, ff: 14336, a: "SwiGLU" },
+      { n: "Mistral-7B-v0.3", d: 4096, ff: 14336, a: "SwiGLU" },
+      { n: "Gemma-2-9B", d: 3584, ff: 14336, a: "GELU" },
+      { n: "Qwen2.5-7B", d: 3584, ff: 18944, a: "SwiGLU" }
+    ];
+    var ABL = [
+      { n: "GELU 4x", p: 823296, v: 2.4823, d: null },
+      { n: "SwiGLU 2.667x", p: 822784, v: 2.4868, d: 0.0045, ci: [0.0014, 0.0076] },
+      { n: "SwiGLU 4x", p: 1085440, v: 2.4750, d: -0.0073, ci: [-0.0105, -0.0041] }
+    ];
+
+    var act = 0, matched = true;               // 0 ReLU, 1 GELU, 2 SwiGLU
+    var NAMES = ["ReLU", "GELU", "SwiGLU"];
+
+    function relu(x) { return x > 0 ? x : 0; }
+    function gelu(x) {
+      return 0.5 * x * (1 + Math.tanh(0.7978845608 * (x + 0.044715 * x * x * x)));
+    }
+    function silu(x) { return x / (1 + Math.exp(-x)); }
+    function fn(x) { return act === 0 ? relu(x) : act === 1 ? gelu(x) : silu(x); }
+
+    function dff() {
+      if (act < 2) return DM * MULT;
+      return matched ? Math.round(DM * MULT * 2 / 3) : DM * MULT;
+    }
+    function params() { return (act < 2 ? 2 : 3) * DM * dff(); }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function fmtP(n) { return (n / 1e6).toFixed(1) + "M"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 420", width: "100%",
+      role: "img", "aria-label": "three activations, matched on parameters" }, f.body);
+
+    var CX0 = 40, CX1 = 300, CY0 = 60, CY1 = 200;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, base = 2 * DM * DM * MULT;
+
+      T(svg, 8, 14, "Corvid's d_model " + commas(DM) + ", feed-forward at " + MULT + "x",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, NAMES[act] + (act === 2 ? (matched ? ", width corrected to 2/3"
+          : ", width left at 4x") : ""),
+        { anchor: "end", size: 11, fill: C.orange });
+
+      /* ---- the curve ---- */
+      function cx(x) { return CX0 + (x + 4) / 8 * (CX1 - CX0); }
+      function cy(y) { return CY1 - (y + 1) / 5 * (CY1 - CY0); }
+      line(svg, CX0, cy(0), CX1, cy(0), { stroke: C.line, sw: 1 });
+      line(svg, cx(0), CY0, cx(0), CY1, { stroke: C.line, sw: 1 });
+      T(svg, CX1, cy(0) + 13, "input", { anchor: "end", size: 9, fill: C.faint });
+      [0, 1, 2, 3].forEach(function (v) {
+        T(svg, cx(0) - 6, cy(v), String(v), { anchor: "end", size: 8.5, fill: C.faint });
+      });
+      [[relu, C.dim, 0], [gelu, C.dim, 1], [silu, C.dim, 2]].forEach(function (c) {
+        var pts = [], x;
+        for (i = 0; i <= 120; i++) {
+          x = -4 + i / 120 * 8;
+          pts.push(cx(x) + "," + cy(c[0](x)));
+        }
+        S("polyline", { points: pts.join(" "), fill: "none",
+          stroke: c[2] === act ? C.orange : C.dim, "stroke-width": c[2] === act ? 2.4 : 1,
+          opacity: c[2] === act ? 1 : 0.35 }, svg);
+      });
+      T(svg, CX0 + 4, CY0 + 4, act === 2 ? "SiLU, the gate's curve" : NAMES[act],
+        { anchor: "start", size: 10, fill: C.orange });
+      T(svg, CX0 + 4, CY1 + 26, act === 2
+          ? "SwiGLU is a shape, not a curve: silu(x W_gate) * (x W_up), then W_down."
+          : act === 1 ? "No dead zone: small negatives pass through slightly."
+          : "Hard cut at zero, and a unit stuck negative gets no gradient ever.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* ---- the parameter arithmetic, live ---- */
+      var RX = 336, ry = 58;
+      function row(k, v, tone) {
+        T(svg, RX, ry, k, { anchor: "start", size: 10.5, fill: C.faint });
+        T(svg, 752, ry, v, { anchor: "end", size: 11, fill: tone || C.text });
+        ry += 21;
+      }
+      T(svg, RX, 38, "one layer's feed-forward, on Corvid",
+        { anchor: "start", size: 11, fill: C.faint });
+      row("matrices", act < 2 ? "2  (up, down)" : "3  (gate, up, down)");
+      row("intermediate width", commas(dff()) +
+        "   " + (dff() / DM).toFixed(3) + "x", act === 2 && matched ? C.teal : C.text);
+      /* the two-thirds width is 10,922.667, so a matched layer misses by a few
+         thousand out of 134 million. That is rounding, not a mismatch. */
+      var off = params() / base - 1, even = Math.abs(off) < 0.001;
+      row("parameters", commas(params()), even ? C.teal : C.pink);
+      row("against a 2-matrix 4x layer", commas(base));
+      row("difference", (off === 0 ? "none" : (off > 0 ? "+" : "") +
+        (off * 100).toFixed(Math.abs(off) < 0.01 ? 3 : 1) + "%"),
+        even ? C.teal : C.pink);
+      T(svg, RX, ry + 4, act === 2 && matched
+          ? commas(base) + " / (3 x " + commas(DM) + ") = " + commas(base / (3 * DM)) +
+            ", which is 4 x two thirds."
+          : act === 2 ? "Three matrices at full width is 50% more network, not a fairer test."
+          : "Two matrices, so the 4x default and nothing to correct.",
+        { anchor: "start", size: 9.5, fill: act === 2 && matched ? C.teal : C.faint });
+
+      /* ---- what real models actually chose ---- */
+      var TY = 250;
+      T(svg, 8, TY - 10, "ratios read from real configurations",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      var maxr = 5.4;
+      REAL.forEach(function (m, k) {
+        var yy = TY + 4 + k * 17, r = m.ff / m.d;
+        T(svg, 8, yy, m.n, { anchor: "start", size: 9.5, fill: C.dim });
+        rect(svg, 130, yy - 5, r / maxr * 220, 10, { rx: 2,
+          fill: Math.abs(r - 8 / 3) < 0.03 ? C.teal : C.blue, stroke: "none", op: 0.55 });
+        T(svg, 360, yy, r.toFixed(3) + "x  " + m.a, { anchor: "start", size: 9.5,
+          fill: Math.abs(r - 8 / 3) < 0.03 ? C.teal : C.faint });
+      });
+      line(svg, 130 + (8 / 3) / maxr * 220, TY - 2, 130 + (8 / 3) / maxr * 220, TY + 4 + 6 * 17 - 12,
+        { stroke: C.teal, sw: 1, dash: "3 3" });
+      T(svg, 8, TY + 4 + 6 * 17 + 2, "Only Llama-2 sits on the rule. It told you how to run the " +
+        "ablation, never how wide to build.", { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* ---- the ablation, run for this machine ---- */
+      var AX = 470, ay = TY + 4;
+      T(svg, AX, TY - 10, "ablation run for this machine, 400 steps",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      ABL.forEach(function (a) {
+        var hot = (act === 2 && matched && a.n === "SwiGLU 2.667x") ||
+                  (act === 2 && !matched && a.n === "SwiGLU 4x") ||
+                  (act === 1 && a.n === "GELU 4x");
+        T(svg, AX, ay, a.n, { anchor: "start", size: 9.5, fill: hot ? C.orange : C.dim });
+        T(svg, 660, ay, fmtP(a.p), { anchor: "end", size: 9.5, fill: C.faint });
+        T(svg, 752, ay, a.v.toFixed(4), { anchor: "end", size: 9.5,
+          fill: hot ? C.orange : C.text });
+        ay += 17;
+        if (a.d !== null) {
+          T(svg, AX + 10, ay, (a.d > 0 ? "+" : "") + a.d.toFixed(4) + "  [" +
+            a.ci[0].toFixed(4) + ", " + a.ci[1].toFixed(4) + "]",
+            { anchor: "start", size: 9, fill: a.d > 0 ? C.pink : C.teal });
+          ay += 16;
+        }
+      });
+      T(svg, AX, ay + 4, "paired against GELU, 256 held-out sequences",
+        { anchor: "start", size: 9, fill: C.faint });
+
+      T(svg, 8, 396, "At this size matched SwiGLU is 0.0045 worse, not better — a 823,296-parameter " +
+        "model is not where the effect lives.", { anchor: "start", size: 10, fill: C.pink });
+      T(svg, 8, 414, "What it does show: the variant that wins carries 32% more parameters — " +
+        "the comparison the rule exists to prevent.",
+        { anchor: "start", size: 10, fill: C.teal });
+
+      svg.setAttribute("viewBox", "0 0 760 430");
+    }
+
+    function say() {
+      f.say(NAMES[act] + ": " + (act < 2 ? "2" : "3") + " matrices, intermediate " +
+        commas(dff()) + ", " + commas(params()) + " parameters against " +
+        commas(2 * DM * DM * MULT) + " for a two-matrix layer at 4x.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tb = tabs(f.controls, ["ReLU", "GELU", "SwiGLU"], 0, function (i) {
+      act = i; render(); say();
+    });
+    var tgM = toggle(f.controls, "two-thirds correction", true, function (v) {
+      matched = v; render();
+      if (act < 2) { f.say("The correction only applies to SwiGLU: two matrices have nothing to shrink."); return; }
+      f.say(v ? "Intermediate width " + commas(dff()) + ": the parameter counts now match, and the " +
+                "comparison is between activations rather than between network sizes."
+              : "Three matrices at the full 4x width: " + commas(params()) + " parameters against " +
+                commas(2 * DM * DM * MULT) + ", which is 50% more network.");
+    });
+    f.btn("reset", function () {
+      act = 0; matched = true; tb.sync(0); tgM.set(true); render();
+      f.say("Switch to SwiGLU, then turn the two-thirds correction off and watch the parameter count.");
+    });
+
+    render();
+    f.say("Switch to SwiGLU, then turn the two-thirds correction off and watch the parameter count.");
   };
 
 })();
