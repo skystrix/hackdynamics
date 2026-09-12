@@ -38,6 +38,9 @@
      llmGreedyLoop  ch18 Stepper    real GPT-2 walking into a real cycle
      llmGrammarMask ch19 Stepper    a real automaton, and a mask that closes to one token
      llmAgentLoop   ch19 Simulator  four lines of control flow, and the bill they run up
+     llmTuneDecision ch20 Comparator five axes in order, and the one that ends the argument
+     llmLossMask    ch20 Inspector  which tokens produce gradient, and the two off-by-ones
+     llmForgetting  ch20 Tuner      one curve rising, three falling, and the knee computed
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -8859,6 +8862,470 @@
 
     render();
     f.say("Run the task. Then break the search tool and run it again.");
+  };
+
+
+
+  /* ========================================================================
+     42. llmTuneDecision — CH 20 — Comparator
+
+     Five axes checked in the section's order, because the first one that
+     returns an answer ends the discussion. Rows one to three eliminate
+     fine-tuning outright; rows four and five are where it earns its keep;
+     cost is checked last, deliberately.
+
+     The blueprint's discovery is a property of that ordering, not a special
+     case: turn on per-user permissions alone and fine-tuning is unavailable
+     whatever else is selected, because a weight has no reader. Turn on house
+     style alone and it becomes the recommendation. One toggle, opposite
+     verdicts, and the deciding axis named both times.
+
+     The cost panel is the section's own arithmetic on sliders, and it
+     reproduces: 2,000 examples x 310 tokens x 3 epochs is 1,860,000 training
+     tokens, which at 6ND against 2ND is 5,580,000 forward-pass equivalents,
+     and divided by the 780 input tokens each request saves, 7,154 requests
+     to break even.
+     ======================================================================== */
+  VIZ.llmTuneDecision = function (el) {
+    var f = frame(el);
+
+    var REQ = [
+      { n: "answers change daily", v: false, verdict: "retrieval",
+        why: "A fine-tune is a build artefact. Retraining nightly to absorb yesterday's prices is an expensive way to reinvent a database with worse consistency." },
+      { n: "must cite its sources", v: false, verdict: "retrieval",
+        why: "A citation needs a document to point at. Weights have no provenance to return." },
+      { n: "per-user permissions", v: false, verdict: "retrieval",
+        why: "If Ana may see a document and Bo may not, that cannot live in the weights, because a weight has no reader. Retrieval filters at query time with the user's identity in hand." },
+      { n: "fixed output shape", v: false, verdict: "fine-tune",
+        why: "A required schema is a property of how the model answers rather than what it knows, and demonstrations teach it far more reliably than instructions." },
+      { n: "a house voice", v: false, verdict: "fine-tune",
+        why: "A hundred examples of the register are worth more than a page of adjectives describing it." },
+      { n: "cost per request matters", v: false, verdict: "cost",
+        why: "Prompting costs nothing to try and something on every request forever. The crossover is arithmetic." }
+    ];
+    var nEx = 2000, tokEx = 310, epochs = 3, saved = 780;
+
+    function trainTok() { return nEx * tokEx * epochs; }
+    function fwdEq() { return trainTok() * 3; }          // 6ND against 2ND
+    function breakEven() { return fwdEq() / saved; }
+    function decide() {
+      var i;
+      for (i = 0; i < REQ.length; i++) if (REQ[i].v) return { i: i, r: REQ[i] };
+      return null;
+    }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 420", width: "100%",
+      role: "img", "aria-label": "five axes, checked in order" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var d = decide(), i;
+
+      T(svg, 8, 14, "check them in order: the first one that answers ends the discussion",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, d ? (d.r.verdict === "retrieval" ? "retrieval, not fine-tuning"
+            : d.r.verdict === "cost" ? "arithmetic decides" : "fine-tuning")
+          : "nothing selected", { anchor: "end", size: 11,
+        fill: d ? (d.r.verdict === "retrieval" ? C.pink : C.green) : C.faint });
+
+      var y = 46;
+      for (i = 0; i < REQ.length; i++) {
+        var on = REQ[i].v, first = d && d.i === i;
+        if (first) rect(svg, 4, y - 12, 748, 24, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, (i + 1) + ".", { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 30, y, REQ[i].n, { anchor: "start", size: 10.5,
+          fill: on ? (first ? C.text : C.dim) : C.faint });
+        T(svg, 240, y, on ? "required" : "not required", { anchor: "start", size: 9.5,
+          fill: on ? C.orange : C.faint });
+        T(svg, 340, y, REQ[i].verdict === "retrieval" ? "rules fine-tuning out"
+            : REQ[i].verdict === "cost" ? "checked last, on purpose" : "fine-tuning earns its keep",
+          { anchor: "start", size: 9.5, fill: REQ[i].verdict === "retrieval" ? C.pink : C.green });
+        T(svg, 752, y, first ? "this one decides" : "", { anchor: "end", size: 9.5, fill: C.orange });
+        y += 24;
+      }
+
+      line(svg, 8, 200, 752, 200, { stroke: C.line, sw: 1 });
+      if (d) wrapT(svg, 8, 220, 122, 17, d.r.why, { size: 10.5, fill: C.dim, max: 2 });
+      else T(svg, 8, 220, "Turn one on. Start with per-user permissions, alone.",
+        { anchor: "start", size: 10.5, fill: C.faint });
+
+      /* the cost crossover */
+      var CY = 268;
+      line(svg, 8, CY - 14, 752, CY - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, CY, "the crossover, checked last", { anchor: "start", size: 9, fill: C.faint });
+      var ly = CY + 22;
+      [[commas(nEx) + " examples x " + tokEx + " tokens x " + epochs + " epochs", commas(trainTok()) + " training tokens"],
+       ["at 6ND to train against 2ND to run", commas(fwdEq()) + " forward-pass equivalents"],
+       ["divided by " + saved + " input tokens saved per request", commas(breakEven()) + " requests to break even"]
+      ].forEach(function (r, k) {
+        T(svg, 8, ly, r[0], { anchor: "start", size: 10, fill: C.dim });
+        T(svg, 560, ly, r[1], { anchor: "end", size: 10.5, fill: k === 2 ? C.orange : C.text });
+        ly += 20;
+      });
+      T(svg, 752, CY + 30, commas(breakEven()), { anchor: "end", size: 20, fill: C.orange });
+      T(svg, 752, CY + 50, "requests to break even", { anchor: "end", size: 9.5, fill: C.faint });
+
+      T(svg, 8, 384, "Seven thousand requests is days for many services and an afternoon for some — " +
+        "which is exactly why cost is checked last.", { anchor: "start", size: 10, fill: C.faint });
+      T(svg, 8, 404, "A fine-tune that pays for itself in a week and rules out per-user permissions " +
+        "forever is not a saving.", { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    function say() {
+      var d = decide();
+      f.say(d ? "Axis " + (d.i + 1) + ", " + d.r.n + ", decides: " +
+              (d.r.verdict === "retrieval" ? "retrieval, and no later toggle changes it."
+               : d.r.verdict === "cost" ? "the arithmetic, " + commas(breakEven()) + " requests."
+               : "fine-tuning.")
+            : "Nothing required yet. Turn on per-user permissions alone.");
+    }
+
+    var tgs = REQ.map(function (r, k) {
+      return toggle(f.controls, r.n, false, function (v) { REQ[k].v = v; render(); say(); });
+    });
+    var sE = slider(f.controls, "examples", 200, 8000, 2000, 200,
+      function (v) { return commas(v); }, function (v) { nEx = v; render(); say(); });
+    var sS = slider(f.controls, "tokens saved", 100, 2000, 780, 20,
+      function (v) { return String(v); }, function (v) { saved = v; render(); say(); });
+    f.btn("reset", function () {
+      REQ.forEach(function (r, k) { r.v = false; tgs[k].set(false); });
+      nEx = 2000; saved = 780; sE.set(2000); sS.set(780); render();
+      f.say("Flip requirements. The verdict explains itself.");
+    });
+
+    render();
+    f.say("Flip requirements. The verdict explains itself.");
+  };
+
+
+  /* ========================================================================
+     43. llmLossMask — CH 20 — Inspector
+
+     The section's two rows, with the spans that produce them on screen:
+
+       single turn              310 tokens    96 graded    31.0%
+       five-turn conversation   840 tokens   350 graded    41.7%
+                                (40 system + 5 x (90 user + 70 assistant))
+
+     Both fractions are computed from the spans rather than quoted, so moving
+     the turn count moves them, and the section's closing point about
+     conversations being the cheapest gradient in the chapter falls out as a
+     ratio: 41.7 over 31.0 is 1.35 times the graded fraction for the same
+     compute, because one system prompt is amortised over five graded spans.
+
+     The two details the section says decide correctness are controls rather
+     than prose. Move the mask boundary one token and the first word of the
+     answer stops being graded; drop the turn-ending token and you have
+     trained a model whose responses have no ending, which shows up at
+     serving time looking like a decoding bug.
+     ======================================================================== */
+  VIZ.llmLossMask = function (el) {
+    var f = frame(el);
+
+    /* Token counts are the section's. The strip below shows them to scale. */
+    var SPAN = { sys: 40, user: 85, asst: 69, hdr: 5, eot: 1 };
+    var SINGLE = { t: 310, g: 96 };          /* the chapter's other example, as printed */
+    var masked = true, turns = 5, edge = 0, eot = true;
+
+    function spans() {
+      var out = [], i;
+      out.push({ r: "system", n: SPAN.sys, g: false });
+      for (i = 0; i < turns; i++) {
+        out.push({ r: "user", n: SPAN.user, g: false });
+        out.push({ r: "header", n: SPAN.hdr, g: edge < 0 });
+        out.push({ r: "assistant", n: SPAN.asst - (edge > 0 ? 1 : 0), g: true });
+        if (edge > 0) out.push({ r: "first word", n: 1, g: false });
+        out.push({ r: "turn end", n: SPAN.eot, g: eot });
+      }
+      return out;
+    }
+    function totals() {
+      var S = spans(), t = 0, g = 0;
+      S.forEach(function (s) { t += s.n; if (masked ? s.g : true) g += s.n; });
+      return { t: t, g: g, f: g / t };
+    }
+    function five(n) {
+      return { t: SPAN.sys + n * (SPAN.user + SPAN.hdr + SPAN.asst + SPAN.eot),
+               g: n * (SPAN.asst + SPAN.eot) };
+    }
+
+    var COL = { system: C.faint, user: C.orange, header: C.purple, assistant: C.teal,
+                "turn end": C.pink, "first word": C.pink };
+
+    var svg = S("svg", { viewBox: "0 0 760 424", width: "100%",
+      role: "img", "aria-label": "which tokens produce gradient" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var S = spans(), TT = totals(), i;
+
+      T(svg, 8, 14, turns + (turns === 1 ? " turn" : "-turn conversation") + " · " +
+        (masked ? "loss masking on" : "loss masking off"),
+        { anchor: "start", size: 11, fill: masked ? C.teal : C.pink });
+      T(svg, 752, 14, TT.g + " of " + TT.t + " tokens graded · " + (TT.f * 100).toFixed(1) + "%",
+        { anchor: "end", size: 11, fill: C.text });
+
+      /* the example, to scale */
+      var BX = 8, BW = 744, x = BX, y = 44;
+      T(svg, 8, 34, "the example, one box per span, to scale",
+        { anchor: "start", size: 9, fill: C.faint });
+      S.forEach(function (s) {
+        var w = s.n / TT.t * BW, lit = masked ? s.g : true;
+        rect(svg, x, y, Math.max(1, w - 1), 30, { rx: 3, fill: COL[s.r] || C.blue,
+          stroke: "none", op: lit ? 0.8 : 0.18 });
+        if (w > 40) T(svg, x + w / 2, y + 15, s.n + "", { size: 9,
+          fill: lit ? C.card : C.faint });
+        x += w;
+      });
+      T(svg, 8, y + 46, "lit spans produce gradient; dim spans are context the lit ones are conditioned on",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* legend */
+      var lx = 8, ly = y + 66;
+      ["system", "user", "header", "assistant", "turn end"].forEach(function (r) {
+        rect(svg, lx, ly - 7, 12, 12, { rx: 2, fill: COL[r], stroke: "none", op: 0.8 });
+        T(svg, lx + 18, ly, r, { anchor: "start", size: 9.5, fill: C.dim });
+        lx += 28 + r.length * 6.4;
+      });
+
+      /* the section's table */
+      var ty = 174;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 300, ty, "tokens", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 400, ty, "graded", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 500, ty, "fraction", { anchor: "end", size: 9, fill: C.faint });
+      ty += 22;
+      var one = SINGLE, fv = five(5);
+      [["single turn", one.t, one.g], ["five-turn conversation", fv.t, fv.g]].forEach(function (r, k) {
+        var on = (k === 0 && turns === 1) || (k === 1 && turns === 5);
+        T(svg, 8, ty, r[0], { anchor: "start", size: 10.5, fill: on ? C.teal : C.dim });
+        T(svg, 300, ty, String(r[1]), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 400, ty, String(r[2]), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 500, ty, (r[2] / r[1] * 100).toFixed(1) + "%", { anchor: "end", size: 10.5,
+          fill: on ? C.teal : C.text });
+        ty += 20;
+      });
+      wrapT(svg, 8, ty + 8, 126, 14, "40 system + 5 x (90 user + 70 assistant) — same masking rule, " +
+        ((fv.g / fv.t) / (one.g / one.t)).toFixed(2) +
+        "x the gradient per token of compute. Row one is the chapter's other example.",
+        { size: 9.5, fill: C.faint, max: 2 });
+
+      /* the two details */
+      var dy = 288;
+      line(svg, 8, dy - 14, 752, dy - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, dy, "where the mask ends", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 8, dy + 20, edge === 0 ? "correct: the first token graded is the first token of the answer"
+          : edge < 0 ? "one token early: the template's own header is being trained on"
+          : "one token late: the first word of the answer is never graded",
+        { anchor: "start", size: 10.5, fill: edge === 0 ? C.green : C.pink });
+      T(svg, 8, dy + 44, "the turn-ending token", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 8, dy + 64, eot ? "inside the mask, because emitting it is the behaviour that stops generation"
+          : "excluded — responses will have no ending, and it looks like a decoding bug at serving time",
+        { anchor: "start", size: 10.5, fill: eot ? C.green : C.pink });
+
+      wrapT(svg, 8, 386, 122, 17, masked
+        ? "It is tempting to read the ungraded 69% as waste. It is not: it is the context those 96 " +
+          "predictions are conditioned on, and removing it removes the task."
+        : "Masking off: every token is graded, including the user's question. You are spending part of " +
+          "the gradient teaching the model to write plausible user requests.",
+        { size: 10, fill: masked ? C.faint : C.pink, max: 2 });
+    }
+
+    function say() {
+      var TT = totals();
+      f.say(TT.g + " of " + TT.t + " tokens produce gradient, " + (TT.f * 100).toFixed(1) + "%" +
+        (masked ? "." : " — including the question."));
+    }
+
+    var tgM = toggle(f.controls, "loss masking", true, function (v) {
+      masked = v; render();
+      f.say(v ? "Masked: the loss is computed only on what the model is supposed to produce."
+              : "Unmasked: the objective is now question-then-answer with equal weight on both halves.");
+    });
+    var sT = slider(f.controls, "turns", 1, 8, 5, 1,
+      function (v) { return String(v); }, function (v) { turns = v; render(); say(); });
+    var tE = tabs(f.controls, ["one token early", "correct", "one token late"], 1, function (i) {
+      edge = i - 1; render(); say();
+    });
+    var tgE = toggle(f.controls, "grade the stop token", true, function (v) {
+      eot = v; render();
+      f.say(v ? "The turn-ending token is graded, so the model learns to stop."
+              : "The stop token is excluded. At serving time this looks like runaway generation.");
+    });
+    f.btn("reset", function () {
+      masked = true; turns = 5; edge = 0; eot = true;
+      tgM.set(true); sT.set(5); tE.sync(1); tgE.set(true); render();
+      f.say("Turn masking off. Look at which tokens are now being learned.");
+    });
+
+    render();
+    f.say("Turn masking off. Look at which tokens are now being learned.");
+  };
+
+
+  /* ========================================================================
+     44. llmForgetting — CH 20 — Tuner
+
+     Four curves on one schedule, which is the section's whole protocol: the
+     task metric you are watching and three evaluations of things you did not
+     touch, measured at checkpoints rather than at the end.
+
+     The curves are a model, not a measurement, and the machine says so. What
+     the model encodes is the section's own causal claim: damage grows with
+     the learning rate faster than progress does, so raising the rate tenfold
+     moves the general curves down long before it moves the task curve left.
+     Replay works by adding a term that pulls toward general behaviour, and
+     LoRA works by making most of the weights ineligible to move — which is
+     why its general curves flatten rather than merely slow.
+
+     The knee is computed, not drawn in: the first checkpoint at which the
+     mean general score has fallen a full point below baseline while the task
+     is still climbing. That is the number the section says should be a
+     decision made by someone who knows both.
+     ======================================================================== */
+  VIZ.llmForgetting = function (el) {
+    var f = frame(el);
+
+    var GEN = [["broad reasoning", 68.4, 1.0], ["instruction following", 74.1, 0.78],
+               ["code generation", 55.2, 1.35]];
+    var TASK0 = 41.8, TASKMAX = 88.6, STEPS = 3000;
+    var lrMul = 1, size = 2000, lora = false, replay = 0, atStep = 1200;
+
+    function tau() { return 520 / Math.pow(lrMul, 0.55) * Math.pow(2000 / size, 0.25); }
+    function task(s) { return TASK0 + (TASKMAX - TASK0) * (1 - Math.exp(-s / tau())); }
+    function damage(s) {
+      /* the rate moves when damage arrives far more than how much arrives */
+      var D = Math.min(0.5, 0.30 * Math.pow(lrMul, 0.35)) * (lora ? 0.16 : 1) * (1 - 0.55 * replay);
+      var rho = 900 / lrMul;
+      return D * (1 - Math.exp(-s / rho));
+    }
+    function gen(k, s) { return GEN[k][1] * (1 - damage(s) * GEN[k][2]); }
+    function meanDrop(s) {
+      var d = 0, k;
+      for (k = 0; k < GEN.length; k++) d += GEN[k][1] - gen(k, s);
+      return d / GEN.length;
+    }
+    function knee() {
+      var s;
+      for (s = 20; s <= STEPS; s += 20) if (meanDrop(s) >= 1) return s;
+      return -1;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 424", width: "100%",
+      role: "img", "aria-label": "one task rising while three others fall" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var k, i, K = knee();
+
+      T(svg, 8, 14, "learning rate " + (2e-5 * lrMul).toExponential(1) + " · " +
+        size.toLocaleString("en-US") + " examples · " + (lora ? "LoRA" : "full fine-tune") +
+        (replay ? " · " + Math.round(replay * 100) + "% replay" : ""),
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, K < 0 ? "no measurable forgetting yet" : "general ability down a point by step " + K,
+        { anchor: "end", size: 11, fill: K < 0 ? C.green : C.pink });
+
+      var PX = 48, PY = 44, PW = 560, PH = 220;
+      function sx(s) { return PX + s / STEPS * PW; }
+      function sy(v) { return PY + PH - v / 95 * PH; }
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      line(svg, PX, PY, PX, PY + PH, { stroke: C.line, sw: 1 });
+      [20, 40, 60, 80].forEach(function (v) {
+        T(svg, PX - 8, sy(v), String(v), { anchor: "end", size: 8.5, fill: C.faint });
+      });
+      [0, 1000, 2000, 3000].forEach(function (s) {
+        T(svg, sx(s), PY + PH + 14, s ? s.toLocaleString("en-US") : "0",
+          { size: 8.5, fill: C.faint });
+      });
+
+      /* baselines */
+      GEN.forEach(function (g) {
+        S("line", { x1: PX, y1: sy(g[1]), x2: PX + PW, y2: sy(g[1]), stroke: C.faint,
+          "stroke-width": 1, "stroke-dasharray": "2 4", opacity: 0.4 }, svg);
+      });
+      /* curves */
+      var COLS = [C.blue, C.sky, C.purple];
+      for (k = 0; k < GEN.length; k++) {
+        var pts = [];
+        for (i = 0; i <= 120; i++) { var s = i / 120 * STEPS; pts.push(sx(s) + "," + sy(gen(k, s))); }
+        S("polyline", { points: pts.join(" "), fill: "none", stroke: COLS[k], "stroke-width": 1.8 }, svg);
+      }
+      var tp = [];
+      for (i = 0; i <= 120; i++) { var s2 = i / 120 * STEPS; tp.push(sx(s2) + "," + sy(task(s2))); }
+      S("polyline", { points: tp.join(" "), fill: "none", stroke: C.teal, "stroke-width": 2.6 }, svg);
+
+      if (K > 0) {
+        S("line", { x1: sx(K), y1: PY, x2: sx(K), y2: PY + PH, stroke: C.pink,
+          "stroke-width": 1.5, "stroke-dasharray": "3 3", opacity: 0.5 }, svg);
+        T(svg, sx(K) + 5, PY + 10, "the knee", { anchor: "start", size: 9, fill: C.pink });
+      }
+      S("line", { x1: sx(atStep), y1: PY, x2: sx(atStep), y2: PY + PH, stroke: C.orange,
+        "stroke-width": 1.5, opacity: 0.5 }, svg);
+
+      /* readouts at the checkpoint */
+      var RX = 626, y = 50;
+      T(svg, RX, 36, "at step " + atStep.toLocaleString("en-US"),
+        { anchor: "start", size: 9, fill: C.faint });
+      T(svg, RX, y, "the task", { anchor: "start", size: 9.5, fill: C.teal });
+      T(svg, 752, y + 16, task(atStep).toFixed(1), { anchor: "end", size: 14, fill: C.teal });
+      y += 40;
+      for (k = 0; k < GEN.length; k++) {
+        var d = gen(k, atStep) - GEN[k][1];
+        T(svg, RX, y, GEN[k][0].slice(0, 18), { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 700, y + 16, gen(k, atStep).toFixed(1), { anchor: "end", size: 12, fill: COLS[k] });
+        T(svg, 752, y + 16, (d >= 0 ? "+" : "") + d.toFixed(1), { anchor: "end", size: 10,
+          fill: d < -1 ? C.pink : C.faint });
+        y += 38;
+      }
+
+      line(svg, 8, 306, 752, 306, { stroke: C.line, sw: 1 });
+      T(svg, 8, 326, K < 0
+          ? "Nothing has fallen a full point yet. The task is at " + task(atStep).toFixed(1) + "."
+          : "At step " + K + " the task is still climbing (" + task(K).toFixed(1) +
+            " and rising) and general ability is already " + meanDrop(K).toFixed(1) + " points down.",
+        { anchor: "start", size: 10.5, fill: K < 0 ? C.green : C.pink });
+      wrapT(svg, 8, 348, 122, 17, "Nothing in the task metric tells you where that line is. You only " +
+        "see it by running the other three on the same schedule. These curves are a model of the " +
+        "section's causal claim, not a measurement: damage grows with the learning rate faster than " +
+        "progress does, replay adds a term pulling toward general behaviour, and LoRA makes most of " +
+        "the weights ineligible to move at all.", { size: 10, fill: C.faint, max: 4 });
+    }
+
+    function say() {
+      var K = knee();
+      f.say("Step " + atStep + ": task " + task(atStep).toFixed(1) + ", general down " +
+        meanDrop(atStep).toFixed(1) + " points" +
+        (K > 0 ? ". The knee is at step " + K + "." : ", and nothing has lost a full point yet."));
+    }
+
+    var sL = slider(f.controls, "learning rate", 0, 1, 0, 0.1,
+      function (v) { return (2e-5 * Math.pow(10, v)).toExponential(1); },
+      function (v) { lrMul = Math.pow(10, v); render(); say(); });
+    var sS = slider(f.controls, "examples", 500, 20000, 2000, 500,
+      function (v) { return v.toLocaleString("en-US"); },
+      function (v) { size = v; render(); say(); });
+    var sC = slider(f.controls, "checkpoint", 100, 3000, 1200, 100,
+      function (v) { return v.toLocaleString("en-US"); },
+      function (v) { atStep = v; render(); say(); });
+    var sR = slider(f.controls, "replay", 0, 0.2, 0, 0.05,
+      function (v) { return v ? Math.round(v * 100) + "%" : "off"; },
+      function (v) { replay = v; render(); say(); });
+    var tgL = toggle(f.controls, "LoRA", false, function (v) {
+      lora = v; render();
+      f.say(v ? "LoRA: most of the model is not eligible to change, so the general curves flatten. " +
+                "That is a mechanism, not a hope."
+              : "Full fine-tune: every weight can move, including the ones doing other work.");
+    });
+    f.btn("reset", function () {
+      lrMul = 1; size = 2000; lora = false; replay = 0; atStep = 1200;
+      sL.set(0); sS.set(2000); sC.set(1200); sR.set(0); tgL.set(false); render();
+      f.say("Find the step where the task keeps rising and general ability starts falling.");
+    });
+
+    render();
+    f.say("Find the step where the task keeps rising and general ability starts falling.");
   };
 
 
