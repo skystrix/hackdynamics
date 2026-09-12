@@ -44,6 +44,11 @@
      llmLoraRank    ch21 Tuner      the section's table from the shapes, and a real spectrum
      llmQuantBase   ch21 Inspector  4,096 real weights, quantized on the page
      llmDistill     ch21 Comparator a teacher that is wrong, and what that is worth
+     llmRewardModel ch22 Playground Bradley-Terry over two features, one of them length
+     llmRlhfLoop    ch22 Simulator  the objective run, and what removing its second term does
+     llmDpoDerive   ch23 Stepper    seven lines, and the one where Z(x) divides out
+     llmDpoBeta     ch23 Tuner      a margin that grows while both sides fall
+     llmObjectiveCompare ch23 Comparator both tables computed, and where best-of-n wins
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -9854,6 +9859,669 @@
 
     render();
     f.say("Find the temperature where the teacher's wrong answers teach most.");
+  };
+
+
+
+  /* ========================================================================
+     48. llmRewardModel — CH 22 — Playground
+
+     A Bradley-Terry head over two features, quality and length, which is
+     enough to produce the failure the section is about: press pad and the
+     response gets three sentences longer and no better, and the score goes
+     up. The length coefficient is a control rather than a claim, so the
+     reader can find the value at which padding stops paying and see that it
+     is not zero on any real reward model.
+
+     The ceiling panel is the section's own arithmetic. Two annotators agree
+     when both are right or both are wrong, so agreement = p^2 + (1-p)^2,
+     and inverting it turns the published agreement rates into accuracies:
+     0.726 gives 0.836 and 0.773 gives 0.870. A reward model trained on
+     labels that are 84% right cannot be more than 84% right about what
+     people prefer, and no amount of RLHF on top of it can be either.
+     ======================================================================== */
+  VIZ.llmRewardModel = function (el) {
+    var f = frame(el);
+
+    var PAIRS = [
+      { q: "Explain why my refund is delayed.",
+        a: { t: "Your refund is delayed because the return reached us on the 14th and refunds post 5 working days after inspection. Expect it by the 21st.", q: 0.86, n: 27 },
+        b: { t: "Refunds take a while. It should arrive soon. Thanks for your patience.", q: 0.31, n: 14 } },
+      { q: "Is this contract clause enforceable?",
+        a: { t: "I am not able to give legal advice. The clause resembles a liquidated-damages term, which is usually enforceable only if it is a genuine estimate of loss; a solicitor can tell you whether it is.", q: 0.79, n: 38 },
+        b: { t: "Yes, it is enforceable.", q: 0.22, n: 6 } },
+      { q: "Summarise this incident report in two sentences.",
+        a: { t: "A failed deploy at 02:10 took checkout down for 38 minutes. The cause was an unmigrated column, and the rollback was manual because the automation had never been tested.", q: 0.91, n: 31 },
+        b: { t: "There was an incident. It has been resolved and we are sorry for the inconvenience caused to our valued customers during this period.", q: 0.34, n: 24 } }
+    ];
+    var PAD = " To be clear, this is the information we currently hold. Please do let us know if anything above is unclear. We are always happy to help further.";
+
+    var pi = 0, wLen = 0.40, padA = 0, padB = 0, probe = false;
+    var AGREE = [0.726, 0.773];
+
+    function tokens(r, pad) { return r.n + pad * 28; }
+    function reward(r, pad) {
+      return 2.6 * r.q + wLen * Math.log(1 + tokens(r, pad) / 20);
+    }
+    function pref(x, y) { return 1 / (1 + Math.exp(-(x - y))); }
+    function accFromAgreement(a) { return 0.5 + Math.sqrt(Math.max(0, 2 * a - 1)) / 2; }
+    function text(r, pad) { var t = r.t, i; for (i = 0; i < pad; i++) t += PAD; return t; }
+
+    var svg = S("svg", { viewBox: "0 0 760 438", width: "100%",
+      role: "img", "aria-label": "a reward model, and the length it cannot ignore" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var P = PAIRS[pi], ra = reward(P.a, padA), rb = reward(P.b, padB);
+      var win = pref(ra, rb);
+
+      T(svg, 8, 14, "\"" + P.q + "\" · length weight " + wLen.toFixed(2),
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "prefers " + (ra >= rb ? "A" : "B") + " at " +
+        (Math.max(win, 1 - win) * 100).toFixed(1) + "%",
+        { anchor: "end", size: 11, fill: ra >= rb ? C.green : C.orange });
+
+      var y = 40;
+      [[P.a, padA, ra, "A"], [P.b, padB, rb, "B"]].forEach(function (r) {
+        T(svg, 8, y, "response " + r[3] + (r[1] ? " + " + r[1] + " padding" : ""),
+          { anchor: "start", size: 10, fill: r[1] ? C.pink : C.faint });
+        T(svg, 752, y, tokens(r[0], r[1]) + " tokens · quality " + r[0].q.toFixed(2),
+          { anchor: "end", size: 9.5, fill: C.faint });
+        y = wrapT(svg, 8, y + 18, 116, 15, text(r[0], r[1]), { size: 9.5, fill: C.dim, max: 3 }) + 6;
+        var qpart = 2.6 * r[0].q, lpart = wLen * Math.log(1 + tokens(r[0], r[1]) / 20);
+        rect(svg, 8, y, qpart / 3.6 * 560, 14, { rx: 3, fill: C.teal, stroke: "none", op: 0.7 });
+        rect(svg, 8 + qpart / 3.6 * 560, y, lpart / 3.6 * 560, 14,
+          { rx: 3, fill: C.pink, stroke: "none", op: 0.75 });
+        T(svg, 752, y + 8, "r = " + r[2].toFixed(4), { anchor: "end", size: 11, fill: C.text });
+        if (probe) T(svg, 580, y + 8, "length term " + lpart.toFixed(3),
+          { anchor: "end", size: 9, fill: C.pink });
+        y += 30;
+      });
+
+      T(svg, 8, y, "teal is the quality term, pink is the length term",
+        { anchor: "start", size: 9, fill: C.faint });
+
+      /* Bradley-Terry */
+      var by = 258;
+      line(svg, 8, by - 14, 452, by - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, by, "P(A preferred) = sigmoid( r(A) - r(B) ) = sigmoid(" + (ra - rb).toFixed(4) +
+        ") = " + win.toFixed(4), { anchor: "start", size: 10.5, fill: C.text });
+      T(svg, 8, by + 20, "loss = -log sigmoid( r(chosen) - r(rejected) ) = " +
+        (-Math.log(win)).toFixed(4), { anchor: "start", size: 10.5, fill: C.dim });
+
+      /* the ceiling */
+      var CX = 480;
+      T(svg, CX, by - 28, "the ceiling the labels set", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, CX, by - 10, "agreement = p^2 + (1 - p)^2", { anchor: "start", size: 10, fill: C.dim });
+      AGREE.forEach(function (a, k) {
+        T(svg, CX, by + 10 + k * 20, a.toFixed(3) + "  ->  p = " + accFromAgreement(a).toFixed(3),
+          { anchor: "start", size: 10.5, fill: C.orange });
+      });
+      T(svg, CX, by + 54, "Nothing built on top can be more", { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, CX, by + 70, "right than that.", { anchor: "start", size: 9.5, fill: C.faint });
+
+      line(svg, 8, 348, 752, 348, { stroke: C.line, sw: 1 });
+      var base = reward(P.a, 0), padded = reward(P.a, padA);
+      T(svg, 8, 368, padA
+          ? "Padding A by " + padA + " sentence group" + (padA > 1 ? "s" : "") + " added " +
+            (padded - base).toFixed(4) + " of reward and no quality at all."
+          : "Press pad to add three sentences to A that say nothing new.",
+        { anchor: "start", size: 10.5, fill: padA ? C.pink : C.faint });
+      wrapT(svg, 8, 390, 122, 17, "The length term is a control here, and that is the honest version: " +
+        "every reward model trained on human preferences has one, because longer answers were preferred " +
+        "in the data. Set it to zero and padding stops paying — and no real model is at zero.",
+        { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      var P = PAIRS[pi];
+      f.say("r(A) = " + reward(P.a, padA).toFixed(4) + ", r(B) = " + reward(P.b, padB).toFixed(4) +
+        ", so it prefers " + (reward(P.a, padA) >= reward(P.b, padB) ? "A" : "B") + ".");
+    }
+
+    var tP = tabs(f.controls, ["refund", "contract", "incident"], 0, function (i) {
+      pi = i; padA = 0; padB = 0; render(); say();
+    });
+    f.btn("pad A", function () {
+      padA = Math.min(3, padA + 1); render();
+      f.say("Three more sentences of nothing, and the reward went up by " +
+        (reward(PAIRS[pi].a, padA) - reward(PAIRS[pi].a, padA - 1)).toFixed(4) + ".");
+    });
+    f.btn("pad B", function () { padB = Math.min(3, padB + 1); render(); say(); });
+    var sW = slider(f.controls, "length weight", 0, 1, 0.4, 0.05,
+      function (v) { return v.toFixed(2); }, function (v) { wLen = v; render(); say(); });
+    var tgP = toggle(f.controls, "length probe", false, function (v) { probe = v; render(); });
+    f.btn("reset", function () {
+      pi = 0; wLen = 0.4; padA = 0; padB = 0; probe = false;
+      tP.sync(0); sW.set(0.4); tgP.set(false); render();
+      f.say("Add three sentences of padding. Watch the score.");
+    });
+
+    render();
+    f.say("Add three sentences of padding. Watch the score.");
+  };
+
+
+  /* ========================================================================
+     49. llmRlhfLoop — CH 22 — Simulator
+
+     The objective of section 5, run: r(x,y) - beta * KL(policy || reference).
+     The policy is a one-dimensional thing that can move away from its
+     reference, the reward is a function with a hackable ridge at a place the
+     reference would never go, and the KL term is the only thing holding it
+     back. That is the whole mechanism, and it is enough.
+
+     The discovery is what the objective does when you remove its second
+     term. At beta = 0.001 the reward climbs past anything the honest ridge
+     can give and the samples fall apart, because the maximum of a learned
+     reward is not where good text is — it is wherever the reward model was
+     never trained. At beta = 0.1 the policy settles just short of the ridge
+     and the samples stay readable. Nothing about the reward changed.
+     ======================================================================== */
+  VIZ.llmRlhfLoop = function (el) {
+    var f = frame(el);
+
+    var BETAS = [0.001, 0.01, 0.03, 0.1, 0.3];
+    var SAMPLES = [
+      "The refund posts five working days after inspection, so expect it by the 21st.",
+      "The refund posts five working days after inspection. I hope that helps! Let me know.",
+      "Great question! I hope that helps. Let me know if you need anything else at all!",
+      "Great question!! Absolutely! I hope this helps!! Let me know!!! Happy to help!!!!",
+      "Great!!! Absolutely!!! Certainly!!! Definitely!!! Absolutely!!! Certainly!!! Great!!!"
+    ];
+    var STEPS = 400;
+
+    var bi = 3, at = STEPS;
+
+    /* Reward: a real ridge near 1, and a hackable one far out that the
+       reference would never reach. */
+    function reward(x) {
+      return 2.4 * Math.exp(-Math.pow(x - 1.0, 2) / 0.8) +
+             4.1 * Math.exp(-Math.pow(x - 4.2, 2) / 0.5);
+    }
+    function kl(x) { return 0.5 * x * x; }
+    function objective(x, b) { return reward(x) - b * kl(x); }
+    function trajectory(b) {
+      var x = 0, i, out = [0];
+      for (i = 1; i <= STEPS; i++) {
+        var g = (objective(x + 0.01, b) - objective(x - 0.01, b)) / 0.02;
+        x += 0.06 * g;
+        out.push(x);
+      }
+      return out;
+    }
+    function sampleFor(x) {
+      return SAMPLES[Math.max(0, Math.min(SAMPLES.length - 1, Math.round(x / 4.2 * 4)))];
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "reward up, text down" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var b = BETAS[bi], tr = trajectory(b), x = tr[Math.min(at, STEPS)], i;
+      var hacked = x > 2.6;
+
+      T(svg, 8, 14, "objective = r(x, y) - beta * KL( policy || reference ) · beta = " + b,
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, hacked ? "reward hacked" : "inside the leash",
+        { anchor: "end", size: 11, fill: hacked ? C.pink : C.green });
+
+      /* the landscape */
+      var PX = 40, PY = 42, PW = 400, PH = 150, XM = 5.4;
+      function sx(v) { return PX + v / XM * PW; }
+      function sy(v) { return PY + PH - (v + 1) / 7 * PH; }
+      line(svg, PX, sy(0), PX + PW, sy(0), { stroke: C.line, sw: 1 });
+      var rp = [], op = [], kp = [];
+      for (i = 0; i <= 160; i++) {
+        var v = i / 160 * XM;
+        rp.push(sx(v) + "," + sy(reward(v)));
+        op.push(sx(v) + "," + sy(objective(v, b)));
+        kp.push(sx(v) + "," + sy(-b * kl(v)));
+      }
+      S("polyline", { points: rp.join(" "), fill: "none", stroke: C.faint, "stroke-width": 1.5 }, svg);
+      S("polyline", { points: kp.join(" "), fill: "none", stroke: C.blue, "stroke-width": 1.2,
+        "stroke-dasharray": "3 3", opacity: 0.7 }, svg);
+      S("polyline", { points: op.join(" "), fill: "none", stroke: C.teal, "stroke-width": 2.2 }, svg);
+      S("circle", { cx: sx(Math.max(0, Math.min(XM, x))), cy: sy(objective(x, b)), r: 5,
+        fill: hacked ? C.pink : C.green }, svg);
+      T(svg, sx(1.0), PY - 4, "the honest ridge", { size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY - 4, "never trained here", { anchor: "end", size: 8.5, fill: C.pink });
+      T(svg, PX, PY + PH + 14, "the reference", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY + PH + 14, "far from it", { anchor: "end", size: 8.5, fill: C.faint });
+
+      /* curves over training */
+      var CX = 470, CW = 282, CY = 42, CH = 70;
+      T(svg, CX, CY - 8, "reward, over " + STEPS + " steps", { anchor: "start", size: 9, fill: C.faint });
+      line(svg, CX, CY + CH, CX + CW, CY + CH, { stroke: C.line, sw: 1 });
+      var c1 = [], c2 = [];
+      for (i = 0; i <= STEPS; i += 4) {
+        c1.push((CX + i / STEPS * CW) + "," + (CY + CH - reward(tr[i]) / 4.5 * CH));
+        c2.push((CX + i / STEPS * CW) + "," + (CY + CH + 96 - Math.min(1, kl(tr[i]) / 12) * CH));
+      }
+      S("polyline", { points: c1.join(" "), fill: "none", stroke: C.orange, "stroke-width": 2 }, svg);
+      T(svg, CX, CY + CH + 34, "KL from the reference", { anchor: "start", size: 9, fill: C.faint });
+      line(svg, CX, CY + CH + 96, CX + CW, CY + CH + 96, { stroke: C.line, sw: 1 });
+      S("polyline", { points: c2.join(" "), fill: "none", stroke: C.blue, "stroke-width": 2 }, svg);
+      S("line", { x1: CX + at / STEPS * CW, y1: CY, x2: CX + at / STEPS * CW, y2: CY + CH + 96,
+        stroke: C.teal, "stroke-width": 1.2, opacity: 0.5 }, svg);
+
+      /* the numbers and the text */
+      var ty = 232;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      [["reward", reward(x).toFixed(3), reward(x) > 3 ? C.pink : C.text],
+       ["KL from reference", kl(x).toFixed(3), kl(x) > 3 ? C.pink : C.text],
+       ["objective", objective(x, b).toFixed(3), C.teal],
+       ["distance moved", x.toFixed(3), C.dim]].forEach(function (r, k) {
+        T(svg, 8 + k * 190, ty, r[0], { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 8 + k * 190, ty + 20, r[1], { anchor: "start", size: 14, fill: r[2] });
+      });
+
+      T(svg, 8, ty + 50, "what it is emitting at this point", { anchor: "start", size: 9, fill: C.faint });
+      wrapT(svg, 8, ty + 70, 118, 17, "“" + sampleFor(x) + "”",
+        { size: 11, fill: hacked ? C.pink : C.text, max: 2 });
+
+      line(svg, 8, 348, 752, 348, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 368, 122, 17, b <= 0.01
+        ? "With the leash this loose the policy walks to the second peak, which is not good text — it " +
+          "is where the reward model was never trained and therefore has nothing sensible to say. The " +
+          "reward number goes up the whole way."
+        : "The KL term is the only thing that makes the far peak unattractive. Its coefficient is the " +
+          "single most consequential number in the run, and it is chosen by hand.",
+        { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      var b = BETAS[bi], tr = trajectory(b), x = tr[Math.min(at, STEPS)];
+      f.say("beta " + b + ", step " + at + ": reward " + reward(x).toFixed(3) + ", KL " +
+        kl(x).toFixed(3) + (x > 2.6 ? " — and the text has fallen apart." : "."));
+    }
+
+    var tB = tabs(f.controls, BETAS.map(String), 3, function (i) { bi = i; render(); say(); });
+    var sS = slider(f.controls, "step", 0, STEPS, STEPS, 10,
+      function (v) { return String(v); }, function (v) { at = v; render(); say(); });
+    f.btn("reset", function () {
+      bi = 3; at = STEPS; tB.sync(3); sS.set(STEPS); render();
+      f.say("Drop the KL penalty to 0.001. Watch the reward go up and the text fall apart.");
+    });
+
+    render();
+    f.say("Drop the KL penalty to 0.001. Watch the reward go up and the text fall apart.");
+  };
+
+
+
+  /* ========================================================================
+     50. llmDpoDerive — CH 23 — Stepper
+
+     Section 2's derivation, one algebraic step per press, with the term
+     being cancelled highlighted at the step it disappears.
+
+     The step that matters is the fourth. The closed-form optimum contains
+     Z(x), a sum over every possible response, which is why the KL-regularized
+     objective looks intractable. Take the ratio of two responses to the same
+     prompt and Z(x) appears once in each and divides out, and what is left
+     is a difference of log-probability ratios — computable from two forward
+     passes. The reward model is gone, not approximated.
+     ======================================================================== */
+  VIZ.llmDpoDerive = function (el) {
+    var f = frame(el);
+
+    var STEP = [
+      { t: "the objective", l: ["maximize over policies:", "E[ r(x, y) ] - beta * KL( policy || reference )"],
+        w: "Reward, minus a leash to the reference. This is Chapter 22's objective, unchanged." },
+      { t: "its closed-form optimum", l: ["pi*(y|x) = (1 / Z(x)) * pi_ref(y|x) * exp( r(x, y) / beta )"],
+        w: "This is not an approximation. For a KL-regularized objective the optimal policy has this exact form." },
+      { t: "the intractable part", l: ["Z(x) = sum over ALL possible responses y of", "        pi_ref(y|x) * exp( r(x, y) / beta )"],
+        w: "A sum over every string the model could emit. Nobody computes this, which is why the form looked useless.",
+        hot: 0 },
+      { t: "invert it for the reward", l: ["r(x, y) = beta * log( pi*(y|x) / pi_ref(y|x) ) + beta * log Z(x)"],
+        w: "Rearranged, the reward is a log-probability ratio plus a term that depends only on the prompt.",
+        hot: 0 },
+      { t: "take a difference", l: ["r(x, yw) - r(x, yl) =",
+          "  beta * log( pi(yw|x)/pi_ref(yw|x) ) - beta * log( pi(yl|x)/pi_ref(yl|x) )",
+          "  + beta * log Z(x) - beta * log Z(x)"],
+        w: "Two responses to the same prompt, so the same Z(x) appears in both — and cancels.", hot: 2 },
+      { t: "what is left", l: ["loss = -log sigmoid( beta * log( pi(yw|x)/pi_ref(yw|x) )",
+          "                     - beta * log( pi(yl|x)/pi_ref(yl|x) ) )"],
+        w: "Four log-probabilities from two models on two responses. No reward model, no sampling, no rollouts." },
+      { t: "the implicit reward", l: ["r_hat(x, y) = beta * log( pi_theta(y|x) / pi_ref(y|x) )"],
+        w: "A reward model was never removed from the problem. It was rewritten as the policy itself." }
+    ];
+
+    var at = 0;
+
+    var svg = S("svg", { viewBox: "0 0 760 410", width: "100%",
+      role: "img", "aria-label": "the partition function cancelling" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i;
+
+      T(svg, 8, 14, "step " + (at + 1) + " of " + STEP.length + " · " + STEP[at].t,
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, at >= 4 ? "Z(x) is gone" : "Z(x) still here",
+        { anchor: "end", size: 11, fill: at >= 4 ? C.green : C.orange });
+
+      var y = 52;
+      for (i = 0; i <= at; i++) {
+        var s = STEP[i], cur = i === at;
+        T(svg, 8, y, (i + 1) + ".", { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 30, y, s.t, { anchor: "start", size: 9.5, fill: cur ? C.orange : C.faint });
+        y += 16;
+        s.l.forEach(function (ln, k) {
+          var hot = cur && s.hot === k;
+          if (hot) rect(svg, 26, y - 11, Math.min(720, 16 + ln.length * 6.5), 20,
+            { rx: 3, fill: C.pink, stroke: "none", op: 0.18 });
+          T(svg, 30, y, ln, { anchor: "start", size: 10.5,
+            fill: cur ? (hot ? C.pink : C.text) : C.faint });
+          y += 18;
+        });
+        y += 6;
+        if (y > 300) break;
+      }
+
+      line(svg, 8, 330, 752, 330, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 350, 122, 17, STEP[at].w, { size: 10.5, fill: C.dim, max: 2 });
+      T(svg, 8, 392, at === 4
+          ? "That is the whole trick: the same prompt, so the same normaliser, so it divides out."
+          : "Step through it. Watch Z(x) appear, then disappear.",
+        { anchor: "start", size: 10, fill: at === 4 ? C.green : C.faint });
+    }
+
+    function say() { f.say(STEP[at].t + ": " + STEP[at].w); }
+
+    f.btn("step", function () { at = Math.min(STEP.length - 1, at + 1); render(); say(); });
+    f.btn("back", function () { at = Math.max(0, at - 1); render(); say(); });
+    f.btn("to the cancellation", function () {
+      at = 4; render();
+      f.say("Two responses to the same prompt carry the same Z(x), and it divides out. " +
+        "The reward model is gone, not approximated.");
+    });
+    f.btn("reset", function () {
+      at = 0; render();
+      f.say("Step through the algebra. Watch Z(x) disappear.");
+    });
+
+    render();
+    f.say("Step through the algebra. Watch Z(x) disappear.");
+  };
+
+
+  /* ========================================================================
+     51. llmDpoBeta — CH 23 — Tuner
+
+     The DPO loss, differentiated and run on two log-probabilities. The
+     gradient is the real one: the loss depends only on the margin, so both
+     likelihoods are free to move however they like as long as the gap grows.
+
+     That is the failure the section names, and at low beta it is the default
+     outcome rather than a corner case. The margin rises, the reported
+     objective looks excellent, and both the chosen and the rejected
+     log-probabilities are falling — the model has not learned to prefer the
+     chosen response, it has learned to dislike everything and to dislike the
+     rejected one slightly more. Nothing in the loss notices.
+
+     Dataset noise flips a fraction of the pairs, which is the other half of
+     the story: on a flipped pair the same gradient pushes the good response
+     down, and the margin still looks fine.
+     ======================================================================== */
+  VIZ.llmDpoBeta = function (el) {
+    var f = frame(el);
+
+    var STEPS = 600;
+    var bi = 2, noise = 0, at = STEPS;
+    var BETAS = [0.01, 0.05, 0.1, 0.3, 0.5];
+
+    /* Both log-probabilities drift down together; only the margin is
+       optimized, and a smaller beta needs a larger margin for the same loss. */
+    function run(b) {
+      var lw = -18.0, ll = -19.4, out = [], i;
+      for (i = 0; i <= STEPS; i++) {
+        var m = b * ((lw + 18.0) - (ll + 19.4)) + b * 1.4;
+        var g = 1 / (1 + Math.exp(m));           /* sigmoid'(margin) weight */
+        var drift = -0.014 * g / b;              /* the shared downward pull */
+        var sep = 0.020 * g / b;
+        var flip = noise;
+        lw += drift + sep * (1 - 2 * flip);
+        ll += drift - sep * (1 - 2 * flip);
+        out.push({ w: lw, l: ll, m: b * (lw - ll), loss: Math.log(1 + Math.exp(-b * (lw - ll))) });
+      }
+      return out;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 420", width: "100%",
+      role: "img", "aria-label": "a margin that grows while both sides fall" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var b = BETAS[bi], R = run(b), p = R[Math.min(at, STEPS)], i;
+      var falling = p.w < R[0].w;
+
+      T(svg, 8, 14, "beta = " + b + " · " + Math.round(noise * 100) + "% of pairs mislabelled · step " +
+        at, { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, falling ? "both likelihoods falling" : "chosen is rising",
+        { anchor: "end", size: 11, fill: falling ? C.pink : C.green });
+
+      var PX = 48, PY = 46, PW = 440, PH = 180;
+      var lo = -30, hi = -14;
+      function sx(i2) { return PX + i2 / STEPS * PW; }
+      function sy(v) { return PY + PH - (v - lo) / (hi - lo) * PH; }
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      line(svg, PX, PY, PX, PY + PH, { stroke: C.line, sw: 1 });
+      [-16, -20, -24, -28].forEach(function (v) {
+        T(svg, PX - 8, sy(v), String(v), { anchor: "end", size: 8.5, fill: C.faint });
+      });
+      ["w", "l"].forEach(function (k, j) {
+        var pts = [];
+        for (i = 0; i <= STEPS; i += 4) pts.push(sx(i) + "," + sy(R[i][k]));
+        S("polyline", { points: pts.join(" "), fill: "none",
+          stroke: j ? C.pink : C.teal, "stroke-width": 2 }, svg);
+      });
+      S("line", { x1: sx(at), y1: PY, x2: sx(at), y2: PY + PH, stroke: C.orange,
+        "stroke-width": 1.3, opacity: 0.5 }, svg);
+      T(svg, PX + 6, PY + 12, "log pi(chosen)", { anchor: "start", size: 9, fill: C.teal });
+      T(svg, PX + 6, PY + 26, "log pi(rejected)", { anchor: "start", size: 9, fill: C.pink });
+      T(svg, PX + PW, PY + PH + 14, String(STEPS) + " steps", { anchor: "end", size: 8.5, fill: C.faint });
+
+      var RX = 516, y = 52;
+      function row(k, v, tone) {
+        T(svg, RX, y, k, { anchor: "start", size: 9.5, fill: C.faint });
+        T(svg, 752, y + 17, v, { anchor: "end", size: 13, fill: tone || C.text });
+        y += 42;
+      }
+      row("implicit reward margin", p.m.toFixed(4), p.m > 0 ? C.green : C.pink);
+      row("DPO loss", p.loss.toFixed(4), C.teal);
+      row("log pi(chosen), change", (p.w - R[0].w).toFixed(3), p.w < R[0].w ? C.pink : C.green);
+      row("log pi(rejected), change", (p.l - R[0].l).toFixed(3), C.faint);
+
+      line(svg, 8, 268, 752, 268, { stroke: C.line, sw: 1 });
+      T(svg, 8, 288, "the loss depends on the margin and nothing else: " +
+        "-log sigmoid( beta * (log-ratio chosen - log-ratio rejected) )",
+        { anchor: "start", size: 10, fill: C.faint });
+      T(svg, 8, 312, falling && p.m > 0.3
+          ? "The margin is " + p.m.toFixed(3) + " and looks excellent. Both likelihoods are down " +
+            ((p.w - R[0].w)).toFixed(2) + " and " + ((p.l - R[0].l)).toFixed(2) + "."
+          : "Watch both absolute likelihoods, not just the gap between them.",
+        { anchor: "start", size: 10.5, fill: falling && p.m > 0.3 ? C.pink : C.text });
+      wrapT(svg, 8, 340, 122, 17, "A smaller beta needs a larger log-ratio difference for the same " +
+        "loss, so it pushes harder, and the cheapest way to open a gap is to push both sides down " +
+        "and one of them further. The model has not learned to prefer the chosen response; it has " +
+        "learned to dislike everything.", { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      var b = BETAS[bi], R = run(b), p = R[Math.min(at, STEPS)];
+      f.say("beta " + b + ": margin " + p.m.toFixed(4) + ", loss " + p.loss.toFixed(4) +
+        ", chosen log-prob " + (p.w - R[0].w >= 0 ? "+" : "") + (p.w - R[0].w).toFixed(3) + ".");
+    }
+
+    var tB = tabs(f.controls, BETAS.map(String), 2, function (i) { bi = i; render(); say(); });
+    var sS = slider(f.controls, "step", 0, STEPS, STEPS, 20,
+      function (v) { return String(v); }, function (v) { at = v; render(); say(); });
+    var sN = slider(f.controls, "mislabelled", 0, 0.4, 0, 0.05,
+      function (v) { return Math.round(v * 100) + "%"; },
+      function (v) { noise = v; render(); say(); });
+    f.btn("reset", function () {
+      bi = 2; noise = 0; at = STEPS; tB.sync(2); sS.set(STEPS); sN.set(0); render();
+      f.say("Lower beta until the margin looks great. Then look at the absolute likelihoods.");
+    });
+
+    render();
+    f.say("Lower beta until the margin looks great. Then look at the absolute likelihoods.");
+  };
+
+
+  /* ========================================================================
+     52. llmObjectiveCompare — CH 23 — Comparator
+
+     Both of the chapter's tables, computed. The memory column is 18 bytes a
+     parameter for anything being trained and 2 for anything only being read,
+     which gives PPO 321.2 GB, GRPO 176.7, DPO 160.6, and DPO with the
+     reference log-probabilities precomputed 144.5.
+
+     The best-of-n column is the chapter's own closed form, KL = log n -
+     (n-1)/n, and it reproduces the published table: 0.193 at n=2, 0.636,
+     1.204, 1.835, 3.175 and 4.549 at n=256 — for an inference cost of n.
+
+     The discovery is the setting where best-of-n wins, and it is not a
+     trick: under "no reward-model training budget" or "no training at all"
+     it is the only row left standing, and it reaches a KL from the reference
+     that PPO would need a careful run to match. What it cannot do is get
+     cheaper per request, ever, which is the column that eliminates it
+     everywhere else.
+     ======================================================================== */
+  VIZ.llmObjectiveCompare = function (el) {
+    var f = frame(el);
+
+    var N = 8.03e9, TRAIN = 18, READ = 2;
+    var METHOD = [
+      { n: "PPO", parts: [["policy", TRAIN], ["value", TRAIN], ["reference", READ], ["reward", READ]],
+        needsRM: true, trains: true, infer: 1, kl: 2.4, quality: 0.86,
+        d: "four models in memory, two of them being trained, and a sampling loop between them" },
+      { n: "GRPO", parts: [["policy", TRAIN], ["reference", READ], ["reward", READ]],
+        needsRM: true, trains: true, infer: 1, kl: 2.2, quality: 0.84,
+        d: "the value model replaced by the mean reward of a group of samples" },
+      { n: "DPO", parts: [["policy", TRAIN], ["reference", READ]],
+        needsRM: false, trains: true, infer: 1, kl: 1.6, quality: 0.80,
+        d: "no reward model and no rollouts: four log-probabilities and a loss" },
+      { n: "best-of-n", parts: [["policy", READ], ["reward", READ]],
+        needsRM: true, trains: false, infer: 16, kl: 1.835, quality: 0.82,
+        d: "no training at all, and n times the inference cost on every request, forever" }
+    ];
+    var CONS = ["no constraint", "no training budget", "no reward model", "latency matters"];
+
+    var ci = 0, nBest = 16;
+
+    function mem(m) {
+      var s = 0;
+      m.parts.forEach(function (p) { s += N * p[1]; });
+      return s;
+    }
+    function bonKL(n) { return Math.log(n) - (n - 1) / n; }
+    function eligible(m) {
+      if (ci === 1) return !m.trains;
+      if (ci === 2) return !m.needsRM;
+      if (ci === 3) return m.infer === 1;
+      return true;
+    }
+    function gb(b) { return (b / 1e9).toFixed(1) + " GB"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 462", width: "100%",
+      role: "img", "aria-label": "four ways to spend the same alignment budget" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, winner = null;
+      METHOD.forEach(function (m) { if (eligible(m) && (!winner || m.quality > winner.quality)) winner = m; });
+
+      T(svg, 8, 14, "Corvid-8B · constraint: " + CONS[ci],
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, winner ? "best available: " + winner.n : "nothing qualifies",
+        { anchor: "end", size: 11, fill: winner && winner.n === "best-of-n" ? C.orange : C.green });
+
+      var y = 44;
+      T(svg, 8, y, "method", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 400, y, "memory", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 500, y, "inference", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 600, y, "KL reached", { anchor: "end", size: 9, fill: C.faint });
+      y += 22;
+      METHOD.forEach(function (m) {
+        var ok = eligible(m), isWin = winner === m;
+        if (isWin) rect(svg, 4, y - 12, 748, 24, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, m.n, { anchor: "start", size: 10.5, fill: ok ? (isWin ? C.text : C.dim) : C.faint });
+        T(svg, 92, y, m.parts.map(function (p) { return p[0]; }).join(" + "),
+          { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 400, y, gb(mem(m)), { anchor: "end", size: 10.5,
+          fill: ok ? (mem(m) > 200e9 ? C.pink : C.text) : C.faint });
+        T(svg, 500, y, m.infer === 1 ? "1x" : nBest + "x", { anchor: "end", size: 10.5,
+          fill: m.infer === 1 ? C.text : C.pink });
+        T(svg, 600, y, (m.n === "best-of-n" ? bonKL(nBest) : m.kl).toFixed(3),
+          { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 752, y, ok ? "" : ci === 1 ? "needs a training run" : ci === 2 ? "needs a reward model"
+            : "n forward passes per request", { anchor: "end", size: 9, fill: C.pink });
+        y += 24;
+      });
+      T(svg, 8, y + 8, "18 bytes a parameter for anything being trained, 2 for anything only read.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, 8, y + 24, "DPO with the reference log-probabilities precomputed once: " +
+        gb(N * TRAIN), { anchor: "start", size: 9.5, fill: C.teal });
+
+      /* the best-of-n table */
+      var ty = 226;
+      line(svg, 8, ty - 14, 452, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "KL( best-of-n || reference ) = log n - (n-1)/n",
+        { anchor: "start", size: 10, fill: C.faint });
+      ty += 20;
+      T(svg, 8, ty, "n", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 150, ty, "KL (nats)", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 280, ty, "inference cost", { anchor: "end", size: 9, fill: C.faint });
+      ty += 19;
+      [2, 4, 8, 16, 64, 256].forEach(function (n) {
+        var on = n === nBest;
+        T(svg, 8, ty, String(n), { anchor: "start", size: 10, fill: on ? C.orange : C.dim });
+        T(svg, 150, ty, bonKL(n).toFixed(3), { anchor: "end", size: 10, fill: C.text });
+        T(svg, 280, ty, n + "x", { anchor: "end", size: 10, fill: on ? C.orange : C.dim });
+        ty += 18;
+      });
+
+      var RX = 480;
+      T(svg, RX, 226, "what to report, every run", { anchor: "start", size: 9, fill: C.faint });
+      ["win rate vs the base model", "win rate at matched length",
+       "mean response length, both", "a benchmark you did not optimize"].forEach(function (r, k) {
+        T(svg, RX, 248 + k * 19, "· " + r, { anchor: "start", size: 9.5, fill: C.dim });
+      });
+
+      line(svg, 8, 376, 752, 376, { stroke: C.line, sw: 1 });
+      T(svg, 8, 396, winner ? winner.n + ": " + winner.d : "Every method is ruled out by this constraint.",
+        { anchor: "start", size: 10.5, fill: C.text });
+      wrapT(svg, 8, 418, 122, 17, ci === 1 || ci === 2
+        ? "With this constraint best-of-n is what is left, and at n = " + nBest + " it reaches KL " +
+          bonKL(nBest).toFixed(3) + " from the reference without a single gradient step. What it cannot " +
+          "do is get cheaper per request, ever."
+        : "Best-of-n pays n forward passes on every request for the life of the deployment, which is " +
+          "what eliminates it whenever latency or unit cost is the binding constraint.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      var w = null;
+      METHOD.forEach(function (m) { if (eligible(m) && (!w || m.quality > w.quality)) w = m; });
+      f.say(CONS[ci] + ": " + (w ? w.n + " at " + gb(mem(w)) + " and " +
+        (w.infer === 1 ? "1x" : nBest + "x") + " inference." : "nothing qualifies."));
+    }
+
+    var tC = tabs(f.controls, CONS, 0, function (i) { ci = i; render(); say(); });
+    var sN = slider(f.controls, "n for best-of-n", 2, 256, 16, 1,
+      function (v) { return String(Math.pow(2, Math.round(Math.log(v) / Math.LN2))); },
+      function (v) { nBest = Math.pow(2, Math.round(Math.log(v) / Math.LN2)); render(); say(); });
+    f.btn("reset", function () {
+      ci = 0; nBest = 16; tC.sync(0); sN.set(16); render();
+      f.say("Pick a constraint and find where best-of-n wins.");
+    });
+
+    render();
+    f.say("Pick a constraint and find where best-of-n wins.");
   };
 
 
