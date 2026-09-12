@@ -33,6 +33,7 @@
      llmEmergence   ch15 Comparator the inference bill, and a jump that is a ruler
      llmRoofline    ch16 Playground five operations on one roofline, the section's table live
      llmFusion      ch16 Comparator four trips or two, and where it stops mattering
+     llmParallelism ch17 Simulator  one mesh, four tables recomputed, one bubble drawn
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -7843,6 +7844,203 @@
 
     render();
     f.say("Toggle fusion and watch the bytes moved, not the FLOPs.");
+  };
+
+
+
+  /* ========================================================================
+     37. llmParallelism — CH 17 — Simulator
+
+     Corvid-8B across a device mesh, with every number in the chapter's four
+     tables recomputed from the same three formulas: 18 bytes a parameter
+     split according to what the strategy shards, 2*(D-1)/D*M for a ring
+     all-reduce, and (S-1)/(M+S-1) for the pipeline bubble.
+
+     All four come back. The memory table, per device:
+
+                          8 GPUs    64 GPUs
+       plain data         144.5 GB   144.5 GB
+       ZeRO-1              60.2 GB    49.7 GB
+       ZeRO-2              32.1 GB    18.1 GB
+       ZeRO-3              18.1 GB     2.3 GB
+
+     The traffic table: 28.1 GB a step for data parallel, 31 ms on NVLink
+     and 562 ms on a 400 Gb/s network, against 987 ms of compute; ZeRO-3's
+     42.2 GB for 47 and 843. Tensor parallelism's four collectives a layer
+     over 32 layers is 128 of 117.4 MB, which is 15.0 GB, 17 ms on NVLink
+     and 301 ms off it. And the bubble: 42.9%, 15.8%, 46.7%, 17.9%, 9.9%.
+
+     The blueprint's discovery is on the memory bar and needs no prompting.
+     Add devices under plain data parallelism and the bar does not move at
+     all, because nothing is sharded. Switch to ZeRO-3 and it falls by the
+     device count.
+     ======================================================================== */
+  VIZ.llmParallelism = function (el) {
+    var f = frame(el);
+
+    var N = 8.03e9, LAYERS = 32, D_MODEL = 4096, SEQ = 8192;
+    var STRAT = ["data parallel", "ZeRO-1", "ZeRO-2", "ZeRO-3", "tensor 8-way", "pipeline", "TP8 + DP"];
+    var LINK = [["NVLink, 900 GB/s", 900e9], ["PCIe, 64 GB/s", 64e9],
+                ["network, 400 Gb/s", 50e9], ["network, 100 Gb/s", 12.5e9]];
+    /* 18 bytes a parameter: bf16 weights 2, fp32 gradients 4, master 4, m 4, v 4 */
+    var REPL = [18, 6, 2, 0, 18, 18, 18];       // bytes/param replicated on every device
+    var SHARD = [0, 12, 16, 18, 0, 0, 0];       // bytes/param divided by the device count
+
+    var si = 3, logD = 3, li = 0, stages = 8, micro = 8;
+
+    function devices() { return Math.round(Math.pow(2, logD)); }
+    function memPer(k, D) {
+      if (k === 4) return N * 18 / 8 + N * 18 * 0;            // tensor: weights split 8 ways
+      if (k === 5) return N * 18 / stages;                    // pipeline: layers split by stage
+      if (k === 6) return N * 18 / 8;                         // TP in node, DP across
+      return N * (REPL[k] + SHARD[k] / D);
+    }
+    function allreduce(M, D) { return 2 * (D - 1) / D * M; }
+    function traffic(k, D) {
+      var G = N * 2;                                          // bf16 gradients
+      if (k <= 2) return allreduce(G, D);
+      if (k === 3) return 3 * ((D - 1) / D) * G;   /* reduce-scatter + two all-gathers */
+      var act = SEQ * D_MODEL * 2;                            // one activation tensor
+      if (k === 4) return 4 * LAYERS * allreduce(act, 8);
+      if (k === 5) return 2 * (stages - 1) * act;             // stage boundaries, both ways
+      return 4 * LAYERS * allreduce(act, 8) + allreduce(G, Math.max(1, D / 8));
+    }
+    function bubble() { return (stages - 1) / (micro + stages - 1); }
+    function stepCompute() { return 987e-3; }                 // the chapter's figure, one step
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function gb(b) { return b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : (b / 1e6).toFixed(1) + " MB"; }
+    function ms(t) { return t >= 1 ? t.toFixed(2) + " s" : (t * 1e3).toFixed(0) + " ms"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 468", width: "100%",
+      role: "img", "aria-label": "one model across a device mesh" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var Dv = devices(), i;
+      var m = memPer(si, Dv), tr = traffic(si, Dv), tt = tr / LINK[li][1];
+
+      T(svg, 8, 14, "Corvid-8B, 18 bytes a parameter · " + commas(Dv) + " devices · " + LINK[li][0],
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, gb(m) + " per device", { anchor: "end", size: 11,
+        fill: m > 80e9 ? C.pink : C.green });
+
+      /* memory per device, every strategy, at this device count */
+      var BX = 132, BW = 300, y = 44, worst = N * 18;
+      T(svg, 8, 32, "memory per device", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 752, 32, "at " + commas(Dv) + " devices", { anchor: "end", size: 9, fill: C.faint });
+      for (i = 0; i < STRAT.length; i++) {
+        var mi = memPer(i, Dv), on = i === si;
+        if (on) rect(svg, 4, y - 11, 748, 22, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, STRAT[i], { anchor: "start", size: 10, fill: on ? C.text : C.dim });
+        rect(svg, BX, y - 7, mi / worst * BW, 14,
+          { rx: 3, fill: on ? C.teal : C.blue, stroke: "none", op: on ? 0.8 : 0.45 });
+        T(svg, BX + BW + 76, y, gb(mi), { anchor: "end", size: 10, fill: C.text });
+        T(svg, 752, y, mi > 80e9 ? "over an 80 GB card" : "", { anchor: "end", size: 9, fill: C.pink });
+        y += 22;
+      }
+
+      /* what it costs to talk */
+      var ty = 216;
+      line(svg, 8, ty - 14, 448, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "traffic per device per step", { anchor: "start", size: 9, fill: C.faint });
+      ty += 20;
+      T(svg, 8, ty, "bytes moved", { anchor: "start", size: 10, fill: C.dim });
+      T(svg, 300, ty, gb(tr), { anchor: "end", size: 10.5, fill: C.text });
+      ty += 19;
+      T(svg, 8, ty, "time on " + LINK[li][0].split(",")[0], { anchor: "start", size: 10, fill: C.dim });
+      T(svg, 300, ty, ms(tt), { anchor: "end", size: 10.5, fill: tt > 0.3 ? C.pink : C.text });
+      ty += 19;
+      T(svg, 8, ty, "as a share of a 987 ms step", { anchor: "start", size: 10, fill: C.dim });
+      T(svg, 300, ty, (tt / stepCompute() * 100).toFixed(0) + "%",
+        { anchor: "end", size: 10.5, fill: tt / stepCompute() > 0.3 ? C.pink : C.green });
+      ty += 19;
+      rect(svg, 8, ty, 292, 14, { rx: 3, fill: C.blue, stroke: "none", op: 0.3 });
+      rect(svg, 8, ty, Math.min(292, tt / stepCompute() * 292), 14,
+        { rx: 3, fill: C.pink, stroke: "none", op: 0.6 });
+
+      /* the pipeline bubble, on a timeline */
+      var PX = 470, PW = 282, PY = 216;
+      T(svg, PX, PY - 14, "pipeline: " + stages + " stages, " + micro + " micro-batches",
+        { anchor: "start", size: 9, fill: C.faint });
+      var slots = micro + stages - 1, cw = PW / slots, rh = 80 / stages;
+      for (var st = 0; st < stages; st++) for (var t2 = 0; t2 < slots; t2++) {
+        var busy = t2 >= st && t2 < st + micro;
+        rect(svg, PX + t2 * cw, PY + st * rh, Math.max(1, cw - 0.8), rh - 0.8,
+          { rx: 1, fill: busy ? C.teal : C.faint, stroke: "none", op: busy ? 0.7 : 0.25 });
+      }
+      T(svg, PX, 312, "idle is " + (bubble() * 100).toFixed(1) + "% of the timeline",
+        { anchor: "start", size: 10, fill: bubble() > 0.3 ? C.pink : C.green });
+      T(svg, PX, 328, "(S-1)/(M+S-1) = " + (stages - 1) + "/" + (micro + stages - 1),
+        { anchor: "start", size: 9, fill: C.faint });
+
+      /* the chapter's own table, recomputed */
+      var by = 358;
+      line(svg, 8, by - 14, 752, by - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, by, "the bubble at the chapter's five settings", { anchor: "start", size: 9, fill: C.faint });
+      var bx = 8;
+      [[4, 4], [4, 16], [8, 8], [8, 32], [8, 64]].forEach(function (p) {
+        var b = (p[0] - 1) / (p[1] + p[0] - 1), on = p[0] === stages && p[1] === micro;
+        T(svg, bx, by + 20, p[0] + " x " + p[1], { anchor: "start", size: 10,
+          fill: on ? C.orange : C.dim });
+        T(svg, bx, by + 38, (b * 100).toFixed(1) + "%", { anchor: "start", size: 11,
+          fill: on ? C.orange : C.text });
+        bx += 78;
+      });
+
+      var RX = 420;
+      T(svg, RX, by, "what each strategy shards", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, RX, by + 20, si <= 3
+        ? REPL[si] + " bytes replicated + " + SHARD[si] + " divided by " + commas(Dv)
+        : si === 5 ? "the layers themselves, " + stages + " ways"
+        : "every weight matrix, 8 ways inside the node",
+        { anchor: "start", size: 10, fill: C.dim });
+      T(svg, RX, by + 38, si === 0
+        ? "nothing is sharded, so the bar never moves"
+        : "so more devices means less memory each",
+        { anchor: "start", size: 10, fill: si === 0 ? C.pink : C.green });
+
+      line(svg, 8, 412, 752, 412, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 432, 122, 17, si === 0
+        ? "Plain data parallelism replicates all 18 bytes on every device. Doubling the mesh doubles " +
+          "throughput and changes memory per device by nothing at all. That is what ZeRO exists to fix."
+        : si === 3
+        ? "ZeRO-3 shards all three: optimizer state, gradients and the parameters themselves. Memory " +
+          "falls by the device count, and the price is an extra all-gather of parameters in both passes."
+        : si >= 4
+        ? "Tensor parallelism splits each matrix, so its collectives run once per layer and must stay " +
+          "on the fast link. Off NVLink the same traffic costs " +
+          ms(traffic(si, Dv) / LINK[2][1]) + " against a 987 ms step."
+        : "Sharding the optimizer state costs nothing in traffic: the all-reduce becomes a " +
+          "reduce-scatter plus an all-gather, which move the same bytes.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      var Dv = devices(), tr = traffic(si, Dv), tt = tr / LINK[li][1];
+      f.say(STRAT[si] + " on " + commas(Dv) + " devices: " + gb(memPer(si, Dv)) + " per device, " +
+        gb(tr) + " of traffic, " + ms(tt) + " on " + LINK[li][0].split(",")[0] +
+        " — " + (tt / stepCompute() * 100).toFixed(0) + "% of a 987 ms step.");
+    }
+
+    var tS = tabs(f.controls, ["DP", "ZeRO-1", "ZeRO-2", "ZeRO-3", "TP", "PP", "TP+DP"], 3,
+      function (i) { si = i; render(); say(); });
+    var sD = slider(f.controls, "devices", 0, 10, 3, 1,
+      function (v) { return commas(Math.pow(2, v)); },
+      function (v) { logD = v; render(); say(); });
+    var tL = tabs(f.controls, ["NVLink", "PCIe", "400 Gb/s", "100 Gb/s"], 0,
+      function (i) { li = i; render(); say(); });
+    var sS = slider(f.controls, "stages", 2, 16, 8, 2,
+      function (v) { return String(v); }, function (v) { stages = v; render(); say(); });
+    var sM = slider(f.controls, "micro-batches", 2, 64, 8, 2,
+      function (v) { return String(v); }, function (v) { micro = v; render(); say(); });
+    f.btn("reset", function () {
+      si = 3; logD = 3; li = 0; stages = 8; micro = 8;
+      tS.sync(3); tL.sync(0); sD.set(3); sS.set(8); sM.set(8); render();
+      f.say("Add GPUs with plain data parallelism. Notice memory never drops.");
+    });
+
+    render();
+    f.say("Add GPUs with plain data parallelism. Notice memory never drops.");
   };
 
 
