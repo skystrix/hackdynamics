@@ -7,6 +7,7 @@
      llmTokenizerCompare ch2 Comparator one text, three real encodings, measured
      llmChatTemplate ch3 Stepper    a conversation flattened, then broken on purpose
      llmTokenBoundaries ch3 Playground tokens with ids, and the classic traps flagged
+     llmEmbeddingSpace ch4 Playground real GPT-2 rows, three metrics, one Gram matrix
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -2352,6 +2353,398 @@
 
     render();
     f.say("Type a big number. Then type it with commas.");
+  };
+
+
+  /* ========================================================================
+     11. llmEmbeddingSpace — CH 4 — Playground
+
+     Real rows of a real embedding table: GPT-2's wte, 50,257 x 768, read on
+     12 September 2026. A text's vector is the mean of its words' rows, which
+     is section 1's object and nothing more.
+
+     Shipping 768 numbers per word would be half a megabyte, and it is not
+     needed. Every quantity this machine draws — norm, dot, cosine, Euclidean
+     distance — is a bilinear function of the vectors, so the Gram matrix of
+     the vocabulary is the entire geometry. 51 words, a 1,326-entry lower
+     triangle, and any sentence the reader builds from those words gets its
+     exact 768-dimensional numbers computed in the browser. Nothing here is
+     approximate and nothing here is projected except the picture.
+
+     The picture is honest too: each vector is drawn in the plane it shares
+     with the query, so its length, its angle and its horizontal position are
+     the true norm, the true angle and the true dot product. What is lost is
+     only the relation between two texts that are neither the query.
+
+     Two things fall out of the data and are the whole section. Against "a cat
+     was sitting on a rug", the single word "cat" wins on dot product and
+     comes fifth on cosine, because it is a longer vector rather than a nearer
+     one. And "the cat sat on the mat" and "the mat sat on the cat" have
+     cosine exactly 1.000, because a mean of word vectors has no word order —
+     which is the argument for Chapter 4's second half.
+     ======================================================================== */
+  VIZ.llmEmbeddingSpace = function (el) {
+    var f = frame(el);
+
+    var WORDS = ["the", "a", "an", "and", "cat", "dog", "mat", "rug", "sat", "sitting", "was", "on", "under", "king", "queen", "man", "woman", "boy", "girl", "Paris", "France", "London", "England", "computer", "machine", "run", "running", "ran", "chased", "after", "puppy", "kitten", "stock", "market", "fell", "sharply", "rose", "bank", "river", "money", "boat", "water", "food", "ate", "slept", "big", "small", "red", "blue", "house", "tree"];
+    /* lower triangle of the 51x51 Gram matrix of those rows, 3dp */
+    var GT = [
+      7.13, 5.76, 6.619, 5.014, 5.675, 6.12, 4.255, 3.902, 3.284, 6.778, 1.79, 1.945,
+      2.111, 1.926, 10.613, 1.607, 1.733, 1.861, 1.774, 5.756, 10.328, 1.093, 1.246, 1.296,
+      1.218, 3.037, 3.13, 12.492, 0.453, 0.679, 1.121, 0.783, 3.398, 3.898, 5.077, 16.988,
+      1.611, 1.772, 1.901, 1.811, 2.784, 2.376, 3.14, 3.276, 10.74, 1.687, 1.698, 1.869,
+      1.754, 2.214, 2.425, 2.633, 3.131, 5.723, 10.411, 3.334, 3.137, 2.858, 3.711, 2.332,
+      2.177, 1.829, 1.954, 3.212, 2.121, 7.142, 3.804, 3.584, 3.114, 3.957, 1.716, 1.75,
+      1.343, 0.947, 1.85, 2.245, 3.169, 6.114, 2.615, 2.562, 2.48, 2.776, 1.895, 1.794,
+      1.804, 2.401, 1.562, 1.988, 2.4, 3.173, 7.834, 1.406, 1.44, 1.726, 1.496, 2.922,
+      2.968, 2.799, 3.345, 2.896, 3.493, 2.326, 1.68, 1.841, 11.691, 0.78, 1.085, 1.548,
+      1.085, 3.509, 3.0, 3.692, 4.175, 2.711, 2.873, 2.206, 1.373, 1.876, 8.506, 14.326,
+      2.494, 2.447, 2.256, 2.579, 3.163, 3.408, 2.567, 2.118, 2.284, 2.607, 2.864, 2.456,
+      1.901, 3.82, 2.764, 9.291, 1.533, 1.679, 1.76, 1.834, 3.281, 3.639, 3.293, 3.332,
+      2.271, 3.076, 2.681, 1.81, 1.848, 3.214, 5.465, 6.278, 10.247, 1.363, 1.445, 1.449,
+      1.569, 3.372, 4.261, 2.954, 3.234, 2.412, 2.678, 2.282, 1.814, 2.036, 4.016, 3.589,
+      5.643, 5.267, 11.081, 1.201, 1.448, 1.519, 1.66, 3.904, 3.96, 3.364, 3.565, 2.317,
+      2.713, 2.553, 1.763, 2.039, 3.799, 5.6, 4.707, 7.792, 7.976, 11.092, 1.698, 1.63,
+      1.963, 1.487, 3.001, 2.24, 2.267, 2.769, 2.651, 2.728, 1.917, 1.71, 1.782, 2.599,
+      3.178, 2.435, 2.814, 2.713, 3.042, 11.461, 1.91, 1.759, 2.03, 1.455, 2.705, 2.595,
+      1.884, 2.424, 1.86, 2.042, 1.99, 1.54, 2.084, 3.023, 3.51, 2.289, 2.866, 2.954,
+      2.83, 7.186, 11.194, 1.963, 1.791, 2.039, 1.705, 3.188, 2.296, 1.842, 2.068, 2.362,
+      2.44, 2.058, 1.677, 1.677, 2.751, 3.009, 2.455, 2.611, 2.546, 2.601, 6.244, 4.852,
+      10.152, 1.761, 1.592, 1.853, 1.453, 2.524, 2.433, 1.897, 2.241, 2.08, 2.271, 1.951,
+      1.418, 1.939, 3.18, 3.18, 2.725, 2.826, 3.236, 3.222, 4.5, 6.995, 6.093, 11.397,
+      1.807, 1.918, 1.943, 1.843, 3.244, 2.983, 2.485, 2.852, 2.108, 2.413, 2.042, 1.706,
+      1.821, 2.108, 2.157, 2.427, 2.767, 2.919, 3.116, 1.896, 1.95, 2.105, 2.095, 9.372,
+      1.709, 1.732, 1.73, 1.935, 3.282, 3.437, 2.73, 2.975, 2.385, 2.497, 2.278, 1.931,
+      1.721, 3.03, 3.136, 3.023, 3.324, 3.159, 3.038, 1.796, 2.417, 2.14, 2.123, 5.667,
+      12.185, 2.052, 2.171, 2.097, 2.262, 2.555, 2.458, 1.818, 2.38, 2.153, 2.253, 2.346,
+      2.228, 1.928, 2.059, 2.237, 2.35, 1.956, 2.392, 2.093, 1.874, 1.807, 2.211, 1.811,
+      2.417, 2.748, 10.061, 2.183, 2.2, 2.103, 2.236, 2.549, 2.521, 1.868, 2.135, 2.447,
+      4.185, 2.297, 2.57, 2.441, 2.419, 2.538, 2.062, 2.089, 2.078, 2.016, 1.929, 1.927,
+      2.393, 1.912, 2.711, 2.941, 6.197, 9.619, 1.477, 1.688, 1.85, 1.885, 2.94, 2.561,
+      2.596, 3.336, 4.074, 2.845, 4.169, 1.906, 1.924, 2.618, 3.187, 2.257, 2.663, 2.853,
+      2.637, 2.386, 2.443, 2.605, 2.17, 2.475, 3.086, 6.947, 6.276, 10.185, 0.759, 1.119,
+      1.667, 1.045, 3.485, 3.364, 2.463, 4.016, 4.117, 3.594, 2.677, 1.452, 1.965, 3.448,
+      4.025, 2.503, 3.16, 3.692, 3.555, 3.744, 3.486, 3.108, 3.179, 2.361, 2.856, 3.421,
+      3.574, 5.633, 11.862, 3.038, 2.896, 2.645, 3.191, 1.777, 1.872, 1.725, 1.962, 1.641,
+      2.109, 2.984, 3.442, 3.053, 1.871, 1.938, 2.018, 2.091, 2.244, 2.177, 1.567, 1.932,
+      1.76, 1.879, 2.003, 2.067, 2.115, 2.28, 2.122, 2.513, 6.89, 0.511, 0.853, 1.367,
+      0.832, 4.794, 7.516, 3.061, 5.295, 2.558, 3.088, 1.775, 1.065, 1.967, 3.728, 4.622,
+      2.788, 4.034, 5.233, 5.593, 2.883, 3.149, 2.511, 3.756, 2.441, 3.16, 2.414, 2.914,
+      3.17, 4.638, 2.08, 14.165, 0.299, 0.929, 1.543, 0.705, 6.53, 6.133, 3.552, 4.899,
+      2.775, 3.131, 1.879, 1.19, 1.776, 4.31, 6.019, 2.777, 4.61, 5.324, 5.756, 3.224,
+      3.583, 3.718, 2.906, 2.974, 3.188, 2.433, 3.08, 3.634, 5.042, 1.941, 9.303, 15.992,
+      1.756, 1.925, 1.922, 1.785, 2.311, 2.542, 1.84, 2.691, 2.63, 2.875, 2.056, 1.913,
+      2.313, 2.494, 2.111, 2.005, 1.895, 2.24, 2.407, 3.022, 2.251, 2.43, 1.792, 2.636,
+      2.486, 2.448, 2.728, 2.674, 2.36, 1.804, 3.181, 3.09, 12.291, 1.837, 1.871, 1.913,
+      2.002, 2.623, 2.576, 2.542, 3.08, 2.098, 2.129, 2.174, 1.612, 2.033, 2.479, 2.411,
+      2.38, 2.462, 2.007, 2.266, 2.703, 2.296, 2.655, 2.062, 2.618, 2.927, 2.395, 2.055,
+      2.372, 2.645, 1.985, 2.803, 2.28, 4.209, 10.69, 1.405, 1.415, 1.604, 1.706, 2.522,
+      2.731, 2.434, 2.971, 3.645, 3.15, 3.757, 1.609, 2.234, 2.855, 2.761, 2.999, 3.156,
+      3.37, 3.309, 2.302, 2.508, 2.484, 2.579, 2.294, 2.38, 2.246, 2.29, 4.583, 4.133,
+      2.316, 2.711, 3.19, 2.167, 2.42, 9.434, 0.74, 0.893, 1.363, 0.695, 2.362, 2.892,
+      2.179, 3.707, 1.92, 2.065, 1.697, 1.223, 1.842, 2.914, 2.356, 1.761, 2.658, 3.219,
+      3.007, 2.677, 3.061, 2.194, 2.873, 2.522, 2.187, 1.809, 1.949, 2.868, 3.826, 1.888,
+      3.762, 4.26, 2.484, 2.193, 3.005, 11.781, 1.077, 1.169, 1.556, 1.583, 2.77, 2.399,
+      2.873, 3.861, 4.387, 2.494, 3.351, 1.414, 1.833, 3.399, 3.662, 2.51, 3.33, 2.894,
+      3.434, 3.113, 2.948, 2.474, 2.632, 2.33, 2.861, 1.642, 1.987, 4.034, 3.548, 1.847,
+      3.051, 3.646, 2.633, 2.065, 5.484, 3.851, 11.094, 1.425, 1.518, 1.652, 1.603, 2.555,
+      2.319, 2.307, 2.932, 2.216, 2.563, 2.0, 1.548, 1.566, 2.934, 2.725, 2.126, 2.696,
+      2.564, 2.62, 2.624, 2.439, 2.771, 2.181, 3.632, 3.267, 2.685, 2.556, 2.902, 3.194,
+      1.758, 2.335, 3.105, 3.795, 3.279, 2.189, 2.573, 2.42, 10.804, 1.292, 1.29, 1.495,
+      1.42, 2.836, 3.518, 3.071, 4.49, 2.71, 2.791, 2.119, 1.586, 1.722, 4.032, 3.722,
+      2.788, 3.283, 3.135, 3.468, 2.584, 2.288, 2.599, 2.543, 2.765, 2.938, 2.199, 2.551,
+      2.969, 3.609, 1.836, 3.573, 3.652, 2.717, 3.418, 3.111, 3.158, 3.401, 4.335, 10.986,
+      2.364, 2.431, 2.409, 2.067, 2.546, 2.843, 2.457, 3.201, 2.463, 2.43, 2.425, 2.0,
+      1.95, 3.221, 2.544, 3.078, 2.961, 2.64, 2.856, 2.722, 2.857, 2.856, 2.96, 2.94,
+      3.037, 2.502, 2.637, 2.85, 2.824, 2.192, 3.013, 2.945, 2.956, 3.592, 2.556, 2.219,
+      2.61, 4.058, 3.029, 9.932, 1.171, 1.431, 1.574, 1.427, 3.947, 4.019, 2.8, 4.336,
+      2.038, 2.744, 2.147, 1.53, 1.767, 3.494, 3.373, 2.657, 3.246, 3.457, 3.569, 2.58,
+      2.798, 2.433, 2.809, 3.137, 3.662, 2.417, 2.479, 3.04, 3.913, 2.104, 4.142, 4.445,
+      3.057, 2.861, 2.458, 2.915, 2.66, 3.994, 5.724, 3.089, 12.006, 2.538, 2.522, 2.409,
+      2.338, 2.812, 2.635, 2.108, 2.514, 2.044, 2.101, 2.506, 2.295, 2.04, 2.476, 2.556,
+      2.432, 2.729, 2.393, 2.64, 2.215, 2.122, 2.251, 2.27, 2.675, 2.774, 2.264, 2.89,
+      2.504, 2.484, 2.272, 2.302, 2.154, 2.986, 2.423, 2.268, 2.332, 2.797, 3.318, 5.335,
+      3.287, 4.449, 9.278, 2.406, 2.457, 2.573, 2.349, 3.078, 3.13, 1.799, 3.238, 2.502,
+      2.567, 2.36, 2.104, 2.37, 2.546, 3.034, 2.346, 2.796, 2.346, 2.885, 2.744, 2.815,
+      2.351, 2.183, 2.774, 2.352, 2.005, 2.494, 2.308, 2.695, 2.372, 3.265, 3.065, 2.916,
+      2.934, 2.006, 1.95, 2.325, 2.541, 2.918, 3.829, 2.98, 4.311, 9.721, 0.94, 1.086,
+      1.635, 1.385, 3.31, 3.335, 2.909, 4.179, 4.557, 3.532, 3.418, 1.471, 1.747, 3.419,
+      4.197, 2.348, 3.049, 3.12, 3.409, 3.243, 3.281, 2.503, 3.226, 1.917, 2.536, 2.173,
+      2.429, 5.463, 6.008, 2.226, 4.244, 4.646, 2.208, 2.623, 4.726, 3.198, 4.603, 2.337,
+      3.087, 2.698, 3.371, 2.405, 5.604, 12.938, 0.39, 0.728, 1.291, 0.891, 3.351, 2.965,
+      3.119, 5.619, 5.295, 4.082, 3.244, 1.426, 2.134, 4.065, 5.116, 2.536, 3.787, 3.963,
+      4.314, 3.375, 2.983, 2.831, 3.357, 2.519, 2.508, 2.469, 2.575, 5.086, 5.85, 1.968,
+      4.331, 4.886, 2.408, 2.092, 4.875, 3.154, 4.532, 2.604, 3.659, 3.032, 3.619, 2.502,
+      2.932, 7.609, 14.375, 2.651, 2.673, 2.376, 2.272, 2.488, 2.322, 1.966, 2.524, 2.131,
+      2.226, 2.344, 2.249, 1.814, 2.767, 2.165, 2.568, 2.504, 2.3, 2.633, 2.298, 1.981,
+      2.293, 1.974, 2.559, 2.932, 2.435, 2.477, 2.164, 2.168, 1.967, 2.387, 1.901, 2.461,
+      2.55, 2.125, 2.32, 2.02, 2.345, 2.543, 3.443, 2.81, 2.307, 2.611, 2.152, 1.991,
+      8.236, 2.741, 2.773, 2.517, 2.232, 2.497, 2.342, 1.635, 2.321, 2.219, 2.348, 2.313,
+      2.079, 2.143, 2.137, 2.092, 2.425, 2.78, 2.442, 2.647, 1.872, 2.0, 2.12, 1.618,
+      2.354, 2.69, 2.431, 2.241, 2.158, 2.011, 1.952, 2.466, 2.466, 1.92, 2.446, 1.908,
+      2.099, 2.08, 2.422, 2.533, 2.748, 2.554, 2.784, 2.868, 1.793, 1.629, 4.844, 8.01,
+      2.421, 2.392, 2.234, 2.214, 2.663, 2.29, 2.075, 2.46, 2.617, 2.3, 2.337, 2.151,
+      2.07, 2.18, 2.436, 2.465, 2.405, 2.266, 2.354, 2.045, 1.641, 2.365, 2.356, 2.337,
+      1.925, 2.27, 2.452, 2.469, 2.531, 2.286, 1.894, 2.619, 2.238, 1.756, 2.261, 2.662,
+      2.971, 2.038, 3.035, 2.439, 2.263, 2.87, 2.312, 1.947, 1.862, 3.113, 2.506, 8.969,
+      2.107, 2.179, 2.17, 1.955, 2.566, 2.783, 2.066, 2.826, 2.424, 2.751, 2.261, 2.033,
+      2.072, 2.752, 2.744, 2.302, 2.653, 2.976, 2.763, 2.259, 2.449, 2.491, 2.239, 2.594,
+      2.819, 2.233, 2.591, 2.467, 3.085, 2.09, 3.354, 3.426, 2.576, 1.823, 2.426, 2.894,
+      2.971, 2.28, 2.994, 2.647, 3.454, 2.76, 2.344, 2.049, 2.471, 3.233, 3.108, 5.991,
+      9.771, 2.052, 2.058, 2.018, 2.184, 3.222, 3.298, 2.603, 3.426, 2.406, 3.177, 2.302,
+      2.158, 2.037, 3.177, 3.178, 3.04, 3.448, 3.322, 3.596, 2.438, 2.58, 3.022, 2.725,
+      3.182, 3.306, 2.703, 2.417, 2.491, 2.182, 2.31, 3.02, 3.261, 3.34, 2.66, 2.437,
+      2.124, 2.578, 3.458, 3.102, 2.914, 4.091, 3.259, 3.3, 2.249, 2.919, 2.42, 2.554,
+      2.3, 2.599, 10.317, 1.364, 1.489, 1.619, 1.701, 2.959, 3.788, 3.222, 4.344, 2.664,
+      2.779, 2.171, 1.629, 1.683, 3.04, 2.999, 2.986, 3.174, 3.277, 2.921, 2.259, 1.619,
+      1.685, 1.684, 3.274, 3.445, 2.388, 2.348, 2.735, 3.293, 1.753, 3.382, 3.954, 2.671,
+      2.598, 3.034, 3.1, 3.31, 3.26, 4.845, 1.95, 3.918, 2.745, 2.855, 3.016, 3.48,
+      2.312, 2.274, 2.897, 3.097, 3.695, 11.499
+    ];
+    var PRESETS = ["the cat sat on the mat", "a cat was sitting on a rug", "the mat sat on the cat", "the dog chased the cat", "the stock market fell sharply", "cat", "king", "queen"];
+
+    var IDX = {};
+    WORDS.forEach(function (w, i) { IDX[w.toLowerCase()] = i; });
+    function G(i, j) { return i >= j ? GT[i * (i + 1) / 2 + j] : GT[j * (j + 1) / 2 + i]; }
+
+    /* A text is a bag of word rows, so every inner product is a mean over the
+       Gram matrix. Exact in 768 dimensions, from 1,326 shipped numbers. */
+    function bag(s) {
+      var out = [], ws = s.toLowerCase().split(/\s+/), i;
+      for (i = 0; i < ws.length; i++) {
+        if (!ws[i]) continue;
+        if (!(ws[i] in IDX)) return { bad: ws[i] };
+        out.push(IDX[ws[i]]);
+      }
+      return out.length ? { ids: out } : { bad: "" };
+    }
+    function dot(a, b) {
+      var s = 0, i, j;
+      for (i = 0; i < a.length; i++) for (j = 0; j < b.length; j++) s += G(a[i], b[j]);
+      return s / (a.length * b.length);
+    }
+
+    var texts = PRESETS.map(function (s) {
+      var b = bag(s).ids;
+      return { s: s, ids: b, n: Math.sqrt(dot(b, b)) };
+    });
+    var LET = "ABCDEFGHIJKL";
+    var qi = 1, metric = 0, unit = false;          // default query is the paraphrase
+    var METRICS = ["dot product", "cosine", "Euclidean"];
+
+    function pair(a, b) {
+      var d = dot(a.ids, b.ids), c = d / (a.n * b.n);
+      if (unit) return { d: c, c: c, e: Math.sqrt(Math.max(0, 2 - 2 * c)) };
+      return { d: d, c: c, e: Math.sqrt(Math.max(0, a.n * a.n + b.n * b.n - 2 * d)) };
+    }
+    function score(p) { return metric === 0 ? p.d : metric === 1 ? p.c : p.e; }
+    function ranked(by) {
+      var q = texts[qi];
+      var rows = texts.map(function (t, i) { return { i: i, t: t, p: pair(q, t) }; })
+                      .filter(function (r) { return r.i !== qi; });
+      rows.sort(function (x, y) {
+        var a = by === 2 ? x.p.e : by === 1 ? x.p.c : x.p.d;
+        var b = by === 2 ? y.p.e : by === 1 ? y.p.c : y.p.d;
+        return by === 2 ? a - b : b - a;
+      });
+      return rows;
+    }
+    function fmt(v) { return (v < 0 ? "" : " ") + v.toFixed(3); }
+
+    var svg = S("svg", { viewBox: "0 0 760 380", width: "100%",
+      role: "img", "aria-label": "texts as vectors, and three ways to score them" }, f.body);
+
+    var OX = 66, OY = 268, PW = 300, PH = 205;     // plane origin and extent
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var q = texts[qi], rows = ranked(metric), i;
+
+      /* One isotropic scale, or the angles stop being the angles. Every point
+         is drawn above the axis, so the plane needs half the height it would
+         otherwise and the picture still reads as the section's figure. */
+      var ql0 = unit ? 1 : q.n, mx = ql0, my = 0.001;
+      var pts = texts.map(function (t, k) {
+        if (k === qi) return null;
+        var p = pair(q, t), len = unit ? 1 : t.n, x = p.c * len;
+        var y = Math.sqrt(Math.max(0, len * len - x * x));
+        mx = Math.max(mx, x); my = Math.max(my, y);
+        return { x: x, y: y, k: k };
+      });
+      var sc = Math.min(PW / mx, PH / my);
+
+      T(svg, 8, 14, "GPT-2's embedding table: 50,257 rows of 768 numbers",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "every number below is the real 768 dimensions",
+        { anchor: "end", size: 10, fill: C.faint });
+      T(svg, 8, 34, "query  " + LET.charAt(qi) + "  «" + q.s + "»" +
+        (unit ? "   normalized" : "   |q| = " + q.n.toFixed(3)),
+        { anchor: "start", size: 11.5, fill: C.blue });
+
+      /* ---- the plane ---- */
+      line(svg, OX - 10, OY, OX + PW + 14, OY, { stroke: C.line, sw: 1.2 });
+      line(svg, OX, OY + 10, OX, OY - PH - 6, { stroke: C.line, sw: 1.2 });
+      T(svg, OX + PW + 14, OY + 18, unit ? "cosine with the query" : "dot with the query direction",
+        { anchor: "end", size: 9, fill: C.faint });
+      if (unit) {
+        S("path", { d: "M " + (OX + sc) + " " + OY + " A " + sc + " " + sc + " 0 0 0 " +
+          OX + " " + (OY - sc), fill: "none", stroke: C.line,
+          "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+      }
+
+      var ql = ql0 * sc;
+      line(svg, OX, OY, OX + ql, OY, { stroke: C.blue, sw: 2.5 });
+      T(svg, OX + ql + 9, OY + 12, LET.charAt(qi), { size: 10.5, fill: C.blue });
+
+      /* Two texts with the same bag of words land on the same point — that is
+         the section's discovery, not a bug — so labels stack instead of
+         overprinting. */
+      var placed = [];
+      pts.forEach(function (p) {
+        if (!p) return;
+        var px = OX + p.x * sc, py = OY - p.y * sc;
+        var hot = rows.length && rows[0].i === p.k;
+        line(svg, OX, OY, px, py, { stroke: hot ? C.orange : C.dim, sw: hot ? 2 : 1.2,
+          op: hot ? 1 : 0.6 });
+        S("circle", { cx: px, cy: py, r: 3, fill: hot ? C.orange : C.dim }, svg);
+        var lx = px + 9, ly = py - 6, n = 0;
+        while (placed.some(function (o) {
+          return Math.abs(o[0] - lx) < 9 && Math.abs(o[1] - ly) < 12;
+        }) && n++ < 6) ly += 13;
+        placed.push([lx, ly]);
+        T(svg, lx, ly, LET.charAt(p.k), { size: 10.5, fill: hot ? C.orange : C.dim });
+      });
+
+      /* ---- the ranking ---- */
+      var RX = 398, ry = 56;
+      T(svg, RX, ry - 16, "ranked by " + METRICS[metric] +
+        (metric === 2 ? ", nearest first" : ", highest first"),
+        { anchor: "start", size: 10.5, fill: C.faint });
+      var cosOrder = ranked(1).map(function (r) { return r.i; });
+      rows.forEach(function (r, k) {
+        var moved = cosOrder.indexOf(r.i) !== k;
+        var lab = r.t.s.length > 30 ? r.t.s.slice(0, 29) + "…" : r.t.s;
+        T(svg, RX, ry, LET.charAt(r.i), { anchor: "start", size: 10.5,
+          fill: k === 0 ? C.orange : C.faint });
+        T(svg, RX + 14, ry, lab, { anchor: "start", size: 10.5,
+          fill: k === 0 ? C.orange : C.dim });
+        T(svg, 752, ry, fmt(score(r.p)), { anchor: "end", size: 10.5,
+          fill: moved && metric !== 1 ? C.pink : k === 0 ? C.orange : C.text });
+        ry += 21;
+      });
+      if (metric !== 1) {
+        T(svg, RX, ry + 4, unit ? "Same order as cosine, necessarily."
+            : "Pink: a text this metric ranks somewhere cosine does not.",
+          { anchor: "start", size: 9.5, fill: unit ? C.teal : C.pink });
+        ry += 10;
+      }
+
+      /* ---- what the two panels are saying ---- */
+      var fy = Math.max(OY + 30, ry + 22);       // the ranking can outgrow the plane
+      var top = rows[0], cosTop = ranked(1)[0];
+      T(svg, 8, fy, unit
+          ? "Normalized: every vector sits on the circle, dot equals cosine, and Euclidean is sqrt(2 − 2cos). All three rank alike."
+          : metric === 1
+            ? "Cosine ignores length entirely: «" + cosTop.t.s.slice(0, 34) + "» is the nearest in angle."
+            : top.i !== cosTop.i
+              ? "«" + top.t.s.slice(0, 22) + "» wins here and «" + cosTop.t.s.slice(0, 22) +
+                "» wins on cosine. Same vectors, opposite answers."
+              : "This metric and cosine agree on the winner here. Try «cat» as a candidate against a sentence.",
+        { anchor: "start", size: 10.5, fill: unit ? C.teal : top.i !== cosTop.i ? C.orange : C.dim });
+
+      var a = texts[0], b = null;
+      texts.forEach(function (t, k) {
+        if (k && t.ids.length === a.ids.length && Math.abs(dot(a.ids, t.ids) - a.n * a.n) < 2e-3) b = t;
+      });
+      T(svg, 8, fy + 20, b
+          ? "«" + a.s + "» and «" + b.s + "» have cosine 1.000: a mean of word rows has no word order."
+          : "A text's vector here is the mean of its words' rows, so two texts with the same words are the same point.",
+        { anchor: "start", size: 10.5, fill: b ? C.pink : C.faint });
+      T(svg, 8, fy + 40, "Lengths and angles in the plane are exact; only the relation between two " +
+        "non-query texts is lost by drawing it flat.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 " + (fy + 56));
+    }
+
+    function say() {
+      var rows = ranked(metric), q = texts[qi];
+      f.say("Against «" + q.s + "», " + METRICS[metric] + " puts «" + rows[0].t.s +
+        "» first at " + score(rows[0].p).toFixed(3) + ".");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var sel = document.createElement("select");
+    sel.setAttribute("aria-label", "query text");
+    sel.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;max-width:210px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+    function fillSel() {
+      while (sel.firstChild) sel.removeChild(sel.firstChild);
+      texts.forEach(function (t, i) {
+        var o = document.createElement("option");
+        o.value = i; o.textContent = LET.charAt(i) + "  " + t.s;
+        sel.appendChild(o);
+      });
+      sel.value = String(qi);
+    }
+    sel.addEventListener("change", function () { qi = +sel.value; render(); say(); });
+    f.controls.appendChild(sel);
+
+    var mt = tabs(f.controls, ["dot", "cosine", "Euclidean"], 0, function (i) {
+      metric = i; render(); say();
+    });
+
+    var input = document.createElement("input");
+    input.type = "text"; input.value = "";
+    input.placeholder = "a sentence from the 51 words";
+    input.setAttribute("aria-label", "text to add");
+    input.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;min-width:190px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+    f.controls.appendChild(input);
+
+    function add() {
+      if (texts.length >= LET.length) {
+        f.say("Twelve texts is as many as the plane can label. Press reset to start again."); return;
+      }
+      var b = bag(input.value);
+      if (b.bad !== undefined) {
+        f.say(b.bad
+          ? "«" + b.bad + "» is not one of the 51 words whose rows are shipped. The table has 50,257 " +
+            "rows and this page carries 51 of them: " + WORDS.slice(0, 12).join(", ") + ", and 39 more."
+          : "Type a sentence first, using the shipped words.");
+        return;
+      }
+      texts.push({ s: input.value.toLowerCase().replace(/\s+/g, " ").trim(),
+                   ids: b.ids, n: Math.sqrt(dot(b.ids, b.ids)) });
+      input.value = ""; fillSel(); render();
+      var t = texts[texts.length - 1];
+      f.say("Added " + LET.charAt(texts.length - 1) + ": " + t.ids.length +
+        " word rows averaged, |v| = " + t.n.toFixed(3) + ".");
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); add(); }
+    });
+    f.btn("add text", add);
+
+    var tgUnit = toggle(f.controls, "normalize", false, function (v) {
+      unit = v; render();
+      f.say(v ? "Every vector scaled to length 1. The dot product is now the cosine, and Euclidean " +
+                "is sqrt(2 − 2cos), so the three metrics cannot disagree."
+              : "Lengths are back. Now the dot product can prefer a long vector pointing the wrong way.");
+    });
+    f.btn("reset", function () {
+      texts = PRESETS.map(function (s) {
+        var b = bag(s).ids;
+        return { s: s, ids: b, n: Math.sqrt(dot(b, b)) };
+      });
+      qi = 1; metric = 0; unit = false;
+      mt.sync(0); tgUnit.set(false); fillSel(); render();
+      f.say("Add two sentences that mean the same thing. Then add one that only shares words.");
+    });
+
+    fillSel();
+    render();
+    f.say("Add two sentences that mean the same thing. Then add one that only shares words.");
   };
 
 })();
