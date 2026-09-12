@@ -34,6 +34,8 @@
      llmRoofline    ch16 Playground five operations on one roofline, the section's table live
      llmFusion      ch16 Comparator four trips or two, and where it stops mattering
      llmParallelism ch17 Simulator  one mesh, four tables recomputed, one bubble drawn
+     llmSampler     ch18 Playground the section's own distribution, and three ways to cut it
+     llmGreedyLoop  ch18 Stepper    real GPT-2 walking into a real cycle
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -8041,6 +8043,391 @@
 
     render();
     f.say("Add GPUs with plain data parallelism. Notice memory never drops.");
+  };
+
+
+
+  /* ========================================================================
+     38. llmSampler — CH 18 — Playground
+
+     The open distribution is section 2's own, built from its published
+     construction: ten logits, a tail of last - 2*ln(r/10) out to 128,256,
+     and softmax at whatever temperature you set. Every cell of the section's
+     tables comes back from it — 0.3730 / 0.2430 / 0.0775 / 0.0672 at T=0.7,
+     top-10 mass 0.9315 / 0.7782 / 0.4255 / 0.1528, entropy 3.017 / 4.409 /
+     7.983 / 12.474, top-5 0.6095, top-50 0.9539, top-p 0.9 and 0.95 keeping
+     23 and 47, and min-p 0.1 keeping 10, 17 and 31 as the temperature rises.
+
+     The peaked distribution is not printed in the chapter, only summarized,
+     so this one is fitted to those summaries in the same family and the
+     header says so: it lands at H 0.71 against the stated 0.65 and top-5
+     0.970 against 0.968. What matters is intact and is what the section is
+     arguing: top-p 0.9 keeps 1 token at T=1, 161 at T=1.5 and 37,403 at
+     T=2, while min-p 0.1 keeps 1, 1 and 3. The nucleus follows temperature
+     into the tail; the min-p threshold moves with the peak and does not.
+
+     The penalty slider is not the section-5 table, which does not publish
+     the counts it used. It applies the real rule, logit -= count * penalty,
+     to counts taken from the twenty samples actually drawn.
+     ======================================================================== */
+  VIZ.llmSampler = function (el) {
+    var f = frame(el);
+
+    var V = 128256;
+    var CTX = [
+      { n: "The old bridge ... was", h: "section 2's own construction",
+        top: [4.2, 3.9, 3.1, 3.0, 2.8, 2.6, 2.4, 2.2, 2.1, 1.9], tail: 2.0,
+        names: [" built", " a", " the", " destroyed", " still", " one", " completed",
+                " named", " in", " an"] },
+      { n: "The capital of France is", h: "fitted to the section's summary statistics",
+        top: [5.12, 1.391, 0.7422, 0.2819, -0.0751, -0.3668, -0.6135, -0.8271, -1.0156, -1.1841],
+        tail: 1.97,
+        names: [" Paris", " the", " a", " in", " located", " one", " home", " known",
+                " now", " an"] }
+    ];
+    var SHOW = 22;
+
+    var ci = 0, temp = 1.0, topK = 0, topP = 1.0, minP = 0, pen = 0, samples = [], counts = {};
+
+    function logits(k) {
+      var c = CTX[k], L = c.top.slice(), i;
+      for (i = 11; i <= V; i++) L.push(c.top[9] - c.tail * Math.log(i / 10));
+      return L;
+    }
+    var LOG = [logits(0), logits(1)];
+
+    /* 128,256 exponentials per call, and render wants it a dozen times: cache
+       on the only things that change it. */
+    var PCACHE = {};
+    function probs() {
+      var key = ci + "|" + temp + "|" + pen + "|" + JSON.stringify(counts);
+      if (PCACHE[key]) return PCACHE[key];
+      var L = LOG[ci], i, z = new Array(L.length), m = -Infinity, Z = 0;
+      for (i = 0; i < L.length; i++) {
+        var v = L[i] - (i < 10 ? (counts[i] || 0) * pen : 0);
+        z[i] = v / temp;
+        if (z[i] > m) m = z[i];
+      }
+      for (i = 0; i < z.length; i++) { z[i] = Math.exp(z[i] - m); Z += z[i]; }
+      for (i = 0; i < z.length; i++) z[i] /= Z;
+      if (Object.keys(PCACHE).length > 60) PCACHE = {};
+      PCACHE[key] = z;
+      return z;
+    }
+    function entropy(p) {
+      var h = 0, i;
+      for (i = 0; i < p.length; i++) if (p[i] > 0) h -= p[i] * Math.log(p[i]) / Math.LN2;
+      return h;
+    }
+    function keptBy(p) {
+      var i, s = 0, kk = p.length, kp = p.length, km = p.length;
+      if (topK) kk = topK;
+      if (topP < 1) { s = 0; for (i = 0; i < p.length; i++) { s += p[i]; if (s >= topP) { kp = i + 1; break; } } }
+      if (minP > 0) { km = 0; for (i = 0; i < p.length; i++) if (p[i] >= minP * p[0]) km++; }
+      return { k: kk, p: kp, m: km, all: Math.min(kk, kp, km) };
+    }
+    function name(i) { return i < 10 ? CTX[ci].names[i] : "token #" + (i + 1); }
+    function show(s) { return s.replace(/ /g, "·"); }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    function draw(n) {
+      var p = probs(), cut = keptBy(p).all, r = mulberry(31 + n), out = [], i, j;
+      counts = {};
+      var Z = 0;
+      for (i = 0; i < cut; i++) Z += p[i];
+      for (j = 0; j < n; j++) {
+        var u = r() * Z, s = 0, pick = 0;
+        for (i = 0; i < cut; i++) { s += p[i]; if (u <= s) { pick = i; break; } }
+        if (temp < 0.01) pick = 0;
+        out.push(pick);
+        counts[pick] = (counts[pick] || 0) + 1;
+      }
+      samples = out;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 442", width: "100%",
+      role: "img", "aria-label": "one distribution, and where each rule cuts it" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var p = probs(), K = keptBy(p), i;
+
+      T(svg, 8, 14, CTX[ci].n + " · T = " + temp.toFixed(2) + " · H = " + entropy(p).toFixed(3) +
+        " bits", { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, commas(K.all) + " of " + commas(V) + " tokens survive",
+        { anchor: "end", size: 11, fill: K.all > 200 ? C.pink : C.green });
+
+      /* the head of the distribution, with the cuts drawn across it */
+      var BX = 8, BW = 528, BY = 40, BH = 150, mx = p[0];
+      var cw = BW / SHOW;
+      for (i = 0; i < SHOW; i++) {
+        var h = p[i] / mx * BH, alive = i < K.all;
+        rect(svg, BX + i * cw, BY + BH - h, cw - 2, Math.max(1, h),
+          { rx: 2, fill: alive ? C.teal : C.faint, stroke: "none", op: alive ? 0.75 : 0.3 });
+      }
+      line(svg, BX, BY + BH, BX + BW, BY + BH, { stroke: C.line, sw: 1 });
+      [["top-k", K.k, C.blue], ["top-p", K.p, C.orange], ["min-p", K.m, C.pink]].forEach(function (r, j) {
+        if (r[1] >= SHOW) return;
+        var x = BX + r[1] * cw - 1;
+        S("line", { x1: x, y1: BY - 4, x2: x, y2: BY + BH + 4, stroke: r[2],
+          "stroke-width": 1.5, "stroke-dasharray": "3 3", opacity: 0.55 }, svg);
+        T(svg, x + 4, BY + 8 + j * 13, r[0], { anchor: "start", size: 8.5, fill: r[2] });
+      });
+      for (i = 0; i < SHOW; i += 3)
+        T(svg, BX + i * cw + cw / 2, BY + BH + 12, show(name(i)).slice(0, 8),
+          { size: 8, fill: i < K.all ? C.dim : C.faint });
+      T(svg, BX, BY + BH + 28, CTX[ci].h, { anchor: "start", size: 9, fill: C.faint });
+
+      /* what each rule keeps */
+      var RX = 560, y = 46;
+      function row(k, v, tone) {
+        T(svg, RX, y, k, { anchor: "start", size: 10, fill: C.faint });
+        T(svg, 752, y, v, { anchor: "end", size: 10.5, fill: tone || C.text });
+        y += 19;
+      }
+      T(svg, RX, 34, "tokens kept", { anchor: "start", size: 9, fill: C.faint });
+      row("top-k " + (topK || "off"), topK ? commas(K.k) : "—", C.blue);
+      row("top-p " + topP.toFixed(2), topP < 1 ? commas(K.p) : "—", C.orange);
+      row("min-p " + minP.toFixed(2), minP > 0 ? commas(K.m) : "—", C.pink);
+      row("all three", commas(K.all), C.teal);
+      y += 8;
+      row("p of the top token", p[0].toFixed(4));
+      row("top-5 mass", (p[0] + p[1] + p[2] + p[3] + p[4]).toFixed(4));
+      row("entropy", entropy(p).toFixed(3) + " bits");
+
+      /* twenty samples */
+      var sy = 226;
+      line(svg, 8, sy - 14, 752, sy - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, sy, "twenty samples from what survives", { anchor: "start", size: 9, fill: C.faint });
+      var x = 8, tally = {};
+      samples.forEach(function (s) { tally[s] = (tally[s] || 0) + 1; });
+      samples.forEach(function (s2, j) {
+        var lab = show(name(s2)).slice(0, 9), w = 14 + lab.length * 6.2;
+        if (x + w > 752) return;
+        rect(svg, x, sy + 10, w, 20, { rx: 3, fill: s2 === 0 ? C.teal : C.blue,
+          stroke: "none", op: 0.25 + Math.min(0.5, s2 * 0.05) });
+        T(svg, x + w / 2, sy + 20, lab, { size: 9, fill: C.text });
+        x += w + 4;
+      });
+      var distinct = Object.keys(tally).length;
+      T(svg, 8, sy + 48, distinct + " distinct token" + (distinct === 1 ? "" : "s") + " in twenty draws" +
+        (temp < 0.01 ? " — at temperature 0 there is nothing to sample" : ""),
+        { anchor: "start", size: 10, fill: distinct === 1 ? C.orange : C.dim });
+
+      /* the section's own tables, live */
+      var ty = 314;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "top-p 0.9 keeps", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 300, ty, "min-p 0.1 keeps", { anchor: "start", size: 9, fill: C.faint });
+      ty += 19;
+      [1.0, 1.5, 2.0].forEach(function (t2) {
+        var sp = temp, sk = topK, spp = topP, sm = minP;
+        temp = t2; topK = 0; topP = 0.9; minP = 0;
+        var a = keptBy(probs()).p;
+        topP = 1; minP = 0.1;
+        var b = keptBy(probs()).m;
+        temp = sp; topK = sk; topP = spp; minP = sm;
+        T(svg, 8, ty, "T = " + t2.toFixed(1), { anchor: "start", size: 10, fill: C.dim });
+        T(svg, 200, ty, commas(a) + (a === 1 ? " token" : " tokens"),
+          { anchor: "end", size: 10.5, fill: a > 100 ? C.pink : C.text });
+        T(svg, 300, ty, "T = " + t2.toFixed(1), { anchor: "start", size: 10, fill: C.dim });
+        T(svg, 470, ty, commas(b) + (b === 1 ? " token" : " tokens"),
+          { anchor: "end", size: 10.5, fill: C.green });
+        ty += 19;
+      });
+      wrapT(svg, 500, 333, 42, 16, "Top-p cuts at a fixed amount of mass and temperature moves mass " +
+        "into the tail, so the nucleus follows it there. The min-p threshold is a fraction of the peak, " +
+        "so it moves with it.", { size: 9.5, fill: C.faint, max: 5 });
+      T(svg, 8, 420, "For factual work: low temperature with top-p near 0.9. For open writing: " +
+        "T 1.0-1.5 with min-p 0.05-0.1, not a high top-p.",
+        { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    function say() {
+      var p = probs(), K = keptBy(p);
+      f.say("T = " + temp.toFixed(2) + ": entropy " + entropy(p).toFixed(3) + " bits, " +
+        commas(K.all) + " tokens survive, top token at " + p[0].toFixed(4) + ".");
+    }
+
+    var tC = tabs(f.controls, ["open context", "peaked context"], 0, function (i) {
+      ci = i; draw(20); render(); say();
+    });
+    var sT = slider(f.controls, "temperature", 0, 2, 1, 0.05,
+      function (v) { return v.toFixed(2); },
+      function (v) { temp = Math.max(0.001, v); draw(20); render(); say(); });
+    var sK = slider(f.controls, "top-k", 0, 50, 0, 1,
+      function (v) { return v ? String(v) : "off"; },
+      function (v) { topK = v; draw(20); render(); say(); });
+    var sP = slider(f.controls, "top-p", 0.5, 1, 1, 0.01,
+      function (v) { return v >= 1 ? "off" : v.toFixed(2); },
+      function (v) { topP = v; draw(20); render(); say(); });
+    var sM = slider(f.controls, "min-p", 0, 0.3, 0, 0.01,
+      function (v) { return v ? v.toFixed(2) : "off"; },
+      function (v) { minP = v; draw(20); render(); say(); });
+    var sPen = slider(f.controls, "freq penalty", 0, 2, 0, 0.1,
+      function (v) { return v ? v.toFixed(1) : "off"; },
+      function (v) { pen = v; render(); say(); });
+    f.btn("sample 20", function () {
+      draw(20); render();
+      var d = {}; samples.forEach(function (s) { d[s] = 1; });
+      f.say("Twenty draws, " + Object.keys(d).length + " distinct. " +
+        (pen ? "The frequency penalty is reading these counts back into the logits." : ""));
+    });
+    f.btn("reset", function () {
+      ci = 0; temp = 1; topK = 0; topP = 1; minP = 0; pen = 0;
+      tC.sync(0); sT.set(1); sK.set(0); sP.set(1); sM.set(0); sPen.set(0);
+      draw(20); render();
+      f.say("Sample twenty times at temperature 0. Then at 1.5.");
+    });
+
+    draw(20);
+    render();
+    f.say("Sample twenty times at temperature 0. Then at 1.5.");
+  };
+
+
+  /* ========================================================================
+     39. llmGreedyLoop — CH 18 — Stepper
+
+     Real GPT-2 small, measured 12 September 2026. The greedy path is the
+     model's own argmax at every step, with the top five it was choosing
+     between, and it does what section 1 says it does:
+
+       The best way to learn is to learn by doing. The best way to learn is
+       to learn by doing. The best way to learn is to learn by doing.
+
+     The cycle closes at step 9 and then repeats exactly, forever, with the
+     model perfectly confident at every step — which is the point. Nothing is
+     wrong with the distribution. Greedy decoding is a fixed point finder,
+     and it found one.
+
+     The continuation shown when you switch to sampling is not simulated
+     either: for every prefix along that path, GPT-2 was actually run with
+     do_sample and a fixed seed, so "switch at this token" shows the real
+     twenty tokens that followed. Switch at step 9 and the loop never starts.
+     ======================================================================== */
+  VIZ.llmGreedyLoop = function (el) {
+    var f = frame(el);
+    var GEN = {
+      prompt: "The best way to learn is to learn by",
+      ptoks: ["The", " best", " way", " to", " learn", " is", " to", " learn", " by"],
+      path: [" doing", ".", "\n", "\n", "The", " best", " way", " to", " learn", " is", " to", " learn", " by", " doing", ".", " The", " best", " way", " to", " learn", " is", " to", " learn", " by", " doing", ".", " The", " best", " way", " to", " learn", " is", " to", " learn", " by", " doing", ".", "\n", "\n", "The"],
+      top: [[[" doing",0.4026],[" yourself",0.0395],[" trial",0.0312],[" watching",0.0285],[" experience",0.0243]],[[".",0.3049],[".\"",0.2557],[",",0.0908],[",\"",0.0627],[" and",0.0305]],[["\n",0.1816],[" It",0.0478],[" You",0.0461],[" And",0.0416],[" If",0.041]],[["\n",0.9942],["I",0.0005],["The",0.0004],["This",0.0002],["\"",0.0002]],[["The",0.0531],["I",0.0427],["If",0.0257],["\"",0.0243],["You",0.0202]],[[" best",0.1021],[" first",0.0296],[" most",0.0241],[" second",0.0167],[" problem",0.0152]],[[" way",0.8872],[" thing",0.0172],[" method",0.007],[" ways",0.0069],[" time",0.0041]],[[" to",0.9408],[" is",0.0352],[" for",0.0052],[" of",0.0024],[" I",0.0019]],[[" learn",0.8296],[" teach",0.0403],[" do",0.0104],[" get",0.0098],[" practice",0.007]],[[" is",0.9478],[" by",0.0079],[" to",0.0028],[",",0.0027],[" in",0.0024]],[[" to",0.9578],[" by",0.0196],[" not",0.0032],[":",0.0013],[" the",0.0007]],[[" learn",0.9546],[" do",0.0142],[" teach",0.0071],[" Learn",0.0023],[" study",0.0015]],[[" by",0.9685],[".",0.0128],[" from",0.0022],[",",0.0009],[" and",0.0008]],[[" doing",0.9847],[" learning",0.0039],[" do",0.0026],[" being",0.0012],[" thinking",0.0006]],[[".",0.9639],["\n",0.0065],[",",0.0039],[".\"",0.0037],[" .",0.0016]],[[" The",0.0961],["\n",0.0803],[" You",0.0269],[" If",0.0247],[" Learn",0.0243]],[[" best",0.2068],[" most",0.0338],[" first",0.016],[" worst",0.0142],[" only",0.0141]],[[" way",0.8469],[" thing",0.0196],[" method",0.0105],[" time",0.0088],[" ways",0.0061]],[[" to",0.9663],[" is",0.0145],[" for",0.0044],[" of",0.0015],[" you",0.001]],[[" learn",0.8854],[" teach",0.0244],[" do",0.0087],[" get",0.0069],[" practice",0.0046]],[[" is",0.9129],[" to",0.0073],[" in",0.0064],[" by",0.006],[",",0.0045]],[[" to",0.8805],[" by",0.0208],[" not",0.0099],[" learning",0.0054],[":",0.0035]],[[" learn",0.4656],[" be",0.0294],[" do",0.0289],[" practice",0.0282],[" get",0.0185]],[[" by",0.7035],[".",0.0585],[" from",0.0395],[" to",0.0116],[" in",0.0109]],[[" doing",0.4395],[" learning",0.0645],[" reading",0.0239],[" being",0.022],[" listening",0.0207]],[[".",0.8644],[",",0.0286],[" and",0.0162],[";",0.0051],[" —",0.0046]],[[" The",0.3247],["\n",0.1425],[" You",0.0313],[" Learn",0.0149],[" If",0.0124]],[[" best",0.863],[" most",0.0122],[" worst",0.0069],[" good",0.0056],[" greatest",0.0048]],[[" way",0.9942],[" thing",0.001],[" ways",0.0006],[" method",0.0004],[" time",0.0004]],[[" to",0.9949],[" is",0.0026],[" for",0.0004],[" of",0.0002],[",",0.0002]],[[" learn",0.9872],[" teach",0.0027],[" learning",0.0017],[" do",0.0016],[" get",0.0009]],[[" is",0.9786],[" by",0.0031],[",",0.0016],[" in",0.0011],[" to",0.001]],[[" to",0.9863],[" by",0.003],[" not",0.002],[",",0.0012],[" that",0.0007]],[[" learn",0.9385],[" do",0.0186],[" teach",0.0068],[" learning",0.0023],[" study",0.0021]],[[" by",0.9866],[" from",0.0022],[".",0.001],[" in",0.0009],[" through",0.0008]],[[" doing",0.9655],[" learning",0.005],[" do",0.0025],[" being",0.0012],[" performing",0.0011]],[[".",0.9292],[",",0.0153],[" and",0.0102],[";",0.0052],[" —",0.0034]],[["\n",0.6727],[" The",0.1435],["<|endoftext|>",0.0119],[" And",0.0111],[" You",0.0099]],[["\n",0.9999],[".",0.0],[" (",0.0],[",",0.0],["<|endoftext|>",0.0]],[["The",0.3311],["You",0.0215],["If",0.0199],["I",0.0196],["What",0.016]]],
+      samples: [" yourself, not by \"here is what you mean,\" and it's impossible to know of anything better", ". And some mornings, the crankyness makes me more anxious than the rest of the teachers.", " Otherwise, some other good means is practice. Especially when you don't like to be lectured.", "\nAdvertisement\n\n9. Use Technology\n\nWhen you're faced with an online connection or retailer", "1. Given some context, crank out the narrative. Go.\n\nIt comes as little surprise", " only examples where you find yourself cranky with all this study, are those everywhere you go or when", " way to learn is to learn by doing. Read The Source.\n\nIt comes with a little", " to learn is to learn by doing.\n\nWhen you don't like to co-create groups", " learn is to learn by doing. Technology\n\nWhen you don't like to co-create something", " is to learn by doing. My practice\n\nWhen I go to UCLA to co-curate", " to learn by doing. Easy to understand\n\nWhen you don't like to know, or know", " learn by doing.\"\n\n\n- Nicolás Szczenich<|endoftext|>", " by doing. Reminder, crank up the horn. Go.\n\nCrocket or spider", " doing. Given some time, crank up the skills you need.\n\nCrocketty is", ". The way to learn, regardless of how many times you hear someone say that you can learn by", " Teaching examples feels like \"here is what you mean when you say it like that\" of teachers striving", " only examples where you find yourself cranky\n\nWhen you don't like to co-create groups", " way to learn is to learn from others.\n\nToo many inhibit impulse to seek of teachers are", " to learn is to learn by doing.\n\nWhen you don't like to co-create groups", " learn is to learn by existing.\n\nMATH 6. Not EQ to seek of teachers\n", " is to learn by making choices.\n\nMATH 6. Not making them?\n\nIf", " to learn by doing. The most effective way to learn is to inhibit impulse to seek. Whether done", " learn by finding out how to crank out the skills needed to advance your aspirations to co-founder positions", ". The best way to learn is to learn. The best way to learn is to learn.\n", " having examples to pursue your own goals.\n\nWhen you don't like to co-create groups", ". The best way to learn is to learn by doing.\n\nThe best way to learn is", " Teaching examples feels like \"learning from practice\" all together.\n\nsent to co-founder Chris", " only way to learn is to teach.\n\nWhen you don't like to co-create groups", " way to learn is to learn by doing.\n\nToo many inhibit impulse to seek of teachers\n", " to learn is to learn by doing.\n\nWhen you don't like to co-create groups", " learn is to learn by doing.\n\nMATH 6. Not EQ to seek of teachers\n", " is to learn by doing, regardless of how many times you do it. It comes with a little", " to learn by doing. The best way to learn is to learn by doing.\n\nTens", " learn by doing.\"\n\n\nElements\n\nSomething like this\n\nno coalfield\n", " by doing.\n\nThe most important thing is to study.\n\nThe most important thing is", " doing.\n\nThe best way to learn is to learn by doing. The best way to learn", ". The best way to learn is to learn by doing.\n\nMake them co-opted\n", "\n\n\"Activize the crank while doing all this and it will last everywhere you go.\"\n", "\nThe easiest way is to crank out the skills needed to do a page everywhere. Or at least", "The examples brought to you by cranky\n\nWhen you hear someone say that coke is harder"]
+    };
+
+    var step = 0, sampling = false;
+
+    /* where the greedy path first repeats a run it has already emitted */
+    function cycleAt() {
+      var s = GEN.path.join(""), i, n = GEN.path.length;
+      for (i = 6; i < n; i++) {
+        var a = GEN.path.slice(i - 6, i).join("");
+        if (GEN.path.slice(0, i - 6).join("").indexOf(a) >= 0) return i;
+      }
+      return -1;
+    }
+    var CYC = cycleAt();
+
+    function show(s) { return s.replace(/ /g, "·").replace(/\n/g, "⏎"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "greedy decoding walking into its own cycle" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i;
+
+      T(svg, 8, 14, "GPT-2 small, greedy · step " + step + " of " + GEN.path.length +
+        (sampling ? " · then sampled from here" : ""),
+        { anchor: "start", size: 11, fill: sampling ? C.orange : C.teal });
+      T(svg, 752, 14, step >= CYC ? "inside the cycle" : "not repeating yet",
+        { anchor: "end", size: 11, fill: step >= CYC ? C.pink : C.faint });
+
+      /* the prompt, then the emitted tokens */
+      var items = GEN.ptoks.map(function (t) { return { lab: show(t), p: 1 }; });
+      for (i = 0; i < step; i++) items.push({ lab: show(GEN.path[i]), gen: 1, i: i });
+      var x = 8, y = 44;
+      items.forEach(function (it) {
+        var w = 10 + it.lab.length * 6.4;
+        if (x + w > 752) { x = 8; y += 26; }
+        rect(svg, x, y - 11, w, 22, { rx: 3,
+          fill: !it.gen ? "none" : it.i >= CYC ? C.pink : C.teal,
+          stroke: it.gen ? "none" : C.line, sw: 1, op: it.gen ? 0.55 : 1 });
+        T(svg, x + w / 2, y, it.lab, { size: 9.5, fill: it.gen ? C.card : C.dim });
+        x += w + 3;
+      });
+      var listY = y + 34;
+
+      /* the distribution it chose from */
+      if (step < GEN.top.length) {
+        T(svg, 8, listY, "what it was choosing between at step " + (step + 1),
+          { anchor: "start", size: 9, fill: C.faint });
+        var ty = listY + 20;
+        GEN.top[step].forEach(function (r, k) {
+          T(svg, 8, ty, (k + 1) + ".", { anchor: "start", size: 9, fill: C.faint });
+          T(svg, 30, ty, show(r[0]).slice(0, 14), { anchor: "start", size: 10.5,
+            fill: k === 0 ? C.teal : C.dim });
+          rect(svg, 160, ty - 6, r[1] * 200, 12, { rx: 2, stroke: "none", op: 0.6,
+            fill: k === 0 ? C.teal : C.blue });
+          T(svg, 380, ty, r[1].toFixed(4), { anchor: "end", size: 10, fill: C.dim });
+          ty += 20;
+        });
+        T(svg, 8, ty + 6, "greedy takes the first row, every time, with no randomness anywhere.",
+          { anchor: "start", size: 9.5, fill: C.faint });
+      }
+
+      /* what sampling from here actually produced */
+      var RX = 412;
+      T(svg, RX, listY, sampling ? "GPT-2, sampled from step " + step + ", seed 7"
+                                 : "switch to sampling to see the measured alternative",
+        { anchor: "start", size: 9, fill: sampling ? C.orange : C.faint });
+      /* keep the real spaces here: wrapT breaks on them, and a middle dot
+         would make the whole continuation one unbreakable word. */
+      function keep(t) { return t.replace(/\n/g, " ⏎ "); }
+      if (sampling) wrapT(svg, RX, listY + 22, 40, 16, keep(GEN.samples[step]),
+        { size: 10, fill: C.orange, max: 6 });
+      else wrapT(svg, RX, listY + 22, 40, 16, "Greedy continues:" +
+        keep(GEN.path.slice(step).join("")), { size: 10, fill: C.faint, max: 6 });
+
+      /* the verdict */
+      line(svg, 8, 356, 752, 356, { stroke: C.line, sw: 1 });
+      T(svg, 8, 376, step >= CYC
+          ? "The cycle closed at step " + CYC + " and now repeats exactly, forever."
+          : "Step to " + CYC + " and the phrase starts over.",
+        { anchor: "start", size: 10.5, fill: step >= CYC ? C.pink : C.text });
+      wrapT(svg, 8, 398, 122, 17, "Nothing is wrong with the distribution: the model is confident at " +
+        "every one of these steps. Greedy decoding is a fixed-point finder, and it found one. Switching " +
+        "to sampling at the token where it closes is enough to stop it.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say("Step " + step + ": greedy takes " + show(GEN.path[Math.min(step, GEN.path.length - 1)]) +
+        " at p = " + GEN.top[Math.min(step, GEN.top.length - 1)][0][1].toFixed(4) +
+        (step >= CYC ? " — and the phrase has already started over." : "."));
+    }
+
+    f.btn("step", function () {
+      step = Math.min(GEN.path.length, step + 1); render(); say();
+    });
+    f.btn("run to the loop", function () {
+      step = CYC; sampling = false; tgS.set(false); render();
+      f.say("The cycle closed at step " + CYC + ". From here greedy repeats itself exactly.");
+    });
+    var tgS = toggle(f.controls, "sample from here", false, function (v) {
+      sampling = v; render();
+      f.say(v ? "GPT-2 run again from this prefix with do_sample and seed 7 — the real continuation, " +
+                "not a simulated one."
+              : "Back to greedy: argmax at every step, and no randomness anywhere.");
+    });
+    f.btn("reset", function () {
+      step = 0; sampling = false; tgS.set(false); render();
+      f.say("Step a greedy generation until it repeats, then switch strategy at that token.");
+    });
+
+    render();
+    f.say("Step a greedy generation until it repeats, then switch strategy at that token.");
   };
 
 
