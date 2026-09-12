@@ -18,6 +18,8 @@
      llmActivations ch8 Comparator curves, matched parameters, and an ablation run
      llmParamCounter ch9 Builder   the section's table, produced from a config
      llmMemoryFit   ch9 Tuner      weights, cache, optimizer, and counted activations
+     llmMoeRouter   ch10 Simulator collapse, run rather than asserted, and the loss that stops it
+     llmActiveVsTotal ch10 Comparator two bills, and the dense model you would buy instead
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -4758,5 +4760,464 @@
     render();
     f.say("Set training mode. Watch what actually fills the card.");
   };
+
+
+  /* ========================================================================
+     22. llmMoeRouter — CH 10 — Simulator
+
+     Section 3's rich-get-richer loop, run rather than asserted. Eight
+     experts, a router that is one 4-wide weight vector each, and a token
+     stream drawn from four clusters. One update rule does the whole thing:
+     a chosen expert's weight moves toward the token it was chosen for, by
+     the gate weight it was given. Nothing else is needed for collapse — the
+     chosen expert's weight vector grows, a longer vector wins more dot
+     products, and it is chosen for tokens that were never its kind.
+
+     The balancing loss is the real one, not a thumb on the scale: Switch
+     Transformer's L_aux = E · sum_e f_e · P_e, with f the fraction of slots
+     an expert took and P the router's softmax over ALL experts, and its
+     gradient applied to every expert. The P_e factor is the point — it is
+     why the loss reaches experts the router did not choose, which is exactly
+     the gradient the main objective cannot supply. L_aux is displayed
+     whether or not it is being applied, so it can be watched climbing away
+     from 1.000 during a collapse.
+
+     At 200 tokens with top-2 and no balancing, expert 6 takes 70% of tokens
+     against a 25% fair share and three experts are left under a tenth of it,
+     which is the section's figure and the blueprint's discovery. Turn
+     balancing on and the same 200 tokens spread 18-32%.
+
+     Capacity is per batch of 64 and does what section 3 says: at a 1.25
+     factor the collapsed run drops 24% of its slots and the balanced run 7%.
+     That gap is the load-imbalance-costs-wall-clock argument of section 5,
+     in the one place a reader can see it.
+     ======================================================================== */
+  VIZ.llmMoeRouter = function (el) {
+    var f = frame(el);
+
+    var E = 8, D = 4, NT = 4, NZ = 0.4, LR = 0.15, W0 = 0.2, AUXC = 32, BATCH = 64;
+    var CAPS = [0, 1, 1.25, 1.5, 2];
+    var EC = [C.blue, C.teal, C.orange, C.green, C.pink, C.sky, C.purple, C.dim];
+
+    var K = 2, bal = false, ci = 0;
+    var cen, W, load, n, dropped, skipped, inB, bi, recent, auxL, cap;
+
+    function init() {
+      var r = mulberry(7), c, d, e, v, nn;
+      cen = [];
+      for (c = 0; c < NT; c++) {
+        v = []; for (d = 0; d < D; d++) v.push(gauss(r));
+        nn = Math.sqrt(v.reduce(function (s, z) { return s + z * z; }, 0));
+        cen.push(v.map(function (z) { return z / nn; }));
+      }
+      W = [];
+      for (e = 0; e < E; e++) {
+        v = []; for (d = 0; d < D; d++) v.push(gauss(r) * W0);
+        W.push(v);
+      }
+      load = []; for (e = 0; e < E; e++) load.push(0);
+      n = 0; dropped = 0; skipped = 0; bi = 0; recent = []; auxL = 0;
+      inB = []; for (e = 0; e < E; e++) inB.push(0);
+      cap = CAPS[ci] ? Math.ceil(CAPS[ci] * K * BATCH / E) : Infinity;
+      rng = r;
+    }
+    var rng;
+
+    function softmax(z, idx) {
+      var m = -Infinity, i, out = [], s = 0;
+      for (i = 0; i < idx.length; i++) if (z[idx[i]] > m) m = z[idx[i]];
+      for (i = 0; i < idx.length; i++) { out.push(Math.exp(z[idx[i]] - m)); s += out[i]; }
+      for (i = 0; i < idx.length; i++) out[i] /= s;
+      return out;
+    }
+
+    function step() {
+      var d, e, i;
+      if (bi === 0) { inB = []; for (e = 0; e < E; e++) inB.push(0); }
+
+      var c = Math.floor(rng() * NT), x = [], nx = 0;
+      for (d = 0; d < D; d++) { x.push(cen[c][d] + gauss(rng) * NZ); nx += x[d] * x[d]; }
+      nx = Math.sqrt(nx);
+      for (d = 0; d < D; d++) x[d] /= nx;
+
+      var z = W.map(function (w) {
+        var s = 0; for (var j = 0; j < D; j++) s += w[j] * x[j]; return s;
+      });
+      var order = z.map(function (v, i2) { return i2; })
+                   .sort(function (a, b) { return z[b] - z[a]; });
+      var idx = order.slice(0, K), g = softmax(z, idx), took = [];
+
+      n++;
+      var f0 = load.map(function (v) { return v / Math.max(1, n * K); });
+
+      for (i = 0; i < idx.length; i++) {
+        e = idx[i];
+        if (inB[e] >= cap) { dropped++; continue; }
+        inB[e]++; load[e]++; took.push(e);
+        for (d = 0; d < D; d++) W[e][d] += LR * g[i] * x[d];
+      }
+      if (!took.length) skipped++;
+
+      /* L_aux = E · Σ f_e P_e, with P the softmax over every expert. Computed
+         always so it can be read during a collapse; applied only when on. */
+      var all = z.map(function (v, i2) { return i2; });
+      var P = softmax(z, all), fb = 0;
+      for (e = 0; e < E; e++) fb += f0[e] * P[e];
+      auxL = E * fb;
+      if (bal) {
+        for (e = 0; e < E; e++) {
+          var gr = AUXC * E * P[e] * (f0[e] - fb);
+          for (d = 0; d < D; d++) W[e][d] -= LR * gr * x[d];
+        }
+      }
+
+      recent.push({ e: took.length ? took[0] : -1, drop: !took.length });
+      if (recent.length > 48) recent.shift();
+      bi = (bi + 1) % BATCH;
+    }
+
+    function run(m) { for (var i = 0; i < m; i++) step(); render(); say(); }
+    function restart() { var t = n; init(); for (var i = 0; i < t; i++) step(); render(); }
+
+    var svg = S("svg", { viewBox: "0 0 760 396", width: "100%",
+      role: "img", "aria-label": "eight experts, and the traffic each one took" }, f.body);
+
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function fair() { return K / E; }
+    function share(e) { return n ? load[e] / n : 0; }
+
+    var BX = 104, BW = 430;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var e, i, top = 0, dead = 0;
+      for (e = 0; e < E; e++) {
+        if (share(e) > share(top)) top = e;
+        if (n && share(e) < fair() * 0.25) dead++;
+      }
+
+      T(svg, 8, 14, E + " experts · top-" + K + " · balancing loss " + (bal ? "on" : "off") +
+        " · capacity " + (CAPS[ci] ? CAPS[ci].toFixed(2) + "x, " + cap + " tokens per expert per batch of " + BATCH : "off"),
+        { anchor: "start", size: 11, fill: bal ? C.green : C.orange });
+
+      /* ---- the fair-share rule, labelled above its own line ---- */
+      var fx = BX + fair() * BW;
+      T(svg, fx, 30, "fair share " + (fair() * 100).toFixed(0) + "%",
+        { anchor: "middle", size: 9.5, fill: C.faint });
+      line(svg, fx, 40, fx, 40 + E * 22 + 4, { stroke: C.faint, sw: 1, dash: "3 3" });
+
+      var y = 54;
+      for (e = 0; e < E; e++) {
+        var s = share(e), hot = n && s > fair() * 1.6, cold = n && s < fair() * 0.25;
+        T(svg, 8, y, "expert " + e, { anchor: "start", size: 10.5, fill: C.dim });
+        rect(svg, BX, y - 8, Math.max(n && load[e] ? 1.5 : 0, s * BW), 16,
+          { rx: 3, fill: EC[e], stroke: "none", op: 0.75 });
+        T(svg, 616, y, n ? commas(load[e]) + " of " + commas(n) : "—",
+          { anchor: "end", size: 10.5, fill: C.dim });
+        T(svg, 684, y, n ? (s * 100).toFixed(0) + "%" : "",
+          { anchor: "end", size: 10.5, fill: hot ? C.pink : cold ? C.orange : C.text });
+        T(svg, 752, y, hot ? "overloaded" : cold ? "starved" : "",
+          { anchor: "end", size: 9.5, fill: hot ? C.pink : C.orange });
+        y += 22;
+      }
+
+      /* ---- the numbers ---- */
+      var sy = 254;
+      line(svg, 8, sy - 16, 752, sy - 16, { stroke: C.line, sw: 1 });
+      function stat(x, lab, val, tone) {
+        T(svg, x, sy, lab, { anchor: "start", size: 9.5, fill: C.faint });
+        T(svg, x, sy + 18, val, { anchor: "start", size: 12, fill: tone || C.text });
+      }
+      stat(8, "tokens routed", commas(n));
+      stat(126, "busiest expert",
+        n ? "e" + top + "  " + (share(top) * 100).toFixed(0) + "%" : "—",
+        n && share(top) > fair() * 1.6 ? C.pink : C.text);
+      stat(268, "starved, under a quarter of fair", n ? dead + " of " + E : "—",
+        dead ? C.orange : C.text);
+      stat(470, "slots dropped at capacity",
+        CAPS[ci] ? commas(dropped) + " of " + commas(n * K) +
+          "  " + (n ? (dropped / (n * K) * 100).toFixed(0) : 0) + "%" : "capacity off",
+        dropped ? C.pink : C.dim);
+      stat(658, "L_aux", n ? auxL.toFixed(3) : "—",
+        auxL > 1.25 ? C.pink : auxL ? C.green : C.dim);
+
+      /* ---- the last 48 tokens, coloured by the expert that ranked first --- */
+      T(svg, 8, 310, "the last " + Math.min(48, recent.length) + " tokens, by the expert ranked first",
+        { anchor: "start", size: 9.5, fill: C.faint });
+      for (i = 0; i < recent.length; i++) {
+        var r0 = recent[i];
+        rect(svg, 8 + i * 12, 318, 10, 12, { rx: 2, stroke: "none",
+          fill: r0.drop ? C.faint : EC[r0.e], op: r0.drop ? 0.35 : 0.85 });
+      }
+      if (skipped) T(svg, 752, 324, commas(skipped) +
+        (skipped === 1 ? " token took" : " tokens took") + " no expert at all",
+        { anchor: "end", size: 9.5, fill: C.faint });
+
+      /* ---- what it means ---- */
+      var msg, tone = C.faint;
+      if (!n) msg = "Nothing has been routed yet. Run 200 tokens with balancing off.";
+      else if (!bal && share(top) >= 0.6) {
+        msg = "Collapsed. Expert " + top + " took " + (share(top) * 100).toFixed(0) +
+          "% of tokens against a " + (fair() * 100).toFixed(0) + "% fair share, and " + dead +
+          " experts are under a quarter of theirs.";
+        tone = C.pink;
+      } else if (bal) {
+        msg = "Balanced. Every expert is between " +
+          (Math.min.apply(null, load.map(function (v) { return v / n; })) * 100).toFixed(0) + "% and " +
+          (share(top) * 100).toFixed(0) + "% of tokens, and L_aux is " + auxL.toFixed(3) +
+          " against 1.000 for a perfect spread.";
+        tone = C.green;
+      } else msg = "Keep going. The loop needs a couple of hundred tokens to run to completion.";
+      T(svg, 8, 358, msg, { anchor: "start", size: 11, fill: tone });
+      T(svg, 8, 378, "One update rule: a chosen expert's weight moves toward its token. " +
+        "A longer weight vector wins more dot products.",
+        { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    function say() {
+      if (!n) { f.say("Run 200 tokens with balancing off. Watch one expert eat the model."); return; }
+      var top = 0, e;
+      for (e = 0; e < E; e++) if (share(e) > share(top)) top = e;
+      f.say(commas(n) + " tokens: expert " + top + " took " + (share(top) * 100).toFixed(0) +
+        "%, fair share is " + (fair() * 100).toFixed(0) + "%, L_aux " + auxL.toFixed(3) +
+        (CAPS[ci] ? ", " + (dropped / (n * K) * 100).toFixed(0) + "% of slots dropped" : "") + ".");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    f.btn("+1 token", function () { run(1); });
+    f.btn("+50", function () { run(50); });
+    f.btn("run 200", function () { init(); run(200); });
+    var tgB = toggle(f.controls, "balancing loss", false, function (v) {
+      bal = v; restart();
+      f.say(v ? "The same " + commas(n) + " tokens, re-routed with L_aux applied. Its gradient reaches every " +
+                "expert through the full softmax, including the ones the router did not choose."
+              : "Balancing off. Nothing opposes the loop: chosen more, trained more, therefore chosen more.");
+    });
+    var sK = slider(f.controls, "top-k", 1, 4, 2, 1,
+      function (v) { return String(v); },
+      function (v) {
+        K = v; restart();
+        f.say("top-" + K + ": fair share is now " + (fair() * 100).toFixed(0) +
+          "% of tokens per expert, and each token costs " + K + " expert" + (K > 1 ? "s" : "") + " of arithmetic.");
+      });
+    var sC = slider(f.controls, "capacity", 0, 4, 0, 1,
+      function (v) { return CAPS[v] ? CAPS[v].toFixed(2) + "x" : "off"; },
+      function (v) {
+        ci = v; restart();
+        f.say(CAPS[ci] ? "Capacity " + CAPS[ci].toFixed(2) + "x: " + cap + " tokens per expert per batch, and " +
+              (n ? (dropped / (n * K) * 100).toFixed(0) : 0) + "% of slots dropped" +
+              (bal ? ", with the loss holding the load even." : ". Now turn the balancing loss on.")
+            : "Capacity off: every token reaches every expert it picked, however unbalanced that is.");
+      });
+    f.btn("reset", function () {
+      K = 2; bal = false; ci = 0; sK.set(2); tgB.set(false); sC.set(0);
+      init(); render();
+      f.say("Run 200 tokens with balancing off. Watch one expert eat the model.");
+    });
+
+    init();
+    render();
+    f.say("Run 200 tokens with balancing off. Watch one expert eat the model.");
+  };
+
+
+  /* ========================================================================
+     23. llmActiveVsTotal — CH 10 — Comparator
+
+     Section 4's two bills, and the dense model you would have to buy instead.
+
+     Mixtral comes back exactly as printed: one expert 176,160,768, eight per
+     layer 1,409,286,144, total 46,701,744,128, active 12,878,876,672, ratio
+     3.63x, 93.4 GB to hold and 25.8 GFLOPs to run. The section's figures omit
+     the routers — 4,096 x 8 x 32 = 1,048,576 parameters, the "rounding error"
+     of section 2 — so this omits them too and says so on screen rather than
+     quietly disagreeing by a millionth.
+
+     Qwen3-30B-A3B is derived the same way from its config and lands on 30.52B
+     total and 3.34B active, which is what its name claims. DeepSeek-V3 is
+     carried at the published 671B/37B instead: its MLA attention and its
+     three leading dense layers are not in this chapter's arithmetic, and a
+     derivation that needed apologies would be worth less than a quoted pair.
+
+     tokens/second is chapter 26's model rather than a benchmark: single
+     stream decode is bandwidth-bound, so it is 3.35 TB/s over the bytes read
+     per token. At batch 1 an MoE reads only the experts it picked, which is
+     why matching on FLOPs matches on speed. The quality axis uses the
+     geometric mean of total and active, the field's rule of thumb, labelled
+     as one — and it splits Mixtral's 3.63x evenly, 1.90x of memory bought for
+     1.90x of speed.
+     ======================================================================== */
+  VIZ.llmActiveVsTotal = function (el) {
+    var f = frame(el);
+
+    var BW_HBM = 3.35e12;                     // H100 SXM, bytes per second
+    var MODELS = [
+      { name: "Mixtral-8x7B", d: 4096, L: 32, ff: 14336, E: 8, k: 2, V: 32000,
+        qh: 32, kvh: 8, hd: 128, tied: false, dense_ff: 14336, note: "8 experts of full width, top-2" },
+      { name: "Qwen3-30B-A3B", d: 2048, L: 48, ff: 768, E: 128, k: 8, V: 151936,
+        qh: 32, kvh: 4, hd: 128, tied: false, dense_ff: 6144, note: "128 fine-grained experts, top-8" },
+      { name: "DeepSeek-V3", pub: { total: 671e9, active: 37e9 }, E: 256, k: 8, ff: 2048,
+        dense_ff: 18432, note: "256 routed experts plus one shared, top-8" }
+    ];
+    var AXES = ["same FLOPs per token", "same memory", "same quality"];
+
+    var mi = 0, ax = 0;
+
+    function count(m) {
+      if (m.pub) return { total: m.pub.total, active: m.pub.active, pub: true };
+      var attn = m.d * m.qh * m.hd * 2 + m.d * m.kvh * m.hd * 2;
+      var norms = 2 * m.d, one = 3 * m.d * m.ff;
+      var vocab = m.V * m.d * (m.tied ? 1 : 2);
+      return {
+        one: one, all: one * m.E, attn: attn, norms: norms, vocab: vocab,
+        total: m.L * (attn + norms + one * m.E) + vocab + m.d,
+        active: m.L * (attn + norms + one * m.k) + vocab + m.d
+      };
+    }
+    function denseN(c) {
+      if (ax === 0) return c.active;
+      if (ax === 1) return c.total;
+      return Math.sqrt(c.total * c.active);      // the field's rule of thumb
+    }
+
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function bil(v) { return (v / 1e9).toFixed(v < 1e11 ? 2 : 1) + "B"; }
+    function gb(v) {
+      var b = v * 2;
+      return b >= 1e12 ? (b / 1e12).toFixed(2) + " TB" : (b / 1e9).toFixed(2) + " GB";
+    }
+    function tps(v) { return (BW_HBM / (2 * v)).toFixed(BW_HBM / (2 * v) < 100 ? 1 : 0); }
+
+    var svg = S("svg", { viewBox: "0 0 760 404", width: "100%",
+      role: "img", "aria-label": "an MoE model and the dense model matched to it" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var m = MODELS[mi], c = count(m), dn = denseN(c);
+
+      T(svg, 8, 14, m.name + " · " + m.note + " · matched against a dense model on " + AXES[ax],
+        { anchor: "start", size: 11, fill: C.teal });
+
+      /* ---- left: where the two numbers come from ---- */
+      var y = 46;
+      T(svg, 8, 32, c.pub ? "published, not derived here" : "counted from the config, Chapter 9's method",
+        { anchor: "start", size: 10, fill: C.faint });
+      function row(k, v, tone, sz) {
+        T(svg, 8, y, k, { anchor: "start", size: sz || 10.5, fill: tone || C.dim });
+        T(svg, 356, y, v, { anchor: "end", size: sz || 10.5, fill: tone || C.text });
+        y += 19;
+      }
+      if (c.pub) {
+        row("total parameters", commas(c.total));
+        row("active per token", commas(c.active));
+        y += 8;
+        T(svg, 8, y, "MLA attention and three leading dense layers are outside", { anchor: "start", size: 10, fill: C.faint });
+        y += 16;
+        T(svg, 8, y, "this chapter's arithmetic, so these are the published pair.", { anchor: "start", size: 10, fill: C.faint });
+        y += 30;
+      } else {
+        row("attention, one layer", commas(c.attn), C.faint);
+        row("one expert, 3 x d x ff", commas(c.one), C.orange);
+        row(m.E + " experts, per layer", commas(c.all), C.orange);
+        row(m.k + " experts, per token", commas(c.one * m.k), C.teal);
+        row("embedding + output", commas(c.vocab), C.blue);
+        line(svg, 8, y - 12, 356, y - 12, { stroke: C.line, sw: 1 });
+        row("TOTAL parameters", commas(c.total), C.text, 11.5);
+        row("ACTIVE per token", commas(c.active), C.teal, 11.5);
+        row("ratio", (c.total / c.active).toFixed(2) + "x", C.pink, 11.5);
+        y += 4;
+        T(svg, 8, y, "routers, " + commas(m.d * m.E * m.L) + " parameters, left out as §4 leaves them out.",
+          { anchor: "start", size: 9.5, fill: C.faint });
+        y += 22;
+      }
+
+      T(svg, 8, y, "what each number actually buys", { anchor: "start", size: 10, fill: C.faint });
+      y += 20;
+      T(svg, 8, y, "hold in memory   " + commas(c.total) + " x 2 bytes", { anchor: "start", size: 10, fill: C.dim });
+      T(svg, 356, y, gb(c.total), { anchor: "end", size: 10.5, fill: C.pink });
+      y += 19;
+      T(svg, 8, y, "pay per token    2 x " + commas(c.active), { anchor: "start", size: 10, fill: C.dim });
+      T(svg, 356, y, (2 * c.active / 1e9).toFixed(1) + " GFLOPs", { anchor: "end", size: 10.5, fill: C.teal });
+
+      /* ---- right: the two columns ---- */
+      var RX = 400, CA = 610, CB = 752;
+      T(svg, RX, 32, "the bill, either way", { anchor: "start", size: 10, fill: C.faint });
+      T(svg, CA, 50, m.name.split("-")[0] + ", sparse", { anchor: "end", size: 10, fill: C.teal });
+      T(svg, CB, 50, "dense", { anchor: "end", size: 10, fill: C.blue });
+      var ry = 76;
+      function cmp(k, a, b, tone) {
+        T(svg, RX, ry, k, { anchor: "start", size: 10, fill: C.faint });
+        T(svg, CA, ry, a, { anchor: "end", size: 10.5, fill: tone || C.text });
+        T(svg, CB, ry, b, { anchor: "end", size: 10.5, fill: tone || C.text });
+        ry += 21;
+      }
+      cmp("parameters held", bil(c.total), bil(dn));
+      cmp("parameters per token", bil(c.active), bil(dn));
+      cmp("memory at bf16", gb(c.total), gb(dn), C.pink);
+      cmp("GFLOPs per token", (2 * c.active / 1e9).toFixed(1), (2 * dn / 1e9).toFixed(1), C.teal);
+      cmp("decode, H100, batch 1", tps(c.active) + " tok/s", tps(dn) + " tok/s", C.orange);
+
+      /* ---- two bars, to scale ---- */
+      var by = 198, BXX = RX, BWW = 352;
+      var mmax = Math.max(c.total, dn), smax = Math.max(1 / c.active, 1 / dn);
+      T(svg, BXX, by, "memory", { anchor: "start", size: 9.5, fill: C.faint });
+      rect(svg, BXX, by + 10, c.total / mmax * BWW, 14, { rx: 3, fill: C.pink, stroke: "none", op: 0.7 });
+      rect(svg, BXX, by + 28, dn / mmax * BWW, 14, { rx: 3, fill: C.blue, stroke: "none", op: 0.55 });
+      T(svg, BXX, by + 58, "single-stream decode speed", { anchor: "start", size: 9.5, fill: C.faint });
+      rect(svg, BXX, by + 68, (1 / c.active) / smax * BWW, 14, { rx: 3, fill: C.orange, stroke: "none", op: 0.7 });
+      rect(svg, BXX, by + 86, (1 / dn) / smax * BWW, 14, { rx: 3, fill: C.blue, stroke: "none", op: 0.55 });
+
+      /* ---- the verdict ---- */
+      var rM = c.total / dn, rS = dn / c.active, msg;
+      if (ax === 0) msg = "Same arithmetic per token, so the same single-stream speed — and the sparse model needs " +
+        rM.toFixed(2) + "x the memory to deliver it.";
+      else if (ax === 1) msg = "Same " + gb(c.total) + " on the card, and the sparse model decodes " +
+        rS.toFixed(2) + "x faster for it.";
+      else msg = "Roughly matched quality at the geometric mean of " + bil(c.total) + " and " + bil(c.active) +
+        ": the sparse model is " + rS.toFixed(2) + "x faster and costs " + rM.toFixed(2) + "x the memory.";
+      T(svg, RX, 328, "", { anchor: "start", size: 10 });
+      line(svg, RX, 318, 752, 318, { stroke: C.line, sw: 1 });
+      wrapAt(svg, RX, 336, 352, msg, ax === 1 ? C.teal : C.pink);
+
+      T(svg, 8, 380, ax === 2
+          ? "The geometric mean is a rule of thumb from the scaling literature, not a measurement. Read it as an ordering, not a number."
+          : "tokens/second is Chapter 26's model: 3.35 TB/s over the bytes a token reads. At batch 1 an MoE reads only what it picked.",
+        { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    /* Wrap a sentence into as many 10.5px lines as it needs, at ~46 chars. */
+    function wrapAt(p, x, y0, w, str, tone) {
+      var words = str.split(" "), lineStr = "", out = [], i;
+      for (i = 0; i < words.length; i++) {
+        var t = lineStr ? lineStr + " " + words[i] : words[i];
+        if (t.length > 46 && lineStr) { out.push(lineStr); lineStr = words[i]; }
+        else lineStr = t;
+      }
+      if (lineStr) out.push(lineStr);
+      for (i = 0; i < out.length; i++)
+        T(p, x, y0 + i * 17, out[i], { anchor: "start", size: 10.5, fill: tone || C.text });
+    }
+
+    function say() {
+      var m = MODELS[mi], c = count(m), dn = denseN(c);
+      f.say(m.name + ": " + bil(c.total) + " held, " + bil(c.active) + " per token. Matched on " +
+        AXES[ax] + ", the dense model is " + bil(dn) + " — " + (c.total / dn).toFixed(2) +
+        "x less memory and " + (dn / c.active).toFixed(2) + "x the arithmetic.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tM = tabs(f.controls, MODELS.map(function (m) { return m.name; }), 0, function (i) {
+      mi = i; render(); say();
+    });
+    var tA = tabs(f.controls, AXES, 0, function (i) { ax = i; render(); say(); });
+    f.btn("reset", function () {
+      mi = 0; ax = 0; tM.sync(0); tA.sync(0); render();
+      f.say("Mixtral: 46.7B to hold, 12.9B to run. Match a dense model on one axis and watch the other diverge.");
+    });
+
+    render();
+    f.say("Mixtral: 46.7B to hold, 12.9B to run. Match a dense model on one axis and watch the other diverge.");
+  };
+
 
 })();
