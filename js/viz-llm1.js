@@ -26,6 +26,9 @@
      llmContamination ch12 Playground the n-gram knob, and the floor under it
      llmLossStep    ch13 Stepper    real per-token loss, and what the worst one is
      llmLossCurves  ch13 Comparator six shapes, one fault each, healthy drawn behind
+     llmOptimizer   ch14 Simulator  four rules, a quartic wall, and warmup that saves a run
+     llmPrecision   ch14 Comparator real fp16/bf16/fp8 encoders, and two facts performed
+     llmMemoryLevers ch14 Tuner     the two levers, against 16 GB and the clock
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -6558,6 +6561,516 @@
 
     render();
     f.say("Diagnose each curve before you reveal the answer.");
+  };
+
+
+
+  /* ========================================================================
+     30. llmOptimizer — CH 14 — Simulator
+
+     Four optimizers, written out exactly as section 1 writes them, run on an
+     ill-conditioned surface with a quartic wall so that instability actually
+     diverges instead of merely oscillating.
+
+     The blueprint's discovery lands on SGD at a learning rate of 0.25: with
+     no warmup it blows up at step 18, and with fifty steps of warmup the
+     same learning rate converges. Nothing else changed.
+
+     Adam does not diverge here at any learning rate on offer, and that is
+     worth seeing rather than hiding. Its update is m/sqrt(v), which is
+     bounded near the learning rate whatever the gradient does, so on a
+     surface like this it oscillates rather than explodes. What warmup buys
+     Adam is elsewhere and the machine shows it: at step 1 the second moment
+     is a single sample, so |update| is lr in every coordinate regardless of
+     how small that coordinate's gradient was. The update-size trace makes
+     that first step visible, which is what section 2 means by "Adam's
+     moments need data before they are trusted".
+     ======================================================================== */
+  VIZ.llmOptimizer = function (el) {
+    var f = frame(el);
+
+    var KIND = ["SGD", "momentum", "Adam", "AdamW"], SCHED = ["constant", "cosine", "wsd"];
+    var N = 300, X0 = -5.0, Y0 = 1.4;
+    var kind = 0, lr = 0.25, warm = 0, sch = 0;
+
+    function loss(x, y) { return 0.5 * (x * x / 8 + 8 * y * y) + 0.02 * (x * x * x * x + y * y * y * y); }
+    function grad(x, y) { return [x / 8 + 0.08 * x * x * x, 8 * y + 0.08 * y * y * y]; }
+
+    function lrAt(t) {
+      var w = warm ? Math.min(1, t / warm) : 1, frac, base = 1;
+      if (sch === 1) {                                   // cosine to a tenth
+        frac = Math.max(0, (t - warm) / Math.max(1, N - warm));
+        base = 0.1 + 0.9 * 0.5 * (1 + Math.cos(Math.PI * frac));
+      } else if (sch === 2) {                            // warmup-stable-decay
+        frac = (t - warm) / Math.max(1, N - warm);
+        base = frac < 0.8 ? 1 : 0.1 + 0.9 * (1 - (frac - 0.8) / 0.2);
+      }
+      return lr * w * base;
+    }
+
+    function run() {
+      var x = X0, y = Y0, mx = 0, my = 0, vx = 0, vy = 0, t, div = -1;
+      var path = [[x, y]], L = [loss(x, y)], U = [0], wd = kind === 3 ? 0.02 : 0;
+      for (t = 1; t <= N; t++) {
+        var g = grad(x, y), l = lrAt(t), ux, uy;
+        if (!isFinite(g[0]) || !isFinite(g[1]) || Math.abs(x) > 60 || Math.abs(y) > 60) { div = t; break; }
+        if (kind === 0) { ux = l * g[0]; uy = l * g[1]; }
+        else if (kind === 1) {
+          mx = 0.9 * mx + g[0]; my = 0.9 * my + g[1];
+          ux = l * mx; uy = l * my;
+        } else {
+          mx = 0.9 * mx + 0.1 * g[0]; my = 0.9 * my + 0.1 * g[1];
+          vx = 0.95 * vx + 0.05 * g[0] * g[0]; vy = 0.95 * vy + 0.05 * g[1] * g[1];
+          var bm = 1 - Math.pow(0.9, t), bv = 1 - Math.pow(0.95, t);
+          ux = l * (mx / bm) / (Math.sqrt(vx / bv) + 1e-8);
+          uy = l * (my / bm) / (Math.sqrt(vy / bv) + 1e-8);
+        }
+        x -= ux + wd * l * x; y -= uy + wd * l * y;      // AdamW: decay applied apart
+        path.push([x, y]); L.push(loss(x, y));
+        U.push(Math.sqrt(ux * ux + uy * uy));
+      }
+      return { path: path, L: L, U: U, div: div };
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 424", width: "100%",
+      role: "img", "aria-label": "an optimizer's path down an ill-conditioned valley" }, f.body);
+
+    var MX0 = 8, MY0 = 44, MW = 396, MH = 176, XR = 7, YR = 2.1;
+    function sx(x) { return MX0 + (x + XR) / (2 * XR) * MW; }
+    function sy(y) { return MY0 + (YR - y) / (2 * YR) * MH; }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var R = run(), i;
+
+      T(svg, 8, 14, KIND[kind] + " · lr " + lr.toFixed(3) + " · warmup " + warm +
+        " steps · " + SCHED[sch] + " schedule", { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, R.div > 0 ? "diverged at step " + R.div
+                                : "final loss " + R.L[R.L.length - 1].toExponential(2),
+        { anchor: "end", size: 11, fill: R.div > 0 ? C.pink : C.green });
+
+      /* the surface, as a coarse heat map */
+      T(svg, 8, 32, "loss surface: a narrow valley with a quartic wall",
+        { anchor: "start", size: 9, fill: C.faint });
+      var NX = 48, NY = 22, cw = MW / NX, chh = MH / NY, r2, c2;
+      for (c2 = 0; c2 < NX; c2++) for (r2 = 0; r2 < NY; r2++) {
+        var gx = -XR + (c2 + 0.5) / NX * 2 * XR, gy = YR - (r2 + 0.5) / NY * 2 * YR;
+        var v = Math.min(1, Math.log(1 + loss(gx, gy)) / Math.log(1 + 70));
+        rect(svg, MX0 + c2 * cw, MY0 + r2 * chh, cw + 0.6, chh + 0.6,
+          { rx: 0, fill: C.blue, stroke: "none", op: 0.06 + v * 0.34 });
+      }
+      /* the path */
+      var pts = [];
+      for (i = 0; i < R.path.length; i++) {
+        var p = R.path[i];
+        if (Math.abs(p[0]) > XR * 1.6 || Math.abs(p[1]) > YR * 1.6) break;
+        pts.push(sx(Math.max(-XR, Math.min(XR, p[0]))) + "," + sy(Math.max(-YR, Math.min(YR, p[1]))));
+      }
+      S("polyline", { points: pts.join(" "), fill: "none",
+        stroke: R.div > 0 ? C.pink : C.orange, "stroke-width": 1.6 }, svg);
+      S("circle", { cx: sx(X0), cy: sy(Y0), r: 3.5, fill: C.text }, svg);
+      S("circle", { cx: sx(0), cy: sy(0), r: 3, fill: "none", stroke: C.green, "stroke-width": 2 }, svg);
+      T(svg, sx(X0), sy(Y0) - 10, "start", { size: 8.5, fill: C.faint });
+      T(svg, sx(0) + 26, sy(0) - 8, "minimum", { size: 8.5, fill: C.green });
+
+      /* loss and update size */
+      var PX = 444, PW = 308, PY = 44, PH = 80;
+      function lx(i2) { return PX + i2 / N * PW; }
+      function ly(v) { return PY + PH - Math.min(1, Math.max(0, (Math.log10(Math.max(1e-8, v)) + 8) / 10)) * PH; }
+      T(svg, PX, 32, "loss, log scale", { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      pts = [];
+      for (i = 0; i < R.L.length; i++) pts.push(lx(i) + "," + ly(R.L[i]));
+      S("polyline", { points: pts.join(" "), fill: "none",
+        stroke: R.div > 0 ? C.pink : C.teal, "stroke-width": 1.6 }, svg);
+
+      var UY = 158, UH = 66;
+      function uy2(v) { return UY + UH - Math.min(1, Math.max(0, (Math.log10(Math.max(1e-6, v)) + 6) / 7)) * UH; }
+      T(svg, PX, 146, "size of each update, log scale", { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, UY + UH, PX + PW, UY + UH, { stroke: C.line, sw: 1 });
+      pts = [];
+      for (i = 1; i < R.U.length; i++) pts.push(lx(i) + "," + uy2(R.U[i]));
+      S("polyline", { points: pts.join(" "), fill: "none", stroke: C.orange, "stroke-width": 1.6 }, svg);
+      if (R.U.length > 1) {
+        T(svg, PX, 238, "first update " + R.U[1].toExponential(2),
+          { anchor: "start", size: 9.5, fill: kind >= 2 && !warm ? C.orange : C.faint });
+        if (kind >= 2 && !warm)
+          T(svg, PX, 253, "that is lr, whatever the gradient was",
+            { anchor: "start", size: 9.5, fill: C.orange });
+      }
+
+      /* the rule being applied */
+      var code = kind === 0 ? ["update = lr * g"]
+        : kind === 1 ? ["m = 0.9*m + g", "update = lr * m"]
+        : ["m = b1*m + (1-b1)*g", "v = b2*v + (1-b2)*g*g",
+           "update = lr * m / (sqrt(v) + eps)"].concat(kind === 3 ? ["w -= lr * 0.02 * w   (decoupled)"] : []);
+      var cy2 = 262;
+      T(svg, 8, cy2, "the update rule, as section 1 writes it", { anchor: "start", size: 9, fill: C.faint });
+      code.forEach(function (c3) { cy2 += 17; T(svg, 8, cy2, c3, { anchor: "start", size: 10, fill: C.dim }); });
+
+      /* what just happened */
+      var alt = run.call(null), msg;
+      line(svg, 8, 344, 752, 344, { stroke: C.line, sw: 1 });
+      if (R.div > 0)
+        msg = KIND[kind] + " at lr " + lr.toFixed(3) + " diverged at step " + R.div +
+          (warm ? ", even with " + warm + " steps of warmup." : ". Turn warmup up and run it again.");
+      else if (kind === 0 && lr >= 0.22 && warm)
+        msg = "Converged — at a learning rate that diverges at step 18 with no warmup. " +
+          "Only the first " + warm + " steps changed.";
+      else msg = KIND[kind] + " reached " + R.L[R.L.length - 1].toExponential(2) + " in " +
+          (R.L.length - 1) + " steps.";
+      T(svg, 8, 364, msg, { anchor: "start", size: 10.5, fill: R.div > 0 ? C.pink : C.green });
+      wrapT(svg, 8, 386, 120, 17, kind >= 2
+        ? "Adam's update is m/sqrt(v), which stays near lr whatever the gradient does, so it does not " +
+          "explode here. Its warmup argument is the first update above: at step 1 the second moment is " +
+          "one sample."
+        : "SGD and momentum scale the raw gradient, so a step size past 2/curvature leaves the valley " +
+          "and the quartic wall does the rest. Warmup gives the trajectory time to reach a flatter place " +
+          "first.", { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      var R = run();
+      f.say(KIND[kind] + " at lr " + lr.toFixed(3) + (warm ? " with " + warm + " warmup steps" : ", no warmup") +
+        ": " + (R.div > 0 ? "diverged at step " + R.div + "." : "final loss " + R.L[R.L.length - 1].toExponential(2) + "."));
+    }
+
+    var tK = tabs(f.controls, KIND, 0, function (i) { kind = i; render(); say(); });
+    var sL = slider(f.controls, "lr", 0.01, 1.2, 0.25, 0.01,
+      function (v) { return v.toFixed(2); }, function (v) { lr = v; render(); say(); });
+    var sW = slider(f.controls, "warmup", 0, 120, 0, 10,
+      function (v) { return String(Math.round(v)); }, function (v) { warm = Math.round(v); render(); say(); });
+    var tS = tabs(f.controls, SCHED, 0, function (i) { sch = i; render(); say(); });
+    f.btn("reset", function () {
+      kind = 0; lr = 0.25; warm = 0; sch = 0;
+      tK.sync(0); tS.sync(0); sL.set(0.25); sW.set(0); render();
+      f.say("Raise the learning rate until it diverges. Then turn warmup on.");
+    });
+
+    render();
+    f.say("Raise the learning rate until it diverges. Then turn warmup on.");
+  };
+
+
+  /* ========================================================================
+     31. llmPrecision — CH 14 — Comparator
+
+     Real round-to-nearest-even encoders for fp16, bf16 and fp8 e4m3, so the
+     values on screen are what the hardware would store. The format table is
+     derived from the bit layouts rather than typed in, and comes out as
+     section 3 printed it: fp32 3.40e+38 / 1.18e-38 / 6.9 digits, fp16 65,504
+     / 6.10e-05 / 3.0, bf16 3.39e+38 / 1.18e-38 / 2.1.
+
+     Both of the section's measurements reproduce. A gradient of 1e-8 becomes
+     exactly zero in fp16, because the smallest fp16 subnormal is 2^-24 =
+     5.96e-8; multiply by 1,024 and it lands at 1.024e-5, comfortably
+     representable, which is loss scaling in one line. And an update of 1e-4
+     added to a weight of 1.0 returns exactly 1.0 in bf16, because the gap
+     between representables there is 2^-7 and anything under half of it —
+     0.0039 — rounds away. That single fact is the argument for fp32 master
+     weights, and the machine performs it rather than asserting it.
+     ======================================================================== */
+  VIZ.llmPrecision = function (el) {
+    var f = frame(el);
+
+    /* (name, exponent bits, mantissa bits, bias) */
+    var FMT = [["fp32", 8, 23], ["fp16", 5, 10], ["bf16", 8, 7], ["fp8 e4m3", 4, 3]];
+    function bias(e) { return (1 << (e - 1)) - 1; }
+    function maxOf(e, m) {
+      return (2 - Math.pow(2, -m)) * Math.pow(2, (1 << e) - 2 - bias(e));
+    }
+    function minNormal(e) { return Math.pow(2, 1 - bias(e)); }
+    function digits(m) { return m * Math.LN2 / Math.LN10; }
+
+    /* round-to-nearest-even into (e, m), with subnormals and overflow */
+    function quant(x, e, m) {
+      if (x === 0 || !isFinite(x)) return x;
+      var s = x < 0 ? -1 : 1, a = Math.abs(x), B = bias(e);
+      var emax = (1 << e) - 2 - B, emin = 1 - B;
+      var q, sub = Math.pow(2, emin - m);
+      if (a < Math.pow(2, emin)) {                       // subnormal range
+        q = Math.round(a / sub);
+        return s * q * sub;
+      }
+      var ex = Math.floor(Math.log(a) / Math.LN2);
+      var scale = Math.pow(2, ex - m);
+      q = Math.round(a / scale);
+      if (q === Math.pow(2, m + 1)) { q = Math.pow(2, m); ex += 1; scale = Math.pow(2, ex - m); }
+      if (ex > emax) return s * Infinity;
+      return s * q * scale;
+    }
+
+    var CASE = ["a gradient", "an activation", "a weight plus an update"];
+    var ex = -8, scaled = false, cs = 0;
+
+    function value() { return Math.pow(10, ex) * (scaled ? 1024 : 1); }
+
+    var svg = S("svg", { viewBox: "0 0 760 424", width: "100%",
+      role: "img", "aria-label": "one number, stored four ways" }, f.body);
+
+    function fmtNum(v) {
+      if (v === 0) return "0";
+      if (!isFinite(v)) return v > 0 ? "inf" : "-inf";
+      var a = Math.abs(v);
+      return (a >= 1e-4 && a < 1e6) ? String(Number(v.toPrecision(8))) : v.toExponential(3);
+    }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, y;
+
+      T(svg, 8, 14, "bit layouts, and one number put through each of them",
+        { anchor: "start", size: 11, fill: C.teal });
+
+      /* the table, derived */
+      y = 42;
+      T(svg, 8, y, "format", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 170, y, "bits", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 290, y, "max value", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 400, y, "min normal", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 490, y, "decimal digits", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      FMT.forEach(function (F) {
+        var e = F[1], m = F[2], tone = F[0] === "bf16" ? C.teal : F[0] === "fp16" ? C.orange : C.dim;
+        T(svg, 8, y, F[0], { anchor: "start", size: 10.5, fill: tone });
+        T(svg, 170, y, "1+" + e + "+" + m, { anchor: "end", size: 10.5, fill: C.dim });
+        T(svg, 290, y, maxOf(e, m) > 1e5 ? maxOf(e, m).toExponential(2)
+                                         : Math.round(maxOf(e, m)).toLocaleString("en-US"),
+          { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 400, y, minNormal(e).toExponential(2), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 490, y, digits(m).toFixed(1), { anchor: "end", size: 10.5, fill: C.text });
+        y += 20;
+      });
+      T(svg, 8, y + 6, "bf16 keeps fp32's exponent and spends the saved bits on nothing: same range, fewer digits.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* the value under test */
+      var v = value();
+      T(svg, 8, 168, CASE[cs] + " of " + fmtNum(Math.pow(10, ex)) +
+        (scaled ? ", scaled by 1,024 to " + fmtNum(v) : ""),
+        { anchor: "start", size: 11, fill: C.text });
+      y = 194;
+      T(svg, 8, y, "stored as", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 330, y, "relative error", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      FMT.forEach(function (F) {
+        var q = quant(v, F[1], F[2]), lost = q === 0 && v !== 0, over = !isFinite(q);
+        var tone = lost || over ? C.pink : C.text;
+        T(svg, 8, y, F[0], { anchor: "start", size: 10.5, fill: C.dim });
+        T(svg, 210, y, fmtNum(q), { anchor: "end", size: 10.5, fill: tone });
+        T(svg, 330, y, v === 0 ? "—" : over ? "overflow"
+          : ((Math.abs(q - v) / Math.abs(v)) * 100).toFixed(q === 0 ? 0 : 3) + "%",
+          { anchor: "end", size: 10.5, fill: tone });
+        T(svg, 346, y, lost ? "underflowed to zero — no update, and no warning"
+                    : over ? "became infinity" : "", { anchor: "start", size: 9.5, fill: C.pink });
+        y += 20;
+      });
+
+      /* the two facts the section measures */
+      var RX = 8;
+      line(svg, 8, 292, 752, 292, { stroke: C.line, sw: 1 });
+      var g1 = quant(1e-8, 5, 10), g2 = quant(1e-8 * 1024, 5, 10);
+      T(svg, RX, 312, "loss scaling, in one line", { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, RX, 332, "a gradient of 1e-8 in fp16 is " + fmtNum(g1) +
+        "; multiplied by 1,024 first it is " + (1e-8 * 1024).toExponential(2) +
+        ", which fp16 keeps as " + g2.toExponential(3) + ".",
+        { anchor: "start", size: 10.5, fill: C.orange });
+      var w1 = quant(1.0 + 1e-4, 8, 7), gap = Math.pow(2, -7);
+      T(svg, RX, 358, "why fp32 master weights exist", { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, RX, 378, "1.0 + 1e-4 in bf16 is " + fmtNum(w1) + ". The gap between bf16 values near 1.0 is " +
+        gap.toFixed(7) + ",", { anchor: "start", size: 10.5, fill: C.pink });
+      T(svg, RX, 398, "so anything under half of it — " + (gap / 2).toFixed(4) +
+        " — rounds away. Late in training most updates are that size.",
+        { anchor: "start", size: 10.5, fill: C.pink });
+    }
+
+    function say() {
+      var v = value(), q16 = quant(v, 5, 10), qb = quant(v, 8, 7);
+      f.say(fmtNum(v) + ": fp16 stores " + fmtNum(q16) + ", bf16 stores " + fmtNum(qb) +
+        (q16 === 0 && v !== 0 ? " — fp16 has lost it entirely." :
+         !isFinite(q16) ? " — fp16 has overflowed." : "."));
+    }
+
+    var sE = slider(f.controls, "magnitude", -12, 12, -8, 1,
+      function (v) { return "1e" + Math.round(v); },
+      function (v) { ex = Math.round(v); render(); say(); });
+    var tgS = toggle(f.controls, "loss scaling x1024", false, function (v) {
+      scaled = v; render();
+      f.say(v ? "Scaled by 1,024 before the backward pass, and divided back before the step: the " +
+                "mathematics is unchanged and the gradient survives fp16."
+              : "Unscaled. Anything below 6e-8 is gone in fp16.");
+    });
+    var tC = tabs(f.controls, ["gradient", "activation", "weight + update"], 0, function (i) {
+      cs = i; ex = [-8, 4, 0][i]; sE.set(ex); render(); say();
+    });
+    f.btn("reset", function () {
+      ex = -8; scaled = false; cs = 0; sE.set(-8); tgS.set(false); tC.sync(0); render();
+      f.say("Push the values up. Watch fp16 overflow before bf16 loses precision.");
+    });
+
+    render();
+    f.say("Push the values up. Watch fp16 overflow before bf16 loses precision.");
+  };
+
+
+  /* ========================================================================
+     32. llmMemoryLevers — CH 14 — Tuner
+
+     A 0.65B model at 8,192 tokens against a 16 GB card, priced with Chapter
+     9's arithmetic so the two halves of the course agree: bf16 weights,
+     fp32 master copy, fp32 gradients, and whatever the optimizer keeps.
+
+     The levers do what section 5 says and nothing more. Accumulation raises
+     the effective batch at no memory cost and multiplies the step time by
+     exactly the accumulation count. Checkpointing keeps only the block
+     boundaries, which at this sequence length cuts activations by about 78x
+     and costs 30% of the step.
+
+     The published tokens-per-step table falls out of the sliders: micro 4 x
+     accumulate 8 x 1 device at 8,192 is 262,144 tokens per step, and the
+     same micro-batch on 64 devices is 16,777,216.
+
+     Blue is fixed by Chapter 9 and nothing here moves it. Only the red block
+     answers to these two levers, which is the whole point of the section.
+     ======================================================================== */
+  VIZ.llmMemoryLevers = function (el) {
+    var f = frame(el);
+
+    var d = 1536, L = 24, ff = 4096, V = 32000, heads = 12, kvh = 4, hd = 128, SEQ = 8192;
+    var CARD = 16 * 1e9, TFLOPS = 200e12;
+    var Np = L * (d * heads * hd * 2 + d * kvh * hd * 2 + 3 * d * ff + 2 * d) + V * d + d;
+
+    /* per-parameter bytes: weights + master + grads + optimizer state */
+    var OPT = [["AdamW, fp32 state", 8], ["8-bit Adam", 2], ["SGD + momentum", 4]];
+    var micro = 1, accum = 8, dev = 1, ckpt = true, oi = 0;
+
+    function actPerToken() {
+      var keep = 6 * d + 2 * kvh * hd + 3 * ff;          // what a backward pass must hold
+      var probs = heads * SEQ;                           // the only term that grows with length
+      return ckpt ? d * 2 * L : (keep + probs) * 2 * L;
+    }
+    function mem() {
+      var fixed = Np * (2 + 4 + 4 + OPT[oi][1]);
+      var acts = actPerToken() * SEQ * micro;
+      return { fixed: fixed, acts: acts, total: fixed + acts };
+    }
+    function tokens() { return micro * accum * dev * SEQ; }
+    function stepTime() {
+      var flops = 6 * Np * tokens();
+      return flops / (dev * TFLOPS) * (ckpt ? 1.3 : 1);
+    }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function gb(b) { return (b / 1e9).toFixed(2) + " GB"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 420", width: "100%",
+      role: "img", "aria-label": "what fills a 16 GB card, and what the levers move" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var M = mem(), fits = M.total <= CARD;
+
+      T(svg, 8, 14, commas(Np / 1e6) + "M parameters · " + commas(SEQ) + " tokens per sequence · " +
+        OPT[oi][0], { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, fits ? "fits in 16 GB" : "does not fit",
+        { anchor: "end", size: 11, fill: fits ? C.green : C.pink });
+
+      /* the stack, against the card */
+      var BX = 8, BW = 600, BY = 46, BH = 34, scale = Math.max(CARD, M.total) * 1.04;
+      T(svg, 8, 30, "memory on one device", { anchor: "start", size: 9, fill: C.faint });
+      var segs = [[Np * 2, C.blue, "weights, bf16"], [Np * 4, C.blue, "master copy, fp32"],
+                  [Np * 4, C.blue, "gradients, fp32"], [Np * OPT[oi][1], C.sky, "optimizer state"],
+                  [M.acts, C.pink, "activations"]];
+      var x = BX;
+      segs.forEach(function (s) {
+        var w = s[0] / scale * BW;
+        if (w > 0.5) rect(svg, x, BY, Math.max(1, w - 1), BH, { rx: 3, fill: s[1], stroke: "none", op: 0.72 });
+        x += w;
+      });
+      var cx = BX + CARD / scale * BW;
+      line(svg, cx, BY - 4, cx, BY + BH + 4, { stroke: C.pink, sw: 2, dash: "4 3" });
+      T(svg, cx, BY + BH + 16, "16 GB", { size: 9, fill: C.pink });
+      T(svg, 752, BY + BH / 2, gb(M.total), { anchor: "end", size: 12, fill: fits ? C.green : C.pink });
+
+      var ly = 108;
+      segs.forEach(function (s) {
+        T(svg, 8, ly, s[2], { anchor: "start", size: 10, fill: C.dim });
+        rect(svg, 168, ly - 5, s[0] / scale * 300, 10, { rx: 2, fill: s[1], stroke: "none", op: 0.6 });
+        T(svg, 498, ly, gb(s[0]), { anchor: "end", size: 10, fill: C.text });
+        T(svg, 560, ly, (s[0] / M.total * 100).toFixed(1) + "%", { anchor: "end", size: 9.5, fill: C.faint });
+        ly += 19;
+      });
+      T(svg, 8, ly + 4, "Blue and sky are fixed by Chapter 9's arithmetic. Only the red block answers to these levers.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* the batch arithmetic */
+      var RX = 600;
+      T(svg, RX, 108, "effective batch", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 752, 128, commas(micro * accum * dev), { anchor: "end", size: 16, fill: C.orange });
+      T(svg, RX, 148, micro + " x " + accum + " x " + dev, { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, RX, 174, "tokens per step", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 752, 194, commas(tokens()), { anchor: "end", size: 14, fill: C.teal });
+
+      /* time */
+      var TY = 240;
+      line(svg, 8, TY - 14, 752, TY - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, TY, "one optimizer step", { anchor: "start", size: 9, fill: C.faint });
+      var base = 6 * Np * micro * dev * SEQ / (dev * TFLOPS);
+      var rows = [["one micro-batch, forward and backward", base, C.blue],
+                  [accum + " of them, accumulated", base * accum, C.teal],
+                  ["with checkpointing's 30%", stepTime(), ckpt ? C.orange : C.faint]];
+      var ty = TY + 20, mx = stepTime();
+      rows.forEach(function (r) {
+        T(svg, 8, ty, r[0], { anchor: "start", size: 10, fill: C.dim });
+        rect(svg, 300, ty - 5, r[1] / mx * 300, 10, { rx: 2, fill: r[2], stroke: "none", op: 0.6 });
+        T(svg, 640, ty, r[1].toFixed(2) + " s", { anchor: "end", size: 10, fill: C.text });
+        ty += 19;
+      });
+      T(svg, 8, ty + 4, "6ND FLOPs at 200 TFLOP/s effective per device. Nothing in this section makes anything faster.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* the verdict */
+      var noCkpt = actPerToken.call(null), ratio;
+      ckpt = !ckpt; ratio = actPerToken(); ckpt = !ckpt;
+      line(svg, 8, 356, 752, 356, { stroke: C.line, sw: 1 });
+      T(svg, 8, 376, fits
+          ? "Fits, at " + gb(M.total) + " of 16 GB, and one step takes " + stepTime().toFixed(2) + " s."
+          : "Over the card by " + gb(M.total - CARD) + ". Turn checkpointing on, or drop the micro-batch.",
+        { anchor: "start", size: 10.5, fill: fits ? C.green : C.pink });
+      T(svg, 8, 398, ckpt
+          ? "Checkpointing keeps only the block boundaries: " + (ratio / actPerToken()).toFixed(0) +
+            "x less activation memory, for 30% more time."
+          : "Every intermediate is being kept. Checkpointing would cut that by " +
+            (actPerToken() / ratio).toFixed(0) + "x.",
+        { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    function say() {
+      var M = mem();
+      f.say("micro " + micro + " x accumulate " + accum + " x " + dev + " device" + (dev > 1 ? "s" : "") +
+        " = effective batch " + commas(micro * accum * dev) + ", " + commas(tokens()) + " tokens per step, " +
+        gb(M.total) + (M.total <= CARD ? " — fits." : " — does not fit."));
+    }
+
+    var sM = slider(f.controls, "micro-batch", 1, 8, 1, 1,
+      function (v) { return String(v); }, function (v) { micro = v; render(); say(); });
+    var sA = slider(f.controls, "accumulate", 1, 32, 8, 1,
+      function (v) { return String(v); }, function (v) { accum = v; render(); say(); });
+    var sD = slider(f.controls, "devices", 1, 64, 1, 1,
+      function (v) { return String(v); }, function (v) { dev = v; render(); say(); });
+    var tgC = toggle(f.controls, "checkpointing", true, function (v) {
+      ckpt = v; render();
+      f.say(v ? "Only the block boundaries are kept; the rest is recomputed in the backward pass."
+              : "Every intermediate is kept. This is where the card goes.");
+    });
+    var tO = tabs(f.controls, ["AdamW", "8-bit Adam", "SGD+mom"], 0, function (i) { oi = i; render(); say(); });
+    f.btn("reset", function () {
+      micro = 1; accum = 8; dev = 1; ckpt = true; oi = 0;
+      sM.set(1); sA.set(8); sD.set(1); tgC.set(true); tO.sync(0); render();
+      f.say("Fit a run that did not fit, and pay for it in wall-clock.");
+    });
+
+    render();
+    f.say("Fit a run that did not fit, and pay for it in wall-clock.");
   };
 
 
