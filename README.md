@@ -5,6 +5,25 @@ storage engines, B-Trees, file formats, transactions and recovery, log-structure
 failure detection, leader election, replication, anti-entropy, distributed transactions,
 and consensus. All explanatory text is original writing.
 
+## The courses
+
+Three courses are live. Each is its own page; the shell (`js/app.js`, `js/gate.js`) is
+shared and keyed off `window.HD_COURSE` set by the page.
+
+| Course | Page | Content | Machines |
+|---|---|---|---|
+| Databases in Depth | [`databases-in-depth.html`](databases-in-depth.html) | `?course=db` | `js/viz*.js` |
+| RAG In Depth | [`rag-in-depth.html`](rag-in-depth.html) | `?course=rag` | `js/viz-rag*.js` |
+| LLM In Depth | [`llm-in-depth.html`](llm-in-depth.html) | `?course=llm` | `js/viz-llm1.js` |
+
+Chapter text is no longer static: it is served by the `course-content` Edge Function
+(`supabase/functions/course-content/`), which returns full chapters to premium members
+and free chapters plus locked stubs to everyone else. Registering a new course means
+adding a loader to its `COURSES` map and a page that sets `HD_COURSE.key` to match.
+
+> The sections below describe the original databases course and predate that move; the
+> `js/bookData-*.js` paths in them now live under the Edge Function's `_data/`.
+
 ## Running it
 
 No build step, no server, no dependencies. Either:

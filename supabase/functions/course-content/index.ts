@@ -82,6 +82,9 @@ const COURSES: Record<string, { full: string; preview: string }> = {
     () => import("./_data/bookData-rag-part3.js"),
     () => import("./_data/bookData-rag-part4.js"),
   ]),
+  llm: await build([
+    () => import("./_data/bookData-llm-part1.js"),
+  ]),
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
