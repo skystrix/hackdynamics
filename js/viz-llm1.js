@@ -71,6 +71,13 @@
      llmGuardrailCost ch33 Tuner    two rates, and the base rate that decides
      llmCostModel   ch34 Tuner      where a request's money goes, by earlier arithmetic
      llmIncidentTriage ch34 Comparator twelve symptoms, guessed then revealed
+     llmPocketTokenizer ch35 Builder the chapter's trainer, run on your own text
+     llmPocketShapes ch36 Inspector  every tensor sized from the config, and a mask that stops being square
+     llmPocketTraining ch37 Comparator the real run against chapter 13's gallery
+     llmPocketAblation ch38 Comparator paired against unpaired, and what pairing removes
+     llmPocketDiff  ch39 Inspector  four deviation shapes, and the one that was the harness
+     llmPocketDpo   ch40 Tuner      the real DPO log, with all three numbers plotted
+     llmPocketBench ch41 Comparator five rows, and what each of them is not
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -13919,6 +13926,991 @@
 
     render();
     f.say("Read the symptom. Guess the cause before revealing it.");
+  };
+
+
+
+  /* ========================================================================
+     75. llmPocketTokenizer — CH 35 — Builder
+
+     Chapter 35's trainer, run in the browser on whatever text is in the box:
+     the same whitespace-run pre-tokenizer, the same count-over-unique-
+     segments loop, and the same tie-break on rank that section 6 says will
+     cost you an afternoon if you write it carelessly. Turn the tie-break off
+     and the merge table diverges from the reference within a few merges,
+     which is the failure the chapter's reference test exists to catch.
+
+     The compression row is the chapter's own: 1.87 bytes a token at a
+     vocabulary of 756, 2.40 at 2,256 and 2.65 at 8,256 — diminishing
+     returns with every doubling, measured rather than asserted, on a corpus
+     small enough to train while you watch.
+     ======================================================================== */
+  VIZ.llmPocketTokenizer = function (el) {
+    var f = frame(el);
+
+    var PUB = [[756, 1.87], [2256, 2.40], [8256, 2.65]];
+    var CORPUS =
+      "the quick brown fox jumps over the lazy dog while the other dogs sleep " +
+      "under the old bridge that the council built over the river last winter " +
+      "and the river runs under the bridge and over the stones that the winter " +
+      "left there the council reported that the bridge was opened in the spring " +
+      "and that the old bridge over the river was closed to the traffic that " +
+      "the new bridge carries over the valley to the station on the other side ";
+    var target = 320, tie = true, text = CORPUS;
+
+    function segments(str) {
+      var out = [], i = 0;
+      while (i < str.length) {
+        var sp = /\s/.test(str[i]), j = i + 1;
+        while (j < str.length && /\s/.test(str[j]) === sp) j++;
+        out.push(str.slice(i, j)); i = j;
+      }
+      return out;
+    }
+    function train(n) {
+      var counts = {}, merges = [], rank = {}, next = 256, i;
+      segments(text).forEach(function (s) { counts[s] = (counts[s] || 0) + 1; });
+      var words = Object.keys(counts).map(function (s) {
+        return { syms: s.split("").map(function (c) { return c.charCodeAt(0); }), n: counts[s] };
+      });
+      for (i = 0; i < 256; i++) rank[i] = i;
+      while (next < n) {
+        var pairs = {}, key;
+        words.forEach(function (w) {
+          for (var k = 0; k + 1 < w.syms.length; k++) {
+            key = w.syms[k] + "," + w.syms[k + 1];
+            pairs[key] = (pairs[key] || 0) + w.n;
+          }
+        });
+        var best = null, bf = 0;
+        for (key in pairs) {
+          var pr = key.split(",").map(Number), fq = pairs[key];
+          var better = fq > bf;
+          if (!better && fq === bf && best) {
+            better = tie ? (-rank[pr[0]] > -rank[best[0]] ||
+                (rank[pr[0]] === rank[best[0]] && -rank[pr[1]] > -rank[best[1]]))
+              : key < (best[0] + "," + best[1]);
+          }
+          if (better) { bf = fq; best = pr; }
+        }
+        if (!best || bf < 2) break;
+        merges.push({ a: best[0], b: best[1], id: next, n: bf });
+        rank[next] = next;
+        words = words.map(function (w) {
+          var out = [], k = 0;
+          while (k < w.syms.length) {
+            if (k + 1 < w.syms.length && w.syms[k] === best[0] && w.syms[k + 1] === best[1]) {
+              out.push(next); k += 2;
+            } else { out.push(w.syms[k]); k++; }
+          }
+          return { syms: out, n: w.n };
+        });
+        next++;
+      }
+      var tok = 0;
+      words.forEach(function (w) { tok += w.syms.length * w.n; });
+      return { merges: merges, tokens: tok, bytes: text.length };
+    }
+    function label(m, merges) {
+      function show(id) {
+        if (id < 256) return String.fromCharCode(id).replace(" ", "·");
+        var k = merges.filter(function (x) { return x.id === id; })[0];
+        return k ? show(k.a) + show(k.b) : "?";
+      }
+      return show(m.a) + show(m.b);
+    }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
+      role: "img", "aria-label": "a merge table, trained while you watch" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var R = train(target), i;
+
+      T(svg, 8, 14, "vocabulary " + target + " · " + R.merges.length + " merges learned · " +
+        commas(R.bytes) + " bytes in", { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, (R.bytes / R.tokens).toFixed(2) + " bytes per token",
+        { anchor: "end", size: 11, fill: C.orange });
+
+      T(svg, 8, 36, "the merge table, in the order it was learned",
+        { anchor: "start", size: 9, fill: C.faint });
+      var x = 8, y = 58;
+      R.merges.slice(0, 96).forEach(function (m, k) {
+        var lab = label(m, R.merges).slice(0, 10), w = 12 + lab.length * 6.4;
+        if (x + w > 752) { x = 8; y += 22; }
+        if (y > 190) return;
+        rect(svg, x, y - 10, w, 20, { rx: 3, fill: C.teal, stroke: "none",
+          op: 0.2 + Math.min(0.55, m.n / 40) });
+        T(svg, x + w / 2, y, lab, { size: 9.5, fill: C.text });
+        x += w + 3;
+      });
+
+      /* compression */
+      var ty = 214;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "the chapter's own compression row, measured on the Almanac",
+        { anchor: "start", size: 9, fill: C.faint });
+      ty += 20;
+      PUB.forEach(function (p) {
+        T(svg, 8, ty, "vocab " + commas(p[0]), { anchor: "start", size: 10.5, fill: C.dim });
+        rect(svg, 160, ty - 6, p[1] / 3 * 300, 12, { rx: 2, fill: C.blue, stroke: "none", op: 0.6 });
+        T(svg, 500, ty, p[1].toFixed(2) + " bytes/token", { anchor: "end", size: 10.5, fill: C.text });
+        ty += 20;
+      });
+      T(svg, 8, ty + 4, "Every doubling of the vocabulary buys less than the last one did.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      var RX = 540;
+      T(svg, RX, 214, "yours, on this text", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 752, 240, (R.bytes / R.tokens).toFixed(2), { anchor: "end", size: 20, fill: C.orange });
+      T(svg, RX, 262, "bytes per token", { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, RX, 284, commas(R.tokens) + " tokens", { anchor: "start", size: 10, fill: C.dim });
+
+      line(svg, 8, 330, 752, 330, { stroke: C.line, sw: 1 });
+      T(svg, 8, 350, tie
+          ? "Tie-break on rank is on: equal-frequency pairs resolve the way the reference resolves them."
+          : "Tie-break off: equal-frequency pairs resolve arbitrarily, and the table diverges from the reference.",
+        { anchor: "start", size: 10.5, fill: tie ? C.green : C.pink });
+      wrapT(svg, 8, 372, 122, 17, "Counting over unique segments weighted by frequency, rather than " +
+        "over the raw stream, is why this runs while you watch. The pre-tokenizer keeps whitespace " +
+        "runs, which is what makes the encoding lossless.", { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      var R = train(target);
+      f.say(R.merges.length + " merges at vocabulary " + target + ": " +
+        (R.bytes / R.tokens).toFixed(2) + " bytes per token on " + commas(R.bytes) + " bytes of text.");
+    }
+
+    var sV = slider(f.controls, "vocabulary", 260, 420, 320, 4,
+      function (v) { return String(v); }, function (v) { target = v; render(); say(); });
+    var tgT = toggle(f.controls, "tie-break on rank", true, function (v) {
+      tie = v; render(); say();
+    });
+    f.btn("more text", function () {
+      text = text + CORPUS; render();
+      f.say("Corpus doubled to " + commas(text.length) + " bytes: the same merges appear earlier " +
+        "and the compression improves.");
+    });
+    f.btn("reset", function () {
+      target = 320; tie = true; text = CORPUS; sV.set(320); tgT.set(true); render();
+      f.say("Train on your own text and watch your merge table grow beside the reference.");
+    });
+
+    render();
+    f.say("Train on your own text and watch your merge table grow beside the reference.");
+  };
+
+
+  /* ========================================================================
+     76. llmPocketShapes — CH 36 — Inspector
+
+     Every tensor in the block, sized from the config, with the shape
+     vocabulary the chapter fixes: B, T, C, h, dh, and S, which equals T
+     without a cache and exceeds it with one.
+
+     The parameter count is the chapter's, and it is produced rather than
+     quoted: 786,432 in the fused QKV projection, 262,144 in the output
+     projection, 1,048,576 in each feed-forward matrix and 2,048 in the two
+     norms is 3,147,776 a block; six blocks plus 4,227,072 of embeddings and
+     262,144 of learned positions is 23,375,872 parameters.
+
+     Section 5's gap between S and T is the control that matters. Turn the
+     cache on and T drops to 1 while S keeps growing, and the mask has to
+     become tril(diagonal = S - T) — which is the bug section 7 is about,
+     visible here as a mask that stops being square.
+     ======================================================================== */
+  VIZ.llmPocketShapes = function (el) {
+    var f = frame(el);
+
+    var V = 8256, maxSeq = 512;
+    var d = 512, h = 8, L = 6, ff = 2048, B = 4, Tt = 16, cache = false, cached = 48;
+
+    function dh() { return d / h; }
+    function S2() { return cache ? cached + Tt : Tt; }
+    function block() { return 3 * d * d + d * d + 2 * d * ff + 2 * 2 * d; }
+    function total() { return L * block() + V * d + maxSeq * d; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
+      role: "img", "aria-label": "every tensor in the block, sized from the config" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var Tn = cache ? 1 : Tt, Sn = cache ? cached + 1 : Tt, i;
+
+      T(svg, 8, 14, "d_model " + d + " · " + h + " heads of " + dh() + " · " + L +
+        " layers · d_ff " + ff + " · vocab " + commas(V),
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, commas(total()) + " parameters",
+        { anchor: "end", size: 11, fill: total() === 23375872 ? C.green : C.text });
+
+      /* the tensors */
+      var y = 44;
+      T(svg, 8, y, "tensor", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 330, y, "shape", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 470, y, "parameters", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      [["x, into the block", "(" + B + ", " + Tn + ", " + d + ")", 0],
+       ["qkv projection", "(" + d + ", " + 3 * d + ")", 3 * d * d],
+       ["q, k, v after split", "(" + B + ", " + Tn + ", " + d + ") each", 0],
+       ["q after the head reshape", "(" + B + ", " + h + ", " + Tn + ", " + dh() + ")", 0],
+       ["k, v after the cache", "(" + B + ", " + h + ", " + Sn + ", " + dh() + ")", 0],
+       ["scores", "(" + B + ", " + h + ", " + Tn + ", " + Sn + ")", 0],
+       ["output projection", "(" + d + ", " + d + ")", d * d],
+       ["feed-forward up", "(" + d + ", " + ff + ")", d * ff],
+       ["feed-forward down", "(" + ff + ", " + d + ")", ff * d],
+       ["two norms", "(" + d + ") x 4", 4 * d]].forEach(function (r) {
+        T(svg, 8, y, r[0], { anchor: "start", size: 10, fill: r[2] ? C.dim : C.faint });
+        T(svg, 330, y, r[1], { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 470, y, r[2] ? commas(r[2]) : "—", { anchor: "end", size: 10.5,
+          fill: r[2] ? C.teal : C.faint });
+        y += 19;
+      });
+      T(svg, 8, y + 6, "one block: " + commas(block()) + " · " + L + " blocks: " +
+        commas(L * block()) + " · embeddings " + commas(V * d) + " · positions " +
+        commas(maxSeq * d), { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* the mask */
+      var MX = 520, MY = 50, MS = 190;
+      T(svg, MX, MY - 10, "the mask, T x S", { anchor: "start", size: 9, fill: C.faint });
+      var cw = MS / Math.max(Sn, 1), chh = MS / Math.max(Tn, 1);
+      for (i = 0; i < Tn * Sn && i < 4000; i++) {
+        var r2 = Math.floor(i / Sn), c2 = i % Sn;
+        var ok = c2 <= r2 + (Sn - Tn);
+        rect(svg, MX + c2 * cw, MY + r2 * chh, Math.max(0.6, cw - 0.5), Math.max(0.6, chh - 0.5),
+          { rx: 0, fill: ok ? C.teal : C.faint, stroke: "none", op: ok ? 0.6 : 0.15 });
+      }
+      T(svg, MX, MY + MS + 16, "tril(diagonal = S - T) = " + (Sn - Tn),
+        { anchor: "start", size: 9.5, fill: Sn !== Tn ? C.orange : C.faint });
+      T(svg, MX, MY + MS + 32, Sn === Tn ? "square, because there is no cache"
+          : "not square: " + Tn + " new token" + (Tn === 1 ? "" : "s") + " attending to " + Sn,
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      line(svg, 8, 328, 752, 328, { stroke: C.line, sw: 1 });
+      T(svg, 8, 348, total() === 23375872
+          ? "23,375,872 parameters — the chapter's number, produced from the config."
+          : "Change the config back to 512 / 8 / 6 / 2048 to land on the chapter's 23,375,872.",
+        { anchor: "start", size: 10.5, fill: total() === 23375872 ? C.green : C.orange });
+      wrapT(svg, 8, 370, 122, 17, "Most transformer bugs are shape bugs, and most survive because the " +
+        "code still runs: a wrong transpose gives a tensor of the right size holding the wrong numbers, " +
+        "and the loss goes down anyway, slower than it should, for a week.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say("d_model " + d + ", " + h + " heads of " + dh() + ": one block is " + commas(block()) +
+        " parameters and the model is " + commas(total()) + ".");
+    }
+
+    var sD = slider(f.controls, "d_model", 128, 1024, 512, 64,
+      function (v) { return String(v); },
+      function (v) { d = v; if (d % h) h = 8; render(); say(); });
+    var sH = slider(f.controls, "heads", 1, 16, 8, 1,
+      function (v) { return String(v); },
+      function (v) { if (d % v === 0) h = v; render(); say(); });
+    var sL = slider(f.controls, "layers", 1, 12, 6, 1,
+      function (v) { return String(v); }, function (v) { L = v; render(); say(); });
+    var sF = slider(f.controls, "d_ff", 256, 4096, 2048, 256,
+      function (v) { return String(v); }, function (v) { ff = v; render(); say(); });
+    var sT = slider(f.controls, "T", 1, 32, 16, 1,
+      function (v) { return String(v); }, function (v) { Tt = v; render(); say(); });
+    var tgC = toggle(f.controls, "KV cache", false, function (v) {
+      cache = v; render();
+      f.say(v ? "With a cache T is 1 and S keeps growing, so the mask is no longer square."
+              : "No cache: S equals T and the mask is the familiar triangle.");
+    });
+    f.btn("reset", function () {
+      d = 512; h = 8; L = 6; ff = 2048; Tt = 16; cache = false;
+      sD.set(512); sH.set(8); sL.set(6); sF.set(2048); sT.set(16); tgC.set(false); render();
+      f.say("Change the config and watch every tensor in the block resize.");
+    });
+
+    render();
+    f.say("Change the config and watch every tensor in the block resize.");
+  };
+
+
+  /* ========================================================================
+     77. llmPocketTraining — CH 37 — Comparator
+
+     The chapter's own run, replayed against Chapter 13's gallery. The
+     anchors are the published ones: 8.88 at step 0, 4.65 by step 50, a
+     train-validation gap of 0.04 at step 250 and 0.21 at the end, finishing
+     at 3.271 against a best validation of 3.480 at step 999. The unigram
+     floor and ln(8256) = 9.02 are drawn as lines, because the first fifty
+     steps are the model reaching one of them and nothing else.
+
+     The reading the chapter insists on is that this run did not overfit and
+     did not converge: it ran out of step budget, and the separation is the
+     first half of that story rather than the whole of it. Chapter 15 said
+     why before the run started — 744,628 tokens against a 23.4-million-
+     parameter model is 0.032 tokens a parameter, about 628 times short of
+     compute-optimal.
+     ======================================================================== */
+  VIZ.llmPocketTraining = function (el) {
+    var f = frame(el);
+
+    var STEPS = 1000, V = 8256, TOK = 744628, PARAMS = 23375872;
+    var FAULT = ["your run", "spike, recovered", "no LR decay", "masking bug", "LR too high"];
+    var fi = 0, at = STEPS;
+
+    function real(s) {                                   /* the chapter's curve */
+      if (s <= 0) return 8.88;
+      var early = 4.65 + (8.88 - 4.65) * Math.exp(-s / 14);
+      var late = 3.271 + (4.65 - 3.271) * Math.exp(-(s - 50) / 260);
+      return s < 50 ? early : late;
+    }
+    function val(s) { return real(s) + 0.21 * Math.min(1, Math.max(0, (s - 250) / 500)); }
+    function curve(s) {
+      if (fi === 0) return real(s);
+      if (fi === 1) return real(s) + (s > 400 && s < 470 ? 3.2 * Math.exp(-(s - 400) / 18) : 0);
+      if (fi === 2) return s < 300 ? real(s) : real(300) + 0.0016 * (s - 300);
+      if (fi === 3) return s < 120 ? real(s) : 4.0;
+      return s < 60 ? real(s) : Math.min(9.02, real(60) + 0.004 * (s - 60));
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 424", width: "100%",
+      role: "img", "aria-label": "one real run, and four ways it could have gone wrong" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, gap = val(at) - real(at);
+
+      T(svg, 8, 14, FAULT[fi] + " · step " + at + " · PocketLM, 23.4M parameters, 1,000 steps",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, fi === 0 ? "train " + real(at).toFixed(3) + " · val " + val(at).toFixed(3)
+                               : "compare the shape, not the level",
+        { anchor: "end", size: 11, fill: C.faint });
+
+      var PX = 48, PY = 44, PW = 460, PH = 190;
+      function sx(s) { return PX + s / STEPS * PW; }
+      function sy(v) { return PY + PH - (v - 3.0) / 6.4 * PH; }
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      line(svg, PX, PY, PX, PY + PH, { stroke: C.line, sw: 1 });
+      [9.02, 4.65, 3.48].forEach(function (v, k) {
+        S("line", { x1: PX, y1: sy(v), x2: PX + PW, y2: sy(v), stroke: C.faint,
+          "stroke-width": 1, "stroke-dasharray": "2 4", opacity: 0.5 }, svg);
+        T(svg, PX - 6, sy(v), v.toFixed(2), { anchor: "end", size: 8.5, fill: C.faint });
+      });
+      T(svg, PX + 6, sy(9.02) + 12, "ln(8256) = 9.02, a uniform guess",
+        { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + 6, sy(4.65) - 6, "the unigram floor", { anchor: "start", size: 8.5, fill: C.faint });
+      var tp = [], vp = [];
+      for (i = 0; i <= STEPS; i += 5) {
+        tp.push(sx(i) + "," + sy(Math.min(9.4, curve(i))));
+        if (fi === 0) vp.push(sx(i) + "," + sy(val(i)));
+      }
+      S("polyline", { points: tp.join(" "), fill: "none", stroke: C.teal, "stroke-width": 2 }, svg);
+      if (fi === 0) S("polyline", { points: vp.join(" "), fill: "none", stroke: C.orange,
+        "stroke-width": 2 }, svg);
+      S("line", { x1: sx(at), y1: PY, x2: sx(at), y2: PY + PH, stroke: C.text,
+        "stroke-width": 1, opacity: 0.3 }, svg);
+      T(svg, PX, PY + PH + 14, "0", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY + PH + 14, "1,000 steps", { anchor: "end", size: 8.5, fill: C.faint });
+      if (fi === 0) {
+        T(svg, PX + PW - 4, PY + 14, "teal is train, orange is validation",
+          { anchor: "end", size: 9, fill: C.faint });
+      }
+
+      var RX = 536, y = 52;
+      function row(k, v, tone) {
+        T(svg, RX, y, k, { anchor: "start", size: 9.5, fill: C.faint });
+        T(svg, 752, y + 17, v, { anchor: "end", size: 13, fill: tone || C.text });
+        y += 40;
+      }
+      row("train loss", curve(at).toFixed(3), C.teal);
+      if (fi === 0) {
+        row("validation", val(at).toFixed(3), C.orange);
+        row("the gap", gap.toFixed(3), gap > 0.15 ? C.pink : C.faint);
+      } else {
+        row("what this shape is", "", C.faint);
+      }
+      row("perplexity", Math.exp(curve(at)).toFixed(1), C.dim);
+
+      var ty = 268;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, fi === 0
+          ? "8.88 to 4.65 in fifty steps is the token frequency distribution and nothing else."
+          : fi === 1 ? "A spike that recovers: a gradient the clipping caught late. No action."
+          : fi === 2 ? "Falls, then rises steadily: a learning rate that never decayed."
+          : fi === 3 ? "Flat at a suspiciously round number: a masking bug producing a constant prediction."
+          : "Rises toward ln(V): the learning rate is past stability and the model is unlearning.",
+        { anchor: "start", size: 10.5, fill: fi === 0 ? C.text : C.orange });
+
+      /* the scaling footnote */
+      var by = 306;
+      T(svg, 8, by, "why it separated", { anchor: "start", size: 9, fill: C.faint });
+      [["tokens in the corpus", TOK.toLocaleString("en-US")],
+       ["parameters", PARAMS.toLocaleString("en-US")],
+       ["tokens per parameter", (TOK / PARAMS).toFixed(3)],
+       ["compute-optimal would be", "20, about " + Math.round(20 / (TOK / PARAMS)) + "x more"]
+      ].forEach(function (r, k) {
+        T(svg, 8 + k * 190, by + 20, r[0], { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 8 + k * 190, by + 40, r[1], { anchor: "start", size: 12,
+          fill: k === 3 ? C.pink : C.text });
+      });
+
+      wrapT(svg, 8, 382, 122, 17, "This run did not overfit and did not converge: it ran out of step " +
+        "budget, and validation was still improving at step 999. The gap opening and staying open is " +
+        "the model beginning to fit the particular two megabytes it was shown.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say(FAULT[fi] + " at step " + at + ": loss " + curve(at).toFixed(3) +
+        (fi === 0 ? ", validation " + val(at).toFixed(3) + ", gap " + (val(at) - real(at)).toFixed(3) + "." : "."));
+    }
+
+    var tF = tabs(f.controls, FAULT, 0, function (i) { fi = i; render(); say(); });
+    var sS = slider(f.controls, "step", 0, STEPS, STEPS, 10,
+      function (v) { return String(v); }, function (v) { at = v; render(); say(); });
+    f.btn("reset", function () {
+      fi = 0; at = STEPS; tF.sync(0); sS.set(STEPS); render();
+      f.say("Your own run, replayed against Chapter 13's gallery of failure shapes.");
+    });
+
+    render();
+    f.say("Your own run, replayed against Chapter 13's gallery of failure shapes.");
+  };
+
+
+  /* ========================================================================
+     78. llmPocketAblation — CH 38 — Comparator
+
+     The chapter's ablation table with its intervals drawn, and the thing the
+     drawing is for: sequence difficulty is most of the width of the
+     unpaired intervals and cancels entirely in the paired one.
+
+     RoPE is the uncomplicated case — -0.2452 with an interval of [-0.2535,
+     -0.2365], on a variant that is also 262,144 parameters smaller. RMSNorm
+     is why the harness exists: its own interval [3.8975, 3.9936] and the
+     baseline's [3.8993, 3.9958] overlap almost completely, and the paired
+     difference of -0.0019 with [-0.0024, -0.0015] excludes zero decisively.
+     A difference two hundred times smaller than the unpaired noise.
+
+     And the sentence that stops the harness being a trap, which is on screen
+     rather than in a footnote: 0.0019 nats is a perplexity factor of 1.002.
+     Real, and worthless.
+     ======================================================================== */
+  VIZ.llmPocketAblation = function (el) {
+    var f = frame(el);
+
+    var ROWS = [
+      { n: "baseline", loss: 3.9476, lo: 3.8993, hi: 3.9958, d: 0, dlo: 0, dhi: 0, dp: 0 },
+      { n: "RoPE", loss: 3.7024, lo: 3.6555, hi: 3.7492, d: -0.2452, dlo: -0.2535, dhi: -0.2365,
+        dp: -262144 },
+      { n: "RMSNorm", loss: 3.9457, lo: 3.8975, hi: 3.9936, d: -0.0019, dlo: -0.0024, dhi: -0.0015,
+        dp: -2048 },
+      { n: "SwiGLU, matched", loss: 3.9521, lo: 3.9038, hi: 4.0003, d: 0.0045, dlo: 0.0014,
+        dhi: 0.0076, dp: 0 },
+      { n: "GQA, 2 kv heads", loss: 3.9612, lo: 3.9128, hi: 4.0095, d: 0.0136, dlo: 0.0102,
+        dhi: 0.0170, dp: -393216 },
+      { n: "all four together", loss: null, lo: null, hi: null, d: null, dlo: null, dhi: null, dp: null }
+    ];
+    var paired = true, ri = 2;
+
+    function svgEl() {
+      return S("svg", { viewBox: "0 0 760 432", width: "100%",
+        role: "img", "aria-label": "six variants, paired and unpaired" }, f.body);
+    }
+    var svg = svgEl();
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var r = ROWS[ri], i;
+
+      T(svg, 8, 14, "300 steps, same seed, same batches, 256 held-out sequences · " +
+        (paired ? "paired difference" : "independent intervals"),
+        { anchor: "start", size: 11, fill: paired ? C.teal : C.orange });
+      T(svg, 752, 14, r.d === null ? "not measured" :
+        (paired ? (r.dlo < 0 && r.dhi < 0 ? "excludes zero" : r.dlo > 0 && r.dhi > 0 ? "worse, decisively"
+          : "includes zero") : "overlaps the baseline"),
+        { anchor: "end", size: 11, fill: r.d === null ? C.faint :
+          paired && r.dhi < 0 ? C.green : paired && r.dlo > 0 ? C.pink : C.faint });
+
+      /* the table */
+      var y = 44;
+      T(svg, 8, y, "variant", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 260, y, "loss", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 420, y, "its own 95% interval", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 560, y, "paired difference", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 700, y, "parameters", { anchor: "end", size: 9, fill: C.faint });
+      y += 22;
+      ROWS.forEach(function (q, k) {
+        var on = k === ri;
+        if (on) rect(svg, 4, y - 12, 748, 24, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, q.n, { anchor: "start", size: 10.5, fill: q.loss === null ? C.faint
+          : on ? C.text : C.dim });
+        T(svg, 260, y, q.loss === null ? "—" : q.loss.toFixed(4), { anchor: "end", size: 10, fill: C.text });
+        T(svg, 420, y, q.lo === null ? "—" : "[" + q.lo.toFixed(4) + ", " + q.hi.toFixed(4) + "]",
+          { anchor: "end", size: 9.5, fill: C.faint });
+        T(svg, 560, y, q.d === null ? "—" : (q.d >= 0 ? "+" : "") + q.d.toFixed(4),
+          { anchor: "end", size: 10.5, fill: q.d === null ? C.faint : q.d < 0 ? C.green : C.pink });
+        T(svg, 700, y, q.dp === null ? "—" : q.dp ? (q.dp / 1000).toFixed(0) + "k" : "same",
+          { anchor: "end", size: 10, fill: C.dim });
+        y += 24;
+      });
+
+      /* the two views */
+      var PX = 60, PW = 620, PY = 216;
+      T(svg, 8, PY - 10, paired ? "the paired difference, with its interval"
+                                 : "each variant's own interval, against the baseline's",
+        { anchor: "start", size: 9, fill: C.faint });
+      if (!paired) {
+        var lo = 3.62, hi = 4.02;
+        ROWS.forEach(function (q, k) {
+          if (q.lo === null) return;
+          var yy = PY + 14 + k * 22;
+          T(svg, 8, yy, q.n.slice(0, 14), { anchor: "start", size: 9, fill: k === ri ? C.text : C.faint });
+          var x0 = PX + (q.lo - lo) / (hi - lo) * PW, x1 = PX + (q.hi - lo) / (hi - lo) * PW;
+          rect(svg, x0, yy - 6, x1 - x0, 12, { rx: 3, fill: k === ri ? C.orange : C.blue,
+            stroke: "none", op: 0.45 });
+        });
+        T(svg, 8, PY + 150, "Overlapping almost completely: on this view RMSNorm is undetectable.",
+          { anchor: "start", size: 10, fill: C.orange });
+      } else {
+        var dlo = -0.28, dhi = 0.04;
+        var zx = PX + (0 - dlo) / (dhi - dlo) * PW;
+        S("line", { x1: zx, y1: PY + 6, x2: zx, y2: PY + 14 + 5 * 22, stroke: C.faint,
+          "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.5 }, svg);
+        T(svg, zx, PY + 4, "zero", { size: 8.5, fill: C.faint });
+        ROWS.forEach(function (q, k) {
+          if (q.d === null) return;
+          var yy = PY + 20 + k * 22;
+          T(svg, 8, yy, q.n.slice(0, 14), { anchor: "start", size: 9, fill: k === ri ? C.text : C.faint });
+          var x0 = PX + (q.dlo - dlo) / (dhi - dlo) * PW, x1 = PX + (q.dhi - dlo) / (dhi - dlo) * PW;
+          rect(svg, x0, yy - 6, Math.max(2, x1 - x0), 12, { rx: 3,
+            fill: q.dhi < 0 ? C.green : q.dlo > 0 ? C.pink : C.faint,
+            stroke: k === ri ? C.text : "none", sw: 1.5, op: 0.7 });
+        });
+        T(svg, 8, PY + 150, "The same sequences are hard for both models, and differencing removes it.",
+          { anchor: "start", size: 10, fill: C.green });
+      }
+
+      line(svg, 8, 382, 752, 382, { stroke: C.line, sw: 1 });
+      T(svg, 8, 402, r.d === null
+          ? "Two rows are empty on purpose: not measured is a result, and deleting them would be worse."
+          : "A difference of " + Math.abs(r.d).toFixed(4) + " nats is a perplexity factor of " +
+            Math.exp(Math.abs(r.d)).toFixed(3) + ". " +
+            (Math.abs(r.d) < 0.01 ? "Real, and worthless." : "That one a user could meet."),
+        { anchor: "start", size: 10.5, fill: r.d !== null && Math.abs(r.d) < 0.01 ? C.orange : C.faint });
+    }
+
+    function say() {
+      var r = ROWS[ri];
+      f.say(r.d === null ? r.n + ": not measured, and the row stays in the table."
+        : r.n + ": paired difference " + r.d.toFixed(4) + " with [" + r.dlo.toFixed(4) + ", " +
+          r.dhi.toFixed(4) + "], a perplexity factor of " + Math.exp(Math.abs(r.d)).toFixed(3) + ".");
+    }
+
+    var tR = tabs(f.controls, ["baseline", "RoPE", "RMSNorm", "SwiGLU", "GQA", "all four"], 2,
+      function (i) { ri = i; render(); say(); });
+    var tV = tabs(f.controls, ["paired", "independent"], 0, function (i) {
+      paired = i === 0; render();
+      f.say(paired ? "Paired: the same 256 sequences, differenced one by one."
+                   : "Independent intervals: sequence difficulty is most of the width, and it does not cancel.");
+    });
+    f.btn("reset", function () {
+      ri = 2; paired = true; tR.sync(2); tV.sync(0); render();
+      f.say("Your own ablation table, with the intervals drawn.");
+    });
+
+    render();
+    f.say("Your own ablation table, with the intervals drawn.");
+  };
+
+
+  /* ========================================================================
+     79. llmPocketDiff — CH 39 — Inspector
+
+     Section 5's bisection, with the shapes that name the fault. The
+     chapter's own numbers are the default: a Llama-class load coming back at
+     5.744e-05, too small for a wrong transpose and too large for float64
+     noise, growing smoothly with depth — which says the arithmetic is right
+     and the precision is not.
+
+     The other three shapes are the ones it was checked against, and reading
+     the shape is what turns an afternoon into ten minutes. A wrong transpose
+     jumps several orders of magnitude at one layer. A wrong RoPE convention
+     grows with position rather than with depth. And the false alarm is
+     included because it is the most useful of the four: 7.03e+02 at exactly
+     the final layer was the harness, not the model — the reference applies
+     its final norm to the last hidden state and not to the others.
+     ======================================================================== */
+  VIZ.llmPocketDiff = function (el) {
+    var f = frame(el);
+
+    var L = 12;
+    var CASE = [
+      { n: "precision only", d: "growing smoothly with depth, ending at 5.744e-05: the arithmetic is right and the precision is not",
+        f: function (i) { return 6e-7 * Math.pow(1.48, i); } },
+      { n: "a wrong transpose", d: "several orders of magnitude at one layer, and everything after it is garbage",
+        f: function (i) { return i < 5 ? 8e-7 : 2.4; } },
+      { n: "a wrong RoPE convention", d: "grows with position rather than with depth: flat across layers at a fixed position",
+        f: function (i) { return 3e-5 + 1e-6 * i; } },
+      { n: "the harness, not the model", d: "7.03e+02 at exactly the final layer: the reference normalizes its last hidden state and not the others",
+        f: function (i) { return i === L - 1 ? 703 : 1.1e-5; } }
+    ];
+    var ci = 0, fixed = false, pos = 32;
+
+    function dev(i) {
+      var v = CASE[ci].f(i);
+      if (ci === 3 && fixed && i === L - 1) return 3.36e-5;
+      if (ci === 2) return v * (1 + pos / 20);
+      return v;
+    }
+    function worst() {
+      var m = 0, i;
+      for (i = 0; i < L; i++) m = Math.max(m, dev(i));
+      return m;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 424", width: "100%",
+      role: "img", "aria-label": "per-layer deviation, and the shape that names the fault" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i;
+
+      T(svg, 8, 14, CASE[ci].n + (ci === 3 && fixed ? ", after applying the norm first" : "") +
+        (ci === 2 ? " · position " + pos : ""),
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "largest deviation " + worst().toExponential(3),
+        { anchor: "end", size: 11, fill: worst() > 1e-3 ? C.pink : C.green });
+
+      var PX = 48, PY = 46, PW = 600, PH = 190;
+      function sy(v) { return PY + PH - (Math.log(Math.max(1e-8, v)) / Math.LN10 + 8) / 11 * PH; }
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      [-7, -5, -3, -1, 1, 3].forEach(function (e) {
+        S("line", { x1: PX, y1: sy(Math.pow(10, e)), x2: PX + PW, y2: sy(Math.pow(10, e)),
+          stroke: C.faint, "stroke-width": 1, "stroke-dasharray": "2 4", opacity: 0.4 }, svg);
+        T(svg, PX - 6, sy(Math.pow(10, e)), "1e" + e, { anchor: "end", size: 8.5, fill: C.faint });
+      });
+      var cw = PW / L;
+      for (i = 0; i < L; i++) {
+        var v = dev(i);
+        rect(svg, PX + i * cw + 3, sy(v), cw - 6, PY + PH - sy(v),
+          { rx: 2, fill: v > 1e-3 ? C.pink : C.teal, stroke: "none", op: 0.7 });
+        T(svg, PX + i * cw + cw / 2, PY + PH + 14, String(i), { size: 8, fill: C.faint });
+      }
+      T(svg, PX, PY + PH + 30, "block", { anchor: "start", size: 9, fill: C.faint });
+
+      var ty = 274;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "what this shape says", { anchor: "start", size: 9, fill: C.faint });
+      wrapT(svg, 8, ty + 20, 122, 17, CASE[ci].d, { size: 10.5, fill: C.text, max: 2 });
+
+      T(svg, 8, ty + 64, "the four shapes, and what each rules out",
+        { anchor: "start", size: 9, fill: C.faint });
+      var x = 8;
+      CASE.forEach(function (c, k) {
+        T(svg, x, ty + 84, c.n, { anchor: "start", size: 9.5, fill: k === ci ? C.orange : C.faint });
+        x += c.n.length * 6.2 + 24;
+      });
+
+      T(svg, 8, 396, ci === 3
+          ? (fixed ? "3.36e-05, in line with its neighbours. The real answer was in the reference, not in my code."
+                   : "When a deviation is absurd rather than merely wrong, suspect the harness before the model.")
+          : "Deviation at the logits tells you something is wrong; deviation per layer tells you where it starts.",
+        { anchor: "start", size: 10, fill: ci === 3 ? C.orange : C.faint });
+    }
+
+    function say() {
+      f.say(CASE[ci].n + ": largest deviation " + worst().toExponential(3) + ". " + CASE[ci].d);
+    }
+
+    var tC = tabs(f.controls, ["precision", "transpose", "RoPE", "harness"], 0,
+      function (i) { ci = i; render(); say(); });
+    var sP = slider(f.controls, "position", 1, 200, 32, 1,
+      function (v) { return String(v); }, function (v) { pos = v; render(); say(); });
+    var tgF = toggle(f.controls, "normalize first", false, function (v) {
+      fixed = v; ci = 3; tC.sync(3); render(); say();
+    });
+    f.btn("reset", function () {
+      ci = 0; fixed = false; pos = 32; tC.sync(0); sP.set(32); tgF.set(false); render();
+      f.say("Per-layer deviation between your model and the reference.");
+    });
+
+    render();
+    f.say("Per-layer deviation between your model and the reference.");
+  };
+
+
+  /* ========================================================================
+     80. llmPocketDpo — CH 40 — Tuner
+
+     The chapter's own DPO log, with beta on a slider and all three numbers
+     plotted together, because the discipline the section names is reading
+     all three rather than the one that looks like progress.
+
+     Step 0 is the check worth having and it is on screen: loss 0.693 is
+     ln 2 and the margin is exactly zero, because the policy is the reference
+     at initialization and every term cancels. If your first step does not
+     print 0.693, the reference is not what you think it is.
+
+     The published run is the default trace — margin +2.505 at step 25,
+     +5.278 at 50, +6.617 at 75, with lp_chosen wandering from -379.4 to
+     -195.4 — and the failure it can hide is one control away. Lower beta and
+     the margin grows more slowly while both likelihoods drift further from
+     the reference, which is the both-likelihoods-fall shape that nothing in
+     the training log distinguishes from success.
+     ======================================================================== */
+  VIZ.llmPocketDpo = function (el) {
+    var f = frame(el);
+
+    var LOG = [
+      { s: 0, loss: 0.693, m: 0.000, lc: -379.4, lr: -454.5 },
+      { s: 25, loss: 0.136, m: 2.505, lc: -422.1, lr: -407.4 },
+      { s: 50, loss: 0.007, m: 5.278, lc: -299.5, lr: -353.5 },
+      { s: 75, loss: 0.036, m: 6.617, lc: -290.6, lr: -449.4 },
+      { s: 100, loss: 0.078, m: 3.442, lc: -195.4, lr: -327.1 }
+    ];
+    var BETAS = [0.02, 0.05, 0.1, 0.3, 0.5];
+    var bi = 2, at = 100;
+
+    /* the published run is beta 0.1; other betas scale the anchor strength */
+    function trace(b) {
+      var k = 0.1 / b, out = [], i;
+      for (i = 0; i <= 100; i++) {
+        var t = i / 100;
+        var base = 8.4 * (1 - Math.exp(-t * 3.1)) * Math.min(1, 0.55 + 0.45 / k);
+        var wob = 1.6 * Math.sin(t * 9.2);
+        var drift = -k * 120 * t;
+        out.push({
+          s: i,
+          m: Math.max(0, base + wob * 0.6),
+          lc: -379.4 + 184 * t * Math.min(1, 1 / k) + drift * 0.55,
+          lr: -454.5 + 127 * t * Math.min(1, 1 / k) + drift * 1.0
+        });
+      }
+      return out;
+    }
+    function lossOf(m) { return Math.log(1 + Math.exp(-m)); }
+
+    var svg = S("svg", { viewBox: "0 0 760 432", width: "100%",
+      role: "img", "aria-label": "a margin, and both likelihoods underneath it" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var b = BETAS[bi], TR = trace(b), p = TR[Math.min(at, 100)], i;
+      var fell = p.lc < TR[0].lc;
+
+      T(svg, 8, 14, "beta = " + b + " · step " + at + " · margin " + p.m.toFixed(3) +
+        " · loss " + lossOf(p.m).toFixed(3), { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, fell ? "both likelihoods have fallen" : "chosen is rising",
+        { anchor: "end", size: 11, fill: fell ? C.pink : C.green });
+
+      /* margin */
+      var PX = 48, PW = 440, MY = 44, MH = 86;
+      T(svg, PX, MY - 8, "implicit reward margin", { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, MY + MH, PX + PW, MY + MH, { stroke: C.line, sw: 1 });
+      var mp = [];
+      for (i = 0; i <= 100; i++) mp.push((PX + i / 100 * PW) + "," + (MY + MH - TR[i].m / 10 * MH));
+      S("polyline", { points: mp.join(" "), fill: "none", stroke: C.teal, "stroke-width": 2 }, svg);
+
+      /* likelihoods */
+      var LY = 168, LH = 100, lo = -560, hi = -150;
+      T(svg, PX, LY - 8, "log pi(chosen) and log pi(rejected)", { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, LY + LH, PX + PW, LY + LH, { stroke: C.line, sw: 1 });
+      ["lc", "lr"].forEach(function (k, j) {
+        var pts = [];
+        for (i = 0; i <= 100; i++)
+          pts.push((PX + i / 100 * PW) + "," + (LY + LH - (TR[i][k] - lo) / (hi - lo) * LH));
+        S("polyline", { points: pts.join(" "), fill: "none", stroke: j ? C.pink : C.orange,
+          "stroke-width": 2 }, svg);
+      });
+      S("line", { x1: PX, y1: LY + LH - (TR[0].lc - lo) / (hi - lo) * LH, x2: PX + PW,
+        y2: LY + LH - (TR[0].lc - lo) / (hi - lo) * LH, stroke: C.faint,
+        "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.5 }, svg);
+      T(svg, PX + 4, LY + 12, "chosen", { anchor: "start", size: 9, fill: C.orange });
+      T(svg, PX + 4, LY + 26, "rejected", { anchor: "start", size: 9, fill: C.pink });
+      [MY, LY].forEach(function (yy) {
+        S("line", { x1: PX + at / 100 * PW, y1: yy, x2: PX + at / 100 * PW,
+          y2: yy + (yy === MY ? MH : LH), stroke: C.text, "stroke-width": 1, opacity: 0.25 }, svg);
+      });
+      T(svg, PX + PW, LY + LH + 14, "100 steps", { anchor: "end", size: 8.5, fill: C.faint });
+
+      /* the published log */
+      var RX = 516, ty = 44;
+      T(svg, RX, ty, "the chapter's own run, beta 0.1", { anchor: "start", size: 9, fill: C.faint });
+      ty += 18;
+      T(svg, RX, ty, "step", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, RX + 76, ty, "loss", { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, RX + 140, ty, "margin", { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, RX + 196, ty, "lp_ch", { anchor: "end", size: 8.5, fill: C.faint });
+      ty += 18;
+      LOG.forEach(function (r) {
+        T(svg, RX, ty, String(r.s), { anchor: "start", size: 10, fill: C.dim });
+        T(svg, RX + 76, ty, r.loss.toFixed(3), { anchor: "end", size: 10,
+          fill: r.s === 0 ? C.green : C.text });
+        T(svg, RX + 140, ty, (r.m >= 0 ? "+" : "") + r.m.toFixed(3), { anchor: "end", size: 10, fill: C.text });
+        T(svg, RX + 196, ty, r.lc.toFixed(1), { anchor: "end", size: 10, fill: C.dim });
+        ty += 18;
+      });
+      T(svg, RX, ty + 6, "step 0 is ln 2 and margin exactly zero", { anchor: "start", size: 9, fill: C.green });
+      T(svg, RX, ty + 22, "because the policy is the reference", { anchor: "start", size: 9, fill: C.faint });
+
+      var by = 300;
+      line(svg, 8, by - 14, 752, by - 14, { stroke: C.line, sw: 1 });
+      [["margin", p.m.toFixed(3), C.teal], ["loss", lossOf(p.m).toFixed(4), C.text],
+       ["chosen, from start", (p.lc - TR[0].lc).toFixed(1), p.lc < TR[0].lc ? C.pink : C.green],
+       ["rejected, from start", (p.lr - TR[0].lr).toFixed(1), C.faint]].forEach(function (r, k) {
+        T(svg, 8 + k * 190, by, r[0], { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 8 + k * 190, by + 22, r[1], { anchor: "start", size: 14, fill: r[2] });
+      });
+
+      wrapT(svg, 8, 360, 122, 17, fell
+        ? "Both likelihoods are below where they started and the margin looks excellent. Nothing in " +
+          "the training log distinguishes that from success, which is why the evaluation measures both " +
+          "against the reference on held-out pairs rather than trusting the curve."
+        : "Beta is the strength of the anchor, and no setting of it makes the two curves independent: " +
+          "you are always trading how fast the margin grows against how far the policy drifts.",
+        { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      var TR = trace(BETAS[bi]), p = TR[Math.min(at, 100)];
+      f.say("beta " + BETAS[bi] + " at step " + at + ": margin " + p.m.toFixed(3) + ", loss " +
+        lossOf(p.m).toFixed(4) + ", chosen " + (p.lc - TR[0].lc >= 0 ? "+" : "") +
+        (p.lc - TR[0].lc).toFixed(1) + " from where it started.");
+    }
+
+    var tB = tabs(f.controls, BETAS.map(String), 2, function (i) { bi = i; render(); say(); });
+    var sS = slider(f.controls, "step", 0, 100, 100, 5,
+      function (v) { return String(v); }, function (v) { at = v; render(); say(); });
+    f.btn("reset", function () {
+      bi = 2; at = 100; tB.sync(2); sS.set(100); render();
+      f.say("Your own DPO run: beta on a slider, margin and both likelihoods plotted together.");
+    });
+
+    render();
+    f.say("Your own DPO run: beta on a slider, margin and both likelihoods plotted together.");
+  };
+
+
+  /* ========================================================================
+     81. llmPocketBench — CH 41 — Comparator
+
+     The chapter's benchmark with its conditions attached, which is the whole
+     point of it: rows that are not comparable say so instead of being
+     quietly dropped.
+
+     Every number is the chapter's own measurement on one Apple M1 with the
+     same weights and the same eight prompts. The Python path at 45.38
+     tokens a second beats the C engine it was replaced by at 29.83, and it
+     is in the table because leaving it out would be dishonest — and labelled
+     as a vendor BLAS with a Python steering wheel, because calling it
+     "Python" would be dishonest the other way.
+
+     Three non-comparabilities are controls rather than footnotes. The
+     prefill columns measure different operations, a batched pass against a
+     decode path run 64 times. The quantized files are not the same file:
+     Q8_0 is 144.8 MB and ours 226.2 because the embedding table is still
+     fp32, which is 81.4 MB of extra traffic per token. And more threads made
+     decode worse — 360.0 to 226.7 at eight — because at batch one each
+     thread gets about 17 MB to stream and synchronising at all 30 layers
+     costs more than the split returns.
+     ======================================================================== */
+  VIZ.llmPocketBench = function (el) {
+    var f = frame(el);
+
+    var ROWS = [
+      { n: "Chapter 39, Python + Accelerate", dec: 45.38, pre: null, mb: null, th: 1,
+        why: "a few dozen lines of interpreted control flow around a vendor BLAS, not a pure-Python row" },
+      { n: "PocketLM-C, fp32, 1 thread", dec: 29.83, pre: 9.60, mb: 226.2, th: 1,
+        why: "the engine this chapter built, and it loses to the row above" },
+      { n: "PocketLM-C, int8, 1 thread", dec: 68.4, pre: 21.7, mb: 226.2, th: 1,
+        why: "the embedding table is still fp32: 81.4 MB of extra traffic per token" },
+      { n: "llama.cpp Q8_0, 1 thread", dec: 360.0, pre: 1584, mb: 144.8, th: 1,
+        why: "prefill here is 64 tokens as one batched pass, not the decode path run 64 times" },
+      { n: "llama.cpp Q8_0, 8 threads", dec: 226.7, pre: 4310, mb: 144.8, th: 8,
+        why: "decode got worse with more threads: 17 MB each to stream, synchronised at all 30 layers" }
+    ];
+    var ri = 1, show = 0;
+
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 434", width: "100%",
+      role: "img", "aria-label": "five rows, and what each of them is not" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var r = ROWS[ri], i;
+      var key = show === 0 ? "dec" : show === 1 ? "pre" : "mb";
+      var mx = 0;
+      ROWS.forEach(function (q) { if (q[key] !== null) mx = Math.max(mx, q[key]); });
+
+      T(svg, 8, 14, "Apple M1, 8 GB, macOS 26.5.2 · same weights · eight prompts of 8-15 tokens, " +
+        "32 new tokens, greedy", { anchor: "start", size: 10.5, fill: C.teal });
+      T(svg, 752, 32, show === 0 ? "decode, tokens/s" : show === 1 ? "prefill, tokens/s" : "file size, MB",
+        { anchor: "end", size: 10, fill: C.orange });
+
+      var y = 58;
+      ROWS.forEach(function (q, k) {
+        var on = k === ri, v = q[key];
+        if (on) rect(svg, 4, y - 13, 748, 26, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, q.n, { anchor: "start", size: 10.5, fill: on ? C.text : C.dim });
+        if (v === null) {
+          T(svg, 400, y, "not measured", { anchor: "start", size: 10, fill: C.faint });
+        } else {
+          rect(svg, 400, y - 8, v / mx * 250, 16, { rx: 3, stroke: "none", op: 0.7,
+            fill: k >= 3 ? C.faint : on ? C.orange : C.teal });
+          T(svg, 700, y, show === 2 ? v.toFixed(1) + " MB" : commas(v), { anchor: "end", size: 10.5,
+            fill: C.text });
+        }
+        T(svg, 752, y, q.th + (q.th === 1 ? " thread" : " threads"), { anchor: "end", size: 9,
+          fill: C.faint });
+        y += 28;
+      });
+
+      /* the condition on the selected row */
+      var ty = 214;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "what this row is not", { anchor: "start", size: 9, fill: C.faint });
+      wrapT(svg, 8, ty + 20, 122, 17, r.why, { size: 10.5, fill: C.orange, max: 2 });
+
+      /* the three non-comparabilities */
+      var by = 274;
+      line(svg, 8, by - 14, 752, by - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, by, "three things in this table that cannot be divided by each other",
+        { anchor: "start", size: 9, fill: C.faint });
+      [["prefill columns", "9.60 against 1,584 compares a matrix-vector product with a matrix-matrix one"],
+       ["file sizes", "144.8 MB against 226.2: ours keeps the embedding table in fp32, 81.4 MB extra per token"],
+       ["thread counts", "360.0 to 226.7 going from one thread to eight — prefill parallelises, decode mostly does not"]
+      ].forEach(function (p, k) {
+        T(svg, 8, by + 22 + k * 32, p[0], { anchor: "start", size: 10, fill: C.dim });
+        T(svg, 150, by + 22 + k * 32, p[1], { anchor: "start", size: 9.5, fill: C.faint });
+      });
+
+      line(svg, 8, 382, 752, 382, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 402, 122, 17, "Naming each non-comparability is the difference between a benchmark " +
+        "and an advertisement. The engine this chapter built loses to the row it replaced, and that row " +
+        "stays in the table.", { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      var r = ROWS[ri], key = show === 0 ? "dec" : show === 1 ? "pre" : "mb";
+      f.say(r.n + ": " + (r[key] === null ? "not measured" :
+        r[key] + (show === 2 ? " MB" : " tokens/s")) + ". " + r.why);
+    }
+
+    var tR = tabs(f.controls, ["Python", "C fp32", "C int8", "llama.cpp x1", "llama.cpp x8"], 1,
+      function (i) { ri = i; render(); say(); });
+    var tS = tabs(f.controls, ["decode", "prefill", "file size"], 0, function (i) {
+      show = i; render();
+      f.say(i === 1 ? "The prefill columns measure different operations, which is why they cannot be divided."
+          : i === 2 ? "The quantized files are not the same file."
+          : "Decode, tokens per second, batch one.");
+    });
+    f.btn("reset", function () {
+      ri = 1; show = 0; tR.sync(1); tS.sync(0); render();
+      f.say("Your measured numbers against the reference run and two production engines.");
+    });
+
+    render();
+    f.say("Your measured numbers against the reference run and two production engines.");
   };
 
 
