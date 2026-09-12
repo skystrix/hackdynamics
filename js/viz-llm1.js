@@ -29,6 +29,8 @@
      llmOptimizer   ch14 Simulator  four rules, a quartic wall, and warmup that saves a run
      llmPrecision   ch14 Comparator real fp16/bf16/fp8 encoders, and two facts performed
      llmMemoryLevers ch14 Tuner     the two levers, against 16 GB and the clock
+     llmScalingLaw  ch15 Tuner      one budget, three laws, and Chinchilla rederived
+     llmEmergence   ch15 Comparator the inference bill, and a jump that is a ruler
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -7071,6 +7073,414 @@
 
     render();
     f.say("Fit a run that did not fit, and pay for it in wall-clock.");
+  };
+
+
+
+  /* ========================================================================
+     33. llmScalingLaw — CH 15 — Tuner
+
+     The Chinchilla form L = E + A/N^a + B/D^b, with a = b so that the
+     compute-optimal ratio is scale-free, and B/A set so that ratio is 20
+     tokens per parameter — the chapter's rule.
+
+     That choice is deliberate and worth recording. Hoffmann et al.'s
+     published coefficients (A 406.4, a 0.34, B 410.7, b 0.28) do not
+     reproduce their own 20:1 conclusion: minimizing under them gives about
+     92 tokens per parameter, an inconsistency later replications have
+     pointed out. The fit here keeps E = 1.69, A = 406.4 and a = 0.34 and
+     solves B for the ratio the chapter uses, and it then lands on the
+     published numbers from two different directions:
+
+       C = 5.88e23  ->  69.98B parameters, 1.400T tokens   (Chinchilla, 70B/1.4T)
+       C = 7.227e23 ->  77.62B parameters, 1.552T tokens   (section 4's 77.6B/1.55T)
+
+     Kaplan is the 2020 allocation, N proportional to C^0.73, anchored on
+     GPT-3 at 175B parameters and 300B tokens. Inference-aware is Sardana's:
+     the budget has to cover 6ND of training and 2N of every token the model
+     will ever serve, and the optimum moves sharply toward smaller models.
+     ======================================================================== */
+  VIZ.llmScalingLaw = function (el) {
+    var f = frame(el);
+
+    var E = 1.69, A = 406.4, AL = 0.34;
+    var B = A * Math.pow(20, AL);                      // solves for 20 tokens/parameter
+    var KAP = 1.22e-6;                                 // N = KAP * C^0.73, anchored on GPT-3
+    var LAW = ["Kaplan 2020", "Chinchilla 2022", "inference-aware"];
+    var EFF = 200e12;                                  // FLOPs/s per device, effective
+
+    var logC = Math.log(7.227e23) / Math.LN10, ratio = 20, law = 1, logS = 12.7;
+
+    function loss(N, D) { return E + A / Math.pow(N, AL) + B / Math.pow(D, AL); }
+    function C() { return Math.pow(10, logC); }
+    function served() { return Math.pow(10, logS); }
+    function fromRatio(r, c) {                          // 6ND = c and D/N = r
+      var N = Math.sqrt(c / (6 * r));
+      return { N: N, D: r * N };
+    }
+    function optFor(k, c) {
+      var i, best = null;
+      if (k === 0) { var N = KAP * Math.pow(c, 0.73); return { N: N, D: c / (6 * N) }; }
+      if (k === 1) return fromRatio(20, c);
+      for (i = 0; i < 600; i++) {                       // budget pays for training and serving
+        var n = Math.pow(10, 8 + i / 600 * 5);
+        var d = (c - 2 * n * served()) / (6 * n);
+        if (d < 1e9) continue;
+        var L = loss(n, d);
+        if (!best || L < best.L) best = { N: n, D: d, L: L };
+      }
+      return best || fromRatio(20, c);
+    }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function bn(v) { return v >= 1e12 ? (v / 1e12).toFixed(2) + "T" : (v / 1e9).toFixed(2) + "B"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
+      role: "img", "aria-label": "one compute budget, split several ways" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var c = C(), cur = fromRatio(ratio, c), i;
+
+      T(svg, 8, 14, "budget " + c.toExponential(3) + " FLOPs · " +
+        commas(c / (EFF * 3600)) + " GPU-hours at 200 TFLOP/s",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 32, "law: " + LAW[law], { anchor: "end", size: 10, fill: C.orange });
+
+      /* the isoFLOP curve: loss against model size at this fixed budget */
+      var PX = 8, PY = 46, PW = 440, PH = 180;
+      var lo = 8.2, hi = 12.4;
+      function px(n) { return PX + (Math.log(n) / Math.LN10 - lo) / (hi - lo) * PW; }
+      var Ls = [], mn = 1e9, mx = -1e9;
+      for (i = 0; i <= 200; i++) {
+        var n = Math.pow(10, lo + i / 200 * (hi - lo)), d = c / (6 * n);
+        var v = d > 1e8 ? loss(n, d) : NaN;
+        Ls.push([n, v]);
+        if (isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; }
+      }
+      mx = Math.min(mx, mn + 0.55);
+      function py(v) { return PY + PH - (1 - Math.min(1, Math.max(0, (v - mn) / (mx - mn)))) * PH; }
+      T(svg, PX, 34, "loss against model size · orange is " + LAW[law] + ", teal is yours",
+        { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      var pts = [];
+      Ls.forEach(function (p) { if (isFinite(p[1])) pts.push(px(p[0]) + "," + py(p[1])); });
+      S("polyline", { points: pts.join(" "), fill: "none", stroke: C.blue, "stroke-width": 2 }, svg);
+
+      /* each law's optimum on the same axis */
+      [0, 1, 2].forEach(function (k) {
+        var o = optFor(k, c);
+        if (!o || o.D <= 0 || o.N < Math.pow(10, lo) || o.N > Math.pow(10, hi)) return;
+        var x = px(o.N), y = py(loss(o.N, o.D));
+        var col = k === law ? C.orange : C.faint;
+        /* a guide, not a rule: faint on purpose so a label may cross it */
+        S("line", { x1: x, y1: PY, x2: x, y2: PY + PH, stroke: col,
+          "stroke-width": k === law ? 1.5 : 1, "stroke-dasharray": "3 3", opacity: 0.45 }, svg);
+        S("circle", { cx: x, cy: y, r: k === law ? 4 : 2.5, fill: col }, svg);
+        /* no label: the panel on the right names the law and its pick, and a
+           label here collides with whichever guide happens to share its x. */
+      });
+      var cx2 = px(cur.N);
+      if (cur.N >= Math.pow(10, lo) && cur.N <= Math.pow(10, hi)) {
+        line(svg, cx2, PY, cx2, PY + PH, { stroke: C.teal, sw: 2 });
+        S("circle", { cx: cx2, cy: py(loss(cur.N, cur.D)), r: 4, fill: C.teal }, svg);
+      }
+      T(svg, PX, PY + PH + 14, "1e" + lo.toFixed(0) + " parameters",
+        { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY + PH + 14, "1e" + hi.toFixed(0),
+        { anchor: "end", size: 8.5, fill: C.faint });
+
+      /* what this split buys */
+      var RX = 476, y = 46;
+      function row(k, v, tone) {
+        T(svg, RX, y, k, { anchor: "start", size: 10, fill: C.faint });
+        T(svg, 752, y, v, { anchor: "end", size: 10.5, fill: tone || C.text });
+        y += 19;
+      }
+      T(svg, RX, 34, "your split", { anchor: "start", size: 9, fill: C.faint });
+      row("tokens per parameter", ratio.toFixed(1), C.teal);
+      row("parameters", bn(cur.N));
+      row("training tokens", bn(cur.D));
+      row("predicted loss", loss(cur.N, cur.D).toFixed(4), C.teal);
+      row("FLOPs per served token", (2 * cur.N / 1e9).toFixed(2) + " G", C.orange);
+      y += 10;
+      var o2 = optFor(law, c);
+      T(svg, RX, y, LAW[law] + " would pick", { anchor: "start", size: 9, fill: C.faint });
+      y += 16;
+      row("parameters", bn(o2.N), C.orange);
+      row("training tokens", bn(o2.D), C.orange);
+      row("tokens per parameter", (o2.D / o2.N).toFixed(1), C.orange);
+      row("its loss", loss(o2.N, o2.D).toFixed(4), C.orange);
+      if (law === 2) row("tokens you will serve", bn(served()), C.faint);
+
+      /* the two runs that settled it */
+      var ty = 262;
+      line(svg, 8, ty - 14, 448, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "the two runs that settled it, 6ND computed here",
+        { anchor: "start", size: 9, fill: C.faint });
+      ty += 20;
+      T(svg, 8, ty, "model", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 180, ty, "parameters", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 250, ty, "tokens", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 310, ty, "D/N", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 420, ty, "compute", { anchor: "end", size: 9, fill: C.faint });
+      ty += 19;
+      [["Gopher", 280e9, 300e9], ["Chinchilla", 70e9, 1.4e12]].forEach(function (m) {
+        T(svg, 8, ty, m[0], { anchor: "start", size: 10.5, fill: C.dim });
+        T(svg, 180, ty, bn(m[1]), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 250, ty, bn(m[2]), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 310, ty, (m[2] / m[1]).toFixed(1), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 420, ty, (6 * m[1] * m[2]).toExponential(2), { anchor: "end", size: 10.5, fill: C.text });
+        ty += 19;
+      });
+      T(svg, 8, ty + 4, "Nearly the same compute. Chinchilla beat Gopher on the split alone.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* the verdict */
+      line(svg, 8, 362, 752, 362, { stroke: C.line, sw: 1 });
+      var kap = optFor(0, c), chi = optFor(1, c);
+      T(svg, 8, 382, "Kaplan picks " + bn(kap.N) + " and Chinchilla " + bn(chi.N) + " for the same " +
+        c.toExponential(2) + " FLOPs — a factor of " + (kap.N / chi.N).toFixed(1) + ".",
+        { anchor: "start", size: 10.5, fill: C.orange });
+      wrapT(svg, 8, 404, 122, 16, law === 2
+        ? "Inference-aware puts serving in the objective: the budget must cover 6ND once and 2N on " +
+          "every token the model ever emits, which pushes the optimum smaller still."
+        : "a = b here, so the optimum is a scale-free 20 tokens per parameter — the chapter's rule, " +
+          "and the ratio Hoffmann's own published coefficients famously fail to reproduce.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      var c = C(), cur = fromRatio(ratio, c), o = optFor(law, c);
+      f.say(ratio.toFixed(1) + " tokens per parameter is " + bn(cur.N) + " on " + bn(cur.D) +
+        ", loss " + loss(cur.N, cur.D).toFixed(4) + ". " + LAW[law] + " would pick " + bn(o.N) + ".");
+    }
+
+    var sC = slider(f.controls, "budget", 21, 26, 23.859, 0.01,
+      function (v) { return "1e" + v.toFixed(2); },
+      function (v) { logC = v; render(); say(); });
+    var sR = slider(f.controls, "tokens/param", 0.3, 2.4, 1.301, 0.02,
+      function (v) { return Math.pow(10, v).toFixed(1); },
+      function (v) { ratio = Math.pow(10, v); render(); say(); });
+    var sS = slider(f.controls, "served tokens", 10, 14, 12.7, 0.1,
+      function (v) { return "1e" + v.toFixed(1); },
+      function (v) { logS = v; render(); say(); });
+    var tL = tabs(f.controls, LAW, 1, function (i) {
+      law = i; render();
+      f.say(i === 0 ? "Kaplan 2020: N grows as C^0.73, so nearly all of a bigger budget goes into parameters."
+          : i === 1 ? "Chinchilla 2022: 20 tokens per parameter, at every budget."
+          : "Inference-aware: the budget covers 6ND of training and 2N of every token you will ever serve.");
+    });
+    f.btn("reset", function () {
+      logC = Math.log(7.227e23) / Math.LN10; ratio = 20; law = 1; logS = 12.7;
+      sC.set(logC); sR.set(1.301); sS.set(12.7); tL.sync(1); render();
+      f.say("Fix the budget. Find the best split. Then change the law.");
+    });
+
+    render();
+    f.say("Fix the budget. Find the best split. Then change the law.");
+  };
+
+
+  /* ========================================================================
+     34. llmEmergence — CH 15 — Comparator
+
+     This machine sits in section 4, which is about inference-aware scaling,
+     and its own title is about metrics and emergence, which is section 6.
+     Rather than pick one, it does both, because the two tabs are small and
+     the reader arrives from either direction.
+
+     The bill tab reproduces section 4 exactly, by arithmetic: Corvid-8B on
+     15T tokens is 7.227e23 FLOPs; spent the compute-optimal way that is
+     77.6B on 1.55T; 2N per served token is 16.06 G against 155.21 G; and
+     the crossover, training cost divided by the per-token saving, is
+     5.19 trillion served tokens.
+
+     The jump tab is section 6's deflation, performed. One smooth per-digit
+     accuracy curve, scored three ways. Exact match over five digits is that
+     curve raised to the fifth power, which is near zero until it is not.
+     Nothing about the model changes between the three charts — only the
+     ruler does, which is the methodological rule that outlives the debate.
+     ======================================================================== */
+  VIZ.llmEmergence = function (el) {
+    var f = frame(el);
+
+    var N0 = 8.03e9, D0 = 15e12;
+    var CTRAIN = 6 * N0 * D0;
+    var RATIO = 20;
+    var NOPT = Math.sqrt(CTRAIN / (6 * RATIO)), DOPT = RATIO * NOPT;
+    var SAVE = 2 * NOPT - 2 * N0;
+    var BREAK = CTRAIN / SAVE;
+
+    var METRIC = ["exact match", "per-digit partial credit", "log-likelihood"];
+    var DIGITS = 5;
+    var tab = 0, met = 0, logS = Math.log(BREAK) / Math.LN10;
+
+    function pdigit(logN) { return 1 / (1 + Math.exp(-(logN - 10.2) / 0.28)); }
+    function score(logN, m) {
+      var p = pdigit(logN);
+      if (m === 0) return Math.pow(p, DIGITS);
+      if (m === 1) return p;
+      return Math.max(0, 1 + Math.log(Math.max(1e-6, p)) / 12);   // scaled log-likelihood
+    }
+    function bn(v) { return v >= 1e12 ? (v / 1e12).toFixed(2) + "T" : (v / 1e9).toFixed(2) + "B"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 424", width: "100%",
+      role: "img", "aria-label": "the inference bill, and a jump that is a ruler" }, f.body);
+
+    function renderBill() {
+      var i, y;
+      T(svg, 8, 14, "Corvid-8B on 15T tokens, and the same compute spent the compute-optimal way",
+        { anchor: "start", size: 11, fill: C.teal });
+
+      y = 44;
+      T(svg, 8, y, "", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 260, y, "parameters", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 360, y, "tokens", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 520, y, "FLOPs per served token", { anchor: "end", size: 9, fill: C.faint });
+      y += 22;
+      [["what the field ships", N0, D0, C.teal], ["Chinchilla-optimal", NOPT, DOPT, C.orange]].forEach(function (r) {
+        T(svg, 8, y, r[0], { anchor: "start", size: 10.5, fill: r[3] });
+        T(svg, 260, y, bn(r[1]), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 360, y, bn(r[2]), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 520, y, (2 * r[1] / 1e9).toFixed(2) + " G", { anchor: "end", size: 10.5, fill: r[3] });
+        y += 20;
+      });
+      T(svg, 8, y + 6, "Both cost " + CTRAIN.toExponential(3) + " FLOPs to train. The compute-optimal one is " +
+        (NOPT / N0).toFixed(1) + "x more expensive on every token, forever.",
+        { anchor: "start", size: 10, fill: C.faint });
+
+      /* lifetime cost, both ways */
+      var PX = 8, PY = 142, PW = 560, PH = 150, Smax = Math.pow(10, 13.4);
+      function sx(s) { return PX + s / Smax * PW; }
+      function sy(v) { return PY + PH - v / (CTRAIN + 2 * NOPT * Smax) * PH; }
+      T(svg, PX, 124, "total FLOPs spent, training plus serving",
+        { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      [[N0, C.teal, "8.03B, overtrained"], [NOPT, C.orange, "77.6B, compute-optimal"]].forEach(function (m) {
+        var pts = [];
+        for (i = 0; i <= 60; i++) {
+          var s = i / 60 * Smax;
+          pts.push(sx(s) + "," + sy(CTRAIN + 2 * m[0] * s));
+        }
+        S("polyline", { points: pts.join(" "), fill: "none", stroke: m[1], "stroke-width": 2 }, svg);
+      });
+      var bx = sx(BREAK);
+      line(svg, bx, PY, bx, PY + PH, { stroke: C.pink, sw: 1.5, dash: "3 3" });
+      T(svg, bx, PY - 6, "break-even", { size: 9, fill: C.pink });
+      T(svg, PX, PY + PH + 14, "0 served tokens", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY + PH + 14, bn(Smax) + " served", { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, PX + PW - 4, PY + 10, "8.03B, overtrained", { anchor: "end", size: 9, fill: C.teal });
+      T(svg, PX + PW - 4, PY + 24, "77.6B, compute-optimal", { anchor: "end", size: 9, fill: C.orange });
+
+      /* where you are */
+      var s0 = Math.pow(10, logS), RX = 590;
+      T(svg, RX, 142, "at " + bn(s0) + " served", { anchor: "start", size: 9, fill: C.faint });
+      var rows = [["overtrained, total", CTRAIN + 2 * N0 * s0, C.teal],
+                  ["compute-optimal, total", CTRAIN + 2 * NOPT * s0, C.orange],
+                  ["difference", 2 * (NOPT - N0) * s0 - 0, C.pink]];
+      y = 166;
+      rows.forEach(function (r) {
+        T(svg, RX, y, r[0], { anchor: "start", size: 9.5, fill: C.faint });
+        T(svg, 752, y + 16, r[1].toExponential(3), { anchor: "end", size: 11, fill: r[2] });
+        y += 40;
+      });
+
+      line(svg, 8, 328, 752, 328, { stroke: C.line, sw: 1 });
+      T(svg, 8, 348, "Break-even at " + (BREAK / 1e12).toFixed(2) +
+        " trillion served tokens: training cost " + CTRAIN.toExponential(3) + " divided by the " +
+        (SAVE / 1e9).toFixed(2) + " GFLOP saved per token.",
+        { anchor: "start", size: 10.5, fill: C.pink });
+      wrapT(svg, 8, 372, 122, 17, "Past that point the smaller, overtrained model is not merely cheaper " +
+        "to serve — it has saved more than it cost to make. Chinchilla answered its question correctly, " +
+        "and almost nobody has that question.", { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function renderJump() {
+      var i, m;
+      T(svg, 8, 14, "five-digit arithmetic, one model series, three rulers",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "scoring with " + METRIC[met], { anchor: "end", size: 11, fill: C.orange });
+
+      var PX = 48, PY = 46, PW = 440, PH = 210, lo = 8.5, hi = 12;
+      function px(l) { return PX + (l - lo) / (hi - lo) * PW; }
+      function py(v) { return PY + PH - v * PH; }
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      line(svg, PX, PY, PX, PY + PH, { stroke: C.line, sw: 1 });
+      [0, 0.5, 1].forEach(function (v) {
+        T(svg, PX - 8, py(v), v.toFixed(1), { anchor: "end", size: 8.5, fill: C.faint });
+      });
+      [9, 10, 11, 12].forEach(function (l) {
+        T(svg, px(l), PY + PH + 14, "1e" + l, { size: 8.5, fill: C.faint });
+      });
+      for (m = 0; m < 3; m++) {
+        var pts = [];
+        for (i = 0; i <= 160; i++) {
+          var l = lo + i / 160 * (hi - lo);
+          pts.push(px(l) + "," + py(score(l, m)));
+        }
+        S("polyline", { points: pts.join(" "), fill: "none",
+          stroke: m === met ? C.orange : C.faint,
+          "stroke-width": m === met ? 2.4 : 1, opacity: m === met ? 1 : 0.45 }, svg);
+      }
+      T(svg, PX + PW, PY + PH + 30, "parameters", { anchor: "end", size: 9, fill: C.faint });
+
+      /* the numbers, at five sizes */
+      var RX = 520, y = 46;
+      T(svg, RX, y, "parameters", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 752, y, "score", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      [9, 9.6, 10.2, 10.8, 11.6].forEach(function (l) {
+        var v = score(l, met);
+        T(svg, RX, y, "1e" + l.toFixed(1), { anchor: "start", size: 10.5, fill: C.dim });
+        rect(svg, RX + 64, y - 6, v * 110, 12, { rx: 2, fill: C.orange, stroke: "none", op: 0.55 });
+        T(svg, 752, y, (v * 100).toFixed(1) + "%", { anchor: "end", size: 10.5, fill: C.text });
+        y += 22;
+      });
+      T(svg, RX, y + 8, "per-digit accuracy is the same curve", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, RX, y + 24, "in all three charts.", { anchor: "start", size: 9, fill: C.faint });
+
+      var jump = score(10.5, 0) - score(9.9, 0), smooth = score(10.5, 1) - score(9.9, 1);
+      line(svg, 8, 318, 752, 318, { stroke: C.line, sw: 1 });
+      T(svg, 8, 338, "From 1e9.9 to 1e10.5 parameters: exact match moves " + (jump * 100).toFixed(0) +
+        " points, partial credit " + (smooth * 100).toFixed(0) + ".",
+        { anchor: "start", size: 10.5, fill: C.orange });
+      wrapT(svg, 8, 362, 122, 17, "Exact match over five digits is the per-digit curve raised to the " +
+        "fifth power: near zero until nearly every digit is right, then a leap. The capability improved " +
+        "smoothly throughout. A sharp jump in a discontinuous metric is not evidence of a sharp change " +
+        "in the model.", { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      if (tab === 0) renderBill(); else renderJump();
+    }
+    function say() {
+      if (tab === 0) f.say("Break-even at " + (BREAK / 1e12).toFixed(2) + " trillion served tokens. " +
+        "The compute-optimal model costs " + (NOPT / N0).toFixed(1) + "x more on every token it ever emits.");
+      else f.say(METRIC[met] + ": 1e9.9 scores " + (score(9.9, met) * 100).toFixed(1) + "%, 1e10.5 scores " +
+        (score(10.5, met) * 100).toFixed(1) + "%.");
+    }
+
+    var tT = tabs(f.controls, ["the inference bill", "the emergent jump"], 0, function (i) {
+      tab = i; render(); say();
+    });
+    var sS = slider(f.controls, "served tokens", 11, 13.4, Math.log(BREAK) / Math.LN10, 0.1,
+      function (v) { return "1e" + v.toFixed(1); },
+      function (v) { logS = v; tab = 0; tT.sync(0); render(); say(); });
+    var tM = tabs(f.controls, METRIC, 0, function (i) {
+      met = i; tab = 1; tT.sync(1); render();
+      f.say(i === 0 ? "Exact match: the answer is right or it is not, and five digits must all land."
+          : i === 1 ? "Partial credit per digit: the same outputs, scored continuously. The jump is gone."
+          : "Log-likelihood of the correct answer: continuous too, and equally smooth.");
+    });
+    f.btn("reset", function () {
+      tab = 0; met = 0; logS = Math.log(BREAK) / Math.LN10;
+      tT.sync(0); tM.sync(0); sS.set(Math.log(BREAK) / Math.LN10); render();
+      f.say("Look at the jump. Now change the metric.");
+    });
+
+    render();
+    f.say("Look at the jump. Now change the metric.");
   };
 
 
