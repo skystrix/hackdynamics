@@ -22,6 +22,8 @@
      llmActiveVsTotal ch10 Comparator two bills, and the dense model you would buy instead
      llmLogitLens   ch11 Stepper    every layer asked what it would answer now
      llmInductionHead ch11 Inspector 144 heads scored; both halves of the circuit fall out
+     llmCorpusPipeline ch12 Stepper  1,000 documents, six filters, real MinHash
+     llmContamination ch12 Playground the n-gram knob, and the floor under it
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -44,6 +46,25 @@
      last line for a "+N more" tail. Every machine here that draws a row of
      tokens needs this, and none of them needs its own copy: pass items that
      carry a .w, get .x and .ln back on the ones that fit. */
+
+  /* Draw a sentence as however many lines it needs, breaking on spaces at
+     `cw` characters. Returns the y of the line after the last one drawn. */
+  function wrapT(p, x, y, cw, lh, str, opts) {
+    var words = str.split(" "), cur = "", out = [], i;
+    for (i = 0; i < words.length; i++) {
+      var t = cur ? cur + " " + words[i] : words[i];
+      if (t.length > cw && cur) { out.push(cur); cur = words[i]; } else cur = t;
+    }
+    if (cur) out.push(cur);
+    if (opts && opts.max && out.length > opts.max) {
+      out = out.slice(0, opts.max);
+      out[opts.max - 1] = out[opts.max - 1].replace(/.{2}$/, "…");
+    }
+    for (i = 0; i < out.length; i++)
+      T(p, x, y + i * lh, out[i], { anchor: "start", size: (opts && opts.size) || 10.5,
+        fill: (opts && opts.fill) || C.text });
+    return y + out.length * lh;
+  }
 
   /* A deterministic RNG, so every reader sees the same "random" weights and a
      screenshot means something. Three machines want it; it lives here once. */
@@ -5179,25 +5200,12 @@
         ": the sparse model is " + rS.toFixed(2) + "x faster and costs " + rM.toFixed(2) + "x the memory.";
       T(svg, RX, 328, "", { anchor: "start", size: 10 });
       line(svg, RX, 318, 752, 318, { stroke: C.line, sw: 1 });
-      wrapAt(svg, RX, 336, 352, msg, ax === 1 ? C.teal : C.pink);
+      wrapT(svg, RX, 336, 46, 17, msg, { size: 10.5, fill: ax === 1 ? C.teal : C.pink });
 
       T(svg, 8, 380, ax === 2
           ? "The geometric mean is a rule of thumb from the scaling literature, not a measurement. Read it as an ordering, not a number."
           : "tokens/second is Chapter 26's model: 3.35 TB/s over the bytes a token reads. At batch 1 an MoE reads only what it picked.",
         { anchor: "start", size: 10, fill: C.faint });
-    }
-
-    /* Wrap a sentence into as many 10.5px lines as it needs, at ~46 chars. */
-    function wrapAt(p, x, y0, w, str, tone) {
-      var words = str.split(" "), lineStr = "", out = [], i;
-      for (i = 0; i < words.length; i++) {
-        var t = lineStr ? lineStr + " " + words[i] : words[i];
-        if (t.length > 46 && lineStr) { out.push(lineStr); lineStr = words[i]; }
-        else lineStr = t;
-      }
-      if (lineStr) out.push(lineStr);
-      for (i = 0; i < out.length; i++)
-        T(p, x, y0 + i * 17, out[i], { anchor: "start", size: 10.5, fill: tone || C.text });
     }
 
     function say() {
@@ -5628,6 +5636,552 @@
 
     render();
     f.say("Find the head that fires only on a repeated token. L5 H5 is already selected.");
+  };
+
+
+
+  /* ========================================================================
+     26. llmCorpusPipeline — CH 12 — Stepper
+
+     A thousand documents, generated to order from a seed so the same corpus
+     comes back every time, and six filters that measure them rather than
+     consult the label that made them. Every number on screen is counted from
+     the text: word counts, the fraction of lines that are prose, alphabetic
+     fraction, bullet fraction, and MinHash-64 signatures over five-word
+     shingles with LSH banding, which is the actual algorithm of section 4
+     rather than a stand-in for it.
+
+     The discovery the blueprint asks for is there and is worse than it
+     sounds: 400 of the 1,000 documents are the same licence, differing only
+     in a year and a project name. At the default 0.8 threshold 371 of them
+     go, which leaves 29 copies of the licence in the "clean" corpus. Drop
+     the threshold to 0.7 and 399 go. That cliff is section 4's warning about
+     the cutoff, and it is on a slider rather than in a sentence.
+
+     The two licence copies the machine compares also land where section 4's
+     measurement landed: true Jaccard 0.774 against a MinHash estimate of
+     0.781, from a 64-number signature. The section reported 0.750 and 0.773
+     on its own pair of sentences. Different sentences, same regime, same
+     conclusion — the estimate is good, and it still cannot see paraphrase.
+     ======================================================================== */
+  VIZ.llmCorpusPipeline = function (el) {
+    var f = frame(el);
+
+    var POOL = ("the a of and to in that is was for with as on by at from an it this which " +
+      "river valley bridge signal engine harvest cotton furnace ledger parish treaty canal " +
+      "measure sample record season pattern current pressure surface distance mineral timber " +
+      "printed carried opened reported argued studied traded settled charted drained " +
+      "northern southern coastal inland early later common careful ordinary steady " +
+      "council company society committee register survey account journal notice report " +
+      "market harbour station quarry mill orchard pasture terrace foundry workshop").split(/\s+/);
+    var NAVW = "home about contact privacy terms login register search sitemap help faq news blog shop cart account".split(" ");
+    var FORW = "der die das und mit von einer wurde zwischen jahren stadt fluss wasser bericht gesellschaft".split(" ");
+    var QS = ["Which planet in the solar system has the shortest day and how long is that",
+      "In which year did the first crewed mission land on the surface of the Moon and who was the commander of it"];
+
+    function sent(r, n) {
+      var o = [], i;
+      for (i = 0; i < n; i++) o.push(POOL[Math.floor(r() * POOL.length)]);
+      return o.join(" ");
+    }
+
+    function build() {
+      var r = mulberry(11), docs = [], i, j, k, lines;
+      function push(kind, title, text, conf) {
+        docs.push({ kind: kind, title: title, text: text, conf: conf });
+      }
+      for (i = 0; i < 140; i++) {
+        lines = []; k = 4 + Math.floor(r() * 10);
+        for (j = 0; j < k; j++) lines.push(sent(r, 12 + Math.floor(r() * 14)));
+        push("article", "A note on the " + POOL[20 + Math.floor(r() * 40)],
+          lines.join("\n"), 0.86 + r() * 0.13);
+      }
+      for (i = 0; i < 400; i++)
+        push("licence", "Terms of use",
+          "Permission is hereby granted free of charge to any person obtaining a copy of this " +
+          "software and associated documentation files to deal in the software without restriction " +
+          "including without limitation the rights to use copy modify merge publish distribute " +
+          "sublicense and sell copies of the software subject to the following conditions.\n" +
+          "Copyright " + (1998 + (i % 26)) + " the " + POOL[30 + (i % 30)] + " project. All rights reserved.",
+          0.9 + r() * 0.09);
+      for (i = 0; i < 120; i++) {
+        lines = [];
+        for (j = 0; j < 10 + Math.floor(r() * 8); j++)
+          lines.push(NAVW[Math.floor(r() * NAVW.length)] + " | " + NAVW[Math.floor(r() * NAVW.length)]);
+        push("nav", "Untitled page", lines.join("\n"), 0.7 + r() * 0.2);
+      }
+      for (i = 0; i < 90; i++)
+        push("catalogue", "Product listing",
+          "This item ships within two working days and is covered by our standard returns policy " +
+          "for thirty days from the date of delivery. Please check the size guide carefully before " +
+          "ordering and contact the support team if anything at all is unclear about the fit, the " +
+          "finish or the care instructions. Bulk orders are handled by the trade desk and quoted " +
+          "separately.\nItem code " + (4000 + i) + ".", 0.88 + r() * 0.1);
+      for (i = 0; i < 80; i++)
+        push("stub", "Short entry", sent(r, 9 + Math.floor(r() * 14)), 0.8 + r() * 0.18);
+      for (i = 0; i < 70; i++) {
+        lines = [];
+        for (j = 0; j < 5 + Math.floor(r() * 5); j++) {
+          var s = []; for (k = 0; k < 12; k++) s.push(FORW[Math.floor(r() * FORW.length)]);
+          lines.push(s.join(" "));
+        }
+        push("foreign", "Bericht", lines.join("\n"), 0.18 + r() * 0.42);
+      }
+      for (i = 0; i < 50; i++) {
+        lines = [];
+        for (j = 0; j < 14 + Math.floor(r() * 10); j++) lines.push("- " + sent(r, 4 + Math.floor(r() * 4)));
+        push("bullets", "Checklist", lines.join("\n"), 0.82 + r() * 0.15);
+      }
+      for (i = 0; i < 40; i++) {
+        lines = ["Figures for the quarter are set out in the table below.",
+                 "Revisions to the previous three quarters are marked with an asterisk.",
+                 "All values are given in thousands and rounded to the nearest unit."];
+        for (j = 0; j < 12 + Math.floor(r() * 10); j++)
+          lines.push((1000 + Math.floor(r() * 9000)) + " | " + (r() * 100).toFixed(2) + " | " +
+                     (r() * 10).toFixed(3) + " | " + Math.floor(r() * 500));
+        push("symbols", "Table 4", lines.join("\n"), 0.7 + r() * 0.2);
+      }
+      for (i = 0; i < 10; i++)
+        push("benchmark", "Quiz answers, part " + (i + 1),
+          sent(r, 20) + "\n" + QS[i % 2] + "\n" + sent(r, 18), 0.9 + r() * 0.08);
+      return docs;
+    }
+
+    /* Every metric a filter reads is computed here, from the text. */
+    function measure(d) {
+      var lines = d.text.split("\n").filter(function (l) { return l.trim(); });
+      var w = d.text.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+      var alpha = 0, len = 0, i;
+      for (i = 0; i < w.length; i++) { if (/[a-z]/.test(w[i])) alpha++; len += w[i].length; }
+      var bul = 0, prose = 0, seen = {}, rep = 0;
+      lines.forEach(function (l) {
+        if (/^\s*[-*]/.test(l)) bul++;
+        if (l.trim().split(/\s+/).length >= 6 && l.indexOf("|") < 0) prose++;
+        var key = l.trim(); if (seen[key]) rep++; seen[key] = 1;
+      });
+      d.w = w; d.nw = w.length; d.tok = Math.round(w.length * 1.32);
+      d.meanLen = len / Math.max(1, w.length);
+      d.alphaFrac = alpha / Math.max(1, w.length);
+      d.bulFrac = bul / Math.max(1, lines.length);
+      d.proseFrac = prose / Math.max(1, lines.length);
+      d.repFrac = rep / Math.max(1, lines.length);
+      d.symFrac = (d.text.match(/[^A-Za-z0-9\s]/g) || []).length / Math.max(1, d.text.length);
+    }
+
+    /* MinHash-64 over five-word shingles, then LSH in 16 bands of 4. Each
+       document is compared only with the first document it shares a band
+       with, which is what makes this linear instead of half a million
+       comparisons. */
+    var NH = 64, HA = [], HB = [];
+    (function () {
+      var r = mulberry(5), i;
+      for (i = 0; i < NH; i++) {
+        HA.push((Math.floor(r() * 2147483647) * 2 + 1) >>> 0);
+        HB.push(Math.floor(r() * 4294967295) >>> 0);
+      }
+    })();
+    function signature(w) {
+      var s = new Array(NH).fill(0xFFFFFFFF), i, k;
+      for (i = 0; i + 5 <= w.length; i++) {
+        var b = hash32(w.slice(i, i + 5).join(" "));
+        for (k = 0; k < NH; k++) {
+          var v = ((Math.imul(b, HA[k]) >>> 0) ^ HB[k]) >>> 0;
+          if (v < s[k]) s[k] = v;
+        }
+      }
+      return s;
+    }
+    function agree(a, b) { var c = 0, k; for (k = 0; k < NH; k++) if (a[k] === b[k]) c++; return c / NH; }
+    function trueJaccard(a, b) {
+      var A = {}, B = {}, i, n = 0, u = 0, k;
+      for (i = 0; i + 5 <= a.length; i++) A[a.slice(i, i + 5).join(" ")] = 1;
+      for (i = 0; i + 5 <= b.length; i++) B[b.slice(i, i + 5).join(" ")] = 1;
+      for (k in A) { u++; if (B[k]) n++; }
+      for (k in B) if (!A[k]) u++;
+      return n / u;
+    }
+    function grams(w, n) { var o = [], i; for (i = 0; i + n <= w.length; i++) o.push(w.slice(i, i + n).join(" ")); return o; }
+
+    var DOCS = build(), EV = {}, i;
+    DOCS.forEach(measure);
+    QS.forEach(function (q) {
+      grams(q.toLowerCase().split(" "), 13).forEach(function (g) { EV[g] = 1; });
+    });
+    (function () {
+      var buckets = {}, b, key;
+      DOCS.forEach(function (d, i2) {
+        d.sig = signature(d.w); d.dupEst = 0; d.dupOf = -1;
+        d.hit = grams(d.w, 13).some(function (g) { return EV[g]; });
+        for (b = 0; b < 16; b++) {
+          key = b + ":" + d.sig.slice(b * 4, b * 4 + 4).join(",");
+          if (buckets[key] !== undefined) {
+            var e = agree(d.sig, DOCS[buckets[key]].sig);
+            if (e > d.dupEst) { d.dupEst = e; d.dupOf = buckets[key]; }
+          } else buckets[key] = i2;
+        }
+      });
+    })();
+    var RAWTOK = DOCS.reduce(function (s, d) { return s + d.tok; }, 0);
+    var LIC = DOCS.filter(function (d) { return d.kind === "licence"; });
+    var JTRUE = trueJaccard(LIC[0].w, LIC[1].w), JEST = agree(LIC[0].sig, LIC[1].sig);
+
+    /* ---- the six filters, each a predicate on the measurements ---- */
+    var ST = [
+      { n: "extraction", th: 0.15, lo: 0.05, hi: 0.6, step: 0.05, on: true,
+        tl: "main content must be this much of the page",
+        f: function (d, t) { return d.proseFrac >= t; } },
+      { n: "language id", th: 0.65, lo: 0.3, hi: 0.95, step: 0.05, on: true,
+        tl: "minimum language confidence",
+        f: function (d, t) { return d.conf >= t; } },
+      { n: "basic cleaning", th: 50, lo: 10, hi: 200, step: 10, on: true,
+        tl: "minimum words",
+        f: function (d, t) { return d.nw >= t && d.alphaFrac >= 0.8 && d.repFrac <= 0.5; } },
+      { n: "quality heuristics", th: 0.9, lo: 0.3, hi: 1, step: 0.05, on: true,
+        tl: "maximum fraction of lines that may be bullets",
+        f: function (d, t) { return d.bulFrac <= t && d.meanLen >= 3 && d.meanLen <= 10; } },
+      { n: "deduplication", th: 0.8, lo: 0.5, hi: 0.95, step: 0.05, on: true,
+        tl: "MinHash similarity at which a document is a duplicate",
+        f: function (d, t) { return d.dupEst < t; } },
+      { n: "decontamination", th: 13, lo: 6, hi: 24, step: 1, on: true,
+        tl: "n-gram size checked against the evaluation set",
+        f: function (d) { return !d.hit; } }
+    ];
+    var sel = 4;
+
+    /* Run the whole pipeline and record what each stage removed. */
+    function run() {
+      var alive = DOCS.slice(), out = [{ docs: DOCS.length, tok: RAWTOK }], s;
+      for (s = 0; s < ST.length; s++) {
+        var killed = [], next = [];
+        if (ST[s].on) {
+          alive.forEach(function (d) { (ST[s].f(d, ST[s].th) ? next : killed).push(d); });
+        } else next = alive;
+        alive = next;
+        out.push({ docs: alive.length, tok: alive.reduce(function (a, d) { return a + d.tok; }, 0),
+                   killed: killed });
+      }
+      return out;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 444", width: "100%",
+      role: "img", "aria-label": "a thousand documents through six filters" }, f.body);
+
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    function render() {
+      var R = run(), i2, s;
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+      T(svg, 8, 14, "1,000 documents, generated from a seed · " + commas(RAWTOK) + " tokens raw",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, commas(R[6].docs) + " survive · " + commas(R[6].tok) + " tokens",
+        { anchor: "end", size: 11, fill: C.teal });
+
+      /* ---- the funnel ---- */
+      var y = 44, BX = 118, BW = 190;
+      T(svg, 8, 32, "stage", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, BX + BW + 44, 32, "documents", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 430, 32, "tokens", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 8, y, "raw", { anchor: "start", size: 10, fill: C.dim });
+      rect(svg, BX, y - 7, BW, 14, { rx: 3, fill: C.blue, stroke: "none", op: 0.35 });
+      T(svg, BX + BW + 44, y, "1,000", { anchor: "end", size: 10, fill: C.dim });
+      T(svg, 430, y, commas(RAWTOK), { anchor: "end", size: 10, fill: C.dim });
+      y += 24;
+      for (s = 0; s < ST.length; s++) {
+        var st = ST[s], cur = R[s + 1], gone = R[s].docs - cur.docs;
+        if (s === sel) rect(svg, 4, y - 11, 430, 22, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, st.n, { anchor: "start", size: 10,
+          fill: !st.on ? C.faint : s === sel ? C.text : C.dim });
+        rect(svg, BX, y - 7, cur.docs / 1000 * BW, 14,
+          { rx: 3, fill: s === sel ? C.teal : C.blue, stroke: "none", op: 0.6 });
+        if (gone) rect(svg, BX + cur.docs / 1000 * BW, y - 7, gone / 1000 * BW, 14,
+          { rx: 3, fill: C.pink, stroke: "none", op: 0.3 });
+        T(svg, BX + BW + 44, y, st.on ? commas(cur.docs) + "  −" + commas(gone) : "off",
+          { anchor: "end", size: 10, fill: st.on ? (gone ? C.pink : C.dim) : C.faint });
+        T(svg, 430, y, commas(cur.tok), { anchor: "end", size: 10, fill: C.dim });
+        y += 24;
+      }
+
+      /* ---- the stage you are standing on ---- */
+      var st2 = ST[sel], kill = R[sel + 1].killed || [], RX = 454;
+      T(svg, RX, 32, "stage " + (sel + 1) + " of 6 · " + st2.n,
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, RX, 52, st2.tl, { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, RX, 72, st2.on ? commas(kill.length) + " documents removed here" : "this filter is switched off",
+        { anchor: "start", size: 11, fill: st2.on && kill.length ? C.pink : C.faint });
+
+      var by = {}, ord = [];
+      kill.forEach(function (d) {
+        if (by[d.kind] === undefined) { by[d.kind] = 0; ord.push(d.kind); }
+        by[d.kind]++;
+      });
+      ord.sort(function (a, b) { return by[b] - by[a]; });
+      var ky = 96;
+      ord.slice(0, 5).forEach(function (k) {
+        T(svg, RX, ky, k, { anchor: "start", size: 10, fill: C.dim });
+        rect(svg, RX + 104, ky - 5, by[k] / 1000 * 120, 10, { rx: 2, fill: C.pink, stroke: "none", op: 0.5 });
+        T(svg, 752, ky, commas(by[k]), { anchor: "end", size: 10, fill: C.text });
+        ky += 19;
+      });
+      if (!ord.length) T(svg, RX, ky, "nothing", { anchor: "start", size: 10, fill: C.faint });
+
+      /* ---- what it actually threw away ---- */
+      var sy = 212;
+      line(svg, 8, sy - 14, 752, sy - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, sy, st2.on && kill.length ? "three of them, as they were written"
+                                          : "switch the filter on to read what it removes",
+        { anchor: "start", size: 9.5, fill: C.faint });
+      sy += 18;
+      var picks = [];
+      for (i2 = 0; i2 < kill.length && picks.length < 3; i2 += Math.max(1, Math.floor(kill.length / 3)))
+        picks.push(kill[i2]);
+      picks.forEach(function (d) {
+        if (sy > 330) return;                  // keep clear of the closing lines
+        T(svg, 8, sy, d.title, { anchor: "start", size: 10, fill: C.orange });
+        T(svg, 752, sy, d.nw + " words · " + d.tok + " tokens · lang " + d.conf.toFixed(2) +
+          (sel === 4 ? " · similarity " + d.dupEst.toFixed(3) : ""),
+          { anchor: "end", size: 9, fill: C.faint });
+        sy += 15;
+        sy = wrapT(svg, 8, sy, 126, 13, d.text.replace(/\n/g, " ⏎ ").slice(0, 248),
+          { size: 9.5, fill: C.dim, max: 2 }) + 9;
+      });
+
+      /* ---- the licence, and the cliff ---- */
+      var licGone = kill.filter(function (d) { return d.kind === "licence"; }).length;
+      var msg = sel === 4
+        ? "400 of 1,000 are the same licence with a different year. At " +
+          st2.th.toFixed(2) + " this removes " + commas(licGone) + ", leaving " +
+          commas(400 - licGone) + " copies."
+        : "Every number here is measured from the text, not read off the label that generated it.";
+      line(svg, 8, 380, 752, 380, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 400, 110, 16, msg, { size: 10.5, fill: sel === 4 ? C.pink : C.faint });
+      T(svg, 8, 426, "Two licence copies: true Jaccard " + JTRUE.toFixed(3) + ", MinHash-64 estimate " +
+        JEST.toFixed(3) + " — accurate about what it sees, blind to paraphrase.",
+        { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    function say() {
+      var R = run();
+      f.say(commas(R[6].docs) + " documents and " + commas(R[6].tok) + " tokens survive, from 1,000 and " +
+        commas(RAWTOK) + ". Stage " + (sel + 1) + ", " + ST[sel].n + ", removed " +
+        commas((R[sel + 1].killed || []).length) + ".");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tS = tabs(f.controls, ST.map(function (s) { return s.n.split(" ")[0]; }), 4, function (i2) {
+      sel = i2; sTh.el.querySelector("span");
+      sTh.input.min = ST[sel].lo; sTh.input.max = ST[sel].hi; sTh.input.step = ST[sel].step;
+      sTh.set(ST[sel].th); tgF.set(ST[sel].on); render(); say();
+    });
+    var tgF = toggle(f.controls, "filter on", true, function (v) {
+      ST[sel].on = v; render();
+      f.say(v ? ST[sel].n + " is back on." : ST[sel].n + " is off: everything it was removing now " +
+        "flows downstream, where a later filter may or may not catch it.");
+    });
+    var sTh = slider(f.controls, "threshold", 0.5, 0.95, 0.8, 0.05,
+      function (v) { return sel === 2 ? String(Math.round(v)) : sel === 5 ? "n=" + Math.round(v) : v.toFixed(2); },
+      function (v) { ST[sel].th = v; render(); say(); });
+    f.btn("reset", function () {
+      sel = 4;
+      ST[0].th = 0.15; ST[1].th = 0.65; ST[2].th = 50; ST[3].th = 0.9; ST[4].th = 0.8; ST[5].th = 13;
+      ST.forEach(function (s) { s.on = true; });
+      tS.sync(4); tgF.set(true);
+      sTh.input.min = ST[4].lo; sTh.input.max = ST[4].hi; sTh.input.step = ST[4].step; sTh.set(0.8);
+      render();
+      f.say("Step the pipeline. Look at what each filter throws away.");
+    });
+
+    render();
+    f.say("Step the pipeline. Look at what each filter throws away.");
+  };
+
+
+  /* ========================================================================
+     27. llmContamination — CH 12 — Playground
+
+     Section 5's table, reproduced by counting rather than quoted. Eight
+     evaluation questions, eight documents, and the overlap computed live on
+     whitespace-split lowercase n-grams.
+
+     The section's pair is question 1 against "Quiz night: planet facts",
+     which share a fifteen-word run. Fifteen words contain eight 8-grams,
+     three 13-grams and no 20-gram, so the table comes back exactly:
+
+         n = 8    8 shared    flagged
+         n = 13   3 shared    flagged
+         n = 20   0 shared    missed
+
+     The score panel is the part the section argues about. Three questions
+     the model actually knows, three leaked verbatim, two leaked only as
+     paraphrase. Reported with nothing removed: 8 of 8. True ability: 3 of 8.
+     The best decontamination setting on offer, n = 8, gets to 5 of 8 — and
+     it cannot go lower, because the two paraphrased leaks are invisible to
+     every n. That floor is the section's closing point, and it is the number
+     the machine is really for.
+     ======================================================================== */
+  VIZ.llmContamination = function (el) {
+    var f = frame(el);
+
+    var EV = [
+      { q: "Which planet in the solar system has the shortest day, and how long is that day?", known: false },
+      { q: "What is the capital city of the country that borders both France and Portugal?", known: true },
+      { q: "In which year did the first crewed mission land on the surface of the Moon, and who was the commander of it?", known: false },
+      { q: "Explain why the boiling point of water decreases as altitude above sea level increases.", known: false },
+      { q: "Who wrote the novel that begins with the line Call me Ishmael?", known: true },
+      { q: "What is the chemical symbol for the element with atomic number seventy-nine?", known: false },
+      { q: "Describe the difference between a comet and an asteroid in terms of composition.", known: false },
+      { q: "How many bones are there in the adult human body, and how many at birth?", known: true }
+    ];
+    var DC = [
+      { t: "Quiz night: planet facts", x: "Pub quiz hosts keep coming back to the same one. Which planet in the solar system has the shortest day and how long is that worth arguing about at the table? The answer is Jupiter, at a little under ten hours." },
+      { t: "eval_set_v2.jsonl, pasted to a forum", x: "Someone dumped the whole file into the thread again. In which year did the first crewed mission land on the surface of the Moon, and who was the commander of it? Answer: 1969, Neil Armstrong. Please stop posting these." },
+      { t: "Gold price and jewellery marks", x: "Hallmarks tell you the metal. Buyers ask about the symbol for the element with atomic number seventy-nine constantly, and it is Au, from aurum." },
+      { t: "Cooking at altitude", x: "Up a mountain your kettle boils sooner and your pasta stays hard. Lower air pressure means water turns to vapour at a lower temperature, so the boil happens earlier and cooks less." },
+      { t: "Small bodies of the solar system", x: "The short version is that one is dirty ice and the other is rock and metal, which is why only one of them grows a tail when it comes close to the Sun." },
+      { t: "A history of railway signalling", x: "Semaphore arms gave way to colour lights over sixty years, and the interlocking frame is the part most people never see." },
+      { t: "Iberian travel notes", x: "The train from the border takes four hours and the food is better than the guidebooks say." },
+      { t: "Bones, a reader question", x: "People ask about the skeleton constantly and the numbers surprise them, because a newborn has far more of them than an adult does." }
+    ];
+    /* Which questions a paraphrase leaks, with no shared n-gram at any n. */
+    var PARA = { 3: 3, 6: 4 };
+
+    var n = 13, thr = 1, decon = true;
+
+    function words(s) { return s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean); }
+    function grams(w, k) { var o = [], i; for (i = 0; i + k <= w.length; i++) o.push(w.slice(i, i + k).join(" ")); return o; }
+    var QW = EV.map(function (e) { return words(e.q); });
+    var DW = DC.map(function (d) { return words(d.x); });
+    function overlap(qi, di, k) {
+      var b = {}, seen = {}, c = 0;
+      grams(DW[di], k).forEach(function (g) { b[g] = 1; });
+      grams(QW[qi], k).forEach(function (g) { if (b[g] && !seen[g]) { seen[g] = 1; c++; } });
+      return c;
+    }
+    function bestFor(qi, k) {
+      var b = { c: 0, d: -1 }, i;
+      for (i = 0; i < DC.length; i++) { var c = overlap(qi, i, k); if (c > b.c) b = { c: c, d: i }; }
+      return b;
+    }
+    function scores() {
+      var rep = 0, after = 0, tru = 0, i;
+      for (i = 0; i < EV.length; i++) {
+        var leak = PARA[i] !== undefined || bestFor(i, 4).c > 0;
+        var caught = decon && bestFor(i, n).c >= thr;
+        if (EV[i].known) tru++;
+        if (EV[i].known || leak) rep++;
+        if (EV[i].known || (leak && !caught)) after++;
+      }
+      return { rep: rep, after: after, tru: tru, n: EV.length };
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
+      role: "img", "aria-label": "benchmark questions found in the training corpus" }, f.body);
+
+    function clip(s, k) { return s.length > k ? s.slice(0, k - 1) + "…" : s; }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, S2 = scores();
+
+      T(svg, 8, 14, EV.length + " evaluation questions · " + DC.length + " corpus documents · n = " + n +
+        " · flag at " + thr + "+ shared n-gram" + (thr > 1 ? "s" : "") +
+        (decon ? "" : " · decontamination off"),
+        { anchor: "start", size: 11, fill: decon ? C.teal : C.orange });
+
+      /* ---- every question, and where it leaked ---- */
+      var y = 42;
+      T(svg, 8, y, "question", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 372, y, "shared", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 452, y, "verdict", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      for (i = 0; i < EV.length; i++) {
+        var b = bestFor(i, n), para = PARA[i] !== undefined;
+        var leak = para || bestFor(i, 4).c > 0;
+        var caught = decon && b.c >= thr;
+        var tone = caught ? C.green : leak ? C.pink : C.faint;
+        T(svg, 8, y, "Q" + (i + 1), { anchor: "start", size: 9.5, fill: C.faint });
+        T(svg, 36, y, clip(EV[i].q, 50), { anchor: "start", size: 10,
+          fill: leak ? C.text : C.dim });
+        T(svg, 372, y, b.c ? String(b.c) : "—", { anchor: "end", size: 10, fill: b.c ? C.text : C.faint });
+        T(svg, 452, y, caught ? "flagged" : para ? "paraphrase" : leak ? "missed" : "clean",
+          { anchor: "end", size: 9.5, fill: tone });
+        if (leak) T(svg, 468, y, clip(para ? DC[PARA[i]].t : DC[b.d >= 0 ? b.d : bestFor(i, 4).d].t, 34),
+          { anchor: "start", size: 9, fill: C.faint });
+        y += 21;
+      }
+
+      /* ---- the section's own pair, at three settings ---- */
+      var ty = 232;
+      line(svg, 8, ty - 16, 452, ty - 16, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "Q1 against “" + DC[0].t + "”, which share a fifteen-word run",
+        { anchor: "start", size: 9.5, fill: C.faint });
+      ty += 20;
+      T(svg, 8, ty, "n-gram size", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 240, ty, "overlapping n-grams found", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 340, ty, "verdict", { anchor: "end", size: 9, fill: C.faint });
+      ty += 19;
+      [8, 13, 20].forEach(function (k) {
+        var c = overlap(0, 0, k), hot = k === n;
+        T(svg, 8, ty, String(k), { anchor: "start", size: 10.5, fill: hot ? C.text : C.dim });
+        T(svg, 240, ty, String(c), { anchor: "end", size: 10.5, fill: hot ? C.text : C.dim });
+        T(svg, 340, ty, c >= thr ? "flagged" : "missed",
+          { anchor: "end", size: 10.5, fill: c >= thr ? C.green : C.pink });
+        ty += 19;
+      });
+      T(svg, 8, ty + 6, "The document is identical at every setting. What changes is whether you notice.",
+        { anchor: "start", size: 10, fill: C.faint });
+
+      /* ---- what the benchmark reports ---- */
+      var RX = 490, BW = 168;
+      T(svg, RX, 232, "what the benchmark reports", { anchor: "start", size: 10, fill: C.faint });
+      var by = 256;
+      [["reported, nothing removed", S2.rep, C.pink],
+       ["after decontamination", S2.after, C.orange],
+       ["what it actually knows", S2.tru, C.green]].forEach(function (r) {
+        T(svg, RX, by, r[0], { anchor: "start", size: 9.5, fill: C.faint });
+        rect(svg, RX, by + 8, r[1] / S2.n * BW, 14, { rx: 3, fill: r[2], stroke: "none", op: 0.65 });
+        T(svg, 752, by + 15, r[1] + " / " + S2.n + "  " + Math.round(r[1] / S2.n * 100) + "%",
+          { anchor: "end", size: 10, fill: r[2] });
+        by += 44;
+      });
+
+      /* ---- the floor ---- */
+      var nPara = Object.keys(PARA).length;
+      line(svg, 8, 376, 752, 376, { stroke: C.line, sw: 1 });
+      T(svg, 8, 394, "Reported " + S2.rep + " of " + S2.n + ", true ability " + S2.tru + " of " + S2.n +
+        ". At n = " + n + " the pass recovers " + (S2.rep - S2.after) +
+        " of the " + (S2.rep - S2.tru) + " leaked questions.",
+        { anchor: "start", size: 10.5, fill: S2.after > S2.tru ? C.orange : C.green });
+      T(svg, 8, 414, nPara + " of them were only ever paraphrased, so no n catches them: " +
+        (S2.tru + nPara) + " of " + S2.n + " is the floor this method can reach.",
+        { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    function say() {
+      var S2 = scores();
+      f.say("n = " + n + ", flag at " + thr + ": the benchmark reports " + S2.after + " of " + S2.n +
+        " after decontamination, against " + S2.tru + " of " + S2.n + " actually known.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var sN = slider(f.controls, "n-gram size", 5, 24, 13, 1,
+      function (v) { return String(v); },
+      function (v) { n = v; render(); say(); });
+    var sT = slider(f.controls, "flag at", 1, 6, 1, 1,
+      function (v) { return v + "+"; },
+      function (v) { thr = v; render(); say(); });
+    var tgD = toggle(f.controls, "decontaminate", true, function (v) {
+      decon = v; render();
+      f.say(v ? "Decontamination on: flagged documents are dropped and their questions stop being free."
+              : "No decontamination at all. Every leaked question is answered from memory.");
+    });
+    f.btn("reset", function () {
+      n = 13; thr = 1; decon = true; sN.set(13); sT.set(1); tgD.set(true); render();
+      f.say("Set n to 8 and find the benchmark questions sitting in the corpus.");
+    });
+
+    render();
+    f.say("Set n to 8 and find the benchmark questions sitting in the corpus.");
   };
 
 
