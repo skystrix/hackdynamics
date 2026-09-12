@@ -52,6 +52,11 @@
      llmPrmVsOrm    ch24 Comparator a right answer reached by luck, scored two ways
      llmTestTimeCompute ch24 Tuner  tokens per correct answer, the only comparable number
      llmModelPicker ch25 Comparator gates before preferences, all four arithmetic
+     llmPrefillDecode ch26 Simulator two phases, and only one of them reads the prompt
+     llmDecodeArithmetic ch26 Tuner  the walk up the bandwidth slope, table and all
+     llmScheduler   ch27 Simulator  one arrival stream, three policies, one p99
+     llmPagedCache  ch27 Builder    487,823 tokens, and how few requests that is
+     llmPrefixCache ch27 Tuner      11x on a hit, against the concurrency it costs
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -10995,6 +11000,733 @@
 
     render();
     f.say("Set your hardware and licence constraints first. Then look at what is left.");
+  };
+
+
+
+  /* ========================================================================
+     56. llmPrefillDecode — CH 26 — Simulator
+
+     One request through both phases, priced with the chapter's own numbers
+     and reproducing all of them. Prefill intensity is P FLOPs per byte, so
+     the table comes back exactly: 100 tokens is memory-bound like decode,
+     295 is the H100's ridge point precisely, and 500 upward is compute-bound.
+     TTFT at 400 TFLOP/s effective reproduces too — 1.61 TFLOP and 4.0 ms at
+     100 tokens, 8.03 and 20.1 at 500, 32.12 and 80.3 at 2,000, 128.48 and
+     321.2 at 8,000.
+
+     Decode is the other machine entirely: 16.06 GB of weights over 3.35 TB/s
+     is 4.79 ms a token and 209 tokens a second, while the arithmetic those
+     bytes feed would take 0.016 ms. Three hundred times as long waiting as
+     computing.
+
+     The discovery is on the timeline without needing to be pointed at. Drag
+     the prompt from 100 to 4,000 tokens and TTFT grows by a factor of forty
+     while TPOT does not move at all, because one of these phases reads the
+     prompt and the other reads the weights.
+     ======================================================================== */
+  VIZ.llmPrefillDecode = function (el) {
+    var f = frame(el);
+
+    var N = 8.03e9, L = 32, KV = 8, HD = 128, BYTES = 2;
+    var PEAK = 989e12, EFF = 400e12, BW = 3.35e12;
+    var prompt = 100, gen = 200, batch = 1;
+
+    function kvPerToken() { return 2 * L * KV * HD * BYTES; }
+    function prefillFlops() { return 2 * N * prompt * batch; }
+    function ttft() { return prefillFlops() / EFF; }
+    function decodeBytes() { return N * BYTES + batch * gen * kvPerToken() / 2; }
+    function tpot() { return decodeBytes() / BW; }
+    function decodeFlops() { return 2 * N * batch; }
+    function intensity() { return prompt; }
+    function ms(t) { return (t * 1e3).toFixed(t < 0.001 ? 3 : 1) + " ms"; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 432", width: "100%",
+      role: "img", "aria-label": "two phases that are not the same machine" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, tt = ttft(), tp = tpot(), total = tt + gen * tp;
+
+      T(svg, 8, 14, "Corvid-8B on an H100 · prompt " + commas(prompt) + " · generate " + commas(gen) +
+        " · batch " + batch, { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "TTFT " + ms(tt) + " · TPOT " + ms(tp),
+        { anchor: "end", size: 11, fill: C.orange });
+
+      /* the timeline */
+      var TX = 8, TW = 744, TY = 44, TH = 34;
+      var pw = tt / total * TW;
+      rect(svg, TX, TY, Math.max(2, pw), TH, { rx: 3, fill: C.orange, stroke: "none", op: 0.75 });
+      rect(svg, TX + pw, TY, TW - pw, TH, { rx: 3, fill: C.teal, stroke: "none", op: 0.7 });
+      if (pw > 60) T(svg, TX + pw / 2, TY + 17, "prefill", { size: 10, fill: C.card });
+      T(svg, TX + pw + (TW - pw) / 2, TY + 17, "decode, " + commas(gen) + " steps",
+        { size: 10, fill: C.card });
+      T(svg, TX, TY + TH + 14, "0", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, TX + TW, TY + TH + 14, ms(total) + " total", { anchor: "end", size: 8.5, fill: C.faint });
+
+      /* the two phases side by side */
+      var y = 108;
+      T(svg, 8, y, "", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 300, y, "prefill", { anchor: "end", size: 9, fill: C.orange });
+      T(svg, 470, y, "decode, one step", { anchor: "end", size: 9, fill: C.teal });
+      y += 22;
+      [["FLOPs", (prefillFlops() / 1e12).toFixed(2) + " TFLOP", (decodeFlops() / 1e9).toFixed(2) + " GFLOP"],
+       ["bytes read", (N * BYTES / 1e9).toFixed(2) + " GB", (decodeBytes() / 1e9).toFixed(2) + " GB"],
+       ["arithmetic intensity", commas(intensity()), (decodeFlops() / decodeBytes()).toFixed(2)],
+       ["against a ridge of 295", intensity() >= 295 ? "compute-bound" : "memory-bound", "memory-bound"],
+       ["time", ms(tt), ms(tp)]].forEach(function (r) {
+        T(svg, 8, y, r[0], { anchor: "start", size: 10, fill: C.faint });
+        T(svg, 300, y, r[1], { anchor: "end", size: 10.5,
+          fill: r[0] === "against a ridge of 295" ? (intensity() >= 295 ? C.green : C.pink) : C.text });
+        T(svg, 470, y, r[2], { anchor: "end", size: 10.5,
+          fill: r[0] === "against a ridge of 295" ? C.pink : C.text });
+        y += 20;
+      });
+      T(svg, 8, y + 6, "a decode step's arithmetic: " + ms(decodeFlops() / PEAK),
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* the published table */
+      var RX = 500, ty = 108;
+      T(svg, RX, ty, "prompt", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 640, ty, "intensity", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 752, ty, "TTFT", { anchor: "end", size: 9, fill: C.faint });
+      ty += 20;
+      [100, 295, 500, 2000, 8000].forEach(function (p) {
+        var on = p === prompt;
+        T(svg, RX, ty, commas(p), { anchor: "start", size: 10, fill: on ? C.orange : C.dim });
+        T(svg, 640, ty, commas(p), { anchor: "end", size: 10,
+          fill: p >= 295 ? C.green : C.pink });
+        T(svg, 752, ty, ms(2 * N * p / EFF), { anchor: "end", size: 10, fill: C.text });
+        ty += 20;
+      });
+      T(svg, RX, ty + 4, "the ridge point is 295 exactly", { anchor: "start", size: 8.5, fill: C.faint });
+
+      /* the KV formula and the ceiling */
+      var by = 258;
+      line(svg, 8, by - 14, 752, by - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, by, "bytes per token = 2 (K and V) x " + L + " layers x " + KV + " kv heads x " +
+        HD + " head dim x " + BYTES + " bytes = " + commas(kvPerToken()) + " = " +
+        (kvPerToken() / 1024) + " KB", { anchor: "start", size: 10, fill: C.dim });
+      T(svg, 8, by + 22, (N * BYTES / 1e9).toFixed(2) + " GB / 3.35 TB/s = " +
+        (N * BYTES / BW * 1e3).toFixed(2) + " ms per token = " + Math.round(BW / (N * BYTES)) +
+        " tokens/second, ceiling",
+        { anchor: "start", size: 10.5, fill: C.teal });
+      T(svg, 8, by + 42, "the arithmetic, meanwhile, would take " + ms(2 * N / PEAK),
+        { anchor: "start", size: 10.5, fill: C.pink });
+
+      line(svg, 8, 334, 752, 334, { stroke: C.line, sw: 1 });
+      var tt100 = 2 * N * 100 / EFF;
+      T(svg, 8, 354, "At 100 tokens TTFT is " + ms(tt100) + "; at 4,000 it is " +
+        ms(2 * N * 4000 / EFF) + ". TPOT does not move, because it never read the prompt.",
+        { anchor: "start", size: 10.5, fill: C.orange });
+      wrapT(svg, 8, 376, 122, 17, "These are not one machine running at two speeds. Prefill reads the " +
+        "prompt once and is compute-bound above 295 tokens; decode reads every weight for every token " +
+        "and is memory-bound at any batch size a single card can hold.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say("prompt " + commas(prompt) + ": TTFT " + ms(ttft()) + ", intensity " + commas(intensity()) +
+        ", and TPOT " + ms(tpot()) + " whatever the prompt was.");
+    }
+
+    var sP = slider(f.controls, "prompt tokens", 50, 8000, 100, 50,
+      function (v) { return commas(v); }, function (v) { prompt = v; render(); say(); });
+    var sG = slider(f.controls, "generated", 10, 1000, 200, 10,
+      function (v) { return commas(v); }, function (v) { gen = v; render(); say(); });
+    var sB = slider(f.controls, "batch", 1, 64, 1, 1,
+      function (v) { return String(v); }, function (v) { batch = v; render(); say(); });
+    f.btn("reset", function () {
+      prompt = 100; gen = 200; batch = 1; sP.set(100); sG.set(200); sB.set(1); render();
+      f.say("Lengthen the prompt. Watch which number changes.");
+    });
+
+    render();
+    f.say("Lengthen the prompt. Watch which number changes.");
+  };
+
+
+  /* ========================================================================
+     57. llmDecodeArithmetic — CH 26 — Tuner
+
+     Chapter 27's batching table, one chapter early and computed from two
+     quantities: bytes read per step, and the bandwidth to read them with.
+     Every published row comes back — batch 1 at 16.19 GB, 4.83 ms and 207
+     tokens a second; 32 at 20.25, 6.05 and 5,293; 128 at 32.84, 9.80 and
+     13,058; 256 at 49.61, 14.81 and 17,285; 384 at 66.39, 19.82 and 19,376;
+     and 512 at 83.17, 24.83 and 20,623, which breaches a 20 ms target.
+
+     The walk up the bandwidth slope is the whole point, and it is visible on
+     the roofline rather than asserted: at batch 1 the intensity is 1 and the
+     card delivers 0.3% of its peak; every doubling roughly doubles it, and
+     the point arrives at the ridge only when the KV cache has become most of
+     the traffic — at which point memory, not compute, ends the run.
+     ======================================================================== */
+  VIZ.llmDecodeArithmetic = function (el) {
+    var f = frame(el);
+
+    var N = 8.03e9, L = 32, KV = 8, HD = 128;
+    var PEAK = 989e12, BW = 3.35e12, CARD = 80e9;
+    var bits = 2, batch = 1, seq = 1000, slo = 20;
+
+    function kvPerToken() { return 2 * L * KV * HD * bits; }
+    function bytes() { return N * bits + batch * seq * kvPerToken(); }
+    function tpot() { return bytes() / BW; }
+    function thru() { return batch / tpot(); }
+    function flops() { return 2 * N * batch; }
+    function intensity() { return flops() / bytes(); }
+    function cache() { return batch * seq * kvPerToken(); }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 434", width: "100%",
+      role: "img", "aria-label": "the walk up the bandwidth slope" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, over = tpot() * 1e3 > slo, oom = N * bits + cache() > CARD;
+
+      T(svg, 8, 14, "Corvid-8B · " + (bits === 2 ? "bf16" : bits === 1 ? "int8" : "4-bit") +
+        " · batch " + batch + " · " + commas(seq) + " tokens each",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, oom ? "over the card" : over ? "breaches " + slo + " ms" : "within budget",
+        { anchor: "end", size: 11, fill: oom || over ? C.pink : C.green });
+
+      /* the roofline */
+      var PX = 44, PY = 44, PW = 380, PH = 160;
+      var xlo = -0.6, xhi = 3.4, ylo = 10, yhi = Math.log(PEAK) / Math.LN10 + 0.2;
+      function rx(a) { return PX + (Math.log(a) / Math.LN10 - xlo) / (xhi - xlo) * PW; }
+      function ry(v) { return PY + PH - (Math.log(v) / Math.LN10 - ylo) / (yhi - ylo) * PH; }
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      line(svg, PX, PY, PX, PY + PH, { stroke: C.line, sw: 1 });
+      var roof = [];
+      for (i = 0; i <= 120; i++) {
+        var a = Math.pow(10, xlo + i / 120 * (xhi - xlo));
+        roof.push(rx(a) + "," + ry(Math.min(PEAK, a * BW)));
+      }
+      S("polyline", { points: roof.join(" "), fill: "none", stroke: C.blue, "stroke-width": 2 }, svg);
+      var sb = batch, trail = [];
+      for (i = 0; i <= 10; i++) {
+        batch = Math.pow(2, i);
+        trail.push(rx(Math.max(Math.pow(10, xlo), intensity())) + "," +
+          ry(flops() / Math.max(flops() / PEAK, bytes() / BW)));
+      }
+      batch = sb;
+      S("polyline", { points: trail.join(" "), fill: "none", stroke: C.orange,
+        "stroke-width": 1.2, "stroke-dasharray": "2 3", opacity: 0.6 }, svg);
+      S("circle", { cx: rx(Math.max(Math.pow(10, xlo), intensity())),
+        cy: ry(flops() / Math.max(flops() / PEAK, bytes() / BW)), r: 5, fill: C.orange }, svg);
+      var rp = rx(PEAK / BW);
+      S("line", { x1: rp, y1: PY, x2: rp, y2: PY + PH, stroke: C.faint,
+        "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.45 }, svg);
+      T(svg, rp + 5, PY + 10, "ridge 295", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX, PY + PH + 14, "intensity 0.25", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY + PH + 14, "2,500", { anchor: "end", size: 8.5, fill: C.faint });
+
+      /* the numbers */
+      var RX = 452, y = 50;
+      function row(k, v, tone) {
+        T(svg, RX, y, k, { anchor: "start", size: 10, fill: C.faint });
+        T(svg, 752, y, v, { anchor: "end", size: 10.5, fill: tone || C.text });
+        y += 20;
+      }
+      row("bytes per step", (bytes() / 1e9).toFixed(2) + " GB");
+      row("  of which weights", (N * bits / 1e9).toFixed(2) + " GB", C.faint);
+      row("  of which KV cache", (cache() / 1e9).toFixed(2) + " GB", C.faint);
+      row("arithmetic intensity", intensity().toFixed(2), C.teal);
+      row("TPOT", (tpot() * 1e3).toFixed(2) + " ms", over ? C.pink : C.text);
+      row("throughput", commas(thru()) + " tok/s", C.orange);
+      row("of the card's peak", (flops() / Math.max(flops() / PEAK, bytes() / BW) / PEAK * 100).toFixed(2) + "%",
+        C.faint);
+      row("memory used", ((N * bits + cache()) / 1e9).toFixed(1) + " of 80 GB", oom ? C.pink : C.text);
+
+      /* the published table */
+      var ty = 244;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "batch", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 180, ty, "bytes per step", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 280, ty, "TPOT", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 400, ty, "throughput", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 490, ty, "cache", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 600, ty, "verdict", { anchor: "end", size: 9, fill: C.faint });
+      ty += 20;
+      var sb2 = batch, sbits = bits, sseq = seq;
+      bits = 2; seq = 1000;
+      [1, 32, 128, 256, 384, 512].forEach(function (b) {
+        batch = b;
+        var on = b === sb2 && sbits === 2 && sseq === 1000;
+        T(svg, 8, ty, String(b), { anchor: "start", size: 10, fill: on ? C.orange : C.dim });
+        T(svg, 180, ty, (bytes() / 1e9).toFixed(2) + " GB", { anchor: "end", size: 10, fill: C.text });
+        T(svg, 280, ty, (tpot() * 1e3).toFixed(2) + " ms", { anchor: "end", size: 10, fill: C.text });
+        T(svg, 400, ty, commas(thru()) + " tok/s", { anchor: "end", size: 10, fill: C.text });
+        T(svg, 490, ty, (cache() / 1e9).toFixed(1) + " GB", { anchor: "end", size: 10, fill: C.text });
+        T(svg, 600, ty, tpot() * 1e3 > slo ? "breaches" : "ok", { anchor: "end", size: 10,
+          fill: tpot() * 1e3 > slo ? C.pink : C.green });
+        ty += 19;
+      });
+      batch = sb2; bits = sbits; seq = sseq;
+
+      line(svg, 8, 384, 752, 384, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 404, 122, 17, "At batch 1 the card delivers a fraction of a percent of its peak, " +
+        "because one token's arithmetic is 16 GFLOPs against 16 GB of traffic. Every doubling roughly " +
+        "doubles the intensity, and the walk ends when the cache, not the compute, runs out.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say("batch " + batch + ": intensity " + intensity().toFixed(2) + ", TPOT " +
+        (tpot() * 1e3).toFixed(2) + " ms, " + commas(thru()) + " tokens a second, " +
+        ((N * bits + cache()) / 1e9).toFixed(1) + " GB of the card.");
+    }
+
+    var sB = slider(f.controls, "batch", 1, 512, 1, 1,
+      function (v) { return String(v); }, function (v) { batch = v; render(); say(); });
+    var sS = slider(f.controls, "tokens each", 200, 8000, 1000, 200,
+      function (v) { return commas(v); }, function (v) { seq = v; render(); say(); });
+    var tP = tabs(f.controls, ["bf16", "int8", "4-bit"], 0, function (i) {
+      bits = [2, 1, 0.5][i]; render(); say();
+    });
+    var sL = slider(f.controls, "SLO", 5, 60, 20, 5,
+      function (v) { return v + " ms"; }, function (v) { slo = v; render(); say(); });
+    f.btn("reset", function () {
+      bits = 2; batch = 1; seq = 1000; slo = 20;
+      sB.set(1); sS.set(1000); tP.sync(0); sL.set(20); render();
+      f.say("Batch size 1. Look at the arithmetic intensity. Now raise the batch.");
+    });
+
+    render();
+    f.say("Batch size 1. Look at the arithmetic intensity. Now raise the batch.");
+  };
+
+
+
+  /* ========================================================================
+     58. llmScheduler — CH 27 — Simulator
+
+     An arriving request stream and three policies, run on the same arrivals
+     so the difference on the timeline is the policy and nothing else.
+
+     The discovery is section 1's, and it is visible in one run: put a single
+     4,000-token request in a static batch of short ones and every short
+     request in that batch waits for it, because the batch does not retire
+     until its longest member finishes. The p99 is the number that notices.
+     Switch to continuous batching, where a finished sequence's slot is
+     refilled on the next step, and the tail collapses without the throughput
+     moving much at all.
+     ======================================================================== */
+  VIZ.llmScheduler = function (el) {
+    var f = frame(el);
+
+    var POL = ["static", "dynamic", "continuous"];
+    var STEP_MS = 12;                                   /* one decode step for the whole batch */
+    var pol = 0, cap = 8, burst = false, mix = 1;
+
+    function stream() {
+      var r = mulberry(19), out = [], t = 0, i;
+      for (i = 0; i < 40; i++) {
+        t += 6 + Math.floor(r() * 22);
+        var long = r() < (mix === 0 ? 0.02 : mix === 1 ? 0.12 : 0.35);
+        out.push({ id: i, at: t, len: long ? 260 + Math.floor(r() * 140) : 20 + Math.floor(r() * 40) });
+      }
+      if (burst) for (i = 0; i < 12; i++) out.push({ id: 40 + i, at: 220, len: 30 + Math.floor(r() * 30) });
+      out.sort(function (a, b) { return a.at - b.at; });
+      return out;
+    }
+
+    function run() {
+      var reqs = stream().map(function (q) {
+        return { id: q.id, at: q.at, len: q.len, start: -1, end: -1, left: q.len };
+      });
+      var now = 0, active = [], done = 0, busy = 0, steps = 0, guard = 0;
+      while (done < reqs.length && guard++ < 40000) {
+        var waiting = reqs.filter(function (q) { return q.start < 0 && q.at <= now && q.left > 0; });
+        if (pol === 2 || !active.length) {
+          while (active.length < cap && waiting.length) {
+            var q = waiting.shift(); q.start = now; active.push(q);
+          }
+        }
+        if (!active.length) {
+          var next = reqs.filter(function (q2) { return q2.start < 0; });
+          if (!next.length) break;
+          now = Math.max(now, Math.min.apply(null, next.map(function (q2) { return q2.at; })));
+          continue;
+        }
+        busy += active.length; steps++;
+        active.forEach(function (q2) { q2.left -= 1; });
+        now += STEP_MS;
+        var finished = active.filter(function (q2) { return q2.left <= 0; });
+        finished.forEach(function (q2) { q2.end = now; done++; });
+        if (pol === 0) {
+          if (finished.length === active.length) active = [];
+          else if (finished.length) {                   /* the slot is held until the batch retires */
+            active = active;
+          }
+        } else active = active.filter(function (q2) { return q2.left > 0; });
+        if (pol === 0 && active.length && active.every(function (q2) { return q2.left <= 0; })) active = [];
+      }
+      var lat = reqs.filter(function (q) { return q.end > 0; })
+                    .map(function (q) { return q.end - q.at; }).sort(function (a, b) { return a - b; });
+      return { reqs: reqs, lat: lat, now: now, util: steps ? busy / (steps * cap) : 0,
+               thru: now ? reqs.reduce(function (s, q) { return s + (q.end > 0 ? q.len : 0); }, 0) / (now / 1000) : 0 };
+    }
+
+    function pct(a, p) { return a.length ? a[Math.min(a.length - 1, Math.floor(p * a.length))] : 0; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 464", width: "100%",
+      role: "img", "aria-label": "one arrival stream, three policies" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var R = run(), i;
+
+      T(svg, 8, 14, POL[pol] + " batching · cap " + cap + " · " +
+        (mix === 0 ? "mostly short" : mix === 1 ? "one long in eight" : "a third long") +
+        (burst ? " · burst at 220 ms" : ""), { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "p99 " + commas(pct(R.lat, 0.99)) + " ms · " + commas(R.thru) + " tok/s",
+        { anchor: "end", size: 11, fill: pct(R.lat, 0.99) > 3000 ? C.pink : C.green });
+
+      /* the timeline */
+      var TX = 8, TW = 744, TY = 40, RH = 5, span = Math.max(1, R.now);
+      T(svg, 8, 32, "each row is one request: pale is waiting, solid is running",
+        { anchor: "start", size: 9, fill: C.faint });
+      R.reqs.slice(0, 40).forEach(function (q, k) {
+        var y = TY + k * RH;
+        var x0 = TX + q.at / span * TW;
+        var x1 = TX + (q.start < 0 ? q.at : q.start) / span * TW;
+        var x2 = TX + (q.end > 0 ? q.end : R.now) / span * TW;
+        rect(svg, x0, y, Math.max(1, x1 - x0), RH - 1.5,
+          { rx: 1, fill: C.pink, stroke: "none", op: 0.35 });
+        rect(svg, x1, y, Math.max(1, x2 - x1), RH - 1.5,
+          { rx: 1, fill: q.len > 200 ? C.orange : C.teal, stroke: "none", op: 0.75 });
+      });
+      var TB = 250;
+      T(svg, TX, TB, "0", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, TX + TW, TB, commas(R.now) + " ms", { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, TX + 120, TB, "orange rows are the long requests", { anchor: "start", size: 8.5, fill: C.orange });
+
+      /* latency distribution */
+      var y2 = 276;
+      line(svg, 8, y2 - 12, 752, y2 - 12, { stroke: C.line, sw: 1 });
+      [["p50", pct(R.lat, 0.5)], ["p90", pct(R.lat, 0.9)], ["p99", pct(R.lat, 0.99)],
+       ["slot utilisation", Math.round(R.util * 100)], ["throughput", Math.round(R.thru)]].forEach(function (r, k) {
+        T(svg, 8 + k * 150, y2, r[0], { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 8 + k * 150, y2 + 20, k >= 3 ? (k === 3 ? r[1] + "%" : commas(r[1]) + " tok/s")
+            : commas(r[1]) + " ms",
+          { anchor: "start", size: 13, fill: k === 2 && r[1] > 3000 ? C.pink : C.text });
+      });
+
+      /* all three policies on the same stream */
+      var ty = 334;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "policy", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 300, ty, "p50", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 400, ty, "p99", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 520, ty, "throughput", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 640, ty, "slots busy", { anchor: "end", size: 9, fill: C.faint });
+      ty += 20;
+      var sp = pol;
+      POL.forEach(function (p, k) {
+        pol = k;
+        var Rk = run(), on = k === sp;
+        T(svg, 8, ty, p, { anchor: "start", size: 10.5, fill: on ? C.text : C.dim });
+        T(svg, 300, ty, commas(pct(Rk.lat, 0.5)) + " ms", { anchor: "end", size: 10, fill: C.text });
+        T(svg, 400, ty, commas(pct(Rk.lat, 0.99)) + " ms", { anchor: "end", size: 10,
+          fill: pct(Rk.lat, 0.99) > 3000 ? C.pink : C.green });
+        T(svg, 520, ty, commas(Rk.thru) + " tok/s", { anchor: "end", size: 10, fill: C.text });
+        T(svg, 640, ty, Math.round(Rk.util * 100) + "%", { anchor: "end", size: 10, fill: C.text });
+        ty += 20;
+      });
+      pol = sp;
+
+      line(svg, 8, 414, 752, 414, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 434, 122, 17, pol === 0
+        ? "Under static batching a slot is held until the whole batch retires, so one 300-step request " +
+          "makes every short request beside it wait for all 300. The mean barely notices and the p99 does."
+        : "A finished sequence's slot is refilled on the next step, so a long request no longer holds " +
+          "anyone else. The throughput is similar; the tail is not.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      var R = run();
+      f.say(POL[pol] + ": p50 " + commas(pct(R.lat, 0.5)) + " ms, p99 " +
+        commas(pct(R.lat, 0.99)) + " ms, " + commas(R.thru) + " tokens a second, " +
+        Math.round(R.util * 100) + "% of slots busy.");
+    }
+
+    var tP = tabs(f.controls, POL, 0, function (i) { pol = i; render(); say(); });
+    var sC = slider(f.controls, "batch cap", 2, 32, 8, 1,
+      function (v) { return String(v); }, function (v) { cap = v; render(); say(); });
+    var tM = tabs(f.controls, ["mostly short", "one long in eight", "a third long"], 1,
+      function (i) { mix = i; render(); say(); });
+    var tgB = toggle(f.controls, "burst", false, function (v) {
+      burst = v; render();
+      f.say(v ? "Twelve requests arrive at once at 220 ms." : "Steady arrivals.");
+    });
+    f.btn("reset", function () {
+      pol = 0; cap = 8; burst = false; mix = 1;
+      tP.sync(0); tM.sync(1); sC.set(8); tgB.set(false); render();
+      f.say("Run static batching with mixed lengths. Look at the p99.");
+    });
+
+    render();
+    f.say("Run static batching with mixed lengths. Look at the p99.");
+  };
+
+
+  /* ========================================================================
+     59. llmPagedCache — CH 27 — Builder
+
+     Section 3's arithmetic, and it comes back exactly. On an 80 GB card with
+     16.06 GB of weights, the free 63.94 GB is 487,823 tokens of KV cache at
+     128 KB each. Reserve the full 8,192-token context for every request and
+     that is 59 concurrent requests; at a mean actual length of 1,000 tokens,
+     87.8% of every reservation is never used.
+
+     Paging allocates in blocks of 16 tokens as the sequence grows, so the
+     only waste is the tail of the last block — a couple of tokens per
+     request instead of seven thousand. The concurrency number moves by a
+     factor of eight, and nothing about the model changed.
+     ======================================================================== */
+  VIZ.llmPagedCache = function (el) {
+    var f = frame(el);
+
+    var N = 8.03e9, L = 32, KV = 8, HD = 128, CARD = 80e9, PER = 2 * 32 * 8 * 128 * 2;
+    var maxCtx = 8192, meanLen = 1000, blockSz = 16, paged = false, share = false;
+
+    function free() { return CARD - N * 2; }
+    function capacityTokens() { return Math.floor(free() / PER); }
+    function perRequest() {
+      if (!paged) return maxCtx;
+      return Math.ceil(meanLen / blockSz) * blockSz;
+    }
+    function concurrent() { return Math.floor(capacityTokens() / perRequest()); }
+    function wasted() { return 1 - meanLen / perRequest(); }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function gb(b) { return (b / 1e9).toFixed(2) + " GB"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
+      role: "img", "aria-label": "reserved, and actually used" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i;
+
+      T(svg, 8, 14, "80 GB card · " + gb(N * 2) + " of weights · " + gb(free()) +
+        " free = " + commas(capacityTokens()) + " tokens of cache",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, commas(concurrent()) + " concurrent requests",
+        { anchor: "end", size: 11, fill: concurrent() > 200 ? C.green : C.pink });
+
+      /* the cache, drawn */
+      var BX = 8, BW = 744, BY = 42, ROWS = 8, CELLS = 24, CH = 20;
+      T(svg, 8, 34, paged ? "paged: blocks of " + blockSz + " tokens, allocated as the sequence grows"
+                          : "reserved: the full " + commas(maxCtx) + "-token context, per request",
+        { anchor: "start", size: 9, fill: C.faint });
+      var cw = BW / CELLS, used = meanLen / perRequest();
+      for (i = 0; i < ROWS * CELLS; i++) {
+        var r = Math.floor(i / CELLS), c = i % CELLS;
+        var slot = i < concurrent() ? 1 : 0;
+        var x = BX + c * cw, y = BY + 14 + r * (CH + 2);
+        if (r * CELLS + c >= ROWS * CELLS) break;
+        rect(svg, x, y, cw - 1.5, CH, { rx: 2, fill: C.faint, stroke: "none", op: slot ? 0.22 : 0.08 });
+        if (slot) rect(svg, x, y, (cw - 1.5) * used, CH,
+          { rx: 2, fill: C.teal, stroke: "none", op: 0.8 });
+      }
+      var shown = Math.min(concurrent(), ROWS * CELLS);
+      T(svg, 8, BY + 14 + ROWS * (CH + 2) + 14,
+        "each box is one request's reservation; teal is the part it actually uses" +
+        (concurrent() > ROWS * CELLS ? " · showing " + shown + " of " + commas(concurrent()) : ""),
+        { anchor: "start", size: 9, fill: C.faint });
+
+      /* the numbers */
+      var ty = 288;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      [["reserved per request", commas(perRequest()) + " tokens", C.text],
+       ["actually used", commas(meanLen) + " tokens", C.teal],
+       ["never used", (wasted() * 100).toFixed(1) + "%", wasted() > 0.3 ? C.pink : C.green],
+       ["concurrent requests", commas(concurrent()), C.orange]].forEach(function (r, k) {
+        T(svg, 8 + k * 190, ty, r[0], { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 8 + k * 190, ty + 20, r[1], { anchor: "start", size: 14, fill: r[2] });
+      });
+
+      /* both ways */
+      var by = 342;
+      line(svg, 8, by - 14, 752, by - 14, { stroke: C.line, sw: 1 });
+      var sp = paged;
+      paged = false; var a = concurrent(), aw = wasted();
+      paged = true; var b = concurrent(), bw = wasted();
+      paged = sp;
+      T(svg, 8, by, "reserve the whole context: " + commas(a) + " concurrent, " +
+        (aw * 100).toFixed(1) + "% of the cache never touched",
+        { anchor: "start", size: 10.5, fill: C.pink });
+      T(svg, 8, by + 20, "page it in blocks of " + blockSz + ": " + commas(b) + " concurrent, " +
+        (bw * 100).toFixed(1) + "% waste — a factor of " + (b / a).toFixed(1),
+        { anchor: "start", size: 10.5, fill: C.green });
+      wrapT(svg, 8, by + 44, 122, 17, "Nothing about the model changed. The only difference is whether " +
+        "memory is allocated for the length a request might reach or the length it has reached.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say((paged ? "paged" : "reserved") + ": " + commas(perRequest()) + " tokens per request, " +
+        commas(concurrent()) + " concurrent, " + (wasted() * 100).toFixed(1) + "% never used.");
+    }
+
+    var tgP = toggle(f.controls, "paging", false, function (v) {
+      paged = v; render();
+      f.say(v ? "Blocks are allocated as the sequence grows, so the waste is the tail of the last block."
+              : "The full context is reserved when the request arrives, whatever it turns out to need.");
+    });
+    var sC = slider(f.controls, "max context", 2048, 32768, 8192, 1024,
+      function (v) { return commas(v); }, function (v) { maxCtx = v; render(); say(); });
+    var sM = slider(f.controls, "mean length", 100, 8000, 1000, 100,
+      function (v) { return commas(v); }, function (v) { meanLen = v; render(); say(); });
+    var sBk = slider(f.controls, "block", 4, 64, 16, 4,
+      function (v) { return String(v); }, function (v) { blockSz = v; render(); say(); });
+    f.btn("reset", function () {
+      paged = false; maxCtx = 8192; meanLen = 1000; blockSz = 16;
+      tgP.set(false); sC.set(8192); sM.set(1000); sBk.set(16); render();
+      f.say("Add requests of different lengths. Watch the gaps appear.");
+    });
+
+    render();
+    f.say("Add requests of different lengths. Watch the gaps appear.");
+  };
+
+
+  /* ========================================================================
+     60. llmPrefixCache — CH 27 — Tuner
+
+     Section 4's worked example, computed. A 2,000-token system prompt with a
+     200-token user turn on Corvid at 400 TFLOP/s effective: cold, prefill is
+     2,200 tokens and TTFT is 88.3 ms; warm, it is 200 tokens and 8.0 ms, an
+     11x improvement. 80.3 ms of GPU time saved per request, for 262 MB of
+     cache held once.
+
+     The break-even the blueprint asks for is where that 262 MB stops being
+     free — the memory the shared prefix holds is memory the KV cache cannot
+     use for concurrency, so the trade is TTFT against how many requests fit.
+     Both sides are on screen, and the crossing moves with the hit rate,
+     which is the number nobody measures before turning the feature on.
+     ======================================================================== */
+  VIZ.llmPrefixCache = function (el) {
+    var f = frame(el);
+
+    var N = 8.03e9, EFF = 400e12, PER = 2 * 32 * 8 * 128 * 2, CARD = 80e9;
+    var sysLen = 2000, userLen = 200, hit = 1.0, qps = 20;
+
+    function prefill(t) { return 2 * N * t / EFF; }
+    function cold() { return prefill(sysLen + userLen); }
+    function warm() { return prefill(userLen); }
+    function saved() { return cold() - warm(); }
+    function prefixMem() { return sysLen * PER; }
+    function effTtft() { return hit * warm() + (1 - hit) * cold(); }
+    function freeFor() { return CARD - N * 2 - prefixMem(); }
+    function concurrency(m) { return Math.floor(m / (1000 * PER)); }
+    function ms(t) { return (t * 1e3).toFixed(1) + " ms"; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 426", width: "100%",
+      role: "img", "aria-label": "a prefix held once, against the concurrency it costs" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i;
+
+      T(svg, 8, 14, commas(sysLen) + "-token system prompt + " + commas(userLen) +
+        "-token user turn · hit rate " + Math.round(hit * 100) + "%",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, (cold() / warm()).toFixed(1) + "x faster on a hit",
+        { anchor: "end", size: 11, fill: C.green });
+
+      var y = 46;
+      [["cold", sysLen + userLen, cold(), C.pink], ["warm", userLen, warm(), C.green]].forEach(function (r) {
+        T(svg, 8, y, r[0] + ": prefill " + commas(r[1]) + " tokens",
+          { anchor: "start", size: 10.5, fill: r[3] });
+        rect(svg, 260, y - 8, r[2] / cold() * 340, 16, { rx: 3, fill: r[3], stroke: "none", op: 0.65 });
+        T(svg, 752, y, "TTFT " + ms(r[2]), { anchor: "end", size: 11, fill: r[3] });
+        y += 28;
+      });
+      T(svg, 8, y + 2, "GPU time saved per request: " + ms(saved()) +
+        " · memory held for the shared prefix: " + (prefixMem() / 1e6).toFixed(0) + " MB, once",
+        { anchor: "start", size: 10, fill: C.orange });
+
+      /* what it costs in concurrency */
+      var cy = 146;
+      line(svg, 8, cy - 14, 752, cy - 14, { stroke: C.line, sw: 1 });
+      var without = concurrency(CARD - N * 2), withIt = concurrency(freeFor());
+      [["concurrent requests, no prefix cache", commas(without), C.dim],
+       ["with the prefix held", commas(withIt), withIt < without * 0.9 ? C.pink : C.text],
+       ["effective TTFT at this hit rate", ms(effTtft()), C.teal],
+       ["GPU seconds saved per second", (hit * saved() * qps).toFixed(2), C.orange]].forEach(function (r, k) {
+        T(svg, 8 + k * 190, cy, r[0].slice(0, 30), { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 8 + k * 190, cy + 20, r[1], { anchor: "start", size: 13, fill: r[2] });
+      });
+
+      /* the crossing */
+      var PX = 48, PY = 210, PW = 440, PH = 130;
+      T(svg, PX, PY - 10, "against system-prompt length: time saved, and concurrency lost",
+        { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      var ss = sysLen, sp = [], cp = [];
+      for (i = 0; i <= 60; i++) {
+        sysLen = 100 + i / 60 * 7900;
+        sp.push((PX + i / 60 * PW) + "," + (PY + PH - Math.min(1, hit * saved() * qps / 3) * PH));
+        cp.push((PX + i / 60 * PW) + "," +
+          (PY + PH - concurrency(freeFor()) / Math.max(1, concurrency(CARD - N * 2)) * PH));
+      }
+      sysLen = ss;
+      S("polyline", { points: sp.join(" "), fill: "none", stroke: C.orange, "stroke-width": 2 }, svg);
+      S("polyline", { points: cp.join(" "), fill: "none", stroke: C.pink, "stroke-width": 2 }, svg);
+      S("line", { x1: PX + (sysLen - 100) / 7900 * PW, y1: PY, x2: PX + (sysLen - 100) / 7900 * PW,
+        y2: PY + PH, stroke: C.teal, "stroke-width": 1.3, opacity: 0.5 }, svg);
+      T(svg, PX + 4, PY + 12, "GPU seconds saved per second", { anchor: "start", size: 9, fill: C.orange });
+      T(svg, PX + 4, PY + 26, "concurrency, as a fraction of none-held", { anchor: "start", size: 9, fill: C.pink });
+      T(svg, PX, PY + PH + 14, "100 tokens", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY + PH + 14, "8,000", { anchor: "end", size: 8.5, fill: C.faint });
+
+      var RX = 516;
+      T(svg, RX, PY - 10, "per 1,000 requests", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, RX, PY + 14, "GPU time without: " + (cold() * 1000).toFixed(1) + " s",
+        { anchor: "start", size: 10, fill: C.dim });
+      T(svg, RX, PY + 34, "GPU time with: " + (effTtft() * 1000).toFixed(1) + " s",
+        { anchor: "start", size: 10, fill: C.teal });
+      T(svg, RX, PY + 58, "saved: " + ((cold() - effTtft()) * 1000).toFixed(1) + " s",
+        { anchor: "start", size: 12, fill: C.orange });
+      T(svg, RX, PY + 84, "the prefix costs " + (concurrency(CARD - N * 2) - concurrency(freeFor())) +
+        " concurrent slots", { anchor: "start", size: 9.5, fill: C.faint });
+
+      line(svg, 8, 368, 752, 368, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 388, 122, 17, "The prefix is free only in the sense that it is held once. The memory " +
+        "it holds is memory the cache cannot use for concurrency, so the trade is TTFT against how many " +
+        "requests fit — and it moves with the hit rate, which is the number nobody measures first.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say("cold " + ms(cold()) + ", warm " + ms(warm()) + ", " + (cold() / warm()).toFixed(1) +
+        "x — for " + (prefixMem() / 1e6).toFixed(0) + " MB and " +
+        (concurrency(CARD - N * 2) - concurrency(freeFor())) + " concurrent slots.");
+    }
+
+    var sS = slider(f.controls, "system prompt", 100, 8000, 2000, 100,
+      function (v) { return commas(v); }, function (v) { sysLen = v; render(); say(); });
+    var sU = slider(f.controls, "user turn", 20, 2000, 200, 20,
+      function (v) { return commas(v); }, function (v) { userLen = v; render(); say(); });
+    var sH = slider(f.controls, "hit rate", 0, 1, 1, 0.05,
+      function (v) { return Math.round(v * 100) + "%"; }, function (v) { hit = v; render(); say(); });
+    var sQ = slider(f.controls, "requests/s", 1, 100, 20, 1,
+      function (v) { return String(v); }, function (v) { qps = v; render(); say(); });
+    f.btn("reset", function () {
+      sysLen = 2000; userLen = 200; hit = 1; qps = 20;
+      sS.set(2000); sU.set(200); sH.set(1); sQ.set(20); render();
+      f.say("Find the system-prompt length where caching pays for its memory.");
+    });
+
+    render();
+    f.say("Find the system-prompt length where caching pays for its memory.");
   };
 
 
