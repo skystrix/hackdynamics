@@ -11,6 +11,8 @@
      llmContrastive ch4 Stepper     InfoNCE and its gradients, evaluated live
      llmMultiHead   ch6 Inspector  eight real GPT-2 heads, picked by measuring 144
      llmKvBudget    ch6 Tuner      the cache formula, live, against a 16 GB card
+     llmRope        ch7 Inspector  one subspace, and a score that ignores where
+     llmContextStretch ch7 Tuner   64 pairs, and the angles training never showed
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -3379,6 +3381,361 @@
 
     render();
     f.say("Set MHA. Now switch to GQA. Watch how many users fit.");
+  };
+
+
+  /* ========================================================================
+     15. llmRope — CH 7 — Inspector
+
+     One 2-D subspace, computed live. The section's four checks come out of it
+     exactly: with the first pair's theta of 1.0, q = (1, 0) and k = (0.78,
+     0.54), positions (1,3), (5,7), (50,52) and (1000,1002) all score
+     -0.815615, and gaps of 1, 3 and 8 give -0.033, -0.848 and -0.648.
+
+     The controls are position m and the gap, never m and n, because that is
+     the discovery made structural: sliding m moves both arrows around the
+     circle together and the angle between them — and therefore the number —
+     does not change. There is no state in which the reader has to be told
+     that; the slider cannot express the alternative.
+
+     Pair index sets theta the way a real model does, base^(-2i/d) at head
+     dimension 128, so pair 0 turns once every 6 tokens and pair 63 once every
+     54,410. Those are section 6's numbers, and the base toggle reproduces its
+     other pair: 500,000 stretches the slowest wavelength to 2,559,196.
+     ======================================================================== */
+  VIZ.llmRope = function (el) {
+    var f = frame(el);
+
+    var Q = [1, 0], K = [0.78, 0.54], DH = 128;
+    var m = 1, gap = 2, pair = 0, base = 10000;
+
+    function theta() { return Math.pow(base, -2 * pair / DH); }
+    function wave() { return 2 * Math.PI / theta(); }
+    function rot(v, a) {
+      var c = Math.cos(a), s = Math.sin(a);
+      return [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
+    }
+    function score(mm, nn) {
+      var a = rot(Q, mm * theta()), b = rot(K, nn * theta());
+      return a[0] * b[0] + a[1] * b[1];
+    }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 384", width: "100%",
+      role: "img", "aria-label": "one RoPE subspace, two positions" }, f.body);
+
+    var CX = 150, CY = 152, R = 88;
+    var GX0 = 350, GX1 = 744, GY0 = 96, GY1 = 240, GMAX = 16;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var n = m + gap, th = theta(), s = score(m, n), i;
+
+      T(svg, 8, 14, "one 2-D pair of a 128-dimensional head, rotated by position",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "pair " + pair + " of 64  ·  theta " + th.toFixed(6) +
+        "  ·  one turn every " + commas(wave()) + " tokens",
+        { anchor: "end", size: 10, fill: C.faint });
+
+      /* ---- the plane ---- */
+      S("circle", { cx: CX, cy: CY, r: R, fill: "none", stroke: C.line,
+        "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+      line(svg, CX - R - 14, CY, CX + R + 14, CY, { stroke: C.line, sw: 0.8 });
+      line(svg, CX, CY - R - 14, CX, CY + R + 14, { stroke: C.line, sw: 0.8 });
+
+      var qa = m * th, ka = n * th;
+      var qv = rot(Q, qa), kv = rot(K, ka);
+      var kl = Math.sqrt(K[0] * K[0] + K[1] * K[1]);
+
+      /* the arc between them is the whole story: it is gap x theta, always */
+      var a0 = Math.atan2(qv[1], qv[0]), a1 = Math.atan2(kv[1], kv[0]);
+      var del = a1 - a0;
+      while (del > Math.PI) del -= 2 * Math.PI;
+      while (del <= -Math.PI) del += 2 * Math.PI;
+      var arcR = 38;
+      S("path", { d: "M " + (CX + arcR * Math.cos(a0)) + " " + (CY - arcR * Math.sin(a0)) +
+        " A " + arcR + " " + arcR + " 0 0 " + (del > 0 ? 0 : 1) + " " +
+        (CX + arcR * Math.cos(a0 + del)) + " " + (CY - arcR * Math.sin(a0 + del)),
+        fill: "none", stroke: C.teal, "stroke-width": 2, opacity: 0.85 }, svg);
+
+      line(svg, CX, CY, CX + qv[0] * R, CY - qv[1] * R, { stroke: C.blue, sw: 2.5 });
+      T(svg, CX + qv[0] * (R + 16), CY - qv[1] * (R + 16), "q at " + m,
+        { size: 10, fill: C.blue });
+      line(svg, CX, CY, CX + kv[0] / kl * R * kl, CY - kv[1] / kl * R * kl,
+        { stroke: C.orange, sw: 2.5 });
+      T(svg, CX + kv[0] / kl * (R * kl + 18), CY - kv[1] / kl * (R * kl + 18), "k at " + n,
+        { size: 10, fill: C.orange });
+      var born = Math.atan2(K[1], K[0]) - Math.atan2(Q[1], Q[0]);
+      T(svg, 8, CY + R + 26, "arms " + Math.abs(del).toFixed(4) + " rad apart",
+        { anchor: "start", size: 10.5, fill: C.teal });
+      T(svg, 8, CY + R + 44, "= gap x theta " + (gap * th).toFixed(4) + " + the " +
+        born.toFixed(4) + " q and k began with",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* ---- score against gap ---- */
+      T(svg, GX0, GY0 - 26, "score against gap, with both positions rotated",
+        { anchor: "start", size: 11, fill: C.faint });
+      function gx(d) { return GX0 + d / GMAX * (GX1 - GX0); }
+      function gy(v) { return (GY0 + GY1) / 2 - v / 1.05 * (GY1 - GY0) / 2; }
+      line(svg, GX0, gy(0), GX1, gy(0), { stroke: C.line, sw: 1 });
+      line(svg, GX0, GY0, GX0, GY1, { stroke: C.line, sw: 1 });
+      [-1, 0, 1].forEach(function (v) {
+        T(svg, GX0 - 6, gy(v), v === 0 ? "0" : String(v),
+          { anchor: "end", size: 9, fill: C.faint });
+      });
+      var pts = [];
+      for (i = 0; i <= GMAX * 8; i++) {
+        var d = i / 8;
+        pts.push(gx(d) + "," + gy(score(m, m + d)));
+      }
+      S("polyline", { points: pts.join(" "), fill: "none", stroke: C.dim,
+        "stroke-width": 1.6 }, svg);
+      for (i = 0; i <= GMAX; i += 2) T(svg, gx(i), GY1 + 14, String(i),
+        { size: 9, fill: C.faint });
+      T(svg, GX1, GY1 + 30, "gap between the two positions",
+        { anchor: "end", size: 9.5, fill: C.faint });
+      line(svg, gx(gap), GY0, gx(gap), GY1, { stroke: C.orange, sw: 1, dash: "3 3" });
+      S("circle", { cx: gx(gap), cy: gy(s), r: 4, fill: C.orange }, svg);
+
+      /* ---- the invariance, checked live ---- */
+      T(svg, 8, 296, "the same gap, four places in the sequence",
+        { anchor: "start", size: 11, fill: C.faint });
+      var xs = 8, same = true, first = score(1, 1 + gap);
+      [1, 5, 50, 1000].forEach(function (mm) {
+        var v = score(mm, mm + gap);
+        if (Math.abs(v - first) > 5e-7) same = false;
+        T(svg, xs, 318, "m=" + mm + " n=" + (mm + gap), { anchor: "start", size: 10, fill: C.faint });
+        T(svg, xs, 336, v.toFixed(6), { anchor: "start", size: 11.5,
+          fill: mm === m ? C.orange : C.teal });
+        xs += 132;
+      });
+      T(svg, 560, 327, same ? "identical to six decimals" : "these differ",
+        { anchor: "start", size: 10.5, fill: same ? C.teal : C.pink });
+
+      T(svg, 8, 362, "Absolute rotations in, relative distance out: move m and both arrows turn, " +
+        "but the angle between them cannot.", { anchor: "start", size: 10, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 378");
+    }
+
+    function say() {
+      f.say("positions m=" + m + " n=" + (m + gap) + ", gap " + gap + ", score = " +
+        score(m, m + gap).toFixed(6) + ".");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var sM = slider(f.controls, "position m", 0, 64, 1, 1,
+      function (v) { return String(v); },
+      function (v) { m = v; render(); say(); });
+    var sG = slider(f.controls, "gap", 0, 16, 2, 1,
+      function (v) { return String(v); },
+      function (v) { gap = v; render(); say(); });
+    var sP = slider(f.controls, "pair", 0, 63, 0, 1,
+      function (v) { return String(v); },
+      function (v) {
+        pair = v; render();
+        f.say("Pair " + v + " turns once every " + commas(wave()) +
+          " tokens. Fast pairs tell neighbours apart, slow pairs tell regions apart.");
+      });
+    f.btn("m = 1000", function () {
+      m = 1000; sM.input.max = 1024; sM.set(1000); render();
+      f.say("A thousand tokens in, gap " + gap + ", score = " + score(m, m + gap).toFixed(6) +
+        " — the same six decimals as at position 1.");
+    });
+    var tgB = toggle(f.controls, "base 500,000", false, function (v) {
+      base = v ? 500000 : 10000; render();
+      f.say("Base " + commas(base) + ": the slowest pair now turns once every " +
+        commas(2 * Math.PI * Math.pow(base, 126 / DH)) + " tokens. The fastest pair " +
+        "has not moved, which is the whole point of raising it.");
+    });
+    f.btn("reset", function () {
+      m = 1; gap = 2; pair = 0; base = 10000;
+      sM.input.max = 64; sM.set(1); sG.set(2); sP.set(0); tgB.set(false);
+      render();
+      f.say("Drag both positions while keeping the gap fixed. The score does not move.");
+    });
+
+    render();
+    f.say("Drag both positions while keeping the gap fixed. The score does not move.");
+  };
+
+
+  /* ========================================================================
+     16. llmContextStretch — CH 7 — Tuner
+
+     The same rotation arithmetic as llmRope, asked a different question: what
+     angle does each of the 64 pairs reach at the far end of the context, and
+     has the model ever seen it?
+
+     The quality proxy is stated rather than fudged. A pair is in trained
+     territory while its rotation at the target position stays inside the
+     largest angle it reached during training; past that the model is reading
+     a rotation it never saw, and the proxy is the fraction of the 64 pairs
+     still inside. That is a proxy, not a benchmark, and the machine says so —
+     but it is computed from real rotation angles rather than drawn as a
+     shape, so the cliff appears where the arithmetic puts it.
+
+     Section 6's wavelength table falls out of the same function: at head
+     dimension 128 the fastest pair turns once every 6 tokens under either
+     base, and the slowest turns once every 54,410 at base 10,000 and
+     2,559,196 at 500,000 — the factor of 47 the section quotes.
+     ======================================================================== */
+  VIZ.llmContextStretch = function (el) {
+    var f = frame(el);
+
+    var DH = 128, NP = DH / 2, TRAINED = 8192;
+    var METHODS = ["none", "position interpolation", "NTK-aware", "YaRN"];
+
+    var eTgt = 17, method = 0, base = 500000;      // 2^17 = 131,072, Llama 3.2's target
+    function target() { return 1 << eTgt; }
+    function factor() { return Math.max(1, target() / TRAINED); }
+
+    /* theta for pair i, before and after the method. PI divides every angle
+       by the factor, which is what dividing the position index does. NTK
+       raises the base instead, which leaves the fast pairs untouched because
+       base^0 is 1 whatever the base. YaRN's ramp leaves the already-wrapped
+       pairs exactly alone and NTK-scales the rest. */
+    function th0(i) { return Math.pow(base, -2 * i / DH); }
+    function wrapped(i) { return th0(i) * TRAINED >= 2 * Math.PI; }
+    function ntk(i) {
+      return Math.pow(base * Math.pow(factor(), DH / (DH - 2)), -2 * i / DH);
+    }
+    function theta(i) {
+      if (method === 1) return th0(i) / factor();
+      if (method === 2) return ntk(i);
+      if (method === 3) return wrapped(i) ? th0(i) : ntk(i);
+      return th0(i);
+    }
+    /* A pair that wrapped during training has seen every angle there is, so
+       it is fine anywhere. For the rest, what matters is not whether they
+       overshoot but by how much: the ratio of the angle they reach now to the
+       largest one training showed them. A binary test would score NTK the
+       same as no scaling at all, which is wrong by a factor of six. */
+    function over(i, pos) {
+      if (wrapped(i)) return 1;
+      return Math.min(1, th0(i) * TRAINED / (theta(i) * pos));
+    }
+    function safe(i, pos) { return over(i, pos) > 0.999; }
+    function okAt(pos) {
+      var s2 = 0, i;
+      for (i = 0; i < NP; i++) s2 += over(i, pos);
+      return s2 / NP;
+    }
+    function worst(pos) {
+      var w = 1, i;
+      for (i = 0; i < NP; i++) if (!wrapped(i)) w = Math.max(w, 1 / over(i, pos));
+      return w;
+    }
+    function reach(i, pos) { return theta(i) * pos; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 400", width: "100%",
+      role: "img", "aria-label": "context extension against a rotation-angle proxy" }, f.body);
+
+    var AX0 = 62, AX1 = 744, AY0 = 96, AY1 = 236;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, tgt = target();
+
+      T(svg, 8, 14, "Corvid trained at " + commas(TRAINED) + ", asked for " + commas(tgt) +
+        ": a factor of " + factor().toFixed(0), { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, "rope_theta " + commas(base) + "  ·  " + METHODS[method],
+        { anchor: "end", size: 11, fill: C.orange });
+
+      /* ---- the proxy against position ---- */
+      T(svg, 8, 70, "share of each pair's rotation that training already showed it, averaged over 64",
+        { anchor: "start", size: 11, fill: C.faint });
+      function px(p) { return AX0 + Math.log(p / 512) / Math.log(262144 / 512) * (AX1 - AX0); }
+      function py(v) { return AY1 - v * (AY1 - AY0); }
+      line(svg, AX0, AY1, AX1, AY1, { stroke: C.line, sw: 1.2 });
+      line(svg, AX0, AY0, AX0, AY1, { stroke: C.line, sw: 1.2 });
+      [0, 0.5, 1].forEach(function (v) {
+        T(svg, AX0 - 6, py(v), (v * 100).toFixed(0) + "%", { anchor: "end", size: 9, fill: C.faint });
+        if (v) line(svg, AX0, py(v), AX1, py(v), { stroke: C.line, sw: 0.5, op: 0.4 });
+      });
+      [1024, 8192, 32768, 131072].forEach(function (p) {
+        T(svg, px(p), AY1 + 14, commas(p), { size: 9, fill: C.faint });
+      });
+      line(svg, px(TRAINED), AY0 - 6, px(TRAINED), AY1, { stroke: C.teal, sw: 1, dash: "4 3" });
+      T(svg, px(TRAINED) + 5, AY0 + 4, "trained here", { anchor: "start", size: 9, fill: C.teal });
+
+      var pts = [], p;
+      for (i = 0; i <= 160; i++) {
+        p = 512 * Math.pow(262144 / 512, i / 160);
+        pts.push(px(p) + "," + py(okAt(p)));
+      }
+      S("polyline", { points: pts.join(" "), fill: "none", stroke: C.orange,
+        "stroke-width": 2.2 }, svg);
+      line(svg, px(tgt), AY0 - 6, px(tgt), AY1, { stroke: C.orange, sw: 1, dash: "3 3" });
+      S("circle", { cx: px(tgt), cy: py(okAt(tgt)), r: 4.5, fill: C.orange }, svg);
+
+      /* ---- the 64 pairs, each one's wavelength against the target ---- */
+      var BY = 286, BW = 682;
+      T(svg, 8, BY - 8, "each of the 64 pairs: how much of one turn it completes by position " +
+        commas(tgt), { anchor: "start", size: 10.5, fill: C.faint });
+      for (i = 0; i < NP; i++) {
+        var turns = reach(i, tgt) / (2 * Math.PI), ov = over(i, tgt);
+        var h = Math.min(1, Math.log(1 + turns) / Math.log(1 + 40)) * 26;
+        rect(svg, AX0 + i * (BW / NP), BY + 30 - h, BW / NP - 1.5, h,
+          { rx: 1, fill: ov > 0.999 ? C.teal : C.pink, stroke: "none",
+            op: ov > 0.999 ? 0.6 : 0.3 + 0.6 * (1 - ov) });
+      }
+      line(svg, AX0, BY + 30, AX0 + BW, BY + 30, { stroke: C.line, sw: 0.8 });
+      T(svg, AX0, BY + 44, "pair 0, fastest", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, AX0 + BW, BY + 44, "pair 63, slowest", { anchor: "end", size: 9, fill: C.faint });
+
+      /* ---- the two numbers that trade against each other ---- */
+      var slow = 2 * Math.PI / th0(NP - 1);
+      var res = theta(0), res0 = th0(0);
+      T(svg, 8, 346, "wavelengths at this base: fastest pair " + (2 * Math.PI).toFixed(0) +
+        " tokens, slowest pair " + commas(slow) + ".",
+        { anchor: "start", size: 10.5, fill: C.dim });
+      var wst = worst(tgt);
+      T(svg, 8, 366, wst < 1.001
+          ? "Every pair is inside angles training showed it at " + commas(tgt) + " tokens."
+          : "The worst pair reaches " + wst.toFixed(1) + "x the largest angle training ever " +
+            "showed it, and " + ((1 - okAt(tgt)) * 100).toFixed(0) + "% of the rotation is unseen.",
+        { anchor: "start", size: 11, fill: wst < 1.001 ? C.teal : wst < 4 ? C.orange : C.pink });
+      T(svg, 8, 386, "Neighbours are " + res.toFixed(4) +
+        " rad apart at the fastest pair, against " + res0.toFixed(4) +
+        (res < res0 * 0.999 ? " before — the resolution PI spends." : " before scaling."),
+        { anchor: "start", size: 10.5, fill: res < res0 * 0.999 ? C.orange : C.teal });
+      T(svg, 8, 406, method === 3
+          ? "On this proxy YaRN matches NTK: what it adds is a temperature correction on attention, which rotation angles cannot show."
+          : "A proxy — the share of pairs still in trained angular range — not a benchmark. Section 7 is the test that uses a document.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 420");
+    }
+
+    function say() {
+      f.say(METHODS[method] + " at " + commas(target()) + ": the worst pair overshoots by " +
+        worst(target()).toFixed(1) + "x, and " + (okAt(target()) * 100).toFixed(0) +
+        "% of the rotation across the 64 pairs is angle training had shown them.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var mt = tabs(f.controls, ["no scaling", "PI", "NTK", "YaRN"], 0, function (i) {
+      method = i; render(); say();
+    });
+    var sT = slider(f.controls, "target", 13, 18, 17, 1,
+      function (v) { return commas(1 << v); },
+      function (v) { eTgt = v; render(); say(); });
+    var tgB = toggle(f.controls, "base 10,000", false, function (v) {
+      base = v ? 10000 : 500000; render();
+      f.say("Base " + commas(base) + ": the slowest pair turns once every " +
+        commas(2 * Math.PI * Math.pow(base, 126 / DH)) + " tokens. Raising the base is " +
+        "the same lever as NTK scaling, applied once at training time.");
+    });
+    f.btn("reset", function () {
+      eTgt = 17; method = 0; base = 500000;
+      mt.sync(0); sT.set(17); tgB.set(false); render();
+      f.say("Push the target context past the training length with no scaling. Then turn scaling on.");
+    });
+
+    render();
+    f.say("Push the target context past the training length with no scaling. Then turn scaling on.");
   };
 
 })();
