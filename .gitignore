@@ -73,3 +73,7 @@ _preview*.html
 
 # PocketRAG generated databases (rebuildable from the scripts)
 resources/pocketrag/*.db
+
+# Phase 5 harness: dev-only, see the LLM course memory
+.splice.py
+.sweep.js
