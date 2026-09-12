@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM In Depth — Large Language Models, Opened Up</title>
+<meta name="description" content="An interactive, depth-first course on large language models: tokenizers, attention and the block, pretraining, scaling laws, decoding, fine-tuning, LoRA and DPO, quantization, serving, evaluation and security — and PocketLM, a working model you build yourself.">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/style.css?v=3">
+<script src="js/theme.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<!-- Razorpay Standard Checkout — used by the upgrade wall in js/gate.js -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<!--
+  Which course this shell serves. gate.js asks the course-content function for
+  it (?course=llm) and app.js keys progress and hero copy off it.
+-->
+<script>
+window.HD_COURSE = {
+  key: "llm",
+  title: "LLM In Depth",
+  heroTitle: "The Machine That Guesses the Next Token",
+  heroSub: "How large language models really work — tokenizers, attention and the " +
+           "block, what pretraining costs, scaling laws, decoding and tool use, " +
+           "fine-tuning, LoRA and DPO, quantization, serving arithmetic, evaluation " +
+           "and security — and PocketLM, a working model you build yourself.",
+  heroCta: "Start with the machine ↓",
+  unlockLine: "all 41 chapters, 81 interactive machines, and the full PocketLM build"
+};
+</script>
+<script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
+</head>
+<body class="gated">
+  <!-- Loading overlay: gate.js fetches the course, then reveals the page for
+       everyone. Free chapters render in full; locked ones show an upgrade CTA. -->
+  <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
+
+  <!-- Top bar: brand, global progress, TOC toggle -->
+  <header id="topbar">
+    <button id="toc-toggle" aria-label="Toggle table of contents">☰</button>
+    <a href="#/" id="brand">LLM<span>·</span>IN DEPTH</a>
+    <a href="index.html" id="home-link">← Home</a>
+    <div id="progress-wrap" title="Your journey progress">
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <span id="progress-label">0%</span>
+    </div>
+    <div id="account"></div>
+    <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
+  </header>
+
+  <!-- Sidebar: always-accessible table of contents -->
+  <nav id="toc" aria-label="Table of contents">
+    <div id="toc-inner"></div>
+  </nav>
+  <div id="toc-backdrop"></div>
+
+  <!-- Main content area: the SPA renders here -->
+  <main id="app"></main>
+
+  <!--
+    Book content is NOT loaded here. It's served by the `course-content` Edge
+    Function (?course=llm), which returns full chapters to premium members and
+    free chapters + locked stubs to everyone else.
+
+    Machines: js/viz-llm1.js registers all 81 of this course's interactive
+    frames on window.VIZ. The kit it draws with is viz-rag-kit.js, which is
+    course-neutral (SVG builders and a theme-following palette), so this page
+    loads it rather than shipping a second copy under a different name.
+  -->
+  <script src="js/viz-rag-kit.js"></script>
+  <script src="js/viz-llm1.js"></script>
+  <script src="js/quiz.js"></script>
+  <script src="js/app.js?v=2"></script>
+  <!-- Paywall: must run after the DOM and HDAuth exist -->
+  <script src="js/gate.js"></script>
+</body>
+</html>
