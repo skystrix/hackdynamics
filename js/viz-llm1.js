@@ -31,6 +31,8 @@
      llmMemoryLevers ch14 Tuner     the two levers, against 16 GB and the clock
      llmScalingLaw  ch15 Tuner      one budget, three laws, and Chinchilla rederived
      llmEmergence   ch15 Comparator the inference bill, and a jump that is a ruler
+     llmRoofline    ch16 Playground five operations on one roofline, the section's table live
+     llmFusion      ch16 Comparator four trips or two, and where it stops mattering
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -7481,6 +7483,366 @@
 
     render();
     f.say("Look at the jump. Now change the metric.");
+  };
+
+
+
+  /* ========================================================================
+     35. llmRoofline — CH 16 — Playground
+
+     Section 2's two tables, computed rather than quoted, from the same
+     operation the section uses: one of Corvid's feed-forward matrices,
+     4,096 by 14,336, in bfloat16.
+
+       tokens      FLOPs      bytes      intensity   compute    memory
+            1    0.1 GFLOP   117.5 MB          1.0   0.12 us   35.07 us
+           32    3.8 GFLOP   118.6 MB         31.7   3.80 us   35.41 us
+          128   15.0 GFLOP   122.2 MB        123.1
+        8,192  962.1 GFLOP   419.4 MB      2,293.8 972.77 us  125.20 us
+
+     Every one of those falls out of two formulas — 2*d*ff*T FLOPs and
+     2*d*ff + T*2*(d+ff) bytes — so moving the slider keeps them honest.
+     The H100's ridge point, 989e12 over 3.35e12, is 295 FLOPs per byte and
+     is computed the same way.
+
+     Four other operations are on the same axes for contrast, and they make
+     the section's closing point visible: softmax and layernorm sit far below
+     the ridge at every size, which is why fusion in the next section targets
+     them and not the matmuls.
+     ======================================================================== */
+  VIZ.llmRoofline = function (el) {
+    var f = frame(el);
+
+    var GPU = [
+      { n: "H100 SXM", flops: 989e12, bw: 3.35e12 },
+      { n: "A100 80GB", flops: 312e12, bw: 2.039e12 },
+      { n: "L40S", flops: 362e12, bw: 0.864e12 },
+      { n: "RTX 4090", flops: 165.2e12, bw: 1.008e12 }
+    ];
+    var D = 4096, FF = 14336, HEADS = 32, HD = 128;
+    var OP = [
+      { n: "matmul, d x ff", f: function (T) { return 2 * D * FF * T; },
+        b: function (T) { return 2 * D * FF + T * 2 * (D + FF); },
+        d: "one of Corvid's feed-forward matrices, read once whatever T is" },
+      { n: "attention scores", f: function (T) { return 2 * HEADS * T * T * HD * 2; },
+        b: function (T) { return HEADS * (3 * T * HD * 2 + T * T * 2); },
+        d: "QK^T then AV over one sequence of T, all heads" },
+      { n: "softmax", f: function (T) { return 5 * HEADS * T * T; },
+        b: function (T) { return 2 * HEADS * T * T * 2; },
+        d: "over the attention scores: five operations per element, two trips" },
+      { n: "layernorm", f: function (T) { return 8 * T * D; },
+        b: function (T) { return 2 * T * D * 2; },
+        d: "elementwise over T x d: cheap arithmetic, a read and a write" },
+      { n: "residual add", f: function (T) { return T * D; },
+        b: function (T) { return 3 * T * D * 2; },
+        d: "two reads and a write for one addition" }
+    ];
+
+    var gi = 0, oi = 0, logT = 0;
+
+    function T2() { return Math.round(Math.pow(10, logT)); }
+    function ridge() { return GPU[gi].flops / GPU[gi].bw; }
+    function ai(TN) { return OP[oi].f(TN) / OP[oi].b(TN); }
+    function tCompute(TN) { return OP[oi].f(TN) / GPU[gi].flops; }
+    function tMemory(TN) { return OP[oi].b(TN) / GPU[gi].bw; }
+    function achieved(TN) { return OP[oi].f(TN) / Math.max(tCompute(TN), tMemory(TN)); }
+    function us(t) { return t * 1e6 >= 1000 ? (t * 1e3).toFixed(2) + " ms" : (t * 1e6).toFixed(2) + " us"; }
+    function mb(b) { return b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(1) + " MB"; }
+    function gf(v) { return v >= 1e12 ? (v / 1e12).toFixed(2) + " TFLOP" : (v / 1e9).toFixed(1) + " GFLOP"; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
+      role: "img", "aria-label": "the roofline, and where one operation lands on it" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var TN = T2(), i, G = GPU[gi], bound = tMemory(TN) > tCompute(TN);
+
+      T(svg, 8, 14, G.n + " · " + (G.flops / 1e12).toFixed(0) + " TFLOP/s bf16 ÷ " +
+        (G.bw / 1e12).toFixed(2) + " TB/s = ridge point " + ridge().toFixed(0) + " FLOPs per byte",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, bound ? "memory-bound" : "compute-bound",
+        { anchor: "end", size: 11, fill: bound ? C.pink : C.green });
+
+      /* the roofline */
+      var PX = 40, PY = 46, PW = 420, PH = 190;
+      var xlo = -1.2, xhi = 4.2, ylo = 10, yhi = Math.log(G.flops) / Math.LN10 + 0.25;
+      function rx(a) { return PX + (Math.log(a) / Math.LN10 - xlo) / (xhi - xlo) * PW; }
+      function ry(v) { return PY + PH - (Math.log(v) / Math.LN10 - ylo) / (yhi - ylo) * PH; }
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      line(svg, PX, PY, PX, PY + PH, { stroke: C.line, sw: 1 });
+      var roof = [];
+      for (i = 0; i <= 120; i++) {
+        var a = Math.pow(10, xlo + i / 120 * (xhi - xlo));
+        roof.push(rx(a) + "," + ry(Math.min(G.flops, a * G.bw)));
+      }
+      S("polyline", { points: roof.join(" "), fill: "none", stroke: C.blue, "stroke-width": 2 }, svg);
+      var rp = rx(ridge());
+      S("line", { x1: rp, y1: PY, x2: rp, y2: PY + PH, stroke: C.faint,
+        "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.45 }, svg);
+      T(svg, rp + 5, PY + 12, "ridge " + ridge().toFixed(0), { anchor: "start", size: 8.5, fill: C.faint });
+
+      /* every operation at this T, the selected one large */
+      OP.forEach(function (o, k) {
+        var a = o.f(TN) / o.b(TN), v = o.f(TN) / Math.max(o.f(TN) / G.flops, o.b(TN) / G.bw);
+        if (a < Math.pow(10, xlo) || a > Math.pow(10, xhi)) return;
+        S("circle", { cx: rx(a), cy: ry(v), r: k === oi ? 5 : 3,
+          fill: k === oi ? C.orange : C.faint, opacity: k === oi ? 1 : 0.6 }, svg);
+      });
+      /* the same operation swept over T, as a trail */
+      var trail = [];
+      for (i = 0; i <= 60; i++) {
+        var t2 = Math.pow(10, i / 60 * 4.2);
+        var a2 = ai(t2), v2 = OP[oi].f(t2) / Math.max(OP[oi].f(t2) / G.flops, OP[oi].b(t2) / G.bw);
+        if (a2 >= Math.pow(10, xlo) && a2 <= Math.pow(10, xhi)) trail.push(rx(a2) + "," + ry(v2));
+      }
+      S("polyline", { points: trail.join(" "), fill: "none", stroke: C.orange,
+        "stroke-width": 1, "stroke-dasharray": "2 3", opacity: 0.55 }, svg);
+      [-1, 0, 1, 2, 3, 4].forEach(function (e) {
+        T(svg, rx(Math.pow(10, e)), PY + PH + 14, "1e" + e, { size: 8.5, fill: C.faint });
+      });
+      T(svg, PX + PW, PY + PH + 28, "arithmetic intensity, FLOPs per byte",
+        { anchor: "end", size: 9, fill: C.faint });
+      T(svg, PX - 6, PY + 6, (G.flops / 1e12).toFixed(0) + "T", { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, PX - 6, PY + PH, "10G", { anchor: "end", size: 8.5, fill: C.faint });
+
+      /* the numbers */
+      var RX = 488, y = 46;
+      function row(k, v, tone) {
+        T(svg, RX, y, k, { anchor: "start", size: 10, fill: C.faint });
+        T(svg, 752, y, v, { anchor: "end", size: 10.5, fill: tone || C.text });
+        y += 19;
+      }
+      T(svg, RX, 34, OP[oi].n + " at " + commas(TN) + " token" + (TN === 1 ? "" : "s"),
+        { anchor: "start", size: 10, fill: C.orange });
+      row("FLOPs", gf(OP[oi].f(TN)));
+      row("bytes moved", mb(OP[oi].b(TN)));
+      row("arithmetic intensity", ai(TN) >= 100 ? commas(ai(TN)) : ai(TN).toFixed(1), C.teal);
+      row("compute time", us(tCompute(TN)), bound ? C.faint : C.pink);
+      row("memory time", us(tMemory(TN)), bound ? C.pink : C.faint);
+      row("achieved", (achieved(TN) / 1e12).toFixed(1) + " TFLOP/s");
+      row("of the peak", (achieved(TN) / G.flops * 100).toFixed(1) + "%",
+        achieved(TN) / G.flops < 0.2 ? C.pink : C.green);
+
+      /* the section's table, live */
+      var ty = 282;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "tokens", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 150, ty, "FLOPs", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 260, ty, "bytes moved", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 390, ty, "intensity", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 490, ty, "compute", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 590, ty, "memory", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 700, ty, "verdict", { anchor: "end", size: 9, fill: C.faint });
+      ty += 19;
+      [1, 8, 32, 128, 8192].forEach(function (t3) {
+        var mem = OP[oi].b(t3) / G.bw > OP[oi].f(t3) / G.flops, on = t3 === TN;
+        T(svg, 8, ty, commas(t3), { anchor: "start", size: 10, fill: on ? C.orange : C.dim });
+        T(svg, 150, ty, gf(OP[oi].f(t3)), { anchor: "end", size: 10, fill: C.text });
+        T(svg, 260, ty, mb(OP[oi].b(t3)), { anchor: "end", size: 10, fill: C.text });
+        T(svg, 390, ty, OP[oi].f(t3) / OP[oi].b(t3) >= 100
+          ? commas(OP[oi].f(t3) / OP[oi].b(t3)) : (OP[oi].f(t3) / OP[oi].b(t3)).toFixed(1),
+          { anchor: "end", size: 10, fill: C.teal });
+        T(svg, 490, ty, us(OP[oi].f(t3) / G.flops), { anchor: "end", size: 10, fill: C.dim });
+        T(svg, 590, ty, us(OP[oi].b(t3) / G.bw), { anchor: "end", size: 10, fill: C.dim });
+        T(svg, 700, ty, mem ? "memory-bound" : "compute-bound",
+          { anchor: "end", size: 9.5, fill: mem ? C.pink : C.green });
+        ty += 19;
+      });
+      T(svg, 8, ty + 6, OP[oi].d, { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, 8, ty + 24, oi === 0
+          ? "One token to 128: the arithmetic grows 128-fold and the traffic grows 4%. Thirty-two tokens for the price of one."
+          : "Below the ridge the clock is bytes over bandwidth, and nothing else matters.",
+        { anchor: "start", size: 10, fill: C.faint });
+    }
+
+    function say() {
+      var n = T2();
+      f.say(OP[oi].n + " at " + commas(n) + " tokens on " + GPU[gi].n + ": intensity " +
+        ai(n).toFixed(1) + " against a ridge of " + ridge().toFixed(0) + ", so " +
+        (tMemory(n) > tCompute(n) ? "memory-bound at " + us(tMemory(n)) + "."
+                                  : "compute-bound at " + us(tCompute(n)) + "."));
+    }
+
+    var tO = tabs(f.controls, ["matmul", "attention", "softmax", "layernorm", "residual"], 0,
+      function (i) { oi = i; render(); say(); });
+    var sT = slider(f.controls, "tokens", 0, 4, 0, 0.05,
+      function (v) { return commas(Math.pow(10, v)); },
+      function (v) { logT = v; render(); say(); });
+    var tG = tabs(f.controls, GPU.map(function (g) { return g.n; }), 0,
+      function (i) { gi = i; render(); say(); });
+    f.btn("reset", function () {
+      gi = 0; oi = 0; logT = 0; tO.sync(0); tG.sync(0); sT.set(0); render();
+      f.say("Plot a matmul at batch 64. Then set batch to 1.");
+    });
+
+    render();
+    f.say("Plot a matmul at batch 64. Then set batch to 1.");
+  };
+
+
+  /* ========================================================================
+     36. llmFusion — CH 16 — Comparator
+
+     Section 4's normalize-then-activate pair, priced with section 2's two
+     numbers. Unfused: read, write, read, write. Fused: read, do both, write.
+     Identical arithmetic, half the traffic, and because both operations sit
+     near intensity 1 the time halves with it.
+
+     The discovery the blueprint asks for is the one the section makes in
+     words: fusion does nothing for a compute-bound operation. The second
+     pair on offer is two of Corvid's feed-forward matmuls, where fusing
+     saves one intermediate write and changes the total by a fraction of a
+     percent, because the arithmetic was the constraint all along.
+
+     That contrast is the chapter's counterintuitive result stated as
+     arithmetic: the optimization targets the cheap operations, not the
+     expensive ones.
+     ======================================================================== */
+  VIZ.llmFusion = function (el) {
+    var f = frame(el);
+
+    var D = 4096, FF = 14336, FLOPS = 989e12, BW = 3.35e12;
+    var PAIR = [
+      { n: "layernorm then SiLU", elementwise: true,
+        f: function (T) { return (8 + 4) * T * D; },
+        unfused: function (T) { return 4 * T * D * 2; },     // read, write, read, write
+        fused: function (T) { return 2 * T * D * 2; },       // read, write
+        d: "two elementwise passes over T x d, each at intensity near 1" },
+      { n: "two feed-forward matmuls", elementwise: false,
+        f: function (T) { return 2 * D * FF * T + 2 * FF * D * T; },
+        unfused: function (T) { return 2 * D * FF * 2 + T * 2 * (D + FF) + T * 2 * (FF + D); },
+        fused: function (T) { return 2 * D * FF * 2 + T * 2 * (D + D); },
+        d: "the intermediate of width ff written and read back, or kept on chip" }
+    ];
+
+    var pi = 0, logT = 3, fused = false;
+
+    function T2() { return Math.round(Math.pow(10, logT)); }
+    function bytes(n, fu) { return fu ? PAIR[pi].fused(n) : PAIR[pi].unfused(n); }
+    function time(n, fu) { return Math.max(PAIR[pi].f(n) / FLOPS, bytes(n, fu) / BW); }
+    function ai(n, fu) { return PAIR[pi].f(n) / bytes(n, fu); }
+    function us(t) { return t >= 1e-3 ? (t * 1e3).toFixed(3) + " ms" : (t * 1e6).toFixed(2) + " us"; }
+    function mb(b) { return b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(2) + " MB"; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 420", width: "100%",
+      role: "img", "aria-label": "four trips to HBM, or two" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var TN = T2(), P = PAIR[pi];
+      var tu = time(TN, false), tf = time(TN, true), gain = tu / tf;
+
+      T(svg, 8, 14, P.n + " over " + commas(TN) + " tokens · H100, ridge point 295",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, fused ? "fused into one kernel" : "two separate kernels",
+        { anchor: "end", size: 11, fill: fused ? C.green : C.orange });
+
+      /* the trips to HBM, drawn */
+      var y = 52, BX = 120, TW = 128;
+      T(svg, 8, 36, "trips between HBM and the compute units",
+        { anchor: "start", size: 9, fill: C.faint });
+      var trips = fused ? [["read", C.blue], ["both ops", C.teal], ["write", C.blue]]
+                        : [["read", C.blue], ["op 1", C.teal], ["write", C.blue],
+                           ["read", C.blue], ["op 2", C.teal], ["write", C.blue]];
+      var x = 8;
+      trips.forEach(function (t) {
+        rect(svg, x, y, TW - 8, 26, { rx: 4, fill: t[1], stroke: "none", op: 0.55 });
+        T(svg, x + (TW - 8) / 2, y + 13, t[0], { size: 10, fill: C.card });
+        x += TW;
+      });
+      T(svg, 8, y + 44, fused ? "one read and one write, for identical arithmetic"
+                              : "four trips for two cheap operations",
+        { anchor: "start", size: 10, fill: fused ? C.green : C.orange });
+
+      /* the numbers, both ways */
+      var ty = 134;
+      T(svg, 8, ty, "", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 250, ty, "FLOPs", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 380, ty, "bytes moved", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 480, ty, "intensity", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 600, ty, "time", { anchor: "end", size: 9, fill: C.faint });
+      ty += 22;
+      [[false, "two kernels"], [true, "one fused kernel"]].forEach(function (r) {
+        var on = r[0] === fused, tone = on ? C.text : C.faint;
+        T(svg, 8, ty, r[1], { anchor: "start", size: 10.5, fill: on ? C.orange : C.faint });
+        T(svg, 250, ty, (P.f(TN) / 1e9).toFixed(2) + " G", { anchor: "end", size: 10.5, fill: tone });
+        T(svg, 380, ty, mb(bytes(TN, r[0])), { anchor: "end", size: 10.5, fill: tone });
+        T(svg, 480, ty, ai(TN, r[0]).toFixed(1), { anchor: "end", size: 10.5, fill: tone });
+        T(svg, 600, ty, us(time(TN, r[0])), { anchor: "end", size: 10.5, fill: tone });
+        rect(svg, 616, ty - 7, time(TN, r[0]) / Math.max(tu, tf) * 130, 14,
+          { rx: 3, fill: on ? C.orange : C.faint, stroke: "none", op: 0.55 });
+        ty += 24;
+      });
+      T(svg, 8, ty + 8, "The FLOPs column does not move. That is the whole point of the technique.",
+        { anchor: "start", size: 10, fill: C.faint });
+
+      /* speedup against size */
+      var GX = 8, GY = 246, GW = 440, GH = 108;
+      T(svg, GX, GY - 10, "what fusion is worth, against the number of tokens",
+        { anchor: "start", size: 9, fill: C.faint });
+      line(svg, GX, GY + GH, GX + GW, GY + GH, { stroke: C.line, sw: 1 });
+      var pts = [], i, save = pi, lgmax = 4.5;
+      for (i = 0; i <= 100; i++) {
+        var t3 = Math.pow(10, i / 100 * lgmax);
+        var g = Math.max(PAIR[pi].f(t3) / FLOPS, PAIR[pi].unfused(t3) / BW) /
+                Math.max(PAIR[pi].f(t3) / FLOPS, PAIR[pi].fused(t3) / BW);
+        pts.push((GX + i / 100 * GW) + "," + (GY + GH - Math.min(1, (g - 1) / 1.2) * GH));
+      }
+      S("polyline", { points: pts.join(" "), fill: "none", stroke: C.teal, "stroke-width": 2 }, svg);
+      var mx2 = GX + Math.log(TN) / Math.LN10 / lgmax * GW;
+      S("line", { x1: mx2, y1: GY, x2: mx2, y2: GY + GH, stroke: C.orange,
+        "stroke-width": 1.5, opacity: 0.5 }, svg);
+      T(svg, GX - 2, GY + 6, "2.0x", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, GX - 2, GY + GH - 6, "1.0x", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, GX + GW, GY + GH + 14, "1e4 tokens", { anchor: "end", size: 8.5, fill: C.faint });
+
+      var RX = 478;
+      T(svg, RX, GY - 10, "here", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 752, GY + 14, gain.toFixed(3) + "x", { anchor: "end", size: 20,
+        fill: gain > 1.2 ? C.green : C.faint });
+      T(svg, RX, GY + 40, mb(bytes(TN, false) - bytes(TN, true)) + " of traffic removed",
+        { anchor: "start", size: 10, fill: C.dim });
+      T(svg, RX, GY + 60, "and no FLOPs removed at all",
+        { anchor: "start", size: 10, fill: C.dim });
+      wrapT(svg, RX, GY + 84, 46, 14, P.d, { size: 9, fill: C.faint, max: 2 });
+
+      line(svg, 8, 374, 752, 374, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 394, 122, 17, P.elementwise
+        ? "Both operations sit near intensity 1, so they were entirely memory-bound and halving the " +
+          "traffic roughly halves the time. Fusion effort concentrates here."
+        : "Fusing two large matrix multiplications saves one intermediate write and changes almost " +
+          "nothing: the arithmetic was the constraint. Counterintuitive until you have the intensity number.",
+        { size: 10, fill: C.faint, max: 2 });
+      if (save !== pi) pi = save;
+    }
+
+    function say() {
+      var n = T2();
+      f.say(PAIR[pi].n + " at " + commas(n) + " tokens: fusion removes " +
+        mb(bytes(n, false) - bytes(n, true)) + " of traffic and no arithmetic, for " +
+        (time(n, false) / time(n, true)).toFixed(3) + "x.");
+    }
+
+    var tP = tabs(f.controls, ["elementwise pair", "two matmuls"], 0, function (i) {
+      pi = i; render(); say();
+    });
+    var sT = slider(f.controls, "tokens", 0, 4.5, 3, 0.1,
+      function (v) { return commas(Math.pow(10, v)); },
+      function (v) { logT = v; render(); say(); });
+    var tgF = toggle(f.controls, "fusion", false, function (v) {
+      fused = v; render();
+      f.say(v ? "One kernel: read once, do both, write once. The arithmetic is unchanged."
+              : "Two kernels: the tensor makes four trips for two cheap operations.");
+    });
+    f.btn("reset", function () {
+      pi = 0; logT = 3; fused = false; tP.sync(0); sT.set(3); tgF.set(false); render();
+      f.say("Toggle fusion and watch the bytes moved, not the FLOPs.");
+    });
+
+    render();
+    f.say("Toggle fusion and watch the bytes moved, not the FLOPs.");
   };
 
 
