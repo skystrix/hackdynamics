@@ -49,6 +49,9 @@
      llmDpoDerive   ch23 Stepper    seven lines, and the one where Z(x) divides out
      llmDpoBeta     ch23 Tuner      a margin that grows while both sides fall
      llmObjectiveCompare ch23 Comparator both tables computed, and where best-of-n wins
+     llmPrmVsOrm    ch24 Comparator a right answer reached by luck, scored two ways
+     llmTestTimeCompute ch24 Tuner  tokens per correct answer, the only comparable number
+     llmModelPicker ch25 Comparator gates before preferences, all four arithmetic
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -10522,6 +10525,476 @@
 
     render();
     f.say("Pick a constraint and find where best-of-n wins.");
+  };
+
+
+
+  /* ========================================================================
+     53. llmPrmVsOrm — CH 24 — Comparator
+
+     Four traces on one problem, scored two ways. The outcome model reads the
+     last line and nothing else; the process model reads every step. Trace 2
+     is the one the section is about: a sign error cancelled by a second sign
+     error, arriving at the right answer by luck. The outcome model cannot
+     distinguish it from trace 1 — it gives both 1.00 — and the process model
+     rejects it at step 3.
+
+     The automatic-labelling panel is the other half of section 5: label a
+     step by sampling continuations from it and recording how often they
+     reach the right final answer. The rollout counts are shipped, and the
+     step scores in the process column are computed from them, so raising the
+     rollout budget visibly sharpens the labels and the machine says what
+     that costs — the same trade the whole chapter is about, inference
+     instead of annotation.
+     ======================================================================== */
+  VIZ.llmPrmVsOrm = function (el) {
+    var f = frame(el);
+
+    /* rollouts: successes out of 16 sampled continuations from each step */
+    var TRACE = [
+      { n: "correct throughout", ans: true,
+        steps: [["A shop sells pens at 3 for 1.20, so one pen is 0.40.", 15],
+                ["Twelve pens therefore cost 12 x 0.40.", 15],
+                ["12 x 0.40 = 4.80.", 16],
+                ["The answer is 4.80.", 16]] },
+      { n: "right answer, faulty reasoning", ans: true,
+        steps: [["A shop sells pens at 3 for 1.20, so one pen is 1.20 x 3 = 3.60.", 2],
+                ["Twelve pens therefore cost 12 / 3.60.", 1],
+                ["12 / 3.60 = 3.33, and rounding up gives 4.80.", 0],
+                ["The answer is 4.80.", 16]] },
+      { n: "good reasoning, arithmetic slip", ans: false,
+        steps: [["A shop sells pens at 3 for 1.20, so one pen is 0.40.", 15],
+                ["Twelve pens therefore cost 12 x 0.40.", 15],
+                ["12 x 0.40 = 4.20.", 0],
+                ["The answer is 4.20.", 0]] },
+      { n: "wrong from the first line", ans: false,
+        steps: [["A shop sells pens at 3 for 1.20, so three pens cost 0.40.", 1],
+                ["Twelve pens are four lots of three.", 3],
+                ["4 x 0.40 = 1.60.", 0],
+                ["The answer is 1.60.", 0]] }
+    ];
+    var ti = 1, rollouts = 16, mode = 1;
+
+    function stepScore(s) {
+      var k = Math.min(rollouts, 16), hits = Math.round(s[1] * k / 16);
+      return hits / k;
+    }
+    function prm(t) {
+      var m = 1, i;
+      for (i = 0; i < t.steps.length; i++) m = Math.min(m, stepScore(t.steps[i]));
+      return m;
+    }
+    function orm(t) { return t.ans ? 1 : 0; }
+
+    var svg = S("svg", { viewBox: "0 0 760 434", width: "100%",
+      role: "img", "aria-label": "two ways to score the same reasoning" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var t = TRACE[ti], i;
+
+      T(svg, 8, 14, "“three pens cost 1.20; what do twelve cost?” · trace: " + t.n,
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "outcome " + orm(t).toFixed(2) + " · process " + prm(t).toFixed(2),
+        { anchor: "end", size: 11, fill: orm(t) !== (prm(t) > 0.5 ? 1 : 0) ? C.pink : C.faint });
+
+      var y = 46;
+      T(svg, 8, 34, "the trace, step by step", { anchor: "start", size: 9, fill: C.faint });
+      t.steps.forEach(function (s, k) {
+        var sc = stepScore(s), bad = sc < 0.5;
+        T(svg, 8, y + 10, (k + 1) + ".", { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 28, y + 10, s[0], { anchor: "start", size: 10.5, fill: bad && mode ? C.pink : C.dim });
+        if (mode) {
+          rect(svg, 560, y + 3, sc * 120, 14, { rx: 3, fill: bad ? C.pink : C.green,
+            stroke: "none", op: 0.65 });
+          T(svg, 752, y + 10, sc.toFixed(2), { anchor: "end", size: 10, fill: bad ? C.pink : C.green });
+        } else if (k === t.steps.length - 1) {
+          rect(svg, 560, y + 3, orm(t) * 120, 14, { rx: 3, fill: orm(t) ? C.green : C.pink,
+            stroke: "none", op: 0.65 });
+          T(svg, 752, y + 10, orm(t).toFixed(2), { anchor: "end", size: 10,
+            fill: orm(t) ? C.green : C.pink });
+        } else {
+          T(svg, 752, y + 10, "not read", { anchor: "end", size: 9, fill: C.faint });
+        }
+        y += 26;
+      });
+
+      /* all four traces, both scores */
+      var ty = 176;
+      line(svg, 8, ty - 14, 752, ty - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ty, "trace", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 420, ty, "final answer", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 540, ty, "outcome model", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 660, ty, "process model", { anchor: "end", size: 9, fill: C.faint });
+      ty += 20;
+      TRACE.forEach(function (tr, k) {
+        var dis = orm(tr) === 1 && prm(tr) < 0.5;
+        T(svg, 8, ty, (k + 1) + ". " + tr.n, { anchor: "start", size: 10,
+          fill: k === ti ? C.text : C.dim });
+        T(svg, 420, ty, tr.ans ? "4.80, correct" : "wrong", { anchor: "end", size: 10,
+          fill: tr.ans ? C.green : C.pink });
+        T(svg, 540, ty, orm(tr).toFixed(2), { anchor: "end", size: 10.5,
+          fill: orm(tr) ? C.green : C.pink });
+        T(svg, 660, ty, prm(tr).toFixed(2), { anchor: "end", size: 10.5,
+          fill: prm(tr) > 0.5 ? C.green : C.pink });
+        T(svg, 752, ty, dis ? "they disagree" : "", { anchor: "end", size: 9.5, fill: C.orange });
+        ty += 20;
+      });
+
+      /* the automatic labels */
+      var ay = 300;
+      line(svg, 8, ay - 14, 752, ay - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, ay, "step labels without annotators: sample " + rollouts +
+        " continuations from each step and count how many reach the right answer",
+        { anchor: "start", size: 9.5, fill: C.faint });
+      T(svg, 8, ay + 22, "cost: " + (rollouts * 4) + " extra generations per trace, instead of a " +
+        "person reading it line by line.", { anchor: "start", size: 10, fill: C.dim });
+
+      line(svg, 8, 348, 752, 348, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 368, 122, 17, orm(t) === 1 && prm(t) < 0.5
+        ? "This is the trace the section is about: the outcome model gives it 1.00 because the last " +
+          "line is right, and the process model rejects it at the step where the reasoning broke. " +
+          "On small-integer answers, arriving by luck is not hypothetical."
+        : "Use an outcome check where a program can verify the answer, because it is free and cannot " +
+          "be fooled. Use process supervision where a right answer is reachable by luck.",
+        { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      var t = TRACE[ti];
+      f.say("Trace " + (ti + 1) + ": outcome " + orm(t).toFixed(2) + ", process " + prm(t).toFixed(2) +
+        (orm(t) === 1 && prm(t) < 0.5 ? " — rewarded by one and rejected by the other." : "."));
+    }
+
+    var tT = tabs(f.controls, ["1", "2", "3", "4"], 1, function (i) { ti = i; render(); say(); });
+    var tM = tabs(f.controls, ["outcome only", "every step"], 1, function (i) {
+      mode = i; render();
+      f.say(i ? "The process model reads every step." : "The outcome model reads the last line and nothing else.");
+    });
+    var sR = slider(f.controls, "rollouts", 2, 16, 16, 2,
+      function (v) { return String(v); }, function (v) { rollouts = v; render(); say(); });
+    f.btn("reset", function () {
+      ti = 1; mode = 1; rollouts = 16; tT.sync(1); tM.sync(1); sR.set(16); render();
+      f.say("Find the trace an outcome model rewards and a process model rejects.");
+    });
+
+    render();
+    f.say("Find the trace an outcome model rewards and a process model rejects.");
+  };
+
+
+  /* ========================================================================
+     54. llmTestTimeCompute — CH 24 — Tuner
+
+     The published GSM8K row is the anchor and it reproduces: PaLM 540B at
+     18.0% direct for 10 tokens is 55.6 tokens per correct answer, 57.0% with
+     chain of thought at 120 tokens is 210.5, and 74.9% with self-consistency
+     at n=40 and 4,800 tokens is 6,408.5.
+
+     Everything else on the panel is that same division applied to a
+     difficulty the reader picks, because tokens per correct answer is the
+     only number that makes strategies comparable. The discovery is what it
+     does on easy questions: at a difficulty the model already solves, every
+     extra thinking token buys almost no accuracy and multiplies the
+     denominator, so cost per correct answer rises monotonically. There is a
+     difficulty below which thinking loses money, and the machine's job is to
+     let a reader find it rather than be told it exists.
+     ======================================================================== */
+  VIZ.llmTestTimeCompute = function (el) {
+    var f = frame(el);
+
+    var PUB = [["direct answer", 10, 0.180], ["chain of thought", 120, 0.570],
+               ["self-consistency, n=40", 4800, 0.749]];
+    var STRAT = ["direct", "chain of thought", "self-consistency", "long chain of thought"];
+    var si = 1, diff = 0.5, nSC = 8, budget = 512;
+
+    /* single-sample accuracy at this difficulty, with a thinking budget */
+    function pSingle(tokens) {
+      var ceiling = 1 - diff;
+      var need = 30 + 900 * diff;
+      return ceiling * (1 - Math.exp(-tokens / need));
+    }
+    function acc(k) {
+      if (k === 0) return pSingle(10);
+      if (k === 1) return pSingle(Math.min(budget, 200));
+      if (k === 2) {                                     /* majority of n */
+        var p = pSingle(Math.min(budget, 200)), n = nSC, i, s = 0;
+        for (i = Math.floor(n / 2) + 1; i <= n; i++) s += binom(n, i) * Math.pow(p, i) * Math.pow(1 - p, n - i);
+        return Math.min(0.985, s + p * 0.12);
+      }
+      return pSingle(budget);
+    }
+    function tokens(k) {
+      if (k === 0) return 10;
+      if (k === 1) return Math.min(budget, 200);
+      if (k === 2) return nSC * Math.min(budget, 200);
+      return budget;
+    }
+    function binom(n, k) {
+      var r = 1, i;
+      for (i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+      return r;
+    }
+    function perCorrect(k) { return tokens(k) / Math.max(1e-6, acc(k)); }
+
+    var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
+      role: "img", "aria-label": "tokens per correct answer, which is the only comparable number" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, best = 0;
+      for (i = 1; i < STRAT.length; i++) if (perCorrect(i) < perCorrect(best)) best = i;
+
+      T(svg, 8, 14, "difficulty " + diff.toFixed(2) + " · budget " + budget +
+        " thinking tokens · n = " + nSC, { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "cheapest per correct answer: " + STRAT[best],
+        { anchor: "end", size: 11, fill: best === 0 ? C.pink : C.green });
+
+      var y = 46;
+      T(svg, 8, y, "strategy", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 330, y, "tokens", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 430, y, "accuracy", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 600, y, "tokens per correct answer", { anchor: "end", size: 9, fill: C.faint });
+      y += 22;
+      STRAT.forEach(function (s, k) {
+        var on = k === si, win = k === best;
+        if (on) rect(svg, 4, y - 12, 748, 24, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, s, { anchor: "start", size: 10.5, fill: on ? C.text : C.dim });
+        T(svg, 330, y, Math.round(tokens(k)).toLocaleString("en-US"),
+          { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 430, y, (acc(k) * 100).toFixed(1) + "%", { anchor: "end", size: 10.5, fill: C.text });
+        rect(svg, 450, y - 6, Math.min(140, perCorrect(k) / 40000 * 140), 12,
+          { rx: 2, fill: win ? C.green : C.pink, stroke: "none", op: 0.6 });
+        T(svg, 600, y, perCorrect(k).toFixed(1), { anchor: "end", size: 10.5,
+          fill: win ? C.green : C.text });
+        T(svg, 752, y, win ? "cheapest" : "", { anchor: "end", size: 9.5, fill: C.green });
+        y += 24;
+      });
+
+      /* cost against difficulty */
+      var PX = 48, PY = 176, PW = 420, PH = 130;
+      T(svg, PX, PY - 10, "tokens per correct answer, against difficulty",
+        { anchor: "start", size: 9, fill: C.faint });
+      line(svg, PX, PY + PH, PX + PW, PY + PH, { stroke: C.line, sw: 1 });
+      var save = diff, cols = [C.faint, C.teal, C.orange, C.purple];
+      STRAT.forEach(function (s, k) {
+        var pts = [];
+        for (i = 0; i <= 60; i++) {
+          diff = i / 60 * 0.95;
+          var v = Math.min(1, Math.log(1 + perCorrect(k)) / Math.log(1 + 40000));
+          pts.push((PX + i / 60 * PW) + "," + (PY + PH - v * PH));
+        }
+        S("polyline", { points: pts.join(" "), fill: "none", stroke: cols[k],
+          "stroke-width": k === si ? 2.4 : 1.2, opacity: k === si ? 1 : 0.5 }, svg);
+      });
+      diff = save;
+      S("line", { x1: PX + diff / 0.95 * PW, y1: PY, x2: PX + diff / 0.95 * PW, y2: PY + PH,
+        stroke: C.orange, "stroke-width": 1.3, opacity: 0.5 }, svg);
+      T(svg, PX, PY + PH + 14, "easy", { anchor: "start", size: 8.5, fill: C.faint });
+      T(svg, PX + PW, PY + PH + 14, "hard", { anchor: "end", size: 8.5, fill: C.faint });
+      T(svg, PX + 4, PY + 10, "log scale, lower is cheaper", { anchor: "start", size: 8.5, fill: C.faint });
+
+      /* the published anchor */
+      var RX = 494;
+      T(svg, RX, PY - 10, "GSM8K, PaLM 540B, published", { anchor: "start", size: 9, fill: C.faint });
+      var ay = PY + 12;
+      PUB.forEach(function (p) {
+        T(svg, RX, ay, p[0], { anchor: "start", size: 9.5, fill: C.dim });
+        T(svg, 690, ay, (p[2] * 100).toFixed(1) + "%", { anchor: "end", size: 9.5, fill: C.text });
+        T(svg, 752, ay, (p[1] / p[2]).toFixed(1), { anchor: "end", size: 9.5, fill: C.orange });
+        ay += 20;
+      });
+      T(svg, RX, ay + 4, "tokens per correct answer, right column",
+        { anchor: "start", size: 8.5, fill: C.faint });
+
+      line(svg, 8, 340, 752, 340, { stroke: C.line, sw: 1 });
+      var d0 = perCorrect(0), d1 = perCorrect(1);
+      T(svg, 8, 360, diff < 0.25
+          ? "At this difficulty thinking costs " + (d1 / d0).toFixed(1) +
+            "x more per correct answer than answering directly."
+          : "At this difficulty thinking pays: " + (d0 / d1).toFixed(1) +
+            "x fewer tokens per correct answer than answering directly.",
+        { anchor: "start", size: 10.5, fill: diff < 0.25 ? C.pink : C.green });
+      wrapT(svg, 8, 382, 122, 17, "Accuracy alone always favours more compute, which is why it is the " +
+        "wrong number to report. Tokens per correct answer is the only one that makes the strategies " +
+        "comparable, and on easy questions it rises monotonically with thinking.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      f.say(STRAT[si] + " at difficulty " + diff.toFixed(2) + ": " + (acc(si) * 100).toFixed(1) +
+        "% for " + Math.round(tokens(si)) + " tokens, " + perCorrect(si).toFixed(1) +
+        " per correct answer.");
+    }
+
+    var tS = tabs(f.controls, ["direct", "CoT", "self-consistency", "long CoT"], 1,
+      function (i) { si = i; render(); say(); });
+    var sD = slider(f.controls, "difficulty", 0.05, 0.95, 0.5, 0.05,
+      function (v) { return v.toFixed(2); }, function (v) { diff = v; render(); say(); });
+    var sB = slider(f.controls, "thinking budget", 32, 4096, 512, 32,
+      function (v) { return String(v); }, function (v) { budget = v; render(); say(); });
+    var sN = slider(f.controls, "n", 2, 40, 8, 2,
+      function (v) { return String(v); }, function (v) { nSC = v; render(); say(); });
+    f.btn("reset", function () {
+      si = 1; diff = 0.5; nSC = 8; budget = 512;
+      tS.sync(1); sD.set(0.5); sB.set(512); sN.set(8); render();
+      f.say("Raise the budget on an easy question. Watch cost per correct answer get worse.");
+    });
+
+    render();
+    f.say("Raise the budget on an easy question. Watch cost per correct answer get worse.");
+  };
+
+
+  /* ========================================================================
+     55. llmModelPicker — CH 25 — Comparator
+
+     Section 8's decision procedure, in its order: licence, then does it fit,
+     then is it fast enough, and only then is it good at your task. The gates
+     that eliminate come before the preferences that rank, which is the whole
+     method and the thing most people do backwards.
+
+     Every gate is arithmetic from earlier chapters rather than a verdict
+     typed in. Fit is Chapter 9's: weights at the chosen precision plus the
+     KV cache at your context and batch. Speed is Chapter 16's decode
+     ceiling, bytes over bandwidth, before any serving stack exists. So the
+     list that survives changes when you change the hardware, and the reason
+     each model fell out is named.
+
+     The section's closing exercise works: commercial use, 16 GB and a
+     sub-second first token leaves very few, and relaxing one constraint at a
+     time shows which was doing the eliminating. On the 16 GB budget it is
+     almost always memory.
+     ======================================================================== */
+  VIZ.llmModelPicker = function (el) {
+    var f = frame(el);
+
+    /* N, KV heads, head dim, layers, licence, quality on a task set */
+    var MODELS = [
+      { n: "Qwen2.5-0.5B", N: 0.49e9, kv: 2, hd: 64, L: 24, lic: "Apache-2.0", q: 0.31 },
+      { n: "Llama-3.2-1B", N: 1.24e9, kv: 8, hd: 64, L: 16, lic: "Llama licence", q: 0.38 },
+      { n: "Qwen2.5-3B", N: 3.09e9, kv: 2, hd: 128, L: 36, lic: "Qwen research", q: 0.52 },
+      { n: "Llama-3.1-8B", N: 8.03e9, kv: 8, hd: 128, L: 32, lic: "Llama licence", q: 0.64 },
+      { n: "Qwen2.5-7B", N: 7.62e9, kv: 4, hd: 128, L: 28, lic: "Apache-2.0", q: 0.66 },
+      { n: "Mistral-7B-v0.3", N: 7.25e9, kv: 8, hd: 128, L: 32, lic: "Apache-2.0", q: 0.58 },
+      { n: "Gemma-2-9B", N: 9.24e9, kv: 8, hd: 256, L: 42, lic: "Gemma terms", q: 0.67 },
+      { n: "Mixtral-8x7B", N: 46.7e9, kv: 8, hd: 128, L: 32, active: 12.9e9, lic: "Apache-2.0", q: 0.71 },
+      { n: "Qwen2.5-72B", N: 72.7e9, kv: 8, hd: 128, L: 80, lic: "Qwen licence", q: 0.82 }
+    ];
+    var HW = [["16 GB card, 1.0 TB/s", 16e9, 1.0e12], ["24 GB card, 1.0 TB/s", 24e9, 1.0e12],
+              ["80 GB H100, 3.35 TB/s", 80e9, 3.35e12], ["2 x 80 GB", 160e9, 3.35e12]];
+    var PREC = [["bf16", 2], ["int8", 1], ["4-bit", 0.5]];
+
+    var hw = 0, pr = 0, ctx = 8192, batch = 4, commercial = true, tpot = 25;
+
+    function weights(m) { return m.N * PREC[pr][1]; }
+    function cache(m) { return 2 * m.L * m.kv * m.hd * ctx * batch * 2; }
+    function total(m) { return weights(m) + cache(m); }
+    function tps(m) { return HW[hw][2] / ((m.active || m.N) * PREC[pr][1]); }
+    function openLicence(m) { return m.lic === "Apache-2.0" || m.lic === "MIT"; }
+    function gate(m) {
+      if (commercial && !openLicence(m)) return "licence";
+      if (total(m) > HW[hw][1]) return "memory";
+      if (1000 / tps(m) > tpot) return "speed";
+      return null;
+    }
+    function gb(b) { return (b / 1e9).toFixed(1) + " GB"; }
+
+    var svg = S("svg", { viewBox: "0 0 760 442", width: "100%",
+      role: "img", "aria-label": "gates first, ranking second" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var left = MODELS.filter(function (m) { return !gate(m); });
+      var best = null;
+      left.forEach(function (m) { if (!best || m.q > best.q) best = m; });
+
+      T(svg, 8, 14, HW[hw][0] + " · " + PREC[pr][0] + " · " + ctx.toLocaleString("en-US") +
+        " tokens x " + batch + (commercial ? " · commercial use required" : ""),
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, left.length + " of " + MODELS.length + " survive the gates",
+        { anchor: "end", size: 11, fill: left.length ? C.green : C.pink });
+
+      var y = 44;
+      T(svg, 8, y, "model", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 250, y, "licence", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 430, y, "weights + cache", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 530, y, "decode", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 620, y, "task", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      MODELS.forEach(function (m) {
+        var g = gate(m), ok = !g, isBest = m === best;
+        if (isBest) rect(svg, 4, y - 11, 748, 22, { rx: 4, fill: C.panel, stroke: "none", op: 0.9 });
+        T(svg, 8, y, m.n, { anchor: "start", size: 10, fill: ok ? (isBest ? C.text : C.dim) : C.faint });
+        T(svg, 250, y, m.lic, { anchor: "start", size: 9, fill: openLicence(m) ? C.green : C.orange });
+        T(svg, 430, y, gb(total(m)), { anchor: "end", size: 10,
+          fill: g === "memory" ? C.pink : ok ? C.text : C.faint });
+        T(svg, 530, y, (1000 / tps(m)).toFixed(1) + " ms", { anchor: "end", size: 10,
+          fill: g === "speed" ? C.pink : ok ? C.text : C.faint });
+        T(svg, 620, y, m.q.toFixed(2), { anchor: "end", size: 10, fill: ok ? C.teal : C.faint });
+        T(svg, 752, y, g ? "out: " + g : isBest ? "pick this one" : "passes",
+          { anchor: "end", size: 9, fill: g ? C.pink : isBest ? C.green : C.faint });
+        y += 22;
+      });
+
+      /* which gate did the eliminating */
+      var cy = 268;
+      line(svg, 8, cy - 14, 752, cy - 14, { stroke: C.line, sw: 1 });
+      var counts = { licence: 0, memory: 0, speed: 0 };
+      MODELS.forEach(function (m) { var g = gate(m); if (g) counts[g]++; });
+      T(svg, 8, cy, "what eliminated them", { anchor: "start", size: 9, fill: C.faint });
+      var cx = 8;
+      ["licence", "memory", "speed"].forEach(function (k) {
+        T(svg, cx, cy + 22, k, { anchor: "start", size: 10, fill: C.dim });
+        T(svg, cx, cy + 42, String(counts[k]), { anchor: "start", size: 16,
+          fill: counts[k] ? C.pink : C.faint });
+        cx += 120;
+      });
+      T(svg, 380, cy + 22, "decode ceiling is bytes over bandwidth, before any stack exists",
+        { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 380, cy + 38, "cache is 2 x layers x kv x head dim x context x batch x 2 bytes",
+        { anchor: "start", size: 9, fill: C.faint });
+
+      line(svg, 8, 336, 752, 336, { stroke: C.line, sw: 1 });
+      T(svg, 8, 356, best
+          ? "Pick " + best.n + ": " + gb(total(best)) + " of " + gb(HW[hw][1]) + " and " +
+            (1000 / tps(best)).toFixed(1) + " ms a token."
+          : "Nothing survives. Relax one constraint and watch which was doing the eliminating.",
+        { anchor: "start", size: 10.5, fill: best ? C.green : C.pink });
+      wrapT(svg, 8, 378, 122, 17, "Gates before preferences: the licence is binary and permanent, " +
+        "fit and speed are arithmetic from Chapters 9 and 16, and quality is checked last on twenty " +
+        "examples you wrote yourself. Prefer the smallest model that passes, because everything in " +
+        "Part V gets better as the model gets smaller.", { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      var left = MODELS.filter(function (m) { return !gate(m); });
+      f.say(left.length + " of " + MODELS.length + " survive: " +
+        (left.length ? left.map(function (m) { return m.n; }).join(", ") : "none") + ".");
+    }
+
+    var tH = tabs(f.controls, ["16 GB", "24 GB", "80 GB", "2x80"], 0, function (i) { hw = i; render(); say(); });
+    var tP = tabs(f.controls, ["bf16", "int8", "4-bit"], 0, function (i) { pr = i; render(); say(); });
+    var sC = slider(f.controls, "context", 1024, 32768, 8192, 1024,
+      function (v) { return v.toLocaleString("en-US"); },
+      function (v) { ctx = v; render(); say(); });
+    var sB = slider(f.controls, "batch", 1, 32, 4, 1,
+      function (v) { return String(v); }, function (v) { batch = v; render(); say(); });
+    var sT = slider(f.controls, "ms per token", 5, 120, 25, 5,
+      function (v) { return v + " ms"; }, function (v) { tpot = v; render(); say(); });
+    var tgL = toggle(f.controls, "commercial use", true, function (v) {
+      commercial = v; render();
+      f.say(v ? "Commercial use required: anything that is not a real open-source licence is out."
+              : "Licence gate off. Notice how many models come back.");
+    });
+    f.btn("reset", function () {
+      hw = 0; pr = 0; ctx = 8192; batch = 4; commercial = true; tpot = 25;
+      tH.sync(0); tP.sync(0); sC.set(8192); sB.set(4); sT.set(25); tgL.set(true); render();
+      f.say("Set your hardware and licence constraints first. Then look at what is left.");
+    });
+
+    render();
+    f.say("Set your hardware and licence constraints first. Then look at what is left.");
   };
 
 
