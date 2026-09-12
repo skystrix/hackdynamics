@@ -36,6 +36,8 @@
      llmParallelism ch17 Simulator  one mesh, four tables recomputed, one bubble drawn
      llmSampler     ch18 Playground the section's own distribution, and three ways to cut it
      llmGreedyLoop  ch18 Stepper    real GPT-2 walking into a real cycle
+     llmGrammarMask ch19 Stepper    a real automaton, and a mask that closes to one token
+     llmAgentLoop   ch19 Simulator  four lines of control flow, and the bill they run up
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -8428,6 +8430,435 @@
 
     render();
     f.say("Step a greedy generation until it repeats, then switch strategy at that token.");
+  };
+
+
+
+  /* ========================================================================
+     40. llmGrammarMask — CH 19 — Stepper
+
+     A real character-level automaton compiled from the schema, and a real
+     mask computed by feeding every candidate token's characters through it.
+     A token is legal exactly when the machine survives all of them. That is
+     the whole mechanism of section 2, done rather than described, and the
+     guarantee it produces is visible at the end: when the object is complete
+     the mask has closed to one token, and no sampler at any temperature can
+     end it any other way.
+
+     What is NOT a transformer here is the preference the mask is applied to.
+     There is no model in the page, so each token carries a fixed score and
+     the generator takes the best legal one. The mask is real; the thing
+     being masked is a table, and the machine says so on screen.
+
+     The unconstrained side is the section's own figure: its three published
+     attempts, each fed through the same automaton so the exact character
+     where it leaves the schema is found rather than asserted — a prose
+     preamble, a code fence, and a number cut off by the token limit.
+     ======================================================================== */
+  VIZ.llmGrammarMask = function (el) {
+    var f = frame(el);
+
+    /* Field order matters to the guarantee: the last field is a string, so
+       once its closing quote is emitted exactly one token can follow. */
+    var FIELDS = [
+      { k: "parties", t: "array", on: true },
+      { k: "amount", t: "number", on: true },
+      { k: "date", t: "string", on: true }
+    ];
+    var VOCAB = ["{", "}", "[", "]", ",", ", ", ":", "\"", " ", "\": ", "\", ", "\"]", "\"}", "\":",
+      "parties", "amount", "date", "total", "currency",
+      "Acme", " Ltd", "Brill", " GmbH", "2026", "-03", "-01", "48", "200", "0",
+      "Here", " is", " the", " JSON", ":\n", "```", "json", "\n"];
+    /* What the "model" wants at each step, best first. There is no model in
+       this page: this is a shipped table, and the mask is what is real. */
+    var PREF = [
+      ["Here", "{"], ["\"", "Here"], ["parties"], ["\": "], ["["], ["\""], ["Acme"], [" Ltd"],
+      ["\", "], ["\""], ["Brill"], [" GmbH"], ["\"]"], [", "], ["\""], ["amount"], ["\": "],
+      ["48"], ["200"], [", ", "0"], ["\""], ["date"], ["\": "], ["\""], ["2026"], ["-03"],
+      ["-01"], ["\"", "\"}"], ["}", ","]
+    ];
+    var ATTEMPTS = [
+      "Here is the JSON you requested:\n{\"parties\": [\"Acme Ltd\", \"Brill GmbH\"], \"amount\": 48200}",
+      "```json\n{\"parties\": [\"Acme Ltd\"], \"date\": \"2026-03-01\", \"amount\": 48200}\n```",
+      "{\"parties\": [\"Acme Ltd\", \"Brill GmbH\"], \"date\": \"2026-03-01\", \"amount\": 48"
+    ];
+
+    var on = true, step = 0;
+
+    function live() { return FIELDS.filter(function (x) { return x.on; }); }
+
+    /* A strict JSON-object automaton: one optional space after a colon and
+       after a comma, and none anywhere else outside a string. */
+    function start() { return { i: 0, p: "open" }; }
+    function adv(s, ch) {
+      var F = live(), fd = F[s.i], n = { i: s.i, p: s.p, c: s.c };
+      switch (s.p) {
+        case "open": return ch === "{" ? (n.p = F.length ? "key0" : "close", n) : null;
+        case "key0": return ch === "\"" ? (n.p = "key", n.c = 0, n) : null;
+        case "key":
+          if (ch !== fd.k[s.c]) return null;
+          n.c = s.c + 1; if (n.c === fd.k.length) n.p = "key1";
+          return n;
+        case "key1": return ch === "\"" ? (n.p = "colon", n) : null;
+        case "colon": return ch === ":" ? (n.p = "sp", n) : null;
+        case "sp": if (ch === " ") { n.p = "val"; return n; } return valStart(n, ch, fd);
+        case "val": return valStart(n, ch, fd);
+        case "str": if (ch === "\"") { n.p = "next"; return n; } return ch === "\n" ? null : n;
+        case "num": if (/[0-9]/.test(ch)) return n; return afterValue(n, ch, F);
+        case "arr0": if (ch === "]") { n.p = "next"; return n; }
+          return ch === "\"" ? (n.p = "arrS", n) : null;
+        case "arrS": if (ch === "\"") { n.p = "arrN", n.c = 0; return n; }
+          return ch === "\n" ? null : n;
+        case "arrN":
+          if (ch === ",") { n.p = "arrSp"; n.c = 0; return n; }
+          if (ch === "]") { n.p = "next"; return n; }
+          return null;
+        case "arrSp":
+          if (ch === " " && !s.c) { n.c = 1; return n; }
+          return ch === "\"" ? (n.p = "arrS", n) : null;
+        case "next": return afterValue(n, ch, F);
+        case "keySp":
+          if (ch === " " && !s.c) { n.c = 1; return n; }
+          return ch === "\"" ? (n.p = "key", n.c = 0, n) : null;
+        case "close": return ch === "}" ? (n.p = "done", n) : null;
+      }
+      return null;
+    }
+    function valStart(n, ch, fd) {
+      if (fd.t === "string") return ch === "\"" ? (n.p = "str", n) : null;
+      if (fd.t === "number") return /[0-9]/.test(ch) ? (n.p = "num", n) : null;
+      return ch === "[" ? (n.p = "arr0", n) : null;
+    }
+    function afterValue(n, ch, F) {
+      if (ch === "," && n.i + 1 < F.length) { n.i += 1; n.p = "keySp"; n.c = 0; return n; }
+      if (ch === "}" && n.i + 1 === F.length) { n.p = "done"; return n; }
+      return null;
+    }
+    function feed(s0, text) {
+      var s = { i: s0.i, p: s0.p, c: s0.c }, i;
+      for (i = 0; i < text.length; i++) { s = adv(s, text[i]); if (!s) return null; }
+      return s;
+    }
+    function legal(s) { return VOCAB.map(function (v) { return feed(s, v) !== null; }); }
+
+    /* Masked argmax: the first preference that survives the mask. */
+    function generate() {
+      var s = start(), out = [], k = 0;
+      while (s.p !== "done" && k < PREF.length + 4) {
+        var want = PREF[Math.min(k, PREF.length - 1)], pick = null, i;
+        for (i = 0; i < want.length; i++) if (feed(s, want[i])) { pick = want[i]; break; }
+        if (!pick) {                       /* fall back to any legal token */
+          var ok = legal(s);
+          for (i = 0; i < VOCAB.length; i++) if (ok[i]) { pick = VOCAB[i]; break; }
+        }
+        if (!pick) break;
+        out.push(pick); s = feed(s, pick); k++;
+      }
+      return out;
+    }
+    var GEN = generate();
+
+    function stateAt(k) {
+      var s = start(), i;
+      for (i = 0; i < k && i < GEN.length; i++) s = feed(s, GEN[i]);
+      return s;
+    }
+    function emitted(k) { return GEN.slice(0, k).join(""); }
+    function wanted(k) { return PREF[Math.min(k, PREF.length - 1)][0]; }
+    function breakAt(text) {
+      var s = start(), i;
+      for (i = 0; i < text.length; i++) { var n = adv(s, text[i]); if (!n) return i; s = n; }
+      return s.p === "done" ? -1 : text.length;
+    }
+    function show(t) { return t.replace(/ /g, "·").replace(/\n/g, "⏎"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 450", width: "100%",
+      role: "img", "aria-label": "the legal token mask, recomputed at every step" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+      T(svg, 8, 14, "schema: " + live().map(function (x) { return x.k + ":" + x.t; }).join(", "),
+        { anchor: "start", size: 11, fill: on ? C.teal : C.orange });
+
+      if (on) {
+        var s = stateAt(step), ok = legal(s), nLegal = 0;
+        ok.forEach(function (b) { if (b) nLegal++; });
+        T(svg, 752, 14, nLegal + " of " + VOCAB.length + " tokens legal here",
+          { anchor: "end", size: 11, fill: nLegal === 1 ? C.green : C.faint });
+
+        T(svg, 8, 36, "emitted", { anchor: "start", size: 9, fill: C.faint });
+        wrapT(svg, 8, 56, 118, 17, show(emitted(step)) || "(nothing yet)",
+          { size: 11, fill: C.text, max: 2 });
+
+        T(svg, 8, 104, "the mask at this step · dark is legal, grey is impossible",
+          { anchor: "start", size: 9, fill: C.faint });
+        var x = 8, y = 126;
+        VOCAB.forEach(function (v, k) {
+          var lab = show(v), w = 12 + lab.length * 6.4;
+          if (x + w > 752) { x = 8; y += 24; }
+          var isNext = step < GEN.length && GEN[step] === v;
+          rect(svg, x, y - 11, w, 22, { rx: 3, fill: ok[k] ? C.teal : C.faint,
+            stroke: isNext ? C.text : "none", sw: 2, op: ok[k] ? 0.7 : 0.18 });
+          T(svg, x + w / 2, y, lab, { size: 9.5, fill: ok[k] ? C.card : C.faint });
+          x += w + 4;
+        });
+        var mb = y + 24;
+
+        var want = wanted(step), blocked = step < GEN.length && want !== GEN[step];
+        T(svg, 8, mb + 10, step >= GEN.length ? "The object is complete."
+            : "the table wants " + show(want) + (blocked ? ", which the mask forbids — it takes " +
+              show(GEN[step]) + " instead" : ", and it is legal"),
+          { anchor: "start", size: 10.5, fill: blocked ? C.orange : C.teal });
+        T(svg, 8, mb + 30, nLegal === 1
+            ? "One token is legal. No sampler, at any temperature, can end this object any other way."
+            : nLegal + " tokens survive. Everything else is negative infinity before the softmax.",
+          { anchor: "start", size: 10, fill: nLegal === 1 ? C.green : C.faint });
+      } else {
+        T(svg, 752, 14, "three attempts, one automaton", { anchor: "end", size: 10, fill: C.faint });
+        var yy = 44;
+        ATTEMPTS.forEach(function (a, k) {
+          var b = breakAt(a);
+          T(svg, 8, yy, "attempt " + (k + 1), { anchor: "start", size: 10, fill: C.orange });
+          yy = wrapT(svg, 8, yy + 18, 116, 16, show(a), { size: 10, fill: C.text, max: 3 }) + 4;
+          T(svg, 8, yy, b < 0 ? "valid against the schema"
+              : b >= a.length ? "runs out before the object closes — the token limit cut it"
+              : "leaves the schema at character " + b + ", on " + show(a[b]),
+            { anchor: "start", size: 9.5, fill: b < 0 ? C.green : C.pink });
+          yy += 26;
+        });
+      }
+
+      line(svg, 8, 386, 752, 386, { stroke: C.line, sw: 1 });
+      wrapT(svg, 8, 406, 122, 17, on
+        ? "The mask is computed here: every candidate's characters are fed through the automaton and it " +
+          "survives only if the machine does. What is being masked is a shipped preference table, not a " +
+          "transformer — there is no model in this page."
+        : "The same automaton finds where each attempt leaves the schema. All three look like JSON and " +
+          "none of them is what was asked for.",
+        { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function say() {
+      if (!on) { f.say("Three attempts, three ways to miss: a preamble, a code fence, and a number cut off."); return; }
+      var ok = legal(stateAt(step)), n = 0;
+      ok.forEach(function (b) { if (b) n++; });
+      f.say("Step " + step + ": " + n + " of " + VOCAB.length + " tokens are legal" +
+        (step < GEN.length ? ", and it takes " + show(GEN[step]) + "." : "."));
+    }
+
+    f.btn("step", function () { step = Math.min(GEN.length, step + 1); on = true; tgC.set(true); render(); say(); });
+    f.btn("to the last token", function () {
+      step = Math.max(0, GEN.length - 1); on = true; tgC.set(true); render();
+      var ok = legal(stateAt(step)), n = 0;
+      ok.forEach(function (b) { if (b) n++; });
+      f.say(n === 1 ? "One legal token: the brace that closes the object. That is the guarantee."
+                    : n + " legal tokens remain.");
+    });
+    var tgC = toggle(f.controls, "constraint", true, function (v) {
+      on = v; render();
+      f.say(v ? "Constrained: illegal tokens get negative infinity before the softmax."
+              : "Unconstrained: three attempts that look like JSON, checked against the same schema.");
+    });
+    var tgs = FIELDS.map(function (fd, k) {
+      return toggle(f.controls, fd.k, true, function (v) {
+        FIELDS[k].on = v;
+        if (!live().length) { FIELDS[k].on = true; tgs[k].set(true); }
+        GEN = generate(); step = Math.min(step, GEN.length); render(); say();
+      });
+    });
+    f.btn("reset", function () {
+      FIELDS.forEach(function (fd, k) { fd.on = true; tgs[k].set(true); });
+      on = true; step = 0; tgC.set(true); GEN = generate(); render();
+      f.say("Generate with the schema off, then on. Watch the mask close in.");
+    });
+
+    render();
+    f.say("Generate with the schema off, then on. Watch the mask close in.");
+  };
+
+
+  /* ========================================================================
+     41. llmAgentLoop — CH 19 — Simulator
+
+     The four lines of control flow from section 5, run with a step budget, a
+     loop detector, and an observation size limit — the three things the
+     section says the papers rarely emphasise.
+
+     The tools are scripted, and the agent's judgement is scripted with them,
+     because the branch condition in a real loop is a model's judgement and
+     there is no model in this page. What is real is the accounting: the
+     transcript grows, every step re-sends all of it, and the cost is the
+     running total of that quadratic, which is the thing most people get
+     wrong about agents before they see the number.
+
+     The discovery is section 5's closing observation, and it is a control
+     rather than a claim. Break the search tool and the run either recovers
+     or burns the budget, and which one you get depends on the wording of
+     the error string: "search failed" is retried until the budget dies,
+     while "search unavailable, use lookup_invoice" is recovered from on the
+     next step. Same failure, same agent, different sentence.
+     ======================================================================== */
+  VIZ.llmAgentLoop = function (el) {
+    var f = frame(el);
+
+    var PRICE_IN = 3 / 1e6, PRICE_OUT = 15 / 1e6;    // dollars per token
+    var SYS = 420, OUT = 80;                          // system prompt, tokens out per step
+    var ERR = [["search failed", false], ["search unavailable, use lookup_invoice", true]];
+
+    var broken = false, ei = 0, budget = 8, step = 0, capped = true;
+
+    /* Each entry: thought, action, observation, observation tokens. */
+    function script() {
+      var t = [];
+      function add(th, ac, ob, n) { t.push({ th: th, ac: ac, ob: ob, n: n }); }
+      if (!broken) {
+        add("The invoice reference is in the request; look it up.",
+            "lookup_invoice(ref=\"INV-8812\")", "{\"total\":48200,\"paid\":false}", 24);
+        add("It is unpaid. Find the payment terms for this customer.",
+            "search(\"Acme Ltd payment terms\")", "Net 30 from invoice date. Late fee 2%.", 38);
+        add("I need the invoice date to apply Net 30.",
+            "lookup_invoice(ref=\"INV-8812\", field=\"date\")", "{\"date\":\"2026-03-01\"}", 18);
+        add("Due 2026-03-31, unpaid, so the late fee applies.", "final answer", "", 0);
+        return t;
+      }
+      add("The invoice reference is in the request; look it up.",
+          "lookup_invoice(ref=\"INV-8812\")", "{\"total\":48200,\"paid\":false}", 24);
+      if (ERR[ei][1]) {
+        add("It is unpaid. Find the payment terms for this customer.",
+            "search(\"Acme Ltd payment terms\")", "Error: " + ERR[ei][0], 12);
+        add("Search is down and the error names another tool. Use it.",
+            "lookup_invoice(ref=\"INV-8812\", field=\"terms\")", "{\"terms\":\"Net 30\"}", 16);
+        add("I need the invoice date to apply Net 30.",
+            "lookup_invoice(ref=\"INV-8812\", field=\"date\")", "{\"date\":\"2026-03-01\"}", 18);
+        add("Due 2026-03-31, unpaid, so the late fee applies.", "final answer", "", 0);
+        return t;
+      }
+      var i;
+      for (i = 0; i < 30; i++)
+        add(i ? "That failed. Try the search again." : "It is unpaid. Find the payment terms.",
+            "search(\"Acme Ltd payment terms\")", "Error: " + ERR[ei][0], 12);
+      return t;
+    }
+
+    function run() {
+      var sc = script(), ctx = SYS, rows = [], i, seen = {}, stop = "";
+      for (i = 0; i < sc.length; i++) {
+        if (i >= budget) { stop = "step budget of " + budget + " exhausted"; break; }
+        var e = sc[i], key = e.ac;
+        var dup = seen[key] ? seen[key] : 0;
+        var obN = capped ? Math.min(e.n, 200) : e.n;
+        var cost = ctx * PRICE_IN + OUT * PRICE_OUT;
+        rows.push({ e: e, ctx: ctx, cost: cost, dup: dup >= 2 });
+        ctx += OUT + obN;
+        seen[key] = dup + 1;
+        if (e.ac === "final answer") { stop = "finished"; break; }
+        if (dup >= 2 && capped) { stop = "loop detector: same call three times"; break; }
+      }
+      return { rows: rows, ctx: ctx, stop: stop || "step budget of " + budget + " exhausted" };
+    }
+
+    function money(v) { return "$" + v.toFixed(4); }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 448", width: "100%",
+      role: "img", "aria-label": "a ReAct loop, with its bill" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var R = run(), shown = Math.min(step, R.rows.length), i;
+      var total = 0;
+      for (i = 0; i < shown; i++) total += R.rows[i].cost;
+
+      T(svg, 8, 14, "task: is invoice INV-8812 overdue?", { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 8, 30, (broken ? "search is broken: \"" + ERR[ei][0] + "\"" : "all tools working") +
+        " · budget " + budget, { anchor: "start", size: 9.5, fill: broken ? C.orange : C.faint });
+      T(svg, 752, 14, shown >= R.rows.length ? R.stop : "step " + shown + " of " + R.rows.length,
+        { anchor: "end", size: 11,
+          fill: R.stop === "finished" ? C.green : shown >= R.rows.length ? C.pink : C.faint });
+
+      /* the transcript */
+      var y = 52;
+      for (i = 0; i < shown && y < 330; i++) {
+        var r = R.rows[i], e = r.e;
+        T(svg, 8, y, (i + 1) + ".", { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 30, y, "thought", { anchor: "start", size: 8.5, fill: C.faint });
+        T(svg, 86, y, e.th, { anchor: "start", size: 9.5, fill: C.dim });
+        T(svg, 752, y, commas(r.ctx) + " tokens in · " + money(r.cost),
+          { anchor: "end", size: 9, fill: C.faint });
+        y += 16;
+        T(svg, 30, y, "action", { anchor: "start", size: 8.5, fill: C.faint });
+        T(svg, 86, y, e.ac, { anchor: "start", size: 9.5,
+          fill: r.dup ? C.pink : e.ac === "final answer" ? C.green : C.teal });
+        y += 16;
+        if (e.ob) {
+          T(svg, 30, y, "observe", { anchor: "start", size: 8.5, fill: C.faint });
+          T(svg, 86, y, e.ob.slice(0, 70), { anchor: "start", size: 9.5,
+            fill: e.ob.indexOf("Error") === 0 ? C.pink : C.dim });
+          y += 16;
+        }
+        y += 6;
+      }
+      if (shown === 0) T(svg, 8, 70, "Press run.", { anchor: "start", size: 11, fill: C.faint });
+
+      /* the bill */
+      var BY = 344;
+      line(svg, 8, BY - 14, 752, BY - 14, { stroke: C.line, sw: 1 });
+      T(svg, 8, BY, "steps taken", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 8, BY + 20, String(shown), { anchor: "start", size: 14, fill: C.text });
+      T(svg, 150, BY, "context at the last step", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 150, BY + 20, commas(shown ? R.rows[shown - 1].ctx : SYS) + " tokens",
+        { anchor: "start", size: 14, fill: C.text });
+      T(svg, 380, BY, "cost so far", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 380, BY + 20, money(total), { anchor: "start", size: 14,
+        fill: total > 0.01 ? C.pink : C.teal });
+      T(svg, 560, BY, "if it ran to the budget", { anchor: "start", size: 9, fill: C.faint });
+      var full = 0;
+      R.rows.forEach(function (r) { full += r.cost; });
+      T(svg, 560, BY + 20, money(full), { anchor: "start", size: 14, fill: C.faint });
+
+      wrapT(svg, 8, BY + 48, 122, 17, broken
+        ? (ERR[ei][1]
+            ? "The error names another tool, and the next step uses it. Recovered in one extra step."
+            : "The error says only that something failed, so the same call is made again, and again. " +
+              "The loop detector stops it at three; without one the budget does.")
+        : "Every step re-sends the whole transcript, so the context grows and the cost with it. " +
+          "That quadratic is what most people get wrong about agents before they see the number.",
+        { size: 10, fill: C.faint, max: 2 });
+    }
+
+    function say() {
+      var R = run(), shown = Math.min(step, R.rows.length), total = 0, i;
+      for (i = 0; i < shown; i++) total += R.rows[i].cost;
+      f.say(shown + " step" + (shown === 1 ? "" : "s") + ", " + money(total) + ", " +
+        (shown >= R.rows.length ? R.stop + "." : "still running."));
+    }
+
+    f.btn("step", function () { step += 1; render(); say(); });
+    f.btn("run", function () { step = 99; render(); say(); });
+    var tgB = toggle(f.controls, "break search", false, function (v) {
+      broken = v; step = 99; render();
+      f.say(v ? "Search now returns an error. Run it and watch which happens."
+              : "Tools working. Four steps and a final answer.");
+    });
+    var tE = tabs(f.controls, ["\"search failed\"", "\"...use lookup_invoice\""], 0, function (i) {
+      ei = i; broken = true; tgB.set(true); step = 99; render(); say();
+    });
+    var sB = slider(f.controls, "budget", 2, 20, 8, 1,
+      function (v) { return String(v); }, function (v) { budget = v; render(); say(); });
+    var tgL = toggle(f.controls, "loop detector", true, function (v) {
+      capped = v; render();
+      f.say(v ? "Loop detection on: the same call three times ends the run."
+              : "No loop detection. The budget is the only thing that stops it.");
+    });
+    f.btn("reset", function () {
+      broken = false; ei = 0; budget = 8; step = 0; capped = true;
+      tgB.set(false); tE.sync(0); sB.set(8); tgL.set(true); render();
+      f.say("Run the task. Then break the search tool and run it again.");
+    });
+
+    render();
+    f.say("Run the task. Then break the search tool and run it again.");
   };
 
 
