@@ -9,6 +9,8 @@
      llmTokenBoundaries ch3 Playground tokens with ids, and the classic traps flagged
      llmEmbeddingSpace ch4 Playground real GPT-2 rows, three metrics, one Gram matrix
      llmContrastive ch4 Stepper     InfoNCE and its gradients, evaluated live
+     llmMultiHead   ch6 Inspector  eight real GPT-2 heads, picked by measuring 144
+     llmKvBudget    ch6 Tuner      the cache formula, live, against a 16 GB card
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -2961,6 +2963,422 @@
     init();
     render();
     f.say("Step the training. Watch positives pull together and negatives push apart.");
+  };
+
+
+  /* ========================================================================
+     13. llmMultiHead — CH 6 — Inspector
+
+     Real attention weights from real GPT-2, read on 12 September 2026 with
+     output_attentions on three sentences. These eight heads were not chosen
+     by taste: all 144 of GPT-2's heads were scored on four measurements, and
+     these are the ones the measurements picked out, plus one that scored on
+     nothing so the reader has something dull to compare against.
+
+     What came back is better than the section's illustration.
+
+       L4 H11  puts 1.000 of its weight on the previous token, every position,
+               every sentence. Not "mostly": one.
+       L5 H5   is an induction head. On "Ada Lovelace ... Ada Lovelace", the
+               query «vel» sends 0.832 to the «ace» that followed the first
+               «vel», and the query «ace» sends 0.945 to the « wrote» that
+               followed the first «ace». That is A B ... A -> B, measured.
+       L7 H2   sends 0.957 to the very first token and does nothing else,
+               which is the attention sink of section 6.
+
+     Both halves of the induction circuit the section describes are therefore
+     on screen at once: L4 H11 writes the previous token into the stream, and
+     L5 H5 reads it to find the match.
+
+     The four scores in the table are computed in the browser from the shipped
+     weights, so they describe exactly the grid beside them, and they change
+     when the sentence does.
+     ======================================================================== */
+  VIZ.llmMultiHead = function (el) {
+    var f = frame(el);
+
+    var HEADS = [{l: 4, h: 11}, {l: 2, h: 2}, {l: 5, h: 5}, {l: 6, h: 9}, {l: 0, h: 8}, {l: 11, h: 8}, {l: 7, h: 2}, {l: 1, h: 11}];
+    var SENTS = [
+      { s: "She said \"wait\" and then she said \"go\"",
+        t: ["She", " said", " \"", "wait", "\"", " and", " then", " she", " said", " \"", "go", "\""],
+        a: [
+          [1000,1000,0,0,1000,0,0,0,1000,0,0,0,0,1000,0,0,0,0,0,1000,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,999,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,0,1000,0],
+          [1000,997,3,355,610,35,170,139,635,55,90,41,19,596,254,43,10,7,354,524,63,29,1,2,24,55,843,45,14,2,1,26,31,339,513,75,18,0,0,3,5,65,57,758,93,42,1,0,9,3,38,72,97,639,99,29,0,0,0,3,32,22,67,55,712,80,7,0,0,0,0,3,5,8,45,32,719,181],
+          [1000,966,34,980,6,14,988,1,5,7,956,0,2,16,25,970,1,6,7,5,11,966,1,5,7,1,2,18,677,239,35,11,2,1,12,24,508,6,366,78,0,2,12,10,18,599,3,8,338,1,14,13,8,4,11,909,4,1,8,11,3,1,42,4,1,14,626,0,0,17,1,279,12,14,0,1,24,28],
+          [1000,998,2,995,1,4,993,0,4,3,977,0,9,10,4,998,0,1,0,0,0,995,0,1,1,0,0,3,952,36,3,0,0,0,3,6,605,1,374,10,0,1,7,0,1,734,0,2,256,0,1,2,0,1,3,974,1,1,1,22,1,0,0,0,0,1,736,0,4,7,0,213,17,2,0,4,8,9],
+          [1000,824,176,286,92,622,585,176,156,82,105,52,444,16,383,53,50,332,11,172,382,85,84,297,20,161,323,28,93,42,178,46,274,203,107,58,79,43,204,24,263,188,79,69,50,35,16,144,13,349,136,18,46,18,225,158,98,108,38,56,133,68,76,109,122,35,32,17,171,8,146,113,13,30,18,242,9,200],
+          [1000,0,1000,0,130,870,0,7,901,92,0,356,193,144,307,0,481,83,2,34,400,0,281,34,1,19,360,304,0,116,51,3,14,344,269,203,0,423,120,3,64,120,102,101,66,0,8,437,33,12,37,33,55,21,364,0,11,304,119,59,30,19,38,10,219,191,0,42,14,7,73,61,52,691,6,1,1,53],
+          [1000,999,1,999,0,1,999,0,1,0,993,0,2,0,5,986,0,1,0,0,12,985,1,2,0,0,1,10,982,7,1,0,0,0,1,8,908,0,75,1,3,3,3,2,4,944,0,1,43,2,4,1,1,1,3,967,2,1,0,24,2,1,1,1,1,0,584,0,1,1,1,393,8,1,1,2,1,8],
+          [1000,506,494,127,14,859,84,4,3,910,199,39,460,2,301,311,25,34,2,98,530,50,16,24,4,32,47,827,260,10,13,1,47,46,11,613,45,207,28,5,59,22,7,4,623,27,5,394,0,47,12,3,1,6,504,15,1,2,3,9,14,3,0,0,2,951,70,16,181,1,167,33,8,5,21,242,1,255],
+        ] },
+      { s: "Ada Lovelace wrote the first program. Ada Lovelace was a mathematician.",
+        t: ["Ad", "a", " Lo", "vel", "ace", " wrote", " the", " first", " program", ".", " Ada", " Lo", "vel", "ace", " was", " a", " mathematician", "."],
+        a: [
+          [1000,1000,0,0,1000,0,0,0,1000,0,0,0,0,1000,0,0,0,0,0,1000,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,0,0,999,1,0,0,0,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,0,0,0,1,999,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1000,0],
+          [1000,1000,0,723,238,39,4,4,990,2,15,3,550,402,30,667,22,29,31,62,189,51,2,6,7,31,790,113,117,1,4,2,9,134,581,152,72,1,1,2,3,124,180,592,24,48,0,2,2,11,119,125,169,241,284,94,0,1,1,1,14,18,22,75,461,313,18,0,0,0,0,1,1,4,9,31,900,36,1,0,0,0,0,0,0,0,1,2,85,902,9,2,0,0,0,0,0,0,0,1,1,23,505,409,58,69,0,0,0,0,1,3,1,4,35,119,79,122,406,162,36,0,0,0,0,1,0,2,1,10,17,14,29,31,745,114,104,0,0,0,0,0,0,1,2,14,5,19,31,21,197,344,262,29,0,0,0,0,0,0,0,0,0,4,3,9,26,31,178,445,274],
+          [1000,999,1,996,0,3,1000,0,0,0,998,0,0,0,2,992,0,0,0,0,8,989,1,0,0,0,1,8,995,1,1,0,0,0,2,2,979,0,0,0,0,0,1,2,18,922,1,1,0,0,0,3,5,10,58,54,1,944,0,0,0,0,0,0,0,1,540,1,3,386,37,24,1,0,3,0,4,2,76,0,0,0,832,89,0,0,0,0,1,0,1,46,0,0,0,0,945,1,1,0,0,4,0,0,3,647,3,13,0,7,189,11,14,23,34,5,6,4,15,29,891,0,10,0,0,15,1,3,11,12,6,10,1,1,12,23,932,0,1,0,0,1,4,4,0,3,13,10,0,1,2,19,9,861,0,1,0,0,1,1,1,2,1,67,2,0,0,1,6,8,49],
+          [1000,1000,0,1000,0,0,1000,0,0,0,997,0,0,0,3,992,0,0,0,0,8,999,0,0,0,0,0,1,999,0,0,0,0,0,0,1,996,0,0,0,0,0,0,1,3,996,0,0,0,0,0,0,1,0,3,678,0,319,0,0,1,0,0,0,1,0,775,0,0,220,1,2,0,0,1,0,0,0,4,0,0,0,996,0,0,0,0,0,0,0,0,696,0,0,0,1,298,0,1,0,0,1,0,0,3,989,0,0,0,0,4,0,3,0,1,0,0,0,0,2,992,0,0,0,0,1,0,3,1,0,0,0,0,0,1,2,995,0,0,0,0,0,0,0,0,1,0,0,0,0,0,2,1,979,0,0,0,0,0,0,0,0,0,16,0,0,0,0,1,1,3],
+          [1000,644,356,533,377,90,492,314,120,73,395,285,174,111,35,271,269,289,47,80,42,35,87,30,16,11,29,792,122,133,71,41,48,81,445,58,166,74,64,38,51,228,214,69,96,40,54,16,6,8,14,214,26,22,601,180,98,75,25,24,85,90,47,248,74,55,149,117,46,20,27,53,147,70,60,104,164,45,236,149,82,44,57,27,72,53,47,82,26,79,45,202,135,116,68,23,11,69,30,21,84,17,124,77,24,34,46,20,8,11,14,197,44,42,231,28,32,11,14,267,10,20,6,4,3,10,193,18,17,115,7,11,6,4,183,392,128,56,41,21,11,41,88,66,106,56,71,41,21,11,80,116,46,17,21,7,2,4,6,81,11,10,248,5,10,3,5,54,113,4,399],
+          [1000,0,1000,0,682,318,0,535,445,20,0,342,164,21,473,0,178,117,25,138,542,0,139,93,14,71,166,516,0,65,28,9,28,155,569,146,0,38,20,6,17,308,158,239,214,0,47,21,6,28,94,143,53,149,458,0,149,89,12,42,37,110,45,88,71,356,0,33,16,4,1,1,3,3,3,1,36,899,0,1,1,0,0,0,0,0,0,0,1,101,895,0,60,18,1,35,43,61,40,81,138,380,13,8,122,0,32,11,1,10,38,46,35,90,108,193,26,25,100,285,0,10,6,1,5,18,68,48,48,29,140,10,3,54,381,179,0,15,7,1,6,17,17,48,102,25,97,20,12,44,259,150,180,0,16,4,1,13,21,37,14,37,250,36,9,3,24,94,40,40,361],
+          [1000,1000,0,999,0,1,1000,0,0,0,999,0,0,0,1,977,0,0,0,0,23,998,0,0,0,0,0,1,999,0,0,0,0,0,0,1,998,0,0,0,0,0,0,0,2,995,0,0,0,0,0,0,0,1,4,947,0,40,0,0,8,0,0,1,1,2,928,1,0,55,7,5,0,0,1,0,1,1,357,0,0,0,633,3,0,0,0,0,0,0,5,842,0,0,0,1,145,2,0,1,1,2,1,0,5,991,0,0,0,0,4,2,2,0,1,0,0,0,0,1,991,0,0,0,0,1,0,2,2,0,0,0,0,0,0,2,995,0,0,0,0,1,0,0,0,2,0,0,0,0,0,0,1,961,0,0,0,0,1,0,0,0,0,15,0,0,2,0,2,3,15],
+          [1000,517,483,37,2,961,51,4,13,932,67,15,1,1,916,77,2,1,1,1,919,106,6,2,1,1,8,876,31,4,2,0,0,1,4,958,63,2,2,1,2,6,3,3,920,185,85,19,7,35,74,230,51,66,247,63,4,0,0,2,1,1,0,1,47,881,5,1,510,0,0,0,1,2,1,84,3,392,7,1,6,347,3,1,3,1,2,78,1,6,542,9,5,1,1,481,1,1,0,1,49,19,0,1,431,37,1,0,0,0,8,6,2,3,76,4,1,0,0,862,60,24,1,0,0,2,18,3,1,76,6,1,0,0,7,801,24,0,0,0,1,2,4,0,10,55,7,0,0,0,4,1,888,89,41,10,3,18,33,109,20,29,144,26,9,3,18,101,101,68,176],
+        ] },
+      { s: "The cat sat on the mat because it was warm",
+        t: ["The", " cat", " sat", " on", " the", " mat", " because", " it", " was", " warm"],
+        a: [
+          [1000,1000,0,0,999,1,0,0,1000,0,0,0,0,1000,0,0,0,0,0,1000,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,998,2,0,0,0,0,0,0,0,1000,0,0,0,0,0,0,0,0,0,1000,0],
+          [1000,986,14,514,425,61,265,47,648,40,33,1,29,918,19,110,2,13,674,180,21,226,1,15,34,425,56,243,54,0,8,13,69,100,675,80,26,0,0,1,5,7,50,843,70,33,0,0,1,3,3,29,686,193,49],
+          [1000,996,4,990,2,7,995,2,2,1,959,26,4,2,9,981,2,0,13,2,3,937,40,2,0,0,2,18,673,27,159,15,7,18,93,7,791,17,30,4,14,23,99,9,13,974,9,0,0,0,2,7,6,0,1],
+          [1000,999,1,985,1,14,999,1,0,0,991,4,0,0,5,998,0,1,0,0,1,991,2,0,0,0,0,6,980,3,3,0,0,2,3,10,987,1,0,0,0,0,1,6,5,997,0,0,0,0,0,1,1,0,1],
+          [1000,803,197,689,211,100,382,88,102,428,122,17,49,178,634,294,166,205,162,111,61,194,27,50,254,359,30,87,125,14,34,123,354,23,48,278,109,70,21,119,232,30,55,132,232,238,138,81,74,120,91,62,48,72,77],
+          [1000,0,1000,1,456,543,0,195,669,136,1,275,241,135,348,0,81,642,88,31,157,0,208,181,79,78,106,347,0,163,98,29,51,22,268,370,0,92,45,10,14,20,272,373,173,0,131,116,25,35,288,87,101,109,108],
+          [1000,999,1,999,0,1,1000,0,0,0,991,1,0,0,8,989,0,1,1,4,6,990,0,0,0,1,2,6,972,0,2,0,0,1,13,11,988,0,0,0,1,1,3,4,2,994,0,0,0,0,0,1,0,0,3],
+          [1000,410,590,83,9,907,136,1,1,862,390,1,1,13,593,66,4,9,1,0,920,81,0,1,9,1,1,906,96,4,1,10,18,1,2,867,71,1,5,7,5,3,6,13,888,61,1,4,10,3,2,8,1,4,906],
+        ] },
+    ];
+
+    var si = 0, hi = 0, overlay = false;
+    function toks() { return SENTS[si].t; }
+    function W(k, i, j) { return SENTS[si].a[k][i * (i + 1) / 2 + j] / 1000; }
+    function w(i, j) {
+      if (!overlay) return W(hi, i, j);
+      var s = 0, k;
+      for (k = 0; k < HEADS.length; k++) s += W(k, i, j);
+      return s / HEADS.length;
+    }
+    function name(k) { return "L" + HEADS[k].l + " H" + HEADS[k].h; }
+    function show(s) { return s.replace(/ /g, "·").replace(/\n/g, "⏎"); }
+
+    /* The four measurements, taken off the shipped weights so they describe
+       the grid rather than a claim about it. */
+    function scores(k) {
+      var t = toks(), n = t.length, i, j;
+      var prev = 0, first = 0, ind = 0, nind = 0, quote = 0, nq = 0;
+      var qs = [];
+      for (i = 0; i < n; i++) if (t[i].replace(/\s/g, "") === '"') qs.push(i);
+      for (i = 1; i < n; i++) {
+        prev += W(k, i, i - 1);
+        first += W(k, i, 0);
+        var hit = 0, any = false;
+        for (j = 1; j < i; j++) if (t[j - 1] === t[i]) { hit += W(k, i, j); any = true; }
+        if (any) { ind += hit; nind++; }
+        if (qs.length && i > qs[0]) {
+          var qh = 0;
+          for (j = 0; j < qs.length; j++) if (qs[j] <= i) qh += W(k, i, qs[j]);
+          quote += qh; nq++;
+        }
+      }
+      return { prev: prev / (n - 1), first: first / (n - 1),
+               ind: nind ? ind / nind : -1, quote: nq ? quote / nq : -1 };
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 440", width: "100%",
+      role: "img", "aria-label": "eight real GPT-2 heads on one sentence" }, f.body);
+
+    var COLS = [["prev", "prev"], ["ind", "induction"], ["quote", "quote"], ["first", "first tok"]];
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var t = toks(), n = t.length, i, j;
+      var cell = Math.max(14, Math.min(26, Math.floor(250 / n)));
+
+      T(svg, 8, 14, "GPT-2 small, 12 layers x 12 heads — these eight were picked by measuring all 144",
+        { anchor: "start", size: 11, fill: C.faint });
+
+      /* --- the sentence as chips --- */
+      var L = wrapBoxes(t.map(function (x) {
+        var lab = show(x);
+        return { lab: lab, w: 12 + lab.length * 6.6 };
+      }), 2);
+      L.pos.forEach(function (b, k) {
+        var yy = 34 + b.ln * 24;
+        rect(svg, b.x, yy - 10, b.w, 20, { rx: 4, fill: C.blue, stroke: "none", op: 0.1 });
+        T(svg, b.x + b.w / 2, yy, b.lab, { size: 10.5, fill: C.dim });
+        T(svg, b.x + b.w / 2, yy + 13, String(k), { size: 8, fill: C.faint });
+      });
+      var gy = 34 + L.lines * 24 + 32, gx = 104;
+
+      /* --- heatmap --- */
+      T(svg, 8, gy - 26, overlay ? "mean of the eight heads, query row x key column"
+          : name(hi) + ": query row x key column",
+        { anchor: "start", size: 11, fill: overlay ? C.faint : C.orange });
+      for (i = 0; i < n; i++) {
+        T(svg, gx + i * cell + cell / 2, gy - 10, String(i), { size: 8.5, fill: C.faint });
+        T(svg, gx - 7, gy + i * cell + cell / 2, show(t[i]).slice(0, 8),
+          { anchor: "end", size: 9.5, fill: C.dim });
+        for (j = 0; j < n; j++) {
+          if (j > i) {
+            rect(svg, gx + j * cell, gy + i * cell, cell - 1.5, cell - 1.5,
+              { rx: 2, fill: C.line, stroke: "none", op: 0.12 });
+            continue;
+          }
+          var v = w(i, j);
+          var c = rect(svg, gx + j * cell, gy + i * cell, cell - 1.5, cell - 1.5,
+            { rx: 2, fill: C.blue, stroke: "none", op: 0.06 + 0.94 * v });
+          (function (qi, kj, vv) {
+            tipOn(c, show(t[qi]) + "  →  " + show(t[kj]), "weight " + vv.toFixed(4));
+          })(i, j, v);
+        }
+      }
+
+      /* --- the eight heads, scored --- */
+      var RX = gx + n * cell + 22, ry = gy + 4, CW = 58;
+      if (RX < 412) RX = 412;
+      COLS.forEach(function (c, k) {
+        T(svg, RX + 52 + k * CW + CW / 2, ry - 12, c[1], { size: 8.5, fill: C.faint });
+      });
+      for (i = 0; i < HEADS.length; i++) {
+        var sc = scores(i), on = !overlay && i === hi;
+        var box = rect(svg, RX - 6, ry - 9, 52 + 4 * CW + 8, 20,
+          { rx: 4, fill: on ? C.orange : "none", stroke: "none", op: on ? 0.16 : 1 });
+        T(svg, RX, ry, name(i), { anchor: "start", size: 10, fill: on ? C.orange : C.dim });
+        COLS.forEach(function (c, k) {
+          var v = sc[c[0]], bx = RX + 52 + k * CW;
+          if (v < 0) { T(svg, bx + CW / 2, ry, "—", { size: 9, fill: C.faint }); return; }
+          rect(svg, bx + 2, ry - 6, (CW - 8) * v, 12,
+            { rx: 2, fill: v > 0.4 ? C.teal : C.dim, stroke: "none", op: v > 0.4 ? 0.75 : 0.4 });
+          T(svg, bx + CW / 2, ry, v.toFixed(2), { size: 9,
+            fill: v > 0.4 ? C.text : C.faint });
+        });
+        (function (k) {
+          box.style.cursor = "pointer";
+          box.addEventListener("click", function () { hi = k; overlay = false; tgO.set(false); render(); say(); });
+        })(i);
+        ry += 22;
+      }
+
+      /* --- what this head is doing --- */
+      var fy = Math.max(gy + n * cell + 26, ry + 14);
+      var s0 = scores(hi);
+      T(svg, 8, fy, overlay
+          ? "The mean of these eight. Averaging heads is what a single head would have been forced to do."
+          : s0.prev > 0.8 ? name(hi) + " puts " + s0.prev.toFixed(3) +
+              " of every row on the token one back. Nothing told it to."
+          : s0.ind > 0.3 ? name(hi) + " is an induction head: " + s0.ind.toFixed(3) +
+              " onto whatever followed this token the last time it appeared."
+          : s0.first > 0.8 ? name(hi) + " sends " + s0.first.toFixed(3) +
+              " to the very first token and little anywhere else: an attention sink."
+          : s0.quote > 0.35 ? name(hi) + " puts " + s0.quote.toFixed(2) +
+              " on the quotation marks, from every position after the first one."
+          : name(hi) + " scores on none of the four. Most heads are like this one.",
+        { anchor: "start", size: 10.5, fill: overlay ? C.dim : C.orange });
+      T(svg, 8, fy + 20, "Scores are computed from the weights on screen, so they move when the " +
+        "sentence does. Click a row.", { anchor: "start", size: 9.5, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 " + (fy + 36));
+    }
+
+    function say() {
+      var s0 = scores(hi);
+      f.say(overlay ? "All eight averaged." : name(hi) + " on this sentence: previous token " +
+        s0.prev.toFixed(3) + ", first token " + s0.first.toFixed(3) +
+        (s0.ind >= 0 ? ", induction " + s0.ind.toFixed(3) : "") +
+        (s0.quote >= 0 ? ", quotes " + s0.quote.toFixed(3) : "") + ".");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var sel = document.createElement("select");
+    sel.setAttribute("aria-label", "sentence");
+    sel.style.cssText = "font:12px ui-monospace,Menlo,monospace;padding:4px 6px;max-width:250px;" +
+      "background:var(--bg-2);color:var(--text);border:1px solid var(--line);border-radius:6px";
+    SENTS.forEach(function (s, i) {
+      var o = document.createElement("option");
+      o.value = i; o.textContent = s.s;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", function () { si = +sel.value; render(); say(); });
+    f.controls.appendChild(sel);
+
+    f.btn("next head", function () {
+      hi = (hi + 1) % HEADS.length; overlay = false; tgO.set(false); render(); say();
+    });
+    var tgO = toggle(f.controls, "overlay all eight", false, function (v) {
+      overlay = v; render();
+      f.say(v ? "Every head averaged into one picture. This is the compromise a single head would " +
+                "have had to make, and it is why there are 32 of them."
+              : "Back to " + name(hi) + ".");
+    });
+    f.btn("reset", function () {
+      si = 0; hi = 0; overlay = false; sel.value = "0"; tgO.set(false); render();
+      f.say("Click through the heads. Two of them are doing something obvious.");
+    });
+
+    render();
+    f.say("Click through the heads. Two of them are doing something obvious.");
+  };
+
+
+  /* ========================================================================
+     14. llmKvBudget — CH 6 — Tuner
+
+     The section's formula, made live. Every figure in its table comes back
+     out: 512.0 KB per token under MHA, 128.0 KB at Corvid's 4:1 grouping,
+     16.0 KB under MQA, and 4.295 / 1.074 / 0.134 GB at 8,192 context.
+
+     One number does not. The chapter's table says three full-context MHA
+     requests fit in 11.98 GB; 11.985 / 4.295 is 2.79, so two fit. Eleven and
+     eighty-nine are right — those quotients are 11.16 and 89.3 — so the row
+     was rounded where the other two were floored. A machine that reports how
+     many requests fit has to floor, so this one says two, and the chapter's
+     MHA row wants a one-character fix.
+
+     The real-model strip carries only what the chapter itself states: the
+     query:KV ratios and Gemma's head dimension of 256. Clicking one prices
+     that choice on Corvid's 32 layers, which is the comparison the section
+     draws rather than a claim about that model's own cache.
+     ======================================================================== */
+  VIZ.llmKvBudget = function (el) {
+    var f = frame(el);
+
+    var LAYERS = 32, QH = 32, PARAMS = 8.03e9, CARD = 16e9;
+    var REAL = [
+      { n: "Llama-3-8B", q: 32, kv: 8, d: 128 },
+      { n: "Mistral-7B-v0.3", q: 32, kv: 8, d: 128 },
+      { n: "Qwen2.5-7B", q: 28, kv: 4, d: 128 },
+      { n: "Gemma-2-9B", q: 16, kv: 8, d: 256 }
+    ];
+
+    var kv = 8, dh = 128, eCtx = 13, fp8 = false;   // 2^13 = 8,192, Corvid's context
+    function ctx() { return 1 << eCtx; }
+    function pb() { return fp8 ? 1 : 2; }
+    function perTok(k) { return 2 * LAYERS * k * dh * pb(); }
+    function perReq(k) { return perTok(k) * ctx(); }
+    function weights() { return PARAMS * 0.5; }     // int4, as the section's callout sets up
+    function budget() { return CARD - weights(); }
+    function fits(k) { return Math.floor(budget() / perReq(k)); }
+
+    function kb(b) {
+      if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+      return (b / 1024).toFixed(1) + " KB";
+    }
+    function gb(b) { return (b / 1e9).toFixed(3) + " GB"; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 400", width: "100%",
+      role: "img", "aria-label": "the KV cache priced against a 16 GB card" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, scheme = kv === QH ? "MHA" : kv === 1 ? "MQA" : "GQA " + (QH / kv).toFixed(0) + ":1";
+
+      T(svg, 8, 14, "Corvid-8B: 32 layers, 32 query heads, head dimension " + dh,
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, scheme + ", cache in " + (fp8 ? "fp8" : "bfloat16"),
+        { anchor: "end", size: 11, fill: C.orange });
+
+      /* ---- the formula, with this configuration's numbers in it ---- */
+      T(svg, 8, 44, "2  ×  " + LAYERS + " layers  ×  " + kv + " KV heads  ×  " + dh +
+        " dim  ×  " + pb() + " bytes", { anchor: "start", size: 12.5, fill: C.text });
+      T(svg, 8, 66, "=  " + commas(perTok(kv)) + " bytes  =  " + kb(perTok(kv)) + " per token",
+        { anchor: "start", size: 12.5, fill: C.teal });
+
+      /* ---- the three schemes, priced ---- */
+      var BX = 118, BW = 330, ry = 106;
+      T(svg, 8, 88, "at " + commas(ctx()) + " tokens of context, in a " +
+        gb(budget()) + " budget", { anchor: "start", size: 11, fill: C.faint });
+      var rows = [["MHA", QH], [kv === QH || kv === 1 ? "GQA 4:1" : scheme,
+                   kv === QH || kv === 1 ? QH / 4 : kv], ["MQA", 1]];
+      var wmax = perReq(QH);
+      rows.forEach(function (r) {
+        var k = r[1], on = k === kv;
+        var tone = k === QH ? C.pink : k === 1 ? C.teal : C.orange;
+        T(svg, 8, ry, r[0], { anchor: "start", size: 11, fill: on ? tone : C.dim });
+        T(svg, 108, ry, k + " KV", { anchor: "end", size: 9.5, fill: C.faint });
+        rect(svg, BX, ry - 8, Math.max(2, perReq(k) / wmax * BW), 16,
+          { rx: 3, fill: tone, stroke: "none", op: on ? 0.85 : 0.35 });
+        T(svg, BX + BW + 12, ry, kb(perTok(k)) + "/token", { anchor: "start", size: 10,
+          fill: on ? tone : C.dim });
+        T(svg, 752, ry, fits(k) + (fits(k) === 1 ? " request" : " requests"),
+          { anchor: "end", size: 11, fill: on ? tone : C.dim });
+        ry += 30;
+      });
+
+      /* ---- the numbers behind the bars ---- */
+      var NY = 208;
+      function row(label, value, tone) {
+        T(svg, 8, NY, label, { anchor: "start", size: 10.5, fill: C.faint });
+        T(svg, 420, NY, value, { anchor: "end", size: 11, fill: tone || C.text });
+        NY += 21;
+      }
+      row("cache per token", kb(perTok(kv)), C.teal);
+      row("cache for one full-context request", gb(perReq(kv)), C.teal);
+      row("weights at 4 bits", gb(weights()));
+      row("left for cache on a 16 GB card", gb(budget()));
+      row("full-context requests that fit", String(fits(kv)),
+        fits(kv) < 3 ? C.pink : C.teal);
+
+      /* ---- what real models chose ---- */
+      T(svg, 452, 208, "what real models chose, from the section",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      var sy = 230;
+      REAL.forEach(function (m) {
+        var on = m.kv === kv && m.d === dh;
+        var box = rect(svg, 448, sy - 10, 304, 20, { rx: 4, fill: C.blue,
+          stroke: "none", op: on ? 0.16 : 0 });
+        T(svg, 456, sy, m.n, { anchor: "start", size: 10, fill: on ? C.blue : C.dim });
+        T(svg, 744, sy, m.q + ":" + m.kv + (m.d !== 128 ? "  dim " + m.d : ""),
+          { anchor: "end", size: 10, fill: on ? C.blue : C.faint });
+        (function (mm) {
+          box.style.cursor = "pointer";
+          box.addEventListener("click", function () {
+            kv = mm.kv; dh = mm.d; sKV.set(Math.log(kv) / Math.LN2); render();
+            f.say(mm.n + "'s " + mm.q + ":" + mm.kv + " at head dimension " + mm.d +
+              ", priced on Corvid's 32 layers: " + kb(perTok(kv)) + " per token, " +
+              fits(kv) + " requests.");
+          });
+        })(m);
+        sy += 22;
+      });
+
+      /* ---- the discovery ---- */
+      var mha = fits(QH), gqa = fits(QH / 4);
+      T(svg, 8, 336, "MHA fits " + mha + ", Corvid's 4:1 grouping fits " + gqa +
+        ". Same query heads, same head dimension, same hardware.",
+        { anchor: "start", size: 11, fill: C.orange });
+      T(svg, 8, 358, "At bfloat16 the weights alone are " + gb(PARAMS * 2) +
+        " and do not fit the card at all, which is why the budget above assumes 4-bit.",
+        { anchor: "start", size: 10, fill: C.faint });
+      T(svg, 8, 378, "Query heads never appear in the formula. Only the KV heads do, which is the " +
+        "whole reason the two counts came apart.", { anchor: "start", size: 10, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 394");
+    }
+
+    function say() {
+      f.say(kb(perTok(kv)) + " per token with " + kv + " KV heads: " + gb(perReq(kv)) +
+        " for one " + commas(ctx()) + "-token request, so " + fits(kv) +
+        " fit in " + gb(budget()) + ".");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var tb = tabs(f.controls, ["MHA", "GQA 4:1", "MQA"], 1, function (i) {
+      kv = i === 0 ? QH : i === 2 ? 1 : QH / 4;
+      sKV.set(Math.log(kv) / Math.LN2); render(); say();
+    });
+    var sKV = slider(f.controls, "KV heads", 0, 5, 3, 1,
+      function (v) { return String(1 << v); },
+      function (v) {
+        kv = 1 << v;
+        tb.sync(kv === QH ? 0 : kv === 1 ? 2 : kv === QH / 4 ? 1 : -1);
+        render(); say();
+      });
+    var sC = slider(f.controls, "context", 10, 17, 13, 1,
+      function (v) { return commas(1 << v); },
+      function (v) { eCtx = v; render(); say(); });
+    var tgP = toggle(f.controls, "fp8 cache", false, function (v) {
+      fp8 = v; render();
+      f.say(v ? "One byte per number instead of two: the cache halves and the request count doubles. " +
+                "Chapter 29 is where the quality cost of that gets measured."
+              : "Back to bfloat16, two bytes a number.");
+    });
+    f.btn("reset", function () {
+      kv = 8; dh = 128; eCtx = 13; fp8 = false;
+      tb.sync(1); sKV.set(3); sC.set(13); tgP.set(false); render();
+      f.say("Set MHA. Now switch to GQA. Watch how many users fit.");
+    });
+
+    render();
+    f.say("Set MHA. Now switch to GQA. Watch how many users fit.");
   };
 
 })();
