@@ -24,6 +24,8 @@
      llmInductionHead ch11 Inspector 144 heads scored; both halves of the circuit fall out
      llmCorpusPipeline ch12 Stepper  1,000 documents, six filters, real MinHash
      llmContamination ch12 Playground the n-gram knob, and the floor under it
+     llmLossStep    ch13 Stepper    real per-token loss, and what the worst one is
+     llmLossCurves  ch13 Comparator six shapes, one fault each, healthy drawn behind
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -6182,6 +6184,380 @@
 
     render();
     f.say("Set n to 8 and find the benchmark questions sitting in the corpus.");
+  };
+
+
+
+  /* ========================================================================
+     28. llmLossStep — CH 13 — Stepper
+
+     Real per-token cross-entropy from GPT-2 small, measured 12 September
+     2026: log_softmax of the logits, indexed at the true next token. Nothing
+     on the batch tab is generated.
+
+     The blueprint's discovery is that the token costing most is almost
+     always a rare proper noun. Measured, that is nearly but not quite right,
+     and the machine says which. " Analy" (Analytical) costs 10.59, " Kru"
+     (Kruger) 12.19, " Se" (Seine) 7.37 — but the single most expensive token
+     in the four sentences is " boils" at 12.79, a common verb sitting in
+     position 2 where there is no context to predict it from. The rule is
+     really "the token the context does not predict", and proper nouns are
+     the largest family of those rather than the whole of it.
+
+     The second tab carries the section's own arithmetic: the six-token
+     example at 1.5923, the three anchors, and the loss-to-perplexity table,
+     all computed here rather than quoted.
+     ======================================================================== */
+  VIZ.llmLossStep = function (el) {
+    var f = frame(el);
+    var BATCH = [
+      { first: "The", toks: [" capital", " of", " France", " is", " Paris", ",", " and", " the", " river", " running", " through", " it", " is", " the", " Se", "ine", "."],
+        loss: [9.07, 1.807, 5.03, 2.107, 3.434, 0.797, 1.641, 1.82, 8.22, 7.306, 0.565, 0.95, 0.904, 1.718, 7.374, 0.005, 0.613],
+        top: [[["\n",0.0136],[" the",0.01],[" \"",0.0082],[",",0.0063],[" a",0.0052]],[[" of",0.1642],[",",0.1192],[" city",0.1078],[" has",0.0723],["'s",0.071]],[[" the",0.2387],[" a",0.0192],[" Israel",0.0168],[" Russia",0.014],[" Iran",0.0115]],[[",",0.3749],[" is",0.1216],[" has",0.0674],[" and",0.0657],[".",0.0656]],[[" the",0.0846],[" now",0.0479],[" a",0.0462],[" France",0.0324],[" Paris",0.0322]],[[",",0.4505],[".",0.2612],[" and",0.1217],[".\"",0.0153],[" but",0.0111]],[[" and",0.1938],[" which",0.1015],[" the",0.0984],[" where",0.0865],[" but",0.0585]],[[" the",0.1621],[" its",0.0876],[" it",0.0737],[" is",0.0344],[" in",0.0236]],[[" capital",0.209],[" city",0.1227],[" French",0.0479],[" country",0.0286],[" largest",0.0074]],[[" is",0.1037],[" Paris",0.028],[" Le",0.0267],[",",0.0239],[" of",0.021]],[[" through",0.5681],[" from",0.1557],[" between",0.031],[" along",0.0291],[" down",0.0184]],[[" it",0.3869],[" the",0.2968],[" its",0.0708],[" Paris",0.0462],[" that",0.0333]],[[" is",0.405],[",",0.049],[" flows",0.0474],[" has",0.0439],[" runs",0.0437]],[[" the",0.1794],[" called",0.0998],[" known",0.0653],[" a",0.0426],[" one",0.0255]],[[" city",0.0509],[" capital",0.0467],[" most",0.0277],[" French",0.0242],[" main",0.0196]],[["ine",0.995],["ville",0.0006],["le",0.0005],["ines",0.0003],["y",0.0003]],[[".",0.5418],[",",0.2285],[" River",0.0249],[" and",0.022],[" (",0.0138]]] },
+      { first: "Ad", toks: ["a", " Lo", "vel", "ace", " wrote", " the", " first", " algorithm", " for", " the", " Analy", "tical", " Engine", " in", " 18", "43", "."],
+        loss: [5.348, 6.34, 2.104, 0.064, 6.03, 3.676, 3.329, 9.176, 1.021, 1.797, 10.589, 1.318, 4.996, 2.746, 4.956, 4.576, 0.863],
+        top: [[["\n",0.0266],[".",0.0222],["-",0.0174],[",",0.0123],[" and",0.0065]],[["ption",0.1379],[",",0.0206],["'s",0.018],["ad",0.0143],[" said",0.0133]],[["vel",0.122],["z",0.099],["eb",0.0897],["vers",0.0455],["a",0.0338]],[["ace",0.9384],["ess",0.0323],["ock",0.0118],["ady",0.0022],["ier",0.001]],[[",",0.1922],["\n",0.0757],[" is",0.0528],[" (",0.0397],[" and",0.0384]],[[":",0.3189],[" in",0.1161],[" a",0.0695],[",",0.0663],[" that",0.0591]],[[" following",0.1608],[" book",0.0529],[" story",0.0377],[" first",0.0358],[" script",0.019]],[[" draft",0.0947],[" chapter",0.0839],[" of",0.0608],[" book",0.0347],[" part",0.023]],[[" for",0.3604],[" that",0.0663],[" to",0.0642],[",",0.0622],[" in",0.0587]],[[" the",0.1658],[" this",0.0655],[" a",0.0563],[" an",0.0103],[" generating",0.0064]],[[" algorithm",0.0192],[" first",0.0112],[" new",0.0098],[" \"",0.0097],[" game",0.0078]],[["tical",0.2676],["tic",0.2198],["ze",0.184],["zer",0.152],["zing",0.0381]],[[" Analysis",0.0308],[" Model",0.029],[" Analy",0.0159],[" Data",0.0148],[" Method",0.012]],[[".",0.1607],[",",0.1562],[" in",0.0642],[" for",0.054],[" and",0.0424]],[[" the",0.0485],[" 1998",0.0289],[" 1997",0.0254],[" 2003",0.0228],[" 1989",0.0207]],[["94",0.032],["85",0.0312],["92",0.0284],["78",0.0245],["87",0.0244]],[[".",0.4219],[",",0.2622],[" and",0.1019],[":",0.0179],[" (",0.0156]]] },
+      { first: "Water", toks: [" boils", " at", " one", " hundred", " degrees", " Celsius", " at", " standard", " atmospheric", " pressure", "."],
+        loss: [12.79, 3.039, 6.412, 3.671, 0.737, 1.795, 4.44, 8.643, 2.288, 0.546, 1.046],
+        top: [[[",",0.0491],[".",0.0437],["\n",0.0283],[" and",0.0263],["-",0.0211]],[[" down",0.0722],[" in",0.0703],[",",0.0605],[" up",0.0564],[".",0.0552]],[[" about",0.0735],[" a",0.0593],[" around",0.0305],[" the",0.0295],[" 100",0.0246]],[[" point",0.259],[" end",0.1103],[" of",0.0455],[" time",0.0382],[" temperature",0.0359]],[[" degrees",0.4786],[" and",0.2346],[" thousand",0.0372],[" times",0.0155],[" percent",0.0153]],[[" Fahrenheit",0.2202],[" Celsius",0.1661],[" C",0.1295],[" F",0.088],[".",0.0805]],[[".",0.2425],[",",0.1949],[" (",0.1917],[" and",0.1053],[" for",0.0251]],[[" the",0.1423],[" a",0.0583],[" room",0.0338],[" its",0.0265],[" one",0.0206]],[[" ambient",0.1707],[" temperatures",0.1167],[" temperature",0.103],[" atmospheric",0.1014],[" pressure",0.038]],[[" pressure",0.5795],[" temperatures",0.1683],[" pressures",0.0871],[" temperature",0.0639],[" conditions",0.0278]],[[".",0.3514],[",",0.224],[" (",0.1119],[" and",0.0758],[" of",0.033]]] },
+      { first: "The", toks: [" quarterly", " report", " from", " Zurich", " mentioned", " Kru", "ger", ",", " Bat", "avia", " and", " the", " new", " tariff", "."],
+        loss: [11.668, 1.701, 2.965, 9.114, 9.039, 12.188, 0.406, 2.762, 9.718, 4.086, 1.12, 2.789, 5.608, 11.595, 3.484],
+        top: [[["\n",0.0136],[" the",0.01],[" \"",0.0082],[",",0.0063],[" a",0.0052]],[[" report",0.1825],[" results",0.0324],[" reports",0.0306],[" survey",0.028],[" data",0.0272]],[[" on",0.1032],[",",0.0857],[" also",0.0665],[" from",0.0516],[" of",0.0487]],[[" the",0.3419],[" Moody",0.0149],[" Goldman",0.0132],[" Thomson",0.0108],[" U",0.0107]],[["'s",0.0944],[",",0.0707],["-",0.0509],[" said",0.0423],[" showed",0.0387]],[[" that",0.3201],[" the",0.0926],[" a",0.0531],[" in",0.0399],[" \"",0.025]],[["ger",0.6661],["se",0.0619],["pp",0.039],["k",0.0209],["ll",0.0126]],[["'s",0.2899],[" as",0.0917],[",",0.0632],[" and",0.0479],[" was",0.0298]],[[" who",0.2891],[" a",0.0781],[" the",0.0654],[" whose",0.028],[" which",0.0163]],[["ty",0.1458],["eman",0.0657],["ista",0.0636],["che",0.0595],["ail",0.0473]],[[",",0.3541],[" and",0.3262],["'s",0.1357],["-",0.0152],[" &",0.0076]],[[" the",0.0615],[" other",0.0409],[" B",0.0142],[" St",0.0132],[" L",0.0096]],[[" city",0.0547],[" Netherlands",0.0238],[" other",0.0183],[" University",0.013],[" Swiss",0.0124]],[[" city",0.0219],[" airport",0.013],[" headquarters",0.0098],[" town",0.0077],[" \"",0.0073]],[[" of",0.0398],["-",0.0334],[" rate",0.0333],[" on",0.0313],[".",0.0307]]] },
+    ];
+
+    var VOCAB = 128256;
+    var TOY = [["Paris", 2.10, 1], ["the", 0.40, 0], ["banana", -1.20, 0],
+               ["London", 3.30, 0], ["a", 0.90, 0], ["xylophone", -0.50, 0]];
+    var STAGE = ["forward", "loss", "backward", "clip", "update"];
+    var STAGEW = [
+      "logits come out of the final projection: (4, T, 128256) numbers.",
+      "cross-entropy indexes the true token and takes -ln of its probability.",
+      "the gradient at the logits is (p - onehot) — one subtraction per position.",
+      "the global gradient norm is scaled back to 1.0 if it exceeds it.",
+      "the optimizer applies the update; the next step reads a different batch."
+    ];
+
+    var stg = 0, sel = { s: 0, i: 0 }, tab = 0;
+
+    var all = [];
+    BATCH.forEach(function (b, s) { b.loss.forEach(function (v, i) { all.push({ s: s, i: i, v: v }); }); });
+    var MEAN = all.reduce(function (a, x) { return a + x.v; }, 0) / all.length;
+    var WORST = all.slice().sort(function (a, b) { return b.v - a.v; });
+
+    function softmax(z) {
+      var m = Math.max.apply(null, z), e = z.map(function (v) { return Math.exp(v - m); });
+      var s = e.reduce(function (a, b) { return a + b; }, 0);
+      return e.map(function (v) { return v / s; });
+    }
+    function show(t) { return t.replace(/ /g, "·"); }
+    function heat(v) { return Math.min(1, v / 10); }
+
+    var svg = S("svg", { viewBox: "0 0 760 436", width: "100%",
+      role: "img", "aria-label": "one training step, and what each position cost" }, f.body);
+
+    function renderBatch() {
+      var i, s, y = 82;
+      T(svg, 8, 14, "GPT-2 small, measured · 4 sequences · " + all.length +
+        " positions · mean loss " + MEAN.toFixed(3) + " nats",
+        { anchor: "start", size: 11, fill: C.teal });
+      T(svg, 752, 14, "perplexity " + Math.exp(MEAN).toFixed(1) + " · " +
+        (MEAN / Math.LN2).toFixed(2) + " bits/token", { anchor: "end", size: 11, fill: C.faint });
+
+      /* stage chips */
+      var cx = 8;
+      for (i = 0; i < STAGE.length; i++) {
+        rect(svg, cx, 28, 82, 20, { rx: 4, fill: i === stg ? C.blue : "none",
+          stroke: i === stg ? "none" : C.line, sw: 1, op: i === stg ? 0.75 : 1 });
+        T(svg, cx + 41, 38, STAGE[i], { size: 9.5, fill: i === stg ? C.card : C.faint });
+        cx += 88;
+      }
+      T(svg, 8, 60, STAGEW[stg], { anchor: "start", size: 9.5, fill: C.dim });
+
+      /* the batch, every position coloured by what it cost */
+      for (s = 0; s < BATCH.length; s++) {
+        var b = BATCH[s], n = b.toks.length, cw = Math.floor(700 / 18);
+        T(svg, 8, y, "seq " + s, { anchor: "start", size: 9, fill: C.faint });
+        var x = 52;
+        for (i = 0; i < n; i++) {
+          var on = sel.s === s && sel.i === i;
+          var r0 = rect(svg, x, y - 10, cw - 3, 20, { rx: 3, fill: C.pink,
+            stroke: on ? C.text : "none", sw: 2, op: 0.1 + heat(b.loss[i]) * 0.7 });
+          T(svg, x + (cw - 3) / 2, y, show(b.toks[i]).slice(0, 5),
+            { size: 8.5, fill: heat(b.loss[i]) > 0.6 ? C.card : C.dim });
+          (function (ss, ii) {
+            r0.style.cursor = "pointer";
+            r0.addEventListener("click", function () { sel = { s: ss, i: ii }; render(); say(); });
+          })(s, i);
+          tipOn(r0, show(b.toks[i]), "loss " + b.loss[i].toFixed(3) + " nats");
+          x += cw;
+        }
+        T(svg, 752, y, (b.loss.reduce(function (a, v) { return a + v; }, 0) / n).toFixed(2),
+          { anchor: "end", size: 9, fill: C.faint });
+        y += 30;
+      }
+      T(svg, 8, y - 8, "darker is more expensive · the number on the right is that sequence's mean",
+        { anchor: "start", size: 9, fill: C.faint });
+
+      /* the position you picked */
+      var b2 = BATCH[sel.s], p = b2.loss[sel.i], top = b2.top[sel.i];
+      var ptrue = Math.exp(-p);
+      T(svg, 8, 208, "position " + (sel.i + 1) + " of sequence " + sel.s + " · true token " +
+        show(b2.toks[sel.i]), { anchor: "start", size: 11, fill: C.text });
+      T(svg, 752, 208, "p = " + ptrue.toFixed(5) + " · -ln p = " + p.toFixed(3),
+        { anchor: "end", size: 11, fill: p > 6 ? C.pink : C.green });
+      var ty = 234, found = false;
+      top.forEach(function (r, k) {
+        var isT = r[0] === b2.toks[sel.i];
+        if (isT) found = true;
+        T(svg, 8, ty, (k + 1) + ".", { anchor: "start", size: 9, fill: C.faint });
+        T(svg, 30, ty, show(r[0]).slice(0, 16), { anchor: "start", size: 10,
+          fill: isT ? C.green : C.dim });
+        rect(svg, 180, ty - 6, r[1] * 300, 12, { rx: 2, stroke: "none", op: 0.6,
+          fill: isT ? C.green : C.blue });
+        T(svg, 500, ty, r[1].toFixed(4), { anchor: "end", size: 9.5, fill: C.dim });
+        if (stg === 2) T(svg, 600, ty, "dL/dz = " + (r[1] - (isT ? 1 : 0)).toFixed(4),
+          { anchor: "end", size: 9.5, fill: isT ? C.orange : C.faint });
+        ty += 19;
+      });
+      if (!found) T(svg, 30, ty, "the true token is not in the top five, at p = " + ptrue.toFixed(5),
+        { anchor: "start", size: 9.5, fill: C.pink });
+
+      /* the discovery */
+      line(svg, 8, 348, 752, 348, { stroke: C.line, sw: 1 });
+      T(svg, 8, 366, "most expensive: " +
+        WORST.slice(0, 4).map(function (w) {
+          return show(BATCH[w.s].toks[w.i]) + " " + w.v.toFixed(2);
+        }).join(" · "), { anchor: "start", size: 10.5, fill: C.pink });
+      wrapT(svg, 8, 388, 120, 17, "Three of the four are rare proper nouns. The fourth, ·boils, is a " +
+        "common verb in position 2 with no context to predict it from — the rule is really " +
+        "“whatever the context does not predict”, and proper nouns are its largest family.",
+        { size: 10, fill: C.faint, max: 3 });
+    }
+
+    function renderAnchors() {
+      var i, z = TOY.map(function (t) { return t[1]; }), p = softmax(z);
+      T(svg, 8, 14, "the section's own arithmetic, computed here", { anchor: "start", size: 11, fill: C.teal });
+
+      T(svg, 8, 40, "a toy vocabulary of six, and a model that is confidently wrong",
+        { anchor: "start", size: 9.5, fill: C.faint });
+      var y = 62;
+      T(svg, 8, y, "token", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, 200, y, "logit", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 290, y, "probability", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      for (i = 0; i < TOY.length; i++) {
+        var tone = TOY[i][2] ? C.green : p[i] === Math.max.apply(null, p) ? C.pink : C.dim;
+        T(svg, 8, y, TOY[i][0], { anchor: "start", size: 10.5, fill: tone });
+        T(svg, 200, y, TOY[i][1].toFixed(2), { anchor: "end", size: 10.5, fill: tone });
+        T(svg, 290, y, p[i].toFixed(4), { anchor: "end", size: 10.5, fill: tone });
+        rect(svg, 306, y - 6, p[i] * 120, 12, { rx: 2, fill: tone, stroke: "none", op: 0.5 });
+        y += 19;
+      }
+      T(svg, 8, y + 8, "loss = -ln(" + p[0].toFixed(4) + ") = " + (-Math.log(p[0])).toFixed(4),
+        { anchor: "start", size: 11, fill: C.orange });
+      T(svg, 8, y + 28, "green is the true token; pink is what the model prefers.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      T(svg, 8, 236, "three anchors, for a 128,256-token vocabulary",
+        { anchor: "start", size: 9.5, fill: C.faint });
+      y = 258;
+      [["a uniform guess over the vocabulary", Math.log(VOCAB), "where an untrained model starts", C.dim],
+       ["the true token at p = 0.94", -Math.log(0.94), "confident and right", C.green],
+       ["the true token at p = 1e-6", -Math.log(1e-6), "confident and wrong", C.pink]].forEach(function (r) {
+        T(svg, 8, y, r[0], { anchor: "start", size: 10.5, fill: r[3] });
+        T(svg, 300, y, r[1].toFixed(3), { anchor: "end", size: 10.5, fill: r[3] });
+        T(svg, 320, y, r[2], { anchor: "start", size: 9.5, fill: C.faint });
+        y += 20;
+      });
+      T(svg, 8, y + 6, "Being confidently wrong costs 13.816, more than knowing nothing at 11.762.",
+        { anchor: "start", size: 10, fill: C.faint });
+
+      var RX = 470;
+      T(svg, RX, 40, "loss, bits and perplexity", { anchor: "start", size: 9.5, fill: C.faint });
+      y = 62;
+      T(svg, RX, y, "loss", { anchor: "start", size: 9, fill: C.faint });
+      T(svg, RX + 110, y, "bits/tok", { anchor: "end", size: 9, fill: C.faint });
+      T(svg, 752, y, "perplexity", { anchor: "end", size: 9, fill: C.faint });
+      y += 20;
+      [[Math.log(VOCAB), "untrained: the whole vocabulary"], [6, ""], [4, ""], [3, ""], [2, ""],
+       [1.7, "a good model on held-out web text"]].forEach(function (r) {
+        var L = r[0], ppl = Math.exp(L);
+        T(svg, RX, y, L.toFixed(2), { anchor: "start", size: 10.5, fill: r[1] ? C.teal : C.dim });
+        T(svg, RX + 110, y, (L / Math.LN2).toFixed(2), { anchor: "end", size: 10.5, fill: C.dim });
+        T(svg, 752, y, ppl >= 1000 ? Math.round(ppl).toLocaleString("en-US")
+                                   : ppl >= 10 ? ppl.toFixed(0) : ppl.toFixed(1),
+          { anchor: "end", size: 10.5, fill: r[1] ? C.teal : C.text });
+        y += 20;
+        if (r[1]) { T(svg, RX, y - 8, r[1], { anchor: "start", size: 8.5, fill: C.faint }); y += 10; }
+      });
+      wrapT(svg, RX, 330, 44, 16, "perplexity = exp(loss): how many equally likely " +
+        "options it is effectively choosing between.", { size: 10, fill: C.faint });
+    }
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      if (tab === 0) renderBatch(); else renderAnchors();
+    }
+    function say() {
+      if (tab) { f.say("Six logits in, one loss out: 1.5923 nats, because the true token got 0.2035."); return; }
+      var b = BATCH[sel.s];
+      f.say(STAGE[stg] + " · " + show(b.toks[sel.i]) + " cost " + b.loss[sel.i].toFixed(3) +
+        " nats, p = " + Math.exp(-b.loss[sel.i]).toFixed(5) + ". Batch mean " + MEAN.toFixed(3) + ".");
+    }
+
+    f.btn("step", function () { stg = (stg + 1) % STAGE.length; tab = 0; tT.sync(0); render(); say(); });
+    f.btn("worst token", function () {
+      sel = { s: WORST[0].s, i: WORST[0].i }; tab = 0; tT.sync(0); render();
+      f.say("The most expensive token in the batch is " + show(BATCH[sel.s].toks[sel.i]) +
+        " at " + WORST[0].v.toFixed(2) + " nats — p = " + Math.exp(-WORST[0].v).toFixed(6) + ".");
+    });
+    var tT = tabs(f.controls, ["a real batch", "the section's arithmetic"], 0, function (i) {
+      tab = i; render(); say();
+    });
+    f.btn("reset", function () {
+      stg = 0; sel = { s: 0, i: 0 }; tab = 0; tT.sync(0); render();
+      f.say("Step one training step. Click a position to see what the model got wrong.");
+    });
+
+    render();
+    f.say("Step one training step. Click a position to see what the model got wrong.");
+  };
+
+
+  /* ========================================================================
+     29. llmLossCurves — CH 13 — Comparator
+
+     Six shapes, each generated from one healthy curve plus the single fault
+     the section describes, so the difference on screen is the fault and
+     nothing else. The healthy curve is drawn faint behind every panel for
+     exactly that reason: the diagnosis is in the departure, not the level.
+
+     The healthy curve is anchored at the section's own numbers — 11.76 at
+     step 1, through 6-ish in the first few hundred steps, to a little over 2
+     by twenty thousand — so the early collapse a reader sees is the unigram
+     frequencies being learned, which is what the section says it is.
+
+     Row two, middle, is the one the section singles out: a small bump that
+     is a discovery about the model rather than about the run, and Chapter 11
+     has already shown the reader what forms there.
+     ======================================================================== */
+  VIZ.llmLossCurves = function (el) {
+    var f = frame(el);
+
+    var T0 = 20000;
+    function healthy(t) { return 1.7 + 11.9 / (1 + Math.sqrt(t / 30)); }
+
+    var CURVES = [
+      { n: "spike, then recovery", d: "A difficult batch. With gradient clipping on this is normal and needs no action.",
+        act: "no action", tone: 1,
+        f: function (t) { return healthy(t) + (t >= 3000 && t < 3400 ? 2.6 * Math.exp(-(t - 3000) / 90) : 0); } },
+      { n: "spike, no recovery", d: "The update was large enough to move the parameters somewhere useless. Restore the last checkpoint, skip the batches that caused it, continue. PaLM and OPT both documented doing this repeatedly.",
+        act: "restore a checkpoint", tone: 2,
+        f: function (t) { return t < 3000 ? healthy(t) : healthy(t) + 3.1 - 0.00004 * (t - 3000); } },
+      { n: "step change downward", d: "Not a bug: something changed. A learning-rate schedule transition, a data-mixture change, or an annealing phase.",
+        act: "no action", tone: 1,
+        f: function (t) { return healthy(t) - (t >= 12000 ? 0.45 : 0); } },
+      { n: "a long plateau", d: "Either the learning rate has decayed to nearly zero, which the schedule will tell you, or it collapsed early, which is a bug. Check the actual learning rate before touching anything else.",
+        act: "read the learning rate first", tone: 2,
+        f: function (t) { return t < 800 ? healthy(t) : healthy(800) - 0.00002 * (t - 800); } },
+      { n: "a small bump, early", d: "The interesting one. This is where the induction heads of Chapter 11 form: the circuit reorganizes, the loss briefly worsens, and when it resolves the model can do in-context learning.",
+        act: "nothing — that is the model learning", tone: 0,
+        f: function (t) { return healthy(t) + (t > 400 && t < 1400 ? 0.30 * Math.sin(Math.PI * (t - 400) / 1000) : 0) - (t >= 1400 ? 0.12 : 0); } },
+      { n: "validation rising", d: "Overfitting — and during pretraining that is almost always a bug rather than a limit, because a model seeing trillions of mostly-unique tokens should not be able to overfit. Suspect a corpus far smaller than intended, or a validation split that overlaps the training data.",
+        act: "check the corpus size and the split", tone: 2,
+        f: function (t) { return healthy(t); },
+        g: function (t) { return t < 4000 ? healthy(t) : healthy(4000) + 0.00012 * (t - 4000); } }
+    ];
+
+    var sel = 4, shown = false;
+
+    var svg = S("svg", { viewBox: "0 0 760 430", width: "100%",
+      role: "img", "aria-label": "six loss curves, waiting to be diagnosed" }, f.body);
+      svg.setAttribute("viewBox", "0 0 760 470");
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var i, r, c;
+
+      T(svg, 8, 14, "six runs, same model, same data · log steps on x, loss in nats on y",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, shown ? "diagnoses shown" : "commit before you reveal",
+        { anchor: "end", size: 11, fill: shown ? C.faint : C.orange });
+
+      var PW = 236, PH = 116, GX = 16, GY = 44;
+      function px(p, t) { return p.x + Math.log(Math.max(1, t)) / Math.log(T0) * (PW - 42); }
+      function py(p, v) { return p.y + PH - 26 - Math.min(1, Math.max(0, (v - 1.4) / 11.2)) * (PH - 40); }
+
+      for (i = 0; i < 6; i++) {
+        r = Math.floor(i / 3); c = i % 3;
+        var p = { x: GX + c * (PW + 8) + 30, y: GY + r * (PH + 68) };
+        var cur = CURVES[i], on = i === sel;
+        if (on) rect(svg, p.x - 28, p.y - 14, PW + 6, PH + 4,
+          { rx: 5, fill: C.panel, stroke: "none", op: 0.9 });
+        /* axes */
+        line(svg, p.x, p.y + PH - 26, p.x + PW - 42, p.y + PH - 26, { stroke: C.line, sw: 1 });
+        line(svg, p.x, p.y - 8, p.x, p.y + PH - 26, { stroke: C.line, sw: 1 });
+        /* healthy, faint, behind */
+        var hp = [], gp = [], fp = [], t;
+        for (t = 1; t <= T0; t = Math.max(t + 1, Math.round(t * 1.10))) {
+          hp.push(px(p, t) + "," + py(p, healthy(t)));
+          fp.push(px(p, t) + "," + py(p, cur.f(t)));
+          if (cur.g) gp.push(px(p, t) + "," + py(p, cur.g(t)));
+        }
+        S("polyline", { points: hp.join(" "), fill: "none", stroke: C.faint,
+          "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.5 }, svg);
+        S("polyline", { points: fp.join(" "), fill: "none",
+          stroke: on ? C.teal : C.blue, "stroke-width": on ? 2 : 1.5 }, svg);
+        if (cur.g) S("polyline", { points: gp.join(" "), fill: "none",
+          stroke: C.pink, "stroke-width": on ? 2 : 1.5 }, svg);
+        T(svg, p.x - 6, p.y - 2, "11.8", { anchor: "end", size: 8, fill: C.faint });
+        T(svg, p.x - 6, p.y + PH - 30, "1.4", { anchor: "end", size: 8, fill: C.faint });
+        T(svg, p.x, p.y + PH - 14, "1", { anchor: "start", size: 8, fill: C.faint });
+        T(svg, p.x + PW - 42, p.y + PH - 14, "20k", { anchor: "end", size: 8, fill: C.faint });
+        var lab = T(svg, p.x - 28, p.y + PH + 2, (i + 1) + ". " + (shown ? cur.n : "curve " + (i + 1)),
+          { anchor: "start", size: 10, fill: on ? C.text : C.dim });
+        lab.style.cursor = "pointer";
+        (function (k) { lab.addEventListener("click", function () { sel = k; render(); say(); }); })(i);
+        if (cur.g) T(svg, p.x + PW - 42, p.y + PH + 18, "train · validation",
+          { anchor: "end", size: 8, fill: C.pink });
+      }
+
+      /* the one you are looking at */
+      var cu = CURVES[sel];
+      line(svg, 8, 372, 752, 372, { stroke: C.line, sw: 1 });
+      T(svg, 8, 390, "curve " + (sel + 1) + (shown ? " — " + cu.n : ""),
+        { anchor: "start", size: 11, fill: shown ? [C.teal, C.dim, C.pink][cu.tone] : C.text });
+      if (shown) {
+        var yy = wrapT(svg, 8, 410, 120, 16, cu.d, { size: 10, fill: C.faint, max: 3 });
+        T(svg, 8, yy + 4, "what to do: " + cu.act, { anchor: "start", size: 10.5,
+          fill: cu.tone === 2 ? C.orange : C.green });
+      } else {
+        wrapT(svg, 8, 410, 120, 17, "Decide what this one is before you press reveal. The faint " +
+          "dashed line behind it is a healthy run on the same axes. Getting the spike-that-recovers " +
+          "wrong is common and harmless; getting the plateau wrong costs a week.",
+          { size: 10, fill: C.faint, max: 3 });
+      }
+    }
+
+    function say() {
+      f.say(shown ? "Curve " + (sel + 1) + ": " + CURVES[sel].n + " — " + CURVES[sel].act + "."
+                  : "Curve " + (sel + 1) + " selected. Commit to a diagnosis, then reveal.");
+    }
+
+    var tC = tabs(f.controls, ["1", "2", "3", "4", "5", "6"], 4, function (i) { sel = i; render(); say(); });
+    var tgR = toggle(f.controls, "reveal", false, function (v) {
+      shown = v; render();
+      f.say(v ? "Five of the six need no action or a known action. Only curve 5 is a discovery " +
+                "about the model rather than about the run."
+              : "Hidden again. Diagnose each curve before you reveal the answer.");
+    });
+    f.btn("reset", function () {
+      sel = 4; shown = false; tC.sync(4); tgR.set(false); render();
+      f.say("Diagnose each curve before you reveal the answer.");
+    });
+
+    render();
+    f.say("Diagnose each curve before you reveal the answer.");
   };
 
 
