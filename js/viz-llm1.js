@@ -16,6 +16,8 @@
      llmNeedle      ch7 Playground P4, actually run, with and without decoys
      llmBlock       ch8 Inspector  32 blocks, real backprop, skips on and off
      llmActivations ch8 Comparator curves, matched parameters, and an ablation run
+     llmParamCounter ch9 Builder   the section's table, produced from a config
+     llmMemoryFit   ch9 Tuner      weights, cache, optimizer, and counted activations
      llmCourseMap   ch1  Inspector  three machines, one block, two directions
      llmAttention   ch5  Inspector  one head, clickable queries, the divisor toggle
      llmCausalMask  ch5  Stepper    generate left to right, then let it read the future
@@ -4342,6 +4344,419 @@
 
     render();
     f.say("Switch to SwiGLU, then turn the two-thirds correction off and watch the parameter count.");
+  };
+
+
+  /* ========================================================================
+     20. llmParamCounter — CH 9 — Builder
+
+     The section's table, live. At Corvid's settings every line matches: the
+     embedding at 525,336,576, attention at 41,943,040, feed-forward at
+     176,160,768, two norms at 8,192, a block at 218,112,000, 32 of them at
+     6,979,584,000, and 8,030,261,248 in total. The machine says so on screen
+     rather than leaving the reader to trust it.
+
+     The head dimension is pinned at 128 and the head count derived from
+     d_model, which is what every model in the section does, and it is what
+     makes the blueprint's discovery true: doubling d_model doubles the head
+     count too, so Q and O grow with d squared while the embedding grows
+     linearly. The total does not quadruple — the blocks do, and the
+     vocabulary does not, so watching the two shares move apart is the more
+     useful version of that observation.
+     ======================================================================== */
+  VIZ.llmParamCounter = function (el) {
+    var f = frame(el);
+
+    var DHEAD = 128;
+    var eD = 12, eV = 17, eL = 5, eKV = 3, ffm = 3.5, tied = false;
+    /* Corvid: d 4,096, vocab 128,256, 32 layers, 8 KV heads, ff 14,336 */
+    var vocabExact = 128256;
+
+    function d() { return 1 << eD; }
+    function V() { return eV === 17 ? vocabExact : 1 << eV; }
+    function L() { return 1 << eL; }
+    function kv() { return 1 << eKV; }
+    function heads() { return d() / DHEAD; }
+    function ff() { return Math.round(d() * ffm); }
+
+    function embed() { return V() * d(); }
+    function attn() {
+      return d() * heads() * DHEAD * 2 + d() * kv() * DHEAD * 2;
+    }
+    function ffn() { return 3 * d() * ff(); }
+    function norms() { return 2 * d(); }
+    function block() { return attn() + ffn() + norms(); }
+    function head() { return tied ? 0 : V() * d(); }
+    function total() { return embed() + L() * block() + d() + head(); }
+
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+    function pct(a, b) { return (a / b * 100).toFixed(a / b < 0.001 ? 3 : 2) + "%"; }
+    function bytes(n, per) {
+      var b = n * per;
+      if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
+      return (b / 1e6).toFixed(0) + " MB";
+    }
+    function isCorvid() {
+      return d() === 4096 && V() === 128256 && L() === 32 && kv() === 8 &&
+             ff() === 14336 && !tied;
+    }
+
+    var svg = S("svg", { viewBox: "0 0 760 420", width: "100%",
+      role: "img", "aria-label": "a parameter count, built from a config" }, f.body);
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var T0 = total(), i;
+
+      T(svg, 8, 14, "d_model " + commas(d()) + " · " + heads() + " heads of " + DHEAD +
+        " · " + kv() + " KV · ff " + commas(ff()) + " · " + L() + " layers · vocab " + commas(V()),
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, isCorvid() ? "this is Corvid-8B" : "",
+        { anchor: "end", size: 11, fill: C.teal });
+
+      /* ---- the table ---- */
+      var ry = 46;
+      function row(k, n, tone, ind) {
+        T(svg, 8 + (ind || 0), ry, k, { anchor: "start", size: 10.5, fill: tone || C.dim });
+        T(svg, 300, ry, commas(n), { anchor: "end", size: 10.5, fill: tone || C.text });
+        T(svg, 366, ry, pct(n, T0), { anchor: "end", size: 9.5, fill: C.faint });
+        ry += 19;
+      }
+      T(svg, 8, 30, "parameters", { anchor: "start", size: 10, fill: C.faint });
+      row("token embeddings", embed(), C.blue);
+      row("W_Q + W_O", d() * heads() * DHEAD * 2, C.faint, 12);
+      row("W_K + W_V", d() * kv() * DHEAD * 2, C.faint, 12);
+      row("feed-forward, 3 matrices", ffn(), C.faint, 12);
+      row("two norm gains", norms(), C.faint, 12);
+      row("one block", block(), C.orange);
+      row(L() + " blocks", L() * block(), C.orange);
+      row("final norm", d(), C.faint);
+      row(tied ? "output projection, tied" : "output projection", head(), C.blue);
+      line(svg, 8, ry - 12, 366, ry - 12, { stroke: C.line, sw: 1 });
+      T(svg, 8, ry + 2, "total", { anchor: "start", size: 11.5, fill: C.text });
+      T(svg, 300, ry + 2, commas(T0), { anchor: "end", size: 11.5,
+        fill: isCorvid() ? C.teal : C.text });
+      T(svg, 366, ry + 2, (T0 / 1e9).toFixed(2) + "B", { anchor: "end", size: 10, fill: C.faint });
+
+      /* ---- where it lives, to scale ---- */
+      var BX = 404, BW = 348;
+      T(svg, BX, 30, "to scale", { anchor: "start", size: 10, fill: C.faint });
+      var seg = [[embed(), C.blue, "embed"], [L() * block(), C.pink, "blocks"],
+                 [d(), C.dim, ""], [head(), C.blue, "head"]];
+      var x = BX;
+      seg.forEach(function (s2) {
+        var w = s2[0] / T0 * BW;
+        if (w > 0.2) rect(svg, x, 40, Math.max(1, w - 1), 26,
+          { rx: 3, fill: s2[1], stroke: "none", op: 0.7 });
+        x += w;
+      });
+      T(svg, BX, 80, "embedding " + pct(embed(), T0), { anchor: "start", size: 9.5, fill: C.blue });
+      T(svg, BX + BW, 80, "blocks " + pct(L() * block(), T0),
+        { anchor: "end", size: 9.5, fill: C.pink });
+
+      T(svg, BX, 108, "inside one block", { anchor: "start", size: 10, fill: C.faint });
+      var seg2 = [[attn(), C.orange, "attention"], [ffn(), C.teal, "feed-forward"],
+                  [norms(), C.dim, "norms"]];
+      x = BX;
+      seg2.forEach(function (s2) {
+        var w = s2[0] / block() * BW;
+        if (w > 0.2) rect(svg, x, 118, Math.max(1, w - 1), 22,
+          { rx: 3, fill: s2[1], stroke: "none", op: 0.7 });
+        x += w;
+      });
+      T(svg, BX, 154, "attention " + pct(attn(), block()), { anchor: "start", size: 9.5, fill: C.orange });
+      T(svg, BX + BW, 154, "feed-forward " + pct(ffn(), block()),
+        { anchor: "end", size: 9.5, fill: C.teal });
+      T(svg, BX, 172, "the two norms are " + pct(norms(), block()) + " of a block",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      /* ---- what it weighs ---- */
+      T(svg, BX, 208, "on disk", { anchor: "start", size: 10, fill: C.faint });
+      var py = 228;
+      [["fp32", 4], ["bf16", 2], ["int8", 1], ["4-bit", 0.5]].forEach(function (p) {
+        T(svg, BX, py, p[0], { anchor: "start", size: 10, fill: C.dim });
+        rect(svg, BX + 52, py - 6, T0 * p[1] / (T0 * 4) * 160, 12,
+          { rx: 2, fill: C.blue, stroke: "none", op: 0.5 });
+        T(svg, BX + 300, py, bytes(T0, p[1]), { anchor: "end", size: 10, fill: C.text });
+        py += 20;
+      });
+
+      /* ---- the discovery ---- */
+      var d2 = d() * 2, e2 = V() * d2;
+      var b2 = (d2 * (d2 / DHEAD) * DHEAD * 2 + d2 * kv() * DHEAD * 2) +
+               3 * d2 * Math.round(d2 * ffm) + 2 * d2;
+      var t2 = e2 + L() * b2 + d2 + (tied ? 0 : e2);
+      T(svg, 8, 340, "double d_model to " + commas(d2) + " and the total goes to " +
+        commas(t2) + ", which is " + (t2 / T0).toFixed(2) + "x",
+        { anchor: "start", size: 11, fill: C.orange });
+      T(svg, 8, 360, "the blocks alone go " + (b2 / block()).toFixed(2) +
+        "x — every weight matrix is d by d — while the vocabulary only doubles.",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      T(svg, 8, 380, "Vocabulary is " + pct(embed() + head(), T0) +
+        " of this model. On a 0.5B one it is over a quarter, which is when tying stops being optional.",
+        { anchor: "start", size: 10, fill: C.faint });
+      T(svg, 8, 400, isCorvid()
+          ? "8,030,261,248 — the figure on Corvid's spec card, produced from the config rather than quoted."
+          : "Press Corvid-8B to put every number back on the card.",
+        { anchor: "start", size: 10, fill: isCorvid() ? C.teal : C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 416");
+    }
+
+    function say() {
+      f.say(commas(total()) + " parameters: " + pct(embed() + head(), total()) +
+        " vocabulary, " + pct(L() * block(), total()) + " blocks, " +
+        bytes(total(), 2) + " at bf16.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var sD = slider(f.controls, "d_model", 9, 13, 12, 1,
+      function (v) { return commas(1 << v); },
+      function (v) {
+        eD = v;
+        if (eKV > eD - 7) { eKV = eD - 7; sK.set(eKV); }
+        render(); say();
+      });
+    var sL = slider(f.controls, "layers", 0, 6, 5, 1,
+      function (v) { return String(1 << v); },
+      function (v) { eL = v; render(); say(); });
+    var sK = slider(f.controls, "KV heads", 0, 6, 3, 1,
+      function (v) { return String(1 << v); },
+      function (v) { eKV = Math.min(v, eD - 7); render(); say(); });
+    var sF = slider(f.controls, "ff x", 1, 6, 3.5, 0.5,
+      function (v) { return v.toFixed(1); },
+      function (v) { ffm = v; render(); say(); });
+    var sV = slider(f.controls, "vocab", 13, 18, 17, 1,
+      function (v) { return v === 17 ? "128,256" : commas(1 << v); },
+      function (v) { eV = v; render(); say(); });
+    var tgT = toggle(f.controls, "tie embeddings", false, function (v) {
+      tied = v; render();
+      f.say(v ? "Tied: the output projection is the embedding table transposed, so " +
+                commas(V() * d()) + " parameters disappear from the count."
+              : "Untied, as Corvid is: two tables of " + commas(V() * d()) + ".");
+    });
+    f.btn("Corvid-8B", function () {
+      eD = 12; eV = 17; eL = 5; eKV = 3; ffm = 3.5; tied = false;
+      sD.set(12); sL.set(5); sK.set(3); sF.set(3.5); sV.set(17); tgT.set(false);
+      render();
+      f.say("8,030,261,248 parameters, and every line of the section's table is on screen.");
+    });
+    f.btn("reset", function () {
+      eD = 12; eV = 17; eL = 5; eKV = 3; ffm = 3.5; tied = false;
+      sD.set(12); sL.set(5); sK.set(3); sF.set(3.5); sV.set(17); tgT.set(false);
+      render();
+      f.say("Build Corvid-8B. Then try to make a 3B model with the same context.");
+    });
+
+    render();
+    f.say("Build Corvid-8B. Then try to make a 3B model with the same context.");
+  };
+
+
+  /* ========================================================================
+     21. llmMemoryFit — CH 9 — Tuner
+
+     Sections 4 and 5, priced live. The inference table comes back exactly:
+     Corvid at 8,192 tokens and one request is 17.13 GB at bf16, 9.10 at int8,
+     5.09 at 4-bit, and the first of those does not fit a 16 GB card. So does
+     the training figure: 2 + 4 + 4 + 4 + 4 bytes a parameter is 18, and
+     18 x 8.03e9 is 144.5 GB against an 80 GB H100.
+
+     Activation memory is the one term the section gives as "tens of
+     gigabytes more" rather than a formula, so this machine counts the actual
+     tensors a backward pass has to keep — six d-sized ones, two kv-sized,
+     three ff-sized, and the attention probabilities, which are the only term
+     that grows with sequence length. The count is on screen beside the
+     total. Gradient checkpointing keeps the block boundary only, and the
+     toggle shows what that trade is worth: it is usually the difference
+     between fitting and not.
+     ======================================================================== */
+  VIZ.llmMemoryFit = function (el) {
+    var f = frame(el);
+
+    var N = 8030261248, D = 4096, L = 32, KV = 8, FF = 14336, DHEAD = 128;
+    var HEADS = D / DHEAD;
+    var CARD = 16e9, H100 = 80e9;
+
+    var train = false, wbits = 2, eB = 0, eS = 13, ckpt = false;
+    function batch() { return 1 << eB; }
+    function seq() { return 1 << eS; }
+
+    function weights() { return N * (train ? 2 : wbits); }
+    function optState() { return train ? N * 16 : 0; }   // fp32 master, grads, m, v
+    function kvCache() {
+      return train ? 0 : 2 * L * KV * DHEAD * 2 * seq() * batch();
+    }
+    /* what a backward pass must keep, per token per layer, counted rather
+       than guessed: 6 of width d, 2 of width kv*d_head, 3 of width ff, and
+       the attention probabilities, which are heads numbers per key position */
+    function actPerTok() {
+      if (ckpt) return D;
+      return 6 * D + 2 * KV * DHEAD + 3 * FF + HEADS * seq();
+    }
+    /* Serving keeps nothing for a backward pass, so the section counts only
+       weights and cache and so does this: the few megabytes in flight would
+       move the published 17.13 GB and teach nothing. */
+    function acts() {
+      if (!train) return 0;
+      return actPerTok() * L * seq() * batch() * 2;
+    }
+    function total() { return weights() + optState() + kvCache() + acts(); }
+
+    function gb(b) { return (b / 1e9).toFixed(2) + " GB"; }
+    function commas(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    var svg = S("svg", { viewBox: "0 0 760 400", width: "100%",
+      role: "img", "aria-label": "memory, stacked against a card" }, f.body);
+
+    var BX = 8, BW = 744, BY = 78, BH = 34;
+
+    function render() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var t = total(), i;
+      var top = Math.max(t, H100) * 1.04;
+
+      T(svg, 8, 14, "Corvid-8B, " + (train ? "training" : "serving") + ": batch " +
+        batch() + " at " + commas(seq()) + " tokens",
+        { anchor: "start", size: 11, fill: C.faint });
+      T(svg, 752, 14, train ? "mixed-precision AdamW" : "weights at " +
+        (wbits === 2 ? "bf16" : wbits === 1 ? "int8" : "4-bit"),
+        { anchor: "end", size: 11, fill: C.orange });
+
+      /* ---- the stack ---- */
+      var parts = [["weights", weights(), C.teal],
+                   ["optimizer state and gradients", optState(), C.pink],
+                   ["KV cache", kvCache(), C.blue],
+                   ["activations", acts(), C.orange]];
+      var x = BX;
+      parts.forEach(function (p) {
+        if (p[1] <= 0) return;
+        var w = p[1] / top * BW;
+        rect(svg, x, BY, Math.max(1, w), BH, { rx: 3, fill: p[2], stroke: "none", op: 0.75 });
+        x += w;
+      });
+      rect(svg, BX, BY, BW, BH, { rx: 3, fill: "none", stroke: C.line, sw: 1 });
+
+      [[CARD, "16 GB card", C.pink], [H100, "80 GB H100", C.orange]].forEach(function (c) {
+        var cx = BX + c[0] / top * BW;
+        line(svg, cx, BY - 12, cx, BY + BH + 8, { stroke: c[2], sw: 1.5, dash: "4 3" });
+        /* the line can sit hard against either edge once the bar is huge */
+        var an = cx < 42 ? "start" : cx > 716 ? "end" : "middle";
+        T(svg, cx + (an === "start" ? -4 : an === "end" ? 4 : 0), BY - 18, c[1],
+          { anchor: an, size: 9, fill: c[2] });
+      });
+      T(svg, BX, BY + BH + 22, gb(t) + " in total",
+        { anchor: "start", size: 12, fill: t > H100 ? C.pink : t > CARD ? C.orange : C.teal });
+      T(svg, 752, BY + BH + 22, t > H100 ? "over an H100" : t > CARD ? "over a 16 GB card" : "fits both",
+        { anchor: "end", size: 11, fill: t > H100 ? C.pink : t > CARD ? C.orange : C.teal });
+
+      /* ---- the components ---- */
+      var ry = 158;
+      parts.forEach(function (p) {
+        if (p[1] <= 0) return;
+        rect(svg, 8, ry - 6, 11, 11, { rx: 2, fill: p[2], stroke: "none", op: 0.75 });
+        T(svg, 26, ry, p[0], { anchor: "start", size: 10.5, fill: C.dim });
+        T(svg, 300, ry, gb(p[1]), { anchor: "end", size: 10.5, fill: C.text });
+        T(svg, 366, ry, (p[1] / t * 100).toFixed(1) + "%", { anchor: "end", size: 9.5, fill: C.faint });
+        ry += 20;
+      });
+
+      /* ---- where the numbers come from ---- */
+      var RX = 404, ay = 158;
+      function note(s2, tone) {
+        T(svg, RX, ay, s2, { anchor: "start", size: 9.5, fill: tone || C.faint });
+        ay += 17;
+      }
+      if (train) {
+        note("2 bf16 + 4 fp32 master + 4 grad + 4 m + 4 v", C.dim);
+        note("= 18 bytes a parameter, " + gb(N * 18) + " before activations", C.pink);
+        note("");
+        note(ckpt ? "checkpointed: " + commas(D) + " numbers per token per layer"
+                  : commas(actPerTok()) + " numbers per token per layer:", C.dim);
+        if (!ckpt) {
+          note("  6xd " + commas(6 * D) + " · 2xkv " + commas(2 * KV * DHEAD) +
+               " · 3xff " + commas(3 * FF));
+          note("  attention probabilities " + commas(HEADS * seq()) + ", the only term", C.orange);
+          note("  that grows with sequence length", C.orange);
+        }
+      } else {
+        note("weights = " + N.toExponential(2) + " x " + wbits + " bytes", C.dim);
+        note("KV cache = 2 x 32 layers x 8 KV x 128 x 2 bytes", C.dim);
+        note("  = 128 KB a token, x " + commas(seq()) + " x " + batch(), C.dim);
+        note("");
+        note("activations while serving are one token in flight,", C.faint);
+        note("a few megabytes, and never the reason for an OOM", C.faint);
+      }
+
+      /* ---- the discovery ---- */
+      var fixed = weights() + optState(), b2 = -1;
+      for (i = 0; i <= 6; i++) {
+        var bb = 1 << i;
+        var av = train ? actPerTok() * L * seq() * bb * 2 : 0;
+        var kvv = train ? 0 : 2 * L * KV * DHEAD * 2 * seq() * bb;
+        if (av + kvv > fixed) { b2 = bb; break; }
+      }
+      T(svg, 8, 300, train
+          ? (acts() > weights() + optState()
+             ? "Activations are already larger than every weight, gradient and moment combined."
+             : b2 > 0 ? "At batch " + b2 + " the activations pass the 18 bytes a parameter and " +
+                        "become the thing that fills the card."
+             : "Activations stay under the parameter state across every batch on the slider.")
+          : (kvCache() > weights()
+             ? "The cache is now larger than the weights: " + gb(kvCache()) + " against " + gb(weights()) + "."
+             : b2 > 0 ? "At batch " + b2 + " the cache overtakes the weights."
+             : "Weights dominate at every batch this slider reaches."),
+        { anchor: "start", size: 11, fill: C.orange });
+      T(svg, 8, 322, train && !ckpt
+          ? "Turn checkpointing on: the stored tensors drop to the block boundary and are recomputed instead."
+          : train ? "Checkpointing keeps " + commas(D) + " numbers a token a layer instead of " +
+                    commas(6 * D + 2 * KV * DHEAD + 3 * FF + HEADS * seq()) + ", and pays in recompute."
+          : "At bf16 the weights alone are " + gb(N * 2) + " and a 16 GB card is already lost.",
+        { anchor: "start", size: 10.5, fill: C.faint });
+      T(svg, 8, 344, train
+          ? "144.5 GB of parameter state against an 80 GB H100 is why Chapter 17 shards it and Chapter 21 freezes it."
+          : "Serving is weights plus cache. Training is weights times nine, and then activations on top.",
+        { anchor: "start", size: 10, fill: C.faint });
+      T(svg, 8, 366, "Activation memory is counted from the tensors a backward pass keeps, not from a rule of thumb.",
+        { anchor: "start", size: 9.5, fill: C.faint });
+
+      svg.setAttribute("viewBox", "0 0 760 382");
+    }
+
+    function say() {
+      f.say((train ? "Training" : "Serving") + " at batch " + batch() + ", " + commas(seq()) +
+        " tokens: " + gb(total()) + " in total, of which " + gb(acts()) + " is activations.");
+    }
+
+    /* ---- controls ------------------------------------------------------ */
+    var mt = tabs(f.controls, ["serving", "training"], 0, function (i) {
+      train = !!i; render(); say();
+    });
+    var pt = tabs(f.controls, ["bf16", "int8", "4-bit"], 0, function (i) {
+      wbits = i === 0 ? 2 : i === 1 ? 1 : 0.5;
+      if (train) { f.say("Training runs in mixed precision; the weight precision switch applies to serving."); return; }
+      render(); say();
+    });
+    var sB = slider(f.controls, "batch", 0, 6, 0, 1,
+      function (v) { return String(1 << v); },
+      function (v) { eB = v; render(); say(); });
+    var sS = slider(f.controls, "tokens", 9, 15, 13, 1,
+      function (v) { return commas(1 << v); },
+      function (v) { eS = v; render(); say(); });
+    var tgC = toggle(f.controls, "gradient checkpointing", false, function (v) {
+      ckpt = v; render();
+      f.say(v ? "Only the block boundary is kept and the rest is recomputed: activations fall to " +
+                gb(acts()) + "."
+              : "Every intermediate kept for the backward pass: " + gb(acts()) + ".");
+    });
+    f.btn("reset", function () {
+      train = false; wbits = 2; eB = 0; eS = 13; ckpt = false;
+      mt.sync(0); pt.sync(0); sB.set(0); sS.set(13); tgC.set(false); render();
+      f.say("Set training mode. Watch what actually fills the card.");
+    });
+
+    render();
+    f.say("Set training mode. Watch what actually fills the card.");
   };
 
 })();
