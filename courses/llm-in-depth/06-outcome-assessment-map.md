@@ -2,7 +2,7 @@
 
 **Status:** Phase 6 complete, awaiting owner approval.
 **Date:** 2026-09-13. Phases 0–3 approved. Phase 4 (41 chapters), Phase 5 (81 machines) and
-Phase 8 integration are on `main`; the course-content deploy is still pending.
+Phase 8 integration are on `main`, and the course-content function serves `llm` live.
 
 Scope: every Charter outcome checked against every quiz question, exercise and key-term list
 in the 41 chapters, plus the §8.1 / §8.2 / §8.3 assessment standard and the §11.3 definition
@@ -147,7 +147,7 @@ The fix is the one recommended for RAG: **lengthen the distractors, do not short
 Each distractor becomes a wrong claim with the reason someone holding that misconception
 would give. The two questions added in §4 are written that way; neither key is the longest
 option (Chapter 7 Q11: key 172 against distractors of 177, 170, 172; Chapter 14 Q11: key 124
-against 163, 139, 142).
+against 156, 139, 142).
 
 **Cost.** About 1,040 distractor rewrites across 41 chapters, in one file. Target under 35%
 longest-is-correct, no chapter at 100%.
