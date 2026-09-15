@@ -3295,12 +3295,12 @@
      out: 512.0 KB per token under MHA, 128.0 KB at Corvid's 4:1 grouping,
      16.0 KB under MQA, and 4.295 / 1.074 / 0.134 GB at 8,192 context.
 
-     One number does not. The chapter's table says three full-context MHA
+     One number did not. The chapter's table said three full-context MHA
      requests fit in 11.98 GB; 11.985 / 4.295 is 2.79, so two fit. Eleven and
      eighty-nine are right — those quotients are 11.16 and 89.3 — so the row
      was rounded where the other two were floored. A machine that reports how
-     many requests fit has to floor, so this one says two, and the chapter's
-     MHA row wants a one-character fix.
+     many requests fit has to floor, so this one says two, and Phase 7 fixed
+     the table, the figure and Q4 to match.
 
      The real-model strip carries only what the chapter itself states: the
      query:KV ratios and Gemma's head dimension of 256. Clicking one prices
@@ -14114,7 +14114,8 @@
      quoted: 786,432 in the fused QKV projection, 262,144 in the output
      projection, 1,048,576 in each feed-forward matrix and 2,048 in the two
      norms is 3,147,776 a block; six blocks plus 4,227,072 of embeddings and
-     262,144 of learned positions is 23,375,872 parameters.
+     262,144 of learned positions and 1,024 in the final norm is 23,376,896
+     parameters.
 
      Section 5's gap between S and T is the control that matters. Turn the
      cache on and T drops to 1 while S keeps growing, and the mask has to
@@ -14130,7 +14131,7 @@
     function dh() { return d / h; }
     function S2() { return cache ? cached + Tt : Tt; }
     function block() { return 3 * d * d + d * d + 2 * d * ff + 2 * 2 * d; }
-    function total() { return L * block() + V * d + maxSeq * d; }
+    function total() { return L * block() + V * d + maxSeq * d + 2 * d; }
     function commas(v) { return Math.round(v).toLocaleString("en-US"); }
 
     var svg = S("svg", { viewBox: "0 0 760 428", width: "100%",
@@ -14144,7 +14145,7 @@
         " layers · d_ff " + ff + " · vocab " + commas(V),
         { anchor: "start", size: 11, fill: C.teal });
       T(svg, 752, 14, commas(total()) + " parameters",
-        { anchor: "end", size: 11, fill: total() === 23375872 ? C.green : C.text });
+        { anchor: "end", size: 11, fill: total() === 23376896 ? C.green : C.text });
 
       /* the tensors */
       var y = 44;
@@ -14189,10 +14190,10 @@
         { anchor: "start", size: 9.5, fill: C.faint });
 
       line(svg, 8, 328, 752, 328, { stroke: C.line, sw: 1 });
-      T(svg, 8, 348, total() === 23375872
-          ? "23,375,872 parameters — the chapter's number, produced from the config."
-          : "Change the config back to 512 / 8 / 6 / 2048 to land on the chapter's 23,375,872.",
-        { anchor: "start", size: 10.5, fill: total() === 23375872 ? C.green : C.orange });
+      T(svg, 8, 348, total() === 23376896
+          ? "23,376,896 parameters — the chapter's number, produced from the config."
+          : "Change the config back to 512 / 8 / 6 / 2048 to land on the chapter's 23,376,896.",
+        { anchor: "start", size: 10.5, fill: total() === 23376896 ? C.green : C.orange });
       wrapT(svg, 8, 370, 122, 17, "Most transformer bugs are shape bugs, and most survive because the " +
         "code still runs: a wrong transpose gives a tensor of the right size holding the wrong numbers, " +
         "and the loss goes down anyway, slower than it should, for a week.",
@@ -14252,7 +14253,7 @@
   VIZ.llmPocketTraining = function (el) {
     var f = frame(el);
 
-    var STEPS = 1000, V = 8256, TOK = 744628, PARAMS = 23375872;
+    var STEPS = 1000, V = 8256, TOK = 744628, PARAMS = 23376896;
     var FAULT = ["your run", "spike, recovered", "no LR decay", "masking bug", "LR too high"];
     var fi = 0, at = STEPS;
 

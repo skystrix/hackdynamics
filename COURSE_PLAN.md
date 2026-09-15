@@ -117,3 +117,23 @@ encoding playground, MergeTree parts/merges timeline, Parquet file dissector.
 
 Each course reuses the existing engine: chapters in `bookData-*.js`, visualizations in
 `viz*.js`, quizzes via `quiz.js` — no new infrastructure needed.
+
+---
+
+# The AI Engineering Track
+
+A second track, opened by *RAG In Depth* and re-ordered by the *LLM In Depth* Charter
+(`courses/llm-in-depth/01-course-charter.md` §5). Each course is live and self-contained;
+the order is the recommended one, not a prerequisite chain.
+
+| # | Course | Status | Shell | What it owns |
+|---|---|---|---|---|
+| 01 | **LLM In Depth** | Live | `llm-in-depth.html` | Tokenization, attention and the block, pretraining and scaling, decoding and tool use, fine-tuning and alignment, inference cost, quantization, evaluation, security. Capstone: PocketLM in Python and C. |
+| 02 | **RAG In Depth** | Live | `rag-in-depth.html` | Chunking, sparse and dense retrieval, vector indexes, hybrid search and reranking, grounded generation, agentic retrieval, GraphRAG, RAG evaluation and operations. |
+
+The two courses split shared topics by owner (tokens, embeddings training, judge bias and
+prompt injection to LLM; indexes, fusion, retrieval metrics and injection carried in
+retrieved documents to RAG). The full split is the table in the LLM Charter §5.
+
+Candidate successors, not yet planned: *AI Agents In Depth*, *LLM Inference & Serving In
+Depth* (if the serving chapters outgrow LLM In Depth), *Search & Ranking In Depth*.
