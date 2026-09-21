@@ -1,6 +1,26 @@
 /* ==========================================================================
    bookData-dsa-part1.js — DSA By Patterns, Part 1 chapters (1–12)
    Original explanatory writing.
+   Sources consulted for Chapter 19: MIT 6.006 (Erik Demaine, Jason Ku, Justin
+   Solomon) for the SRTBOT framework; Richard Bellman coined "dynamic
+   programming" in the 1950s (the naming anecdote is from his autobiography
+   "Eye of the Hurricane", 1984); Wagner & Fischer, "The string-to-string
+   correction problem", JACM 21(1):168-173, 1974, and Levenshtein, 1965, for
+   edit distance; CLRS for optimal substructure and overlapping subproblems.
+   Measured 2026-09-21, CPython 3.13.2 arm64: fib recursive call counts with
+   and without a memo (no memo = 2F(n+1)-1: 21,891 at n=20 collapsing to 39
+   with the memo, of which 19 distinct; 2,692,537 at n=30 to 59); coin change
+   for {1,2,5}, combinations (coin loop outer) 1/1/2/2/3/4/5/6/7 vs
+   permutations (amount loop outer) 1/1/2/3/5/9/15/26/44, first divergence at
+   amount 3; top-down memo vs bottom-up recursion depth (top-down raises
+   RecursionError at fib(5000) under the default limit, bottom-up computes
+   fib(100000)); edit distance kitten->sitting = 3 with the reconstructed
+   script (two substitutions, one insertion) by walking back through the
+   table; memoization visiting only reachable subproblems vs tabulation
+   filling all (coins {7,11} amount 100: 26 vs 101; {10,25} amount 300:
+   30 vs 301; {1,2,5} amount 100: 100 vs 101, dense); 0/1 knapsack rolling
+   array full 201,201 cells vs 1,001 (201x), answer 3,513 descending and
+   46,000 ascending (the ascending loop silently solving unbounded knapsack).
    Sources consulted for Chapter 18: Jeff Erickson, "Algorithms", 2019, the
    backtracking chapter; Narayana Pandita, Ganita Kaumudi, 1356, for the
    lexicographic-successor rule that C++ ships as next_permutation; the eight-
@@ -6101,5 +6121,329 @@ CHAPTERS.push({
       q: "The search strategy that runs depth-limited passes at increasing limits &#8212; buying breadth-first completeness with depth-first O(d) memory at an overhead of b/(b&#8722;1) &#8212; is called ____ ____.",
       a: ["iterative deepening"],
       why: "It re-searches the shallow levels every pass, but because the deepest level holds more nodes than all the ones above it, that redundancy is only the factor b/(b-1) - 11% at branching factor 10. In exchange it needs to store only the current path, O(d), where breadth-first search would hold an O(b^d) frontier: at b = 10, d = 8 that is a stack of 8 against a hundred million nodes." }
+  ]
+});
+
+/* ======================= CHAPTER 19 ======================= */
+CHAPTERS.push({
+  num: 19, part: 3, title: "From Memoization to SRTBOT",
+  blurb: "Dynamic programming is the topic people study most and understand least, because it is taught as a gallery of solved problems instead of as a procedure. This chapter gives you the procedure. It starts from a recursion you already wrote in Chapter 6, adds one line to make it fast, and then hands you MIT's six-question checklist &#8212; SRTBOT &#8212; that turns \"spot the dynamic program\" into a form you fill out in order. It ends with the two things the galleries never mention: how to recover the answer rather than its number, and why swapping two lines turns one coin problem into a different one.",
+
+  sections: [
+
+    { title: "The Problem: A Tree That Repeats Itself",
+      html:
+        "<p>Chapter 6 wrote the recursive Fibonacci and measured what it costs: computing <code>fib(n)</code> makes exactly 2F(n+1)&#8722;1 recursive calls, which is 21,891 calls for <code>fib(20)</code> and 2,692,537 for <code>fib(30)</code>. The recursion is correct and it is catastrophically slow, and the reason is visible the moment you draw the call tree. <code>fib(5)</code> calls <code>fib(4)</code> and <code>fib(3)</code>; <code>fib(4)</code> also calls <code>fib(3)</code>; and now the entire <code>fib(3)</code> subtree is computed twice, its <code>fib(2)</code> sub-subtree four times, and so on down. The tree has exponentially many nodes but only n+1 distinct values in it.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 260' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>fib(5): the tree has 15 nodes but only 6 distinct values &#8212; the shaded ones already repeat</text>" +
+        "<line x1='380' y1='49' x2='230' y2='96' stroke='#2a3a5a' stroke-width='1.2'/><line x1='380' y1='49' x2='530' y2='96' stroke='#2a3a5a' stroke-width='1.2'/>" +
+        "<line x1='230' y1='104' x2='140' y2='151' stroke='#2a3a5a' stroke-width='1.2'/><line x1='230' y1='104' x2='320' y2='151' stroke='#2a3a5a' stroke-width='1.2'/>" +
+        "<line x1='530' y1='104' x2='470' y2='151' stroke='#2a3a5a' stroke-width='1.2'/><line x1='530' y1='104' x2='600' y2='151' stroke='#2a3a5a' stroke-width='1.2'/>" +
+        "<circle cx='380' cy='45' r='13' fill='#111a2e' stroke='#4f7cff' stroke-width='1.5'/><text x='380' y='49' text-anchor='middle' fill='#c9d6ea' font-size='10'>f5</text>" +
+        "<circle cx='230' cy='100' r='13' fill='#111a2e' stroke='#4f7cff' stroke-width='1.5'/><text x='230' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>f4</text>" +
+        "<circle cx='530' cy='100' r='13' fill='#3a2e10' stroke='#ffd166' stroke-width='2'/><text x='530' y='104' text-anchor='middle' fill='#ffd166' font-size='10'>f3</text>" +
+        "<circle cx='140' cy='155' r='13' fill='#3a2e10' stroke='#ffd166' stroke-width='2'/><text x='140' y='159' text-anchor='middle' fill='#ffd166' font-size='10'>f3</text>" +
+        "<circle cx='320' cy='155' r='13' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='320' y='159' text-anchor='middle' fill='#3ddc97' font-size='10'>f2</text>" +
+        "<circle cx='470' cy='155' r='13' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='470' y='159' text-anchor='middle' fill='#3ddc97' font-size='10'>f2</text>" +
+        "<circle cx='600' cy='155' r='13' fill='#111a2e' stroke='#4f7cff' stroke-width='1.5'/><text x='600' y='159' text-anchor='middle' fill='#c9d6ea' font-size='10'>f1</text>" +
+        "<text x='140' y='184' text-anchor='middle' fill='#7d8fb0' font-size='8'>...expands again</text>" +
+        "<text x='470' y='184' text-anchor='middle' fill='#7d8fb0' font-size='8'>...expands again</text>" +
+        "<line x1='660' y1='40' x2='660' y2='196' stroke='#1c2a45' stroke-width='1'/>" +
+        "<text x='690' y='40' text-anchor='middle' fill='#2de2ff' font-size='9'>memo</text>" +
+        "<rect x='674' y='52' width='32' height='18' fill='#111a2e' stroke='#2a3a5a'/><text x='690' y='65' text-anchor='middle' fill='#7d8fb0' font-size='8'>f1=1</text>" +
+        "<rect x='674' y='72' width='32' height='18' fill='#10322a' stroke='#3ddc97'/><text x='690' y='85' text-anchor='middle' fill='#3ddc97' font-size='8'>f2=1</text>" +
+        "<rect x='674' y='92' width='32' height='18' fill='#3a2e10' stroke='#ffd166'/><text x='690' y='105' text-anchor='middle' fill='#ffd166' font-size='8'>f3=2</text>" +
+        "<rect x='674' y='112' width='32' height='18' fill='#111a2e' stroke='#2a3a5a'/><text x='690' y='125' text-anchor='middle' fill='#7d8fb0' font-size='8'>f4=3</text>" +
+        "<rect x='674' y='132' width='32' height='18' fill='#111a2e' stroke='#2a3a5a'/><text x='690' y='145' text-anchor='middle' fill='#7d8fb0' font-size='8'>f5=5</text>" +
+        "<line x1='20' y1='212' x2='740' y2='212' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='232' fill='#ffd166' font-size='10'>each colour is one value the tree computes more than once; a memo stores it the first time and</text>" +
+        "<text x='20' y='248' fill='#ffd166' font-size='10'>returns it on every repeat, collapsing 21,891 calls at fib(20) to 39.</text>" +
+        "</svg><div class='fig-cap'>The shaded subtrees are identical work done twice. Storing each value once is the whole idea.</div></div>" +
+
+        "<p>This is the situation dynamic programming exists for, and it has a precise name for each half of it. The subproblems <em>overlap</em> &#8212; the same <code>fib(3)</code> is needed by many callers &#8212; and the problem has <em>optimal substructure</em> &#8212; the answer for n is built from the answers for smaller inputs. When both hold, you never have to solve a subproblem twice; you solve each once, remember it, and the exponential tree collapses to a linear walk. <strong>Dynamic programming</strong> is that idea and nothing more: it is recursion plus remembering, applied wherever the recursion would otherwise repeat itself.</p>" +
+
+        "<p>The scale of the collapse is worth feeling. The recursive call count grows like the golden ratio raised to the n &#8212; roughly 1.618<sup>n</sup> &#8212; so each step up nearly doubles the work: <code>fib(30)</code> already makes 2.7 million calls, <code>fib(40)</code> would make over 300 million, <code>fib(50)</code> tens of billions. The memoized version makes n of them. No cleverer recursion and no faster machine closes an exponential-versus-linear gap; the only move that closes it is to stop recomputing, and that move is the whole subject of the chapter.</p>" +
+
+        "<p>There are exactly two ways to stop recomputing, and the next two sections take one each. You can keep the recursion and bolt a memory onto it, so a repeat is answered from a table instead of re-explored &#8212; top-down. Or you can abandon the recursion and fill the table directly in an order that has every answer ready by the time it is needed &#8212; bottom-up. They compute the same values and differ only in their bookkeeping, and knowing when to prefer each is worth more than any single solved problem in the gallery.</p>" +
+
+        "<p>The name is worse than the idea. Richard Bellman coined \"dynamic programming\" in the 1950s, and by his own account chose the words partly because they sounded impressive enough to survive a sceptical Secretary of Defense &#8212; \"programming\" here means tabulation, as in a schedule, not writing code, and \"dynamic\" was chosen for gravity rather than meaning. Strip the name away and two questions remain, which the rest of this chapter answers in turn: given a recursion that repeats itself, what is the smallest change that stops it, and given a new problem, how do you find the recursion in the first place?</p>"
+    },
+
+    { title: "Memoization: Add a Cache to the Recursion You Wrote",
+      html:
+        "<p>The first answer is the one that changes the least. Take the recursion exactly as Chapter 6 wrote it and give it a dictionary: before computing a subproblem, look in the dictionary; after computing it, store it there. That is <strong>memoization</strong>, and it is <strong>top-down</strong> &#8212; the control flow is still the original recursion, descending from the goal toward the base cases, with the cache intercepting the repeats.</p>" +
+
+        "<pre><code>def fib(n, memo={}):\n" +
+        "    if n < 2: return n\n" +
+        "    if n in memo: return memo[n]     # the only two\n" +
+        "    memo[n] = fib(n-1, memo) + fib(n-2, memo)\n" +
+        "    return memo[n]                   # lines that changed\n</code></pre>" +
+
+        "<p>Two lines. The recursion, the base case, the structure &#8212; all identical to the slow version. And the effect is the collapse the last section promised: <code>fib(20)</code> falls from 21,891 calls to <strong>39</strong>, of which only 19 do any arithmetic and the rest are cache hits; <code>fib(30)</code> falls from 2,692,537 to 59. Each distinct subproblem is computed once and read thereafter, so the running time is the number of distinct subproblems times the cost of one transition &#8212; here n subproblems at O(1) each, an exponential algorithm turned linear by a hash table.</p>" +
+
+        "<p>Why memoization is correct is worth stating because it is the load-bearing assumption. It relies on the subproblems being <em>pure</em>: <code>fib(3)</code> is the same value no matter who asked for it or when, so the first computed answer is valid for every later caller. That is exactly the overlapping-subproblems property, and it is why a memo is sound here and would be a bug in a function whose result depended on hidden state. The cache key must capture everything the answer depends on &#8212; for Fibonacci that is n alone, but for a grid walk it is the pair of coordinates, and for a subsequence problem it is the pair of prefix lengths. A memo keyed on too little silently returns one subproblem's answer for another.</p>" +
+
+        "<p>The grid walk makes the key concrete. Counting paths from the top-left to the bottom-right of a grid, moving only right or down, the honest recursion is <code>paths(i,j) = paths(i-1,j) + paths(i,j-1)</code> &#8212; Fibonacci's tree in two dimensions, re-deriving <code>paths(2,2)</code> from every route that passes through it. The memo key is the pair <code>(i,j)</code>, because the number of ways to reach a cell depends on the cell and nothing else, not on the path that posed the question. Key it on <code>i</code> alone and every column collapses into one, returning a confident wrong number with no error raised. The rule \"the key is exactly the free variables of the subproblem\" is the one that prevents the quietest class of dynamic-programming bug.</p>" +
+
+        "<p>Memoization is the gentlest on-ramp to dynamic programming precisely because it demands no new plan. You write the honest recursion &#8212; the one that would be right if it were not too slow, which is Chapter 18's backtracking with the answers reused instead of recomputed &#8212; and then you add the cache. This is why the advice \"write the brute-force recursion first\" is not a beginner's crutch but the actual method: the recursion is the hard part, and the memo is mechanical once the recursion is right. <strong>Turn the memo off in the machine above</strong> on <code>fib(20)</code> and watch the call counter climb to 21,891; turn it on and watch it stop at 39.</p>",
+      viz: "dsaMemoTable", vizTitle: "Same recursion, one table. Toggle the memo and watch the call counter go from 39 to 21,891"
+    },
+
+    { title: "Tabulation: Bottom-Up, and What It Trades",
+      html:
+        "<p>The second answer throws the recursion away and fills a table directly. If you know that <code>fib(n)</code> needs <code>fib(n-1)</code> and <code>fib(n-2)</code>, you can compute the values in order from the base cases upward &#8212; <code>fib(0)</code>, <code>fib(1)</code>, <code>fib(2)</code>, and so on &#8212; each from the two already sitting in the array. This is <strong>tabulation</strong>, and it is <strong>bottom-up</strong>: no recursion, no cache lookups, only a loop that fills cells in an order guaranteeing every cell's dependencies are already done.</p>" +
+
+        "<pre><code>def fib(n):\n" +
+        "    dp = [0, 1]\n" +
+        "    for i in range(2, n+1):\n" +
+        "        dp.append(dp[i-1] + dp[i-2])\n" +
+        "    return dp[n]\n</code></pre>" +
+
+        "<p>The two forms compute exactly the same values and have the same asymptotic cost, and the choice between them is a set of concrete trade-offs worth knowing rather than a matter of taste.</p>" +
+
+        "<p>Tabulation's demand is that you name the order up front. For Fibonacci that order is obvious &#8212; count upward &#8212; but for a two-dimensional table it is a real decision, and for a general dynamic program it is a topological sort of the subproblem dependency graph, the T of the next section's checklist. Memoization sidesteps the question entirely: the recursion discovers a working order on its own, computing each dependency the first time it is asked for. That is the deeper reason to reach for memoization on an unfamiliar problem &#8212; you can write it before you have worked out the order &#8212; and to switch to tabulation once the order is clear and the stack depth or the call overhead begins to matter.</p>" +
+
+        "<p><strong>Tabulation cannot overflow the recursion stack; memoization can.</strong> The top-down <code>fib</code> recurses n deep before the first return, so at Python's default recursion limit it computes <code>fib(900)</code> fine and dies on <code>fib(5000)</code> with the <code>RecursionError</code> Chapter 6 measured &#8212; and on <code>fib(100000)</code> there is no raising the limit high enough. The bottom-up loop recurses zero deep and computes <code>fib(100000)</code> without complaint. For a deep chain of subproblems this is not a preference, it is the difference between running and crashing.</p>" +
+
+        "<p><strong>Memoization computes only the subproblems it reaches; tabulation computes them all.</strong> This is the trade in the other direction, and it can be large. Consider counting whether an amount is reachable with coins {7, 11}: tabulating fills all 101 cells from 0 to 100, but the top-down recursion visits only the <strong>26</strong> sub-amounts actually reachable by subtracting 7s and 11s. With coins {10, 25} to amount 300 it is 30 cells visited against 301 filled. When the reachable subproblems are a sparse subset of the table, top-down does a fraction of the work; when they are dense &#8212; coins including a 1, so every amount is reachable &#8212; the two do the same work and tabulation's lack of call overhead makes it faster. The rule of thumb falls out: tabulate when the whole table is needed and the order is obvious, memoize when the reachable set is sparse or the order is awkward to state. In practice most published dynamic programs are tabulated, because their tables are dense and their fill orders are simple; memoization earns its keep on the irregular ones &#8212; sparse reachability, an order that is a chore to state, or a recursion you already trust and would rather not rewrite.</p>"
+    },
+
+    { title: "When Dynamic Programming Is Legal",
+      html:
+        "<p>Two properties have to hold before either technique is sound, and naming them precisely is what lets you decide whether a new problem is a dynamic program before you have written a line.</p>" +
+
+        "<p><strong>Optimal substructure</strong> means an optimal solution to the problem contains optimal solutions to its subproblems. The shortest path from A to C through B uses the shortest path from A to B; if there were a shorter A-to-B path you would splice it in and improve the whole. This is what lets you build the answer from sub-answers at all, and it is a real assumption that real problems fail. The <em>longest simple path</em> between two vertices does <strong>not</strong> have it: the longest simple path from A to C need not use the longest simple path from A to B, because reusing that path's vertices might strand you with no simple continuation. A dynamic program for longest simple path is not slow, it is <em>wrong</em>, and knowing the property is what tells you so before you ship it.</p>" +
+
+        "<p>The positive side is the engine of Part 5. Shortest paths have optimal substructure in the strong form that any subpath of a shortest path is itself a shortest path, and that one fact is what every shortest-path algorithm in this course runs on: it is why relaxing edges in the right order converges, and why the shortest distance to a node can be built from the shortest distances to its predecessors. When you meet those algorithms among the graphs, they are dynamic programs whose subproblems are the shortest distance to each node; recognising that is what makes them one idea rather than three to memorise.</p>" +
+
+        "<p><strong>Overlapping subproblems</strong> means the recursion revisits the same subproblem many times &#8212; the repeated <code>fib(3)</code> of section 1. This is the property that makes dynamic programming <em>worth it</em> rather than merely legal. Its absence is instructive: mergesort from Chapter 3 has beautiful optimal substructure &#8212; a sorted array is built from its two sorted halves &#8212; but its subproblems never overlap, because the left half and the right half share no elements. Memoizing mergesort caches a million answers and reads none of them twice; it is pure overhead. When subproblems have optimal substructure but do not overlap, the right tool is the plain divide-and-conquer of Chapter 3, and dynamic programming's table is dead weight.</p>" +
+
+        "<div class='callout'>The two properties are independent, and the four combinations sort the algorithms you have met. Optimal substructure with overlap is dynamic programming. Optimal substructure without overlap is divide-and-conquer. Overlap without optimal substructure &#8212; a problem where subproblems recur but do not compose into the answer &#8212; is where you fall back to the full backtracking search of Chapter 18, memo and all, and hope the search stays small. Neither property, and you are enumerating. Deciding which box a problem sits in, before coding, is most of what \"knowing dynamic programming\" actually means.</div>" +
+
+        "<p>The practical test for optimal substructure is a cut-and-paste argument: assume an optimal solution whose sub-solution is not optimal, cut out the sub-solution, paste in a better one, and derive a contradiction with the whole being optimal. If the argument goes through, the property holds and the recurrence is sound; if you cannot make it go through &#8212; as you cannot for longest simple path, because pasting in a longer sub-path can reuse vertices and break simplicity &#8212; the property fails and no amount of tabulation will save the recurrence. This is the check to run before the six steps of the next section, because the six steps assume it has already passed.</p>"
+    },
+
+    { title: "SRTBOT: Six Questions, Always in Order",
+      html:
+        "<p>Everything so far solves problems you were handed the recursion for. The hard part of dynamic programming is finding the recursion, and the reason it feels like a gift some people have is that it is usually taught by example instead of by procedure. MIT's 6.006 gives the procedure a name, <strong>SRTBOT</strong>, and it is six questions you answer in order for any dynamic program:</p>" +
+
+        "<ul>" +
+        "<li><strong>S &#8212; Subproblems.</strong> Define the set of subproblems and what each one's answer means, precisely enough to be a dictionary key. \"<code>x(i)</code> = the length of the longest increasing subsequence ending at index i.\"</li>" +
+        "<li><strong>R &#8212; Relate.</strong> Write each subproblem's answer in terms of smaller ones &#8212; the recurrence.</li>" +
+        "<li><strong>T &#8212; Topological order.</strong> Give an order in which every subproblem comes after the ones it depends on, so the dependencies exist when you need them. This order is exactly a topological sort of the subproblem dependency graph, which is why the graph must be acyclic.</li>" +
+        "<li><strong>B &#8212; Base cases.</strong> The subproblems that need no recurrence.</li>" +
+        "<li><strong>O &#8212; Original problem.</strong> State the answer to the actual question in terms of the subproblems &#8212; often one of them, sometimes a maximum over all of them.</li>" +
+        "<li><strong>T &#8212; Time.</strong> Count the subproblems and multiply by the cost of one transition. This is the running time, and computing it here catches the mistakes early.</li>" +
+        "</ul>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 250' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>SRTBOT filled in for longest common subsequence of strings s and t</text>" +
+        "<rect x='20' y='28' width='24' height='30' fill='#1a2440' stroke='#4f7cff'/><text x='32' y='48' text-anchor='middle' fill='#2de2ff' font-size='13'>S</text>" +
+        "<text x='54' y='47' fill='#c9d6ea' font-size='10'>L(i,j) = length of the LCS of prefixes s[:i] and t[:j]</text>" +
+        "<rect x='20' y='62' width='24' height='42' fill='#1a2440' stroke='#4f7cff'/><text x='32' y='88' text-anchor='middle' fill='#2de2ff' font-size='13'>R</text>" +
+        "<text x='54' y='78' fill='#c9d6ea' font-size='10'>if s[i-1]==t[j-1]:  L(i,j) = 1 + L(i-1, j-1)</text>" +
+        "<text x='54' y='96' fill='#c9d6ea' font-size='10'>else:  L(i,j) = max( L(i-1, j),  L(i, j-1) )</text>" +
+        "<rect x='20' y='108' width='24' height='30' fill='#1a2440' stroke='#4f7cff'/><text x='32' y='128' text-anchor='middle' fill='#2de2ff' font-size='13'>T</text>" +
+        "<text x='54' y='127' fill='#c9d6ea' font-size='10'>increasing i, then increasing j (each cell reads smaller i or j)</text>" +
+        "<rect x='20' y='142' width='24' height='30' fill='#1a2440' stroke='#4f7cff'/><text x='32' y='162' text-anchor='middle' fill='#2de2ff' font-size='13'>B</text>" +
+        "<text x='54' y='161' fill='#c9d6ea' font-size='10'>L(0, j) = 0 and L(i, 0) = 0  (an empty prefix shares nothing)</text>" +
+        "<rect x='20' y='176' width='24' height='30' fill='#1a2440' stroke='#4f7cff'/><text x='32' y='196' text-anchor='middle' fill='#2de2ff' font-size='13'>O</text>" +
+        "<text x='54' y='195' fill='#c9d6ea' font-size='10'>L(m, n) &#8212; the whole strings</text>" +
+        "<rect x='20' y='210' width='24' height='30' fill='#3a2e10' stroke='#ffd166'/><text x='32' y='230' text-anchor='middle' fill='#ffd166' font-size='13'>T</text>" +
+        "<text x='54' y='223' fill='#ffd166' font-size='10'>m&#183;n subproblems &#215; O(1) each = O(mn).  The last step is a</text>" +
+        "<text x='54' y='239' fill='#ffd166' font-size='10'>check: if the transition were not O(1), the time would not be mn.</text>" +
+        "</svg><div class='fig-cap'>The same six rows fit every dynamic program. Filling them in order is the method; the code writes itself from the card.</div></div>" +
+
+        "<p>The value of a fixed form is that it makes different problems look the same. Grid paths, in the same six lines: <em>S</em>, <code>P(i,j)</code> = number of right/down paths to cell (i,j); <em>R</em>, <code>P(i,j) = P(i-1,j) + P(i,j-1)</code>; <em>T</em>, increasing i then j; <em>B</em>, <code>P(0,0) = 1</code>, any off-grid cell 0; <em>O</em>, <code>P(m,n)</code>; <em>Time</em>, mn subproblems &#215; O(1) = O(mn). Minimum coins for an amount, again the same form: <em>S</em>, <code>C(a)</code> = fewest coins summing to a; <em>R</em>, <code>C(a) = 1 + min over coins c of C(a-c)</code>; <em>T</em>, increasing a; <em>B</em>, <code>C(0) = 0</code>; <em>O</em>, <code>C(amount)</code>; <em>Time</em>, amount subproblems &#215; O(coins). Three unrelated problems, one procedure, and in each the code is a transcription of the card.</p>" +
+
+        "<p>The Time step earns its keep by catching the error the other five hide. Define, for longest increasing subsequence, <code>x(i)</code> = the length of the longest increasing subsequence among the first i elements. The subproblems number n, which looks like O(n) &#8212; but the recurrence for <code>x(i)</code> has to scan back over all earlier elements to find where the subsequence can extend, so the transition is O(n) and the true time is O(n&#178;). The count did not lie, the transition did, and Time is the step where an O(n) transition surfaces. The fix is to strengthen the subproblem &#8212; redefine it as the longest subsequence <em>ending at</em> i &#8212; which is the standard lesson that a too-weak subproblem shows up as an expensive transition.</p>" +
+
+        "<p>The discipline of the last step is the one people skip and the one that pays. Once you have the subproblems and the recurrence, the running time is not a separate analysis &#8212; it is the count of subproblems times the transition cost, read straight off the card. When that product surprises you, one of the earlier answers is wrong: a transition you thought was O(1) but hides a scan makes the time larger than subproblems&#215;1, which is the signal that the subproblem definition is carrying too little state. <strong>In the machine above, fill in Time before revealing it</strong>; the problem it flags is the one where the subproblem count looks right but the transition is secretly O(n), so the true cost is a factor of n above what the count suggests.</p>",
+      viz: "dsaSRTBOT", vizTitle: "Six questions, in order. Answer each before revealing it — especially Time"
+    },
+
+    { title: "Reconstructing the Answer, Not Its Number",
+      html:
+        "<p>Every dynamic program so far computed a <em>number</em> &#8212; the length of the longest common subsequence, the minimum number of coins, the edit distance. Interviews and real systems almost always want the <em>thing</em>: the actual subsequence, the actual coins, the actual sequence of edits. The tutorials stop at the number; recovering the object is a separate step, and it is not hard once you see it.</p>" +
+
+        "<p>Take edit distance &#8212; the minimum single-character insertions, deletions and substitutions to turn one string into another. The table gives the number, and to turn <code>kitten</code> into <code>sitting</code> that number is 3. To recover <em>which</em> three edits, you walk backward from the final cell, at each step asking which neighbouring cell the value came from: an equal-character diagonal step is a keep, a diagonal step that cost one is a substitution, a step from above is a deletion, a step from the left is an insertion. Walking <code>kitten</code> to <code>sitting</code> back through the table yields the script exactly: substitute k with s, keep i, t, t, substitute e with i, keep n, insert g.</p>" +
+
+        "<p>There are two ways to know which neighbour each value came from, and they are a classic space-versus-time trade. <strong>Parent pointers</strong> store, alongside each cell's value, which predecessor produced it; reconstruction is then an O(m+n) walk following the stored pointers, at the cost of a second table doubling the memory. <strong>Recomputation</strong> stores nothing extra and, at each step of the walk, re-derives which neighbour won by re-checking the recurrence against the values still in the table &#8212; the same O(m+n) walk, no extra memory, provided you kept the value table. The measured walk for <code>kitten</code>/<code>sitting</code> is seven steps for two length-six-and-seven strings, and it reads only cells along one path, never the whole table again.</p>" +
+
+        "<p>Which of the two to use is usually settled by whether you were keeping the whole table anyway. If the program already stores every cell &#8212; as edit distance and longest common subsequence do, both being full <code>(m+1)&#215;(n+1)</code> tables &#8212; recomputation is free, because the values are right there and re-checking the recurrence at each of the m+n steps costs a handful of comparisons. Parent pointers earn their second table only when the value computation itself throws cells away, as a space-optimized program does, and you still need the trail; then the pointer table is the price of remembering the path after the values are gone.</p>" +
+
+        "<p>Longest common subsequence reconstructs the same way and shows the pattern once more: the table gives the length, and a backward walk &#8212; step diagonally on a matching pair, otherwise toward the larger neighbour &#8212; spells out the actual common subsequence letter by letter in reverse. The number was never the goal; the subsequence is, and it was sitting implicitly in the table the whole time, waiting for the walk to read it out.</p>" +
+
+        "<p>The subtlety worth carrying is that reconstruction needs the value table to <em>still exist</em>, and the next section is about throwing that table away. The two features are in tension: the space optimization that keeps only the last row of the table makes the number cheap to compute and the object impossible to recover, because the trail back has been overwritten. So the first question reconstruction forces is whether you need the object at all. If you need only the number, optimize the space; if you need the object, you must keep enough of the table to walk it, and the parent-pointer-versus-recompute choice is then how much of it. This is the decision the galleries omit and the interview always probes.</p>"
+    },
+
+    { title: "Space Optimization: The Rolling Array",
+      html:
+        "<p>A dynamic program's table can dominate its memory, and often most of the table is dead. Fibonacci's recurrence reads only the previous two values, so keeping the whole array of n values to return the last one is waste: two variables suffice, and the space drops from O(n) to O(1) with no change to the time. This is the <strong>rolling array</strong> &#8212; keep only as many rows or values as the recurrence actually reads, and let the window roll forward over the table.</p>" +
+
+        "<p>The saving is real at scale. A 0/1 knapsack over 200 items and capacity 1,000 fills a full table of 201&#215;1,001 = <strong>201,201</strong> cells, but its recurrence for row i reads only row i&#8722;1, so a single array of 1,001 cells rolled forward computes the identical answer &#8212; a <strong>201&#215;</strong> reduction in memory for exactly the same result. On a table that would not fit in cache or in memory, this is what makes the algorithm usable rather than theoretical. The grid-paths table shrinks the same way &#8212; each row depends only on the row above, so a single array of width n overwritten left to right replaces the full m&#215;n table, O(min(m,n)) space if you roll along the shorter side.</p>" +
+
+        "<p>The condition to check before collapsing a dimension is mechanical: list, for a general cell, the set of cells its transition reads, and confirm every one of them still lives in the window after the collapse. Fibonacci reads the two prior values &#8212; a window of two. Knapsack row i reads only row i&#8722;1 &#8212; a window of one row. A recurrence that reached back two rows, or across to a cell already overwritten this pass, would need a wider window, and squeezing it too far is the bug that the loop direction below is one instance of. Do the read-set check first and the direction question answers itself.</p>" +
+
+        "<p>The rule for when it is safe is precise, and getting it wrong produces not a crash but a <em>different answer</em>, which is worse. A rolling array is safe when each cell's transition reads only cells that the rolling window still holds &#8212; typically the immediately previous row, or earlier cells of the current row. And when the window is the current row itself, the <em>direction</em> of the inner loop becomes load-bearing. The knapsack collapse to one dimension works only if the capacity loop runs <strong>downward</strong>, so that <code>dp[w - weight]</code> still holds the previous item's value when read. Run the same loop <em>upward</em> and <code>dp[w - weight]</code> has already been updated for the current item, so the item can be taken more than once, and the code silently solves <em>unbounded</em> knapsack instead: measured on the same 200 items, the downward loop gives the correct 3,513 and the upward loop gives 46,000, a completely different problem reached by flipping a <code>range</code>.</p>" +
+
+        "<div class='callout'>This is the first appearance of a theme the next section makes its whole subject: in a space-optimized dynamic program, the order and direction of the loops is not a stylistic choice, it encodes which subproblems are allowed to depend on which. A rolling array removes the dimension that used to keep those dependencies separate, so the loop structure has to enforce by hand what the extra dimension used to enforce for free. Flip a loop and you have not written slower code, you have written a solution to a different problem.</div>"
+    },
+
+    { title: "Loop Order Matters: One Problem or Two",
+      html:
+        "<p>The sharpest example of that theme is two coin problems that differ by nothing you can see in the recurrence &#8212; only in which loop is outer &#8212; and give genuinely different answers. Both fill a one-dimensional table <code>ways[a]</code> counting the ways to make each amount a from a set of coins, both start from <code>ways[0] = 1</code>, and both add <code>ways[a - c]</code> into <code>ways[a]</code> for each coin c. The entire difference is the loop nesting.</p>" +
+
+        "<p>Put the <strong>coin loop outer</strong> &#8212; for each coin, sweep all amounts &#8212; and you count <em>combinations</em>: unordered multisets, where {1, 2} and {2, 1} are the same answer. Put the <strong>amount loop outer</strong> &#8212; for each amount, try every coin &#8212; and you count <em>permutations</em>: ordered sequences, where 1-then-2 and 2-then-1 are counted separately. Filling the tables for coins {1, 2, 5} side by side shows exactly where they part:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>ways to make each amount with {1,2,5}: the two loop orders agree, then split at amount 3</text>" +
+        "<text x='30' y='52' fill='#7d8fb0' font-size='10'>amount</text>" +
+        "<text x='30' y='84' fill='#3ddc97' font-size='10'>combinations</text>" +
+        "<text x='30' y='116' fill='#ff5d73' font-size='10'>permutations</text>" +
+        "<g font-size='11' text-anchor='middle'>" +
+        "<text x='200' y='52' fill='#7d8fb0'>0</text><text x='250' y='52' fill='#7d8fb0'>1</text><text x='300' y='52' fill='#7d8fb0'>2</text><text x='350' y='52' fill='#ffd166'>3</text><text x='400' y='52' fill='#7d8fb0'>4</text><text x='450' y='52' fill='#7d8fb0'>5</text><text x='500' y='52' fill='#7d8fb0'>6</text><text x='550' y='52' fill='#7d8fb0'>7</text><text x='600' y='52' fill='#7d8fb0'>8</text>" +
+        "<text x='200' y='84' fill='#c9d6ea'>1</text><text x='250' y='84' fill='#c9d6ea'>1</text><text x='300' y='84' fill='#c9d6ea'>2</text><text x='350' y='84' fill='#ffd166'>2</text><text x='400' y='84' fill='#c9d6ea'>3</text><text x='450' y='84' fill='#c9d6ea'>4</text><text x='500' y='84' fill='#c9d6ea'>5</text><text x='550' y='84' fill='#c9d6ea'>6</text><text x='600' y='84' fill='#c9d6ea'>7</text>" +
+        "<text x='200' y='116' fill='#c9d6ea'>1</text><text x='250' y='116' fill='#c9d6ea'>1</text><text x='300' y='116' fill='#c9d6ea'>2</text><text x='350' y='116' fill='#ffd166'>3</text><text x='400' y='116' fill='#c9d6ea'>5</text><text x='450' y='116' fill='#c9d6ea'>9</text><text x='500' y='116' fill='#c9d6ea'>15</text><text x='550' y='116' fill='#c9d6ea'>26</text><text x='600' y='116' fill='#c9d6ea'>44</text>" +
+        "</g>" +
+        "<rect x='335' y='38' width='30' height='90' fill='none' stroke='#ffd166' stroke-width='1.5' stroke-dasharray='3 2'/>" +
+        "<line x1='20' y1='140' x2='740' y2='140' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='160' fill='#ffd166' font-size='10'>amount 3: combinations = 2 ({1,2} and {1,1,1}); permutations = 3 (1+2, 2+1, 1+1+1).</text>" +
+        "<text x='20' y='178' fill='#c9d6ea' font-size='10'>The coin loop outer commits to an order among the coins, so it never counts {2,1} after {1,2}.</text>" +
+        "<text x='20' y='196' fill='#c9d6ea' font-size='10'>The amount loop outer re-offers every coin at every step, so it counts each ordering on its own.</text>" +
+        "</svg><div class='fig-cap'>Identical arithmetic, identical starting cell, one loop swapped &#8212; and from amount 3 on, two different sequences.</div></div>" +
+
+        "<p>The mechanism is exactly the rolling-array lesson of the previous section. With the coin loop outer, by the time amount a is updated with coin c, the table already reflects every coin considered <em>before</em> c and none considered after &#8212; so each combination is built in one fixed coin order and counted once. With the amount loop outer, every coin is offered afresh at every amount, so the sequence 1-then-2 and the sequence 2-then-1 both reach amount 3 by different paths and both are counted. The permutation row &#8212; 1, 1, 2, 3, 5, 9, 15, 26, 44 &#8212; is itself a fast recurrence, each term summing the three coins' worth of earlier terms, which is why it pulls away from the combination row so quickly. Neither is a bug; they are the correct answers to two different questions, and which one you get is decided entirely by which line is outer.</p>" +
+
+        "<p>Which one you actually want is a question about the problem, not the code. Counting the ways to give change wants combinations, because {1, 2} and {2, 1} are the same handful of coins. Counting the ways to climb a staircase one or two steps at a time wants permutations, because one-then-two is a different climb from two-then-one &#8212; and that problem, with steps {1, 2}, is Fibonacci again, which is why its answer is the Fibonacci sequence. Same table, same recurrence, and the outer loop chosen to match whether order is part of what you are counting.</p>" +
+
+        "<p>This is the note to end the chapter on, because it is the one the galleries cannot teach by showing you solved problems. A dynamic program is not its recurrence alone; it is the recurrence <em>plus the order the subproblems are filled in</em>, and that order carries meaning the recurrence does not show. Read a dynamic program by asking not only what each cell computes but in what order the cells are computed and what that order forbids &#8212; because, as these two coin problems prove, the same cells filled in a different order are a different algorithm. <strong>Step both orders in the machine above</strong> and find the first cell where the counts diverge; it is amount 3, every time, and the one that reads 3 is counting permutations.</p>",
+      viz: "dsaDPOrder", vizTitle: "Two loops, two orders, two different answers. Find the cell where they first diverge"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Draw the <code>fib(5)</code> call tree, circle every node that computes a value appearing elsewhere in the tree, and count the distinct values. <em>What you should find:</em> 15 nodes, 6 distinct values, and that <code>fib(3)</code> appears twice and <code>fib(2)</code> three times &#8212; the repeats a memo would collapse, taking the call count for <code>fib(20)</code> from 21,891 to 39.</li>" +
+        "<li><strong>Trace.</strong> Fill the SRTBOT card for the grid-paths problem: how many ways to walk from the top-left to the bottom-right of an m&#215;n grid moving only right or down. <em>What you should find:</em> subproblems <code>P(i,j)</code>, relation <code>P(i,j) = P(i-1,j) + P(i,j-1)</code>, base <code>P(0,j)=P(i,0)=1</code>, original <code>P(m,n)</code>, time O(mn) &#8212; and that the answer is the binomial coefficient the table computes cell by cell.</li>" +
+        "<li><strong>Investigate.</strong> Solve <code>fib</code> both top-down with a memo and bottom-up, and call each on n = 900, 5,000 and 100,000 at the default recursion limit. <em>What you should find:</em> the memo version raises <code>RecursionError</code> from 5,000 on while the bottom-up version returns every time, because top-down recurses n deep and bottom-up recurses not at all.</li>" +
+        "<li><strong>Investigate.</strong> Count the ways to make change for amount 8 with coins {1, 2, 5} under both loop orders, printing the whole table. <em>What you should find:</em> the two rows agree through amount 2 and split at amount 3 (2 versus 3), and the amount-outer row grows far faster because it counts every ordering of the coins separately.</li>" +
+        "<li><strong>Build.</strong> Compute the edit distance between two words, then reconstruct the actual edit script by walking backward through the table. <em>What you should find:</em> the number needs the full O(mn) table but the script is an O(m+n) walk along one path, and turning <code>kitten</code> into <code>sitting</code> costs three edits: two substitutions and one insertion.</li>" +
+        "<li><strong>Build.</strong> Write 0/1 knapsack as a rolling one-dimensional array, then run the inner capacity loop once descending and once ascending on the same items. <em>What you should find:</em> descending gives the 0/1 answer and ascending gives a larger number, because the upward sweep lets each item be taken repeatedly &#8212; the same code solving unbounded knapsack by the direction of one loop.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "dynamic programming", d: "Solving a problem by combining the answers to overlapping subproblems, each computed once and remembered; recursion plus remembering, wherever the recursion would repeat itself." },
+    { t: "memoization", d: "The top-down form: run the natural recursion but cache each subproblem's answer, returning the cached value on any repeat. The smallest change that makes an overlapping recursion fast." },
+    { t: "tabulation", d: "The bottom-up form: fill a table of subproblem answers in an order that guarantees each cell's dependencies are already computed, with no recursion." },
+    { t: "top-down", d: "Control flow that descends from the goal toward the base cases, as memoized recursion does; it computes only the subproblems actually reached." },
+    { t: "bottom-up", d: "Control flow that starts at the base cases and builds toward the goal, as tabulation does; it computes every subproblem in the table, in dependency order." },
+    { t: "subproblem", d: "A smaller instance of the same problem whose answer the full problem is built from; its definition is the cache key and must capture everything the answer depends on." },
+    { t: "overlapping subproblems", d: "The property that the recursion revisits the same subproblem many times, which is what makes remembering pay off; its absence makes dynamic programming pure overhead." },
+    { t: "optimal substructure", d: "The property that an optimal solution contains optimal solutions to its subproblems, verified by a cut-and-paste argument; without it a dynamic program is not slow but wrong." },
+    { t: "recurrence", d: "The relation expressing a subproblem's answer in terms of smaller subproblems' answers; the R of SRTBOT and the hard, creative part of any dynamic program." },
+    { t: "SRTBOT", d: "MIT 6.006's six-step procedure for designing a dynamic program: Subproblems, Relate, Topological order, Base cases, Original problem, Time, answered in that order." },
+    { t: "topological order", d: "An ordering of the subproblems in which each comes after everything it depends on, so a bottom-up fill always finds its inputs ready; it exists only if the dependency graph is acyclic." },
+    { t: "base case", d: "A subproblem whose answer is known outright, with no recurrence; the fill starts here and the recursion bottoms out here." },
+    { t: "reconstruction", d: "Recovering the actual solution object, not only its optimal value, by tracing back through the table from the final cell along the choices that produced it." },
+    { t: "parent pointer", d: "A stored record, alongside each cell's value, of which predecessor produced it, letting reconstruction follow pointers in O(path) time at the cost of a second table." },
+    { t: "rolling array", d: "Keeping only the rows or values a recurrence actually reads and rolling the window forward, cutting a table's space with no change to the answer, when the discarded cells are never read again." },
+    { t: "0/1 knapsack", d: "Choosing a subset of weighted, valued items to maximise value within a capacity; the standard dynamic program whose rolling form is safe only with a downward capacity loop." },
+    { t: "loop order", d: "Which loop of a multi-loop tabulation is outer; in a space-optimized table it encodes which subproblems may depend on which, and swapping it can change the problem being solved." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Adding a two-line cache to the recursive <code>fib</code> takes its call count for <code>fib(20)</code> from 21,891 to 39. What property of the problem makes the cache correct?",
+      opts: [
+        "The recursion is tail-recursive, so each cached call replaces a stack frame that would otherwise have been kept alive all the way down until the base case was finally reached",
+        "The cache is a hash table with O(1) lookup, so the constant factor of a repeated computation is amortised away across the whole run of the recursion",
+        "Fibonacci numbers grow exponentially, so after a few levels the values are large enough that recomputing them dominates and caching the large ones is what pays",
+        "The subproblems are pure &#8212; <code>fib(3)</code> is the same value whoever asks and whenever &#8212; so the first computed answer is valid for every later caller and may be reused"
+      ], a: 3,
+      why: "Memoization is sound because the subproblems are pure functions of their arguments: the value of fib(3) does not depend on who called it or when, so storing it the first time and returning it thereafter is always correct. This is the overlapping-subproblems setting. A memo on a function with hidden state would be a bug; the hash table's speed is real but not what makes the caching correct." },
+
+    { type: "mc",
+      q: "Memoizing mergesort caches a million subproblem answers and reads none of them a second time. Why is that pure overhead?",
+      opts: [
+        "Mergesort's subproblems do not overlap &#8212; the two halves share no elements &#8212; so no subproblem is ever requested twice and the cache never gets a hit",
+        "Mergesort has no optimal substructure, so its cached sub-answers cannot be legally combined into the answer for the whole and the cache entries are invalid",
+        "The cache keys for mergesort are whole subarrays, which are expensive to hash, so the caching cost exceeds the sorting cost on inputs of any realistic size",
+        "Mergesort is already O(n log n), which is optimal for comparison sorting, so no technique including memoization could reduce its asymptotic running time further"
+      ], a: 0,
+      why: "A cache pays off only when the same subproblem recurs. Mergesort splits into disjoint halves, so every subproblem is a distinct subarray requested exactly once and no cache lookup ever hits. Mergesort does have optimal substructure - a sorted array is built from sorted halves - which is why it is a divide-and-conquer, not a dynamic program: optimal substructure without overlap." },
+
+    { type: "mc",
+      q: "The top-down memoized <code>fib</code> raises <code>RecursionError</code> on <code>fib(5000)</code> at the default recursion limit, while the bottom-up version returns fine. Which trade does this illustrate?",
+      opts: [
+        "Bottom-up caches values in a contiguous array while top-down uses a hash map, and the array's better locality is what lets it reach far larger inputs",
+        "Top-down recomputes subproblems that bottom-up skips, so its extra work is what exhausts the stack on a deep chain of dependencies",
+        "Top-down recurses as deep as the longest dependency chain while bottom-up is a flat loop, so only the recursive form can overflow the call stack",
+        "Bottom-up evaluates subproblems lazily and top-down eagerly, so the eager form holds more intermediate results live and runs out of memory first"
+      ], a: 2,
+      why: "The memoized recursion descends n frames deep before the first return, so a long chain of subproblems overflows the stack at the recursion limit - the same limit Chapter 6 measured. Tabulation is an ordinary loop that recurses zero deep, so no chain of subproblems can overflow it. Both do the same arithmetic; only the control flow differs." },
+
+    { type: "mc",
+      q: "For counting change with coins {7, 11} up to amount 100, tabulation fills 101 cells but the top-down recursion visits only 26 sub-amounts. When does this favour memoization?",
+      opts: [
+        "Always, because top-down never computes a subproblem it does not need while bottom-up computes the entire table without exception",
+        "When the reachable subproblems are a sparse subset of the full table, so top-down explores a fraction of the cells that tabulation would fill",
+        "When the coins include a 1, because then every amount is reachable and the top-down recursion prunes away all of the unreachable duplicates entirely on its own",
+        "When the amount is small, because the recursion overhead of top-down is only worthwhile below a few hundred subproblems"
+      ], a: 1,
+      why: "Top-down visits only the subproblems the recursion actually reaches. With large coprime coins the reachable sub-amounts are sparse - 26 of 101 here - so top-down does a fraction of the work. When the reachable set is dense, as it is once a 1-coin makes every amount reachable, the two do the same work and tabulation's lack of call overhead wins. It is not always one or the other." },
+
+    { type: "blank",
+      q: "The property that an optimal solution contains optimal solutions to its subproblems &#8212; the one longest-simple-path lacks, making a dynamic program for it wrong rather than slow &#8212; is called ____ ____.",
+      a: ["optimal substructure"],
+      why: "It is verified by a cut-and-paste argument: assume an optimal whole whose sub-solution is suboptimal, paste in a better sub-solution, and contradict the whole's optimality. For longest simple path the argument fails, because a longer sub-path can reuse vertices and break simplicity, so the recurrence is unsound and no tabulation saves it." },
+
+    { type: "mc",
+      q: "In SRTBOT, the final step &#8212; Time &#8212; is computed as the number of subproblems times the transition cost. Why is putting it last a check rather than a formality?",
+      opts: [
+        "A running time larger than subproblems times a constant means a transition is hiding a scan, which signals the subproblem definition is carrying too little state to make each transition O(1)",
+        "The time bound determines whether to memoize or tabulate, and that choice must be made after the recurrence is written but before any code, which is why it comes sixth",
+        "Counting the subproblems last ensures the base cases have already been subtracted from the total, giving a tighter bound than counting them before the base cases are known",
+        "The transition cost cannot be known until the topological order is fixed, because the order determines how many earlier cells each transition must read to find its inputs"
+      ], a: 0,
+      why: "The running time is not a separate analysis - it is read off the card as subproblems times transition cost. When that product is larger than you expected, a transition you assumed was O(1) actually scans, which means the subproblem carries too little state and the definition needs fixing. Computing Time last catches that design error before you write code around a wrong recurrence." },
+
+    { type: "mc",
+      q: "The space-optimized 0/1 knapsack fills a single array descending; running the identical loop ascending returns a larger number. What has the ascending loop computed?",
+      opts: [
+        "An incorrect result from a race between reads and writes to the shared array, with no meaningful interpretation as the answer to any problem",
+        "The same 0/1 answer but with rounding error accumulated, since the ascending order visits the cells in the opposite direction and loses precision",
+        "The unbounded-knapsack answer, because reading an already-updated cell for the current item lets that item be taken more than once",
+        "A lower bound on the correct 0/1 answer, useful as a fast approximation for when the exact descending computation is judged too expensive to run in full"
+      ], a: 2,
+      why: "Descending, dp[w - weight] still holds the previous item's value when read, so each item is used at most once - the 0/1 problem. Ascending, dp[w - weight] has already been updated for the current item, so the item can be taken repeatedly, which is exactly unbounded knapsack. The direction of one loop selects which of two real problems the code solves - measured as 3,513 against 46,000." },
+
+    { type: "mc",
+      q: "Counting change for {1,2,5} gives 2 ways to make amount 3 with the coin loop outer but 3 ways with the amount loop outer. What causes the difference?",
+      opts: [
+        "The amount-outer order double-counts because it revisits amounts already finalised, so its extra count is an off-by-one error rather than a different quantity",
+        "The coin-outer order commits to one fixed order among the coins so each multiset is counted once, while the amount-outer order re-offers every coin and counts each ordering separately",
+        "The two orders round the intermediate sums differently, and the discrepancy accumulates from the first amount at which more than one coin is usable",
+        "The coin-outer order skips coins larger than the current amount while the amount-outer order includes them, so it counts extra infeasible combinations"
+      ], a: 1,
+      why: "With the coin loop outer, amount a is updated with coin c only after all earlier coins and before all later ones, so each combination is built in one fixed coin order and counted once - it counts unordered multisets. With the amount loop outer, every coin is re-offered at every amount, so 1-then-2 and 2-then-1 both reach amount 3 and both count - it counts ordered sequences. Both are correct answers to different questions." },
+
+    { type: "order",
+      q: "Order the steps of solving a new problem by dynamic programming, as this chapter presents them:",
+      items: [
+        "check that the problem has optimal substructure, by a cut-and-paste argument, so the recurrence will be sound",
+        "define the subproblems precisely enough to serve as cache keys, and write the recurrence relating each to smaller ones",
+        "give a topological order of the subproblems and their base cases, then read off the running time as their count times the transition cost",
+        "decide whether the number suffices or the object must be reconstructed, and whether a rolling array can shrink the space"
+      ],
+      why: "Legality comes before design: optimal substructure is what makes any recurrence sound, so it is checked first. Then the creative core - subproblems and the relation between them. Then the mechanical remainder of SRTBOT - order, base cases, time. Finally the engineering the galleries omit: reconstruction if the object is wanted, and space optimization if the table is large, both of which depend on the design already being fixed." },
+
+    { type: "blank",
+      q: "Keeping only the rows a recurrence actually reads &#8212; two variables for Fibonacci, one array for knapsack &#8212; and letting the window advance over the table is the space optimization called the ____ ____.",
+      a: ["rolling array"],
+      why: "It is safe exactly when the discarded cells are never read again: Fibonacci reads only the last two values, knapsack row i reads only row i-1. It cuts the knapsack table from 201,201 cells to 1,001 with the same answer, but it overwrites the trail reconstruction would need, which is why you optimize the space only once you know you need the number and not the object." }
   ]
 });
