@@ -1,6 +1,29 @@
 /* ==========================================================================
    bookData-dsa-part1.js — DSA By Patterns, Part 1 chapters (1–12)
    Original explanatory writing.
+   Sources consulted for Chapter 21: the O(n log n) LIS via patience sorting is
+   classic (Aldous & Diaconis, "Longest increasing subsequences: from patience
+   sorting to the Baik-Deift-Johansson theorem", 1999, for the name); Wagner &
+   Fischer, "The string-to-string correction problem", JACM 21(1):168-173, 1974;
+   Levenshtein, 1965; Hirschberg, "A linear space algorithm for computing
+   maximal common subsequences", CACM 18(6):341-343, 1975; Needleman & Wunsch,
+   1970, and Smith & Waterman, 1981, for biological alignment; Manacher, 1975,
+   for the linear-time longest palindromic substring. Measured 2026-09-21,
+   CPython 3.13.2 arm64: LIS on 20,000 random values, O(n^2) 9,186 ms vs
+   O(n log n) patience sorting 2.2 ms (4,180x), both length 273; the tails
+   array on [10,22,9,33,21,50,41,60] ending [9,21,33,41,60] - correct length 5
+   but NOT a subsequence (33 at index 3 precedes 21 at index 4), an actual LIS
+   being 10,22,33,50,60; LCS(AGGTAB,GXTXAYB)=4 'GTAB'; edit distance
+   kitten->sitting = 3 at unit costs (2 subs, 1 insert), rising to 5 with
+   substitution priced at 3 as the traceback switches to delete+insert; the
+   identity insert-delete edit distance = m+n-2*LCS (6+7-8 = 5); Hirschberg
+   linear-space LCS on 1,000-char strings, full table 1,002,001 cells vs two
+   rows 2,002 (500x less) at 1.5x the time (108.5 -> 157.1 ms), returning a
+   valid LCS of the same length (128/643/1942 at L=200/1000/3000) that may
+   differ from the full-table traceback when optima tie; longest palindromic
+   subsequence = LCS(s, reverse s) verified; longest palindromic substring by
+   O(n^2) interval table and O(1)-space centre expansion agreeing ('geeksskeeg'
+   in 'forgeeksskeegfor').
    Sources consulted for Chapter 20: the 0/1 knapsack dynamic program is
    standard (Bellman); Garey & Johnson, "Computers and Intractability", 1979,
    for pseudopolynomial time and the weakly/strongly NP-complete distinction;
@@ -6724,5 +6747,337 @@ CHAPTERS.push({
         "That it is easier than the other NP-complete problems and can be solved in polynomial time on inputs whose targets are bounded by a polynomial in n alone"
       ], a: 2,
       why: "A weakly NP-complete problem is NP-complete but admits a pseudopolynomial algorithm - so it is tractable exactly when its numbers are small, which is why small-integer knapsack is a routine table-fill. A strongly NP-complete problem stays hard even with small, bounded numbers and has no pseudopolynomial algorithm unless P = NP. The qualifier tells you whether 'the numbers are small' is an escape." }
+  ]
+});
+
+/* ======================= CHAPTER 21 ======================= */
+CHAPTERS.push({
+  num: 21, part: 3, title: "Sequence DP: LIS, LCS and Edit Distance",
+  blurb: "Three problems about sequences that appear in every interview bank and every bioinformatics pipeline, and they are one family once you see the alignment underneath them. You will solve the longest increasing subsequence twice &#8212; the obvious quadratic way and then in n log n by dropping Chapter 13's binary search inside the dynamic program &#8212; watch the longest common subsequence and edit distance turn out to be the same algorithm with different weights, and meet Hirschberg's trick for aligning two million-character strings in the memory of two rows.",
+
+  sections: [
+
+    { title: "Longest Increasing Subsequence, the Quadratic Way",
+      html:
+        "<p>Given a sequence of numbers, find the longest subsequence &#8212; elements in their original order but not necessarily adjacent &#8212; that strictly increases. It is the first sequence dynamic program worth writing, because the obvious recurrence is instructive and the clever one is a genuine surprise.</p>" +
+
+        "<p>Chapter 19's checklist finds the quadratic algorithm, and the one design decision that matters is the subproblem definition. The tempting choice &#8212; <code>x(i)</code> = the length of the longest increasing subsequence in the first i elements &#8212; is the too-weak subproblem Chapter 19 warned about: it does not say what the subsequence <em>ends</em> on, so you cannot tell whether the next element extends it. The fix is to anchor the subproblem. <strong>Subproblems:</strong> <code>x(i)</code> = the length of the longest increasing subsequence <em>ending exactly at index i</em>. <strong>Relate:</strong> <code>x(i) = 1 + max</code> of <code>x(j)</code> over all earlier j with <code>a[j] &lt; a[i]</code>, or 1 if none. <strong>Order:</strong> increasing i. <strong>Base:</strong> every <code>x(i)</code> is at least 1. <strong>Original:</strong> the maximum of <code>x(i)</code> over all i, because the answer can end anywhere. <strong>Time:</strong> n subproblems, each scanning up to n predecessors, so O(n&#178;).</p>" +
+
+        "<p>That O(n&#178;) is the transition cost surfacing exactly as Chapter 19 promised: n subproblems would be O(n) if each transition were O(1), but each one scans back over all earlier elements, so the true cost is n&#178;. Here the scan is genuinely doing work &#8212; finding the best compatible predecessor &#8212; and the next section is about replacing that linear scan with a logarithmic one.</p>" +
+
+        "<p>A short trace fixes the mechanism. On <code>[3, 1, 4, 1, 5, 9, 2, 6]</code> the cells come out 1, 1, 2, 1, 3, 4, 2, 4: the 3 at the 5 builds on the 4, the 4 at the 9 builds on that 5, and the trailing 6 reaches only 4, through the same 5. The answer is 4, ending on the 9 or the 6, never on the last element by any rule &#8212; which is exactly why reconstruction must scan the whole array for its maximum rather than read the final cell.</p>" +
+
+        "<p>Reconstruction follows the Chapter 19 pattern: alongside each <code>x(i)</code>, store which predecessor j achieved the maximum, then walk the parent pointers back from the index where the overall maximum was found. The subtlety unique to \"ending at i\" subproblems is that the answer is not <code>x(n)</code> but the largest cell anywhere in the array, so reconstruction starts by finding that cell &#8212; the longest increasing subsequence rarely ends on the last element, and a program that returns <code>x(n)</code> reports the length of the best subsequence forced to end at the final value, which is a different and smaller number.</p>"
+    },
+
+    { title: "LIS in n log n, and the Array That Lies",
+      html:
+        "<p>The quadratic scan hides a better structure. Sweep the sequence left to right maintaining one array, <code>tails</code>, where <code>tails[k]</code> is the smallest value that can end an increasing subsequence of length k+1 seen so far. For each new element, find the first entry in <code>tails</code> that is not smaller than it and overwrite that entry; if the element is larger than every entry, append it. The length of the answer is the length of <code>tails</code> at the end. This is <strong>patience sorting</strong>, and because <code>tails</code> is always sorted, \"find the first entry not smaller\" is a binary search &#8212; Chapter 13's lower-bound search, doing the work the quadratic scan did linearly. The result is O(n log n).</p>" +
+
+        "<p>One invariant explains why the array stays sorted and why overwriting is correct: a longer increasing subsequence must end on a larger value than a shorter one can, so the smallest achievable tails strictly increase with length. Each new element improves the smallest tail for exactly one length &#8212; the first its value can cap &#8212; and the binary search finds that length. Everything about the method follows from that monotonicity, which is also why the array's length only ever grows or holds, never shrinks.</p>" +
+
+        "<p>The speedup is not subtle. On 20,000 random values the quadratic algorithm took <strong>9,186 milliseconds</strong> and the patience-sorting version took <strong>2.2 milliseconds</strong> &#8212; a factor of 4,180 &#8212; and both reported the same length, 273. The gap is a linear scan against a binary search inside the same outer loop, exactly Chapter 13's promise realised on a real workload.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>input, with an actual longest increasing subsequence shaded green (length 5)</text>" +
+        "<g font-size='8' fill='#556' text-anchor='middle'>" +
+        "<text x='90' y='34'>0</text><text x='172' y='34'>1</text><text x='254' y='34'>2</text><text x='336' y='34'>3</text><text x='418' y='34'>4</text><text x='500' y='34'>5</text><text x='582' y='34'>6</text><text x='664' y='34'>7</text>" +
+        "</g>" +
+        "<rect x='60' y='40' width='60' height='28' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='90' y='59' text-anchor='middle' fill='#3ddc97' font-size='11'>10</text>" +
+        "<rect x='142' y='40' width='60' height='28' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='172' y='59' text-anchor='middle' fill='#3ddc97' font-size='11'>22</text>" +
+        "<rect x='224' y='40' width='60' height='28' rx='3' fill='#111a2e' stroke='#2a3a5a'/><text x='254' y='59' text-anchor='middle' fill='#7d8fb0' font-size='11'>9</text>" +
+        "<rect x='306' y='40' width='60' height='28' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='336' y='59' text-anchor='middle' fill='#3ddc97' font-size='11'>33</text>" +
+        "<rect x='388' y='40' width='60' height='28' rx='3' fill='#111a2e' stroke='#2a3a5a'/><text x='418' y='59' text-anchor='middle' fill='#7d8fb0' font-size='11'>21</text>" +
+        "<rect x='470' y='40' width='60' height='28' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='500' y='59' text-anchor='middle' fill='#3ddc97' font-size='11'>50</text>" +
+        "<rect x='552' y='40' width='60' height='28' rx='3' fill='#111a2e' stroke='#2a3a5a'/><text x='582' y='59' text-anchor='middle' fill='#7d8fb0' font-size='11'>41</text>" +
+        "<rect x='634' y='40' width='60' height='28' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='664' y='59' text-anchor='middle' fill='#3ddc97' font-size='11'>60</text>" +
+        "<text x='20' y='100' fill='#ffd166' font-size='10'>final tails array: [ 9, 21, 33, 41, 60 ] &#8212; length 5 is the right answer</text>" +
+        "<rect x='180' y='108' width='44' height='26' rx='3' fill='#3a2e10' stroke='#ffd166'/><text x='202' y='125' text-anchor='middle' fill='#ffd166' font-size='11'>9</text>" +
+        "<rect x='230' y='108' width='44' height='26' rx='3' fill='#3a2e10' stroke='#ffd166'/><text x='252' y='125' text-anchor='middle' fill='#ffd166' font-size='11'>21</text>" +
+        "<rect x='280' y='108' width='44' height='26' rx='3' fill='#3a2e10' stroke='#ffd166'/><text x='302' y='125' text-anchor='middle' fill='#ffd166' font-size='11'>33</text>" +
+        "<rect x='330' y='108' width='44' height='26' rx='3' fill='#3a2e10' stroke='#ffd166'/><text x='352' y='125' text-anchor='middle' fill='#ffd166' font-size='11'>41</text>" +
+        "<rect x='380' y='108' width='44' height='26' rx='3' fill='#3a2e10' stroke='#ffd166'/><text x='402' y='125' text-anchor='middle' fill='#ffd166' font-size='11'>60</text>" +
+        "<line x1='20' y1='150' x2='740' y2='150' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='168' fill='#ff5d73' font-size='10'>but [9, 21, 33, 41, 60] is NOT a subsequence of the input: 33 sits at index 3, before 21 at index 4.</text>" +
+        "<text x='20' y='186' fill='#c9d6ea' font-size='10'>the tails array carries the right length and the wrong elements; a real LIS is 10, 22, 33, 50, 60.</text>" +
+        "</svg><div class='fig-cap'>Each tails entry is the smallest possible tail of a subsequence of its length &#8212; a set of records, not a single subsequence.</div></div>" +
+
+        "<p>Here is the trap the machine is built to spring. It is natural to assume the <code>tails</code> array <em>is</em> the longest increasing subsequence, and it is not. On the input <code>[10, 22, 9, 33, 21, 50, 41, 60]</code> the final <code>tails</code> is <code>[9, 21, 33, 41, 60]</code> &#8212; length 5, the correct answer &#8212; but that is not a subsequence of the input at all: 33 appears at index 3, before 21 at index 4, so <code>[..., 21, 33, ...]</code> violates the order. An actual longest increasing subsequence is <code>[10, 22, 33, 50, 60]</code>. Each <code>tails</code> entry is the smallest tail achievable for a subsequence of that length, gathered from different subsequences, so the array is a table of records and not one increasing run.</p>" +
+
+        "<p>The consequence is practical: the n log n method gives the length directly, but recovering the actual subsequence needs the parent-pointer bookkeeping of the previous section layered on top, remembering for each element which <code>tails</code> position it filled and which element preceded it there. If you need only the length &#8212; which is what most callers want &#8212; the tails array alone suffices; if you need the subsequence, you cannot read it off the array and must reconstruct. <strong>Run both algorithms in the machine above</strong> and watch the tails array: on the right input its contents are not the answer they appear to be, and the machine is there to make that impossible to forget.</p>",
+      viz: "dsaLIS", vizTitle: "Two algorithms, same length; watch the tails array — it is not the subsequence it looks like"
+    },
+
+    { title: "Longest Common Subsequence",
+      html:
+        "<p>Two sequences now, not one. The longest common subsequence is the longest sequence that appears in both, in order but not necessarily contiguously &#8212; the backbone of <code>diff</code>, of version control's three-way merge, and of DNA comparison. The subproblem is two-dimensional, one index into each string.</p>" +
+
+        "<p><strong>Subproblems:</strong> <code>L(i, j)</code> = the length of the longest common subsequence of the first i characters of s and the first j of t. <strong>Relate:</strong> if the two current characters match, they can both join the subsequence, so <code>L(i, j) = 1 + L(i-1, j-1)</code>, the diagonal step; if they differ, one of them is dropped, so <code>L(i, j) = max(L(i-1, j), L(i, j-1))</code>, the better of dropping s's character or t's. <strong>Order:</strong> increasing i then j, so every cell reads only cells above and to the left. <strong>Base:</strong> a zero-length prefix shares nothing, <code>L(0, j) = L(i, 0) = 0</code>. <strong>Original:</strong> <code>L(m, n)</code>. <strong>Time:</strong> mn subproblems at O(1), so O(mn).</p>" +
+
+        "<p>The whole algorithm turns on one distinction: a <em>match</em> is a diagonal move that adds one, a <em>mismatch</em> is a sideways or upward move that adds nothing and keeps the better neighbour. On <code>AGGTAB</code> and <code>GXTXAYB</code> the table's last cell is 4, and the common subsequence is <code>GTAB</code> &#8212; the four letters that survive into both, separated by the X's and the extra A that only one string has.</p>" +
+
+        "<p>The application that made this algorithm ubiquitous is <code>diff</code>. The lines two files share, in order, are their longest common subsequence; the lines one file has and the other lacks are the insertions and deletions between them, which is why a version-control diff is a longest-common-subsequence computation over lines rather than characters, and why a three-way merge is two such comparisons against a common ancestor. The same O(mn) grid that lines up two short strings lines up two files, a line playing the role of a character, and the traceback is the patch. The granularity is a free choice: diff lines to review a code change, characters to highlight a typo, tokens to compare two sentences &#8212; the grid does not care what a \"character\" is, only that two of them can be tested for equality.</p>" +
+
+        "<p>Reconstruction is a traceback through the grid, and it reads the moves in reverse: from the last cell, a diagonal step on equal characters emits that character; otherwise you step toward whichever neighbour holds the value the cell was built from. The path from corner to corner spells the subsequence backwards, and it touches only the cells along one route, so it costs O(m+n) once the O(mn) table exists. For <code>AGGTAB</code> against <code>GXTXAYB</code> the route takes four diagonal steps, one per shared letter, spelling <code>GTAB</code>. Chapter 19 met this traceback in passing, on edit distance; here it is the same walk on the same kind of grid, which is the first hint that these two problems are relatives.</p>"
+    },
+
+    { title: "Edit Distance",
+      html:
+        "<p>Edit distance &#8212; the <strong>Levenshtein distance</strong> &#8212; is the minimum number of single-character insertions, deletions and substitutions that turn one string into another. It is spell-check, fuzzy search, and the diff between two revisions measured as a number. A spell-checker ranks candidate corrections by their edit distance to the typo; a fuzzy search accepts matches within a distance bound; a sequence aligner scores mutations as substitutions and indels as gaps. Every one of them is this single grid, asked for the number rather than the path. Wagner and Fischer gave the dynamic program in 1974 &#8212; the <strong>Wagner-Fischer algorithm</strong> &#8212; and it is the longest common subsequence's table with three predecessors instead of two.</p>" +
+
+        "<p><strong>Subproblems:</strong> <code>D(i, j)</code> = the edit distance between the first i characters of s and the first j of t. <strong>Relate:</strong> if the characters match, no edit is needed and <code>D(i, j) = D(i-1, j-1)</code>; otherwise it is one plus the cheapest of three moves &#8212; <code>D(i-1, j)</code> to <strong>delete</strong> s's character, <code>D(i, j-1)</code> to <strong>insert</strong> t's, or <code>D(i-1, j-1)</code> to <strong>substitute</strong> one for the other. <strong>Base:</strong> turning a length-i prefix into nothing costs i deletions, so <code>D(i, 0) = i</code> and <code>D(0, j) = j</code>. <strong>Original:</strong> <code>D(m, n)</code>. <strong>Time:</strong> O(mn).</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>edit distance kitten &#8594; sitting = 3; the gold path is the alignment, each step one edit</text>" +
+        "<text x='100' y='36' text-anchor='middle' fill='#7d8fb0' font-size='9'>∅</text>" +
+        "<text x='185' y='36' text-anchor='middle' fill='#2de2ff' font-size='10'>s</text>" +
+        "<text x='270' y='36' text-anchor='middle' fill='#2de2ff' font-size='10'>i</text>" +
+        "<text x='355' y='36' text-anchor='middle' fill='#2de2ff' font-size='10'>t</text>" +
+        "<text x='440' y='36' text-anchor='middle' fill='#2de2ff' font-size='10'>t</text>" +
+        "<text x='525' y='36' text-anchor='middle' fill='#2de2ff' font-size='10'>i</text>" +
+        "<text x='610' y='36' text-anchor='middle' fill='#2de2ff' font-size='10'>n</text>" +
+        "<text x='695' y='36' text-anchor='middle' fill='#2de2ff' font-size='10'>g</text>" +
+        "<text x='40' y='56' text-anchor='middle' fill='#7d8fb0' font-size='9'>∅</text>" +
+        "<text x='40' y='79' text-anchor='middle' fill='#2de2ff' font-size='10'>k</text>" +
+        "<text x='40' y='102' text-anchor='middle' fill='#2de2ff' font-size='10'>i</text>" +
+        "<text x='40' y='125' text-anchor='middle' fill='#2de2ff' font-size='10'>t</text>" +
+        "<text x='40' y='148' text-anchor='middle' fill='#2de2ff' font-size='10'>t</text>" +
+        "<text x='40' y='171' text-anchor='middle' fill='#2de2ff' font-size='10'>e</text>" +
+        "<text x='40' y='194' text-anchor='middle' fill='#2de2ff' font-size='10'>n</text>" +
+        "<circle cx='100' cy='52' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='100' y='56' text-anchor='middle' fill='#ffd166' font-size='10'>0</text>" +
+        "<text x='185' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text>" +
+        "<text x='270' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<text x='355' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='440' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='525' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text>" +
+        "<text x='610' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10'>6</text>" +
+        "<text x='695' y='56' text-anchor='middle' fill='#c9d6ea' font-size='10'>7</text>" +
+        "<text x='100' y='79' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text>" +
+        "<circle cx='185' cy='75' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='185' y='79' text-anchor='middle' fill='#ffd166' font-size='10'>1</text>" +
+        "<text x='270' y='79' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<text x='355' y='79' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='440' y='79' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='525' y='79' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text>" +
+        "<text x='610' y='79' text-anchor='middle' fill='#c9d6ea' font-size='10'>6</text>" +
+        "<text x='695' y='79' text-anchor='middle' fill='#c9d6ea' font-size='10'>7</text>" +
+        "<text x='100' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<text x='185' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<circle cx='270' cy='98' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='270' y='102' text-anchor='middle' fill='#ffd166' font-size='10'>1</text>" +
+        "<text x='355' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<text x='440' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='525' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='610' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text>" +
+        "<text x='695' y='102' text-anchor='middle' fill='#c9d6ea' font-size='10'>6</text>" +
+        "<text x='100' y='125' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='185' y='125' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='270' y='125' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<circle cx='355' cy='121' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='355' y='125' text-anchor='middle' fill='#ffd166' font-size='10'>1</text>" +
+        "<text x='440' y='125' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<text x='525' y='125' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='610' y='125' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='695' y='125' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text>" +
+        "<text x='100' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='185' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='270' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='355' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<circle cx='440' cy='144' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='440' y='148' text-anchor='middle' fill='#ffd166' font-size='10'>1</text>" +
+        "<text x='525' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<text x='610' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='695' y='148' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='100' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text>" +
+        "<text x='185' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text>" +
+        "<text x='270' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='355' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='440' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text>" +
+        "<circle cx='525' cy='167' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='525' y='171' text-anchor='middle' fill='#ffd166' font-size='10'>2</text>" +
+        "<text x='610' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='695' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='100' y='194' text-anchor='middle' fill='#c9d6ea' font-size='10'>6</text>" +
+        "<text x='185' y='194' text-anchor='middle' fill='#c9d6ea' font-size='10'>6</text>" +
+        "<text x='270' y='194' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text>" +
+        "<text x='355' y='194' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text>" +
+        "<text x='440' y='194' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<text x='525' y='194' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text>" +
+        "<circle cx='610' cy='190' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='610' y='194' text-anchor='middle' fill='#ffd166' font-size='10'>2</text>" +
+        "<circle cx='695' cy='190' r='12' fill='#3a2e10' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='695' y='194' text-anchor='middle' fill='#ffd166' font-size='10'>3</text>" +
+        "<line x1='20' y1='210' x2='740' y2='210' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='228' fill='#ffd166' font-size='10'>diagonal = keep or substitute, up = delete, left = insert; this path is sub k, keep ittn, sub e, insert g.</text>" +
+        "</svg><div class='fig-cap'>Reading the path from corner to corner spells the three edits out of the six moves; diagonal steps that stay on equal letters are free.</div></div>" +
+
+        "<p>The grid above turns <code>kitten</code> into <code>sitting</code> in 3 edits, and the traceback names them: substitute k for s, keep i, t, t, substitute e for i, keep n, insert g. Each of the three off-diagonal moves is one edit type, and the diagonal is free when the letters already agree. That the answer is a <em>path</em> is the point &#8212; the number is the path's cost, and the alignment is the path itself.</p>" +
+
+        "<p>The base cases carry more meaning than they look. <code>D(i, 0) = i</code> says turning a prefix of s into the empty string costs one deletion per character, and <code>D(0, j) = j</code> says building t's prefix from nothing costs one insertion each &#8212; the top row and left column are pure delete and insert runs, and the interior is where matches and substitutions let the path cut the diagonal and save moves. Reading the first row and column first is the way to sanity-check any edit-distance code: they must be the identity 0, 1, 2, 3, and a bug there means the recurrence never had correct boundaries to build on.</p>" +
+
+        "<p>The three edits need not cost the same, and changing their weights changes the answer in a way the machine makes vivid. Turning k into s by substitution is one edit; doing it by deleting k and inserting s is two. So while substitution costs 1, the traceback uses it; but raise the substitution cost to 3 and delete-plus-insert, at cost 2, becomes cheaper &#8212; the distance for <code>kitten</code> to <code>sitting</code> rises from 3 to 5 and the traceback abandons substitution entirely, doing two deletions and three insertions where it once did two substitutions and an insertion. The weights are not decoration; they encode which operations your domain considers cheap, and a fuzzy matcher that treats a typo-substitution as cheaper than a delete-and-retype is choosing exactly this weighting.</p>"
+    },
+
+    { title: "One Family: It Is All Alignment",
+      html:
+        "<p>Stack the last two sections side by side and the relationship is unavoidable: the same two-dimensional grid, the same diagonal-on-match move, the same traceback. Longest common subsequence and edit distance are not analogous, they are the <strong>sequence alignment</strong> problem under two different scoring rules, and seeing that collapses two algorithms into one.</p>" +
+
+        "<p>The bridge is exact and checkable. Take edit distance with only insertions and deletions allowed &#8212; forbid substitution, or equivalently price it at 2 so it is never worth more than a delete plus an insert. Then every diagonal move must be a match, every mismatch must be handled by dropping a character from one side, and minimising the edits is the same as maximising the matched diagonals, which is the longest common subsequence. The identity is arithmetic: the insert-delete edit distance equals <code>m + n &#8722; 2&#183;LCS</code>, because the LCS characters are kept and every other character on each side is removed. For <code>kitten</code> and <code>sitting</code>, LCS is 4, so the insert-delete distance is 6 + 7 &#8722; 8 = 5 &#8212; precisely the distance the previous section measured once substitution was priced out.</p>" +
+
+        "<div class='callout'>Once the family is one problem, its members are a choice of weights on a single grid. Unit insert, delete and substitute give Levenshtein distance. Substitution priced above delete-plus-insert gives longest common subsequence. Weight the diagonal by a similarity score that depends on <em>which</em> two characters meet, allow a discount for long runs of gaps, and you have the Needleman-Wunsch and Smith-Waterman alignments that bioinformatics runs on billions of times a day. Learning the grid once is learning all of them; the research in the field is in the scoring function, not the dynamic program, which has not changed since 1974.</div>" +
+
+        "<p>The two names worth carrying are <strong>Needleman-Wunsch</strong>, exactly this grid with an arbitrary score per aligned pair and a penalty per gap, which is the standard global alignment of two whole sequences; and <strong>Smith-Waterman</strong>, the same recurrence with one change &#8212; a cell is never allowed below zero &#8212; which finds the best-scoring <em>local</em> alignment, a matching region buried inside two otherwise dissimilar sequences. Both are the edit-distance table with the weights and one boundary rule altered, and both run in bioinformatics pipelines constantly. The point is not to memorise them but to see they are not new algorithms: the recurrence is the one you have, and the biology lives entirely in the scoring.</p>" +
+
+        "<p>Real aligners add one more wrinkle, the <em>affine</em> gap penalty that charges heavily to open a gap and little to extend it, because one long insertion is biologically likelier than many scattered short ones. Even that is the same grid with a couple of extra states per cell to remember whether a gap is already open. The recurrence bends to the domain; it does not break, and that pliability under a fixed skeleton is what makes sequence alignment one idea rather than a shelf of them.</p>" +
+
+        "<p>This is the payoff of teaching the three problems together rather than as a gallery. The longest increasing subsequence taught the anchored subproblem and the binary-search speed-up; the two-string problems taught the two-dimensional grid and the traceback; and the alignment view ties the second pair into a single algorithm whose behaviour you tune with numbers rather than rewrite. What remains is the engineering question the grid raises the moment the strings get long: it has mn cells, and mn for two million-character genomes is a trillion. The last two sections are the two escapes.</p>"
+    },
+
+    { title: "Hirschberg: The Alignment in Two Rows",
+      html:
+        "<p>The alignment grid is O(mn) in both time and space, and for long strings the space is the wall you hit first: two sequences of a hundred thousand characters need a table of ten billion cells, tens of gigabytes, while the time is merely seconds. Scale to two sequences of a hundred million bases and the full table is 10<sup>16</sup> cells, utterly impossible, while two rows are 2&#215;10<sup>8</sup> &#8212; a few hundred megabytes &#8212; and Hirschberg fits the whole recovered alignment inside that same budget. Computing the <em>length</em> in linear space is already straightforward &#8212; each row depends only on the row above, so two rows suffice: a <strong>linear-space DP</strong>, the rolling array of Chapter 19. The hard part is that the rolling array throws away the trail the traceback needs, so it gives the number and not the alignment.</p>" +
+
+        "<p><strong>Hirschberg's algorithm</strong>, from 1975, recovers the alignment in linear space by divide and conquer over the table. Split the first string in half. Compute, in two rows, the alignment-length row from the top-left corner to the midline, and separately from the bottom-right corner backward to the midline. Added together, these two rows say, for each column, the best total score of an alignment that crosses the midline at that column &#8212; so the column maximising the sum is where the optimal alignment crosses. That single crossing point splits the problem into two independent halves, top-left and bottom-right of it, and the algorithm recurses into each. The alignment is assembled from the split points the recursion finds, and no full row of the table is ever stored.</p>" +
+
+        "<p>The trade is measured and clean. Aligning two 1,000-character strings, the full table holds 1,002,001 cells while Hirschberg keeps two rows of 2,002 &#8212; a <strong>500-fold</strong> reduction in memory &#8212; and the running time went from 108 milliseconds to 157, about <strong>1.5&#215;</strong>. The factor is the price of the recomputation: each level of the recursion re-scans its subrectangle, and the halving series sums to roughly twice the work of a single pass, the same b/(b&#8722;1)-flavoured bounded overhead that iterative deepening paid in Chapter 18. Linear space for double the time is the trade, and for genomes it is the difference between an alignment that runs and one that cannot be allocated.</p>" +
+
+        "<p>One honest detail the measurement surfaced: Hirschberg returns <em>an</em> optimal alignment, not necessarily the same one the full-table traceback returns. When several alignments share the best score &#8212; which is common &#8212; the two methods break the tie differently, so their outputs can differ character for character while both being correct and the same length. That is a property of the problem, not a bug in either algorithm: the optimum is a value, and when many objects achieve it, which one you get is a matter of convention. Verified across strings up to 3,000 characters, Hirschberg's output was always a valid common subsequence of exactly the right length.</p>"
+    },
+
+    { title: "Palindromic Variants",
+      html:
+        "<p>Two problems about palindromes close the chapter, and each is a sequence dynamic program you have already built wearing a small disguise. They also separate two words people routinely confuse: a <em>subsequence</em> can skip characters, a <em>substring</em> must be contiguous, and the distinction changes the algorithm.</p>" +
+
+        "<p>The <strong>longest palindromic subsequence</strong> is a longest common subsequence in disguise. A palindrome reads the same forwards and backwards, so a palindromic subsequence of s is precisely a subsequence that also appears in s reversed &#8212; and the longest such is <code>LCS(s, reverse(s))</code>. No new algorithm is needed: reverse the string and run the grid from section 3. Measured, <code>character</code> has a longest palindromic subsequence of length 5 and <code>forgeeksskeegfor</code> one of length 12, each equal to the LCS against the reversed string exactly. It is the cleanest example in the chapter of the recognition skill the whole course is about: the problem is not new, it is a known problem after one transformation.</p>" +
+
+        "<p>The <strong>longest palindromic substring</strong> is a different problem, because contiguity cannot be reversed away. Its dynamic program is two-dimensional over intervals: <code>P(i, j)</code> is true when the substring from i to j is a palindrome, which holds when the ends match and the inside <code>P(i+1, j-1)</code> is already a palindrome. That is O(n&#178;) time and O(n&#178;) space, and it finds <code>geeksskeeg</code> inside <code>forgeeksskeegfor</code>. But there is a lighter way that needs no table at all: every palindrome has a centre, so <strong>expand around centre</strong> walks outward from each of the 2n&#8722;1 possible centres &#8212; each character and each gap between characters &#8212; growing the palindrome while the mirror characters match. It examines the same O(n&#178;) pairs but in O(1) space, and it returns the identical answer on every test. The table buys nothing here, and the centre method is the one to reach for.</p>" +
+
+        "<p>One detail the centre count hides: a palindrome can have even length, centred between two characters rather than on one, so there are 2n&#8722;1 centres &#8212; n single characters and n&#8722;1 gaps &#8212; not n. An implementation that expands only from characters silently misses every even-length palindrome, reporting <code>bb</code> as two separate single-character palindromes. Handling both centre kinds is the one place the O(1)-space method needs care, and it is the bug the interval table cannot have, because it indexes the intervals directly and never has to guess a centre.</p>" +
+
+        "<p>The centre method is also the doorway to the one genuinely cleverer algorithm in this territory: Manacher's, which shares work between overlapping centres to find the longest palindromic substring in O(n) time. It is worth knowing it exists and rarely worth writing &#8212; the O(n&#178;) centre expansion is fast enough for any string you will hold in memory, and the linear algorithm's bookkeeping is the kind of cleverness Chapter 13 warned takes years to get right. The lesson the two palindrome problems leave is the chapter's thesis in miniature: know which known problem you are looking at &#8212; a common subsequence, an interval table, a set of centres &#8212; and the algorithm is already written.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Run the O(n&#178;) longest-increasing-subsequence recurrence on <code>[10, 22, 9, 33, 21, 50, 41, 60]</code>, recording the parent pointer for each cell, then reconstruct. <em>What you should find:</em> length 5, a subsequence such as 10, 22, 33, 50, 60, and that the largest cell is not the last one &#8212; returning <code>x(n)</code> would give a shorter answer that is forced to end at 60.</li>" +
+        "<li><strong>Trace.</strong> Run patience sorting on the same input and write down the tails array after each element. <em>What you should find:</em> the final tails <code>[9, 21, 33, 41, 60]</code> has the right length but is not a subsequence of the input, because 33 precedes 21 in the array &#8212; the array records smallest tails, not one run.</li>" +
+        "<li><strong>Investigate.</strong> Time both LIS algorithms on tens of thousands of random values. <em>What you should find:</em> identical lengths and a speedup in the thousands &#8212; near 4,000&#215; at n = 20,000 &#8212; because the inner linear scan has become a binary search over the sorted tails array.</li>" +
+        "<li><strong>Investigate.</strong> Build the edit-distance grid for <code>kitten</code> and <code>sitting</code>, then raise the substitution cost from 1 to 3 and refill. <em>What you should find:</em> the distance rises from 3 to 5 and the traceback stops substituting, replacing each substitution with a deletion and an insertion once those two together are cheaper than one substitution.</li>" +
+        "<li><strong>Build.</strong> Compute the longest common subsequence length in two rows, then use it to check the identity that the insert-delete edit distance equals <code>m + n &#8722; 2&#183;LCS</code>. <em>What you should find:</em> for <code>kitten</code> and <code>sitting</code>, LCS 4 gives 6 + 7 &#8722; 8 = 5, matching the substitution-priced-out edit distance and confirming the two problems are one alignment.</li>" +
+        "<li><strong>Build.</strong> Find the longest palindromic substring two ways &#8212; the O(n&#178;) interval table and expand-around-centre &#8212; and the longest palindromic subsequence as <code>LCS(s, reverse(s))</code>. <em>What you should find:</em> the two substring methods agree on <code>geeksskeeg</code> inside <code>forgeeksskeegfor</code> while the centre method uses no table, and the subsequence length equals the LCS against the reversed string.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "subsequence", d: "A selection of elements from a sequence in their original order but not necessarily adjacent, as against a substring, which must be contiguous." },
+    { t: "longest increasing subsequence", d: "The longest subsequence whose values strictly increase; solvable in O(n^2) by an anchored dynamic program and in O(n log n) by patience sorting." },
+    { t: "patience sorting", d: "The O(n log n) LIS method that maintains an array of smallest possible tails, placing each element by binary search; named for the card game it mimics." },
+    { t: "tails array", d: "The array patience sorting maintains, where entry k is the smallest value that can end an increasing subsequence of length k+1; its length is the LIS length, but its contents are not a subsequence." },
+    { t: "longest common subsequence", d: "The longest sequence appearing in both of two strings in order; a two-dimensional dynamic program whose recurrence adds one on a match and takes the better neighbour on a mismatch." },
+    { t: "edit distance", d: "The minimum number of single-character insertions, deletions and substitutions turning one string into another; the same grid as LCS with three predecessors." },
+    { t: "Levenshtein distance", d: "Edit distance under unit costs for insertion, deletion and substitution; the default weighting, named for its 1965 description." },
+    { t: "Wagner-Fischer algorithm", d: "The 1974 dynamic program that fills the edit-distance grid in O(mn), computing each cell from its three predecessors." },
+    { t: "sequence alignment", d: "The single problem underneath LCS and edit distance: a path through the grid whose score, under a chosen weighting, is what each variant optimises." },
+    { t: "Hirschberg's algorithm", d: "A 1975 divide-and-conquer method that recovers an optimal alignment in O(min(m,n)) space and O(mn) time by finding the column where the alignment crosses the midline." },
+    { t: "linear-space DP", d: "Reducing a table's space to a rolling window of the rows a recurrence reads; it yields the value cheaply but discards the trail a traceback needs, which Hirschberg restores." },
+    { t: "longest palindromic subsequence", d: "The longest subsequence that reads the same both ways; computed as the longest common subsequence of the string and its reverse, needing no new algorithm." },
+    { t: "longest palindromic substring", d: "The longest contiguous palindrome in a string; found by an O(n^2) interval table or, in O(1) space, by expanding around each of the 2n-1 centres." },
+    { t: "expand around centre", d: "Finding palindromic substrings by growing outward from every character and every gap while the mirrored characters match; O(n^2) time, O(1) space." },
+    { t: "traceback", d: "Recovering the optimal object from a filled table by walking back from the final cell along the moves that produced each value, costing O(path) once the table exists." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "The LIS subproblem \"<code>x(i)</code> = longest increasing subsequence in the first i elements\" is rejected in favour of \"ending exactly at index i\". Why?",
+      opts: [
+        "The first definition double-counts subsequences that appear in more than one of the prefixes, so its cells overstate the true lengths and the reported maximum comes out larger than the real answer",
+        "The first definition does not record what the subsequence ends on, so you cannot tell whether the next element extends it &#8212; the transition has nothing to build from",
+        "The first definition is O(n log n) while the anchored one is O(n&#178;), so the anchored version is chosen deliberately to keep the reconstruction simple",
+        "The first definition cannot be reconstructed because it stores no parent pointers, while the anchored version stores one predecessor per cell by design"
+      ], a: 1,
+      why: "To extend a subsequence by element i you must know it can follow what came before, which means knowing the previous element's value. The unanchored subproblem discards that - it only knows a length within a prefix - so no O(1) transition exists. Anchoring on 'ends at i' records the tail, and the answer becomes the maximum over all cells rather than the last cell." },
+
+    { type: "mc",
+      q: "On <code>[10, 22, 9, 33, 21, 50, 41, 60]</code> patience sorting ends with tails <code>[9, 21, 33, 41, 60]</code>. The length 5 is correct, but what is wrong with reading that array as the answer?",
+      opts: [
+        "It is missing the element 22, which belongs to the actual longest subsequence, so the array is one element short of the true answer despite its correct length",
+        "It is sorted, whereas the real subsequence appears in input order, so the array must be un-sorted back into position before it can be read",
+        "It is not a subsequence of the input at all &#8212; 33 sits at index 3, before 21 at index 4 &#8212; because each entry is the smallest tail for its length, drawn from different subsequences",
+        "It contains values that never appeared in the input, since patience sorting averages adjacent tails when it inserts, so its entries are synthetic"
+      ], a: 2,
+      why: "Each tails entry is the smallest value that can end an increasing subsequence of its length, and those come from different subsequences, so the array is a set of records, not one run. Here 33 (index 3) precedes 21 (index 4) in the array, violating input order, so it is no subsequence at all - yet its length is the right answer. Recovering an actual LIS needs separate parent pointers." },
+
+    { type: "mc",
+      q: "LIS in O(n log n) replaces the quadratic version's inner linear scan with what, and measured how much faster at n = 20,000?",
+      opts: [
+        "A hash lookup of the previously seen values, roughly 40&#215; faster, since the scan for a smaller predecessor becomes a single constant-time membership test against a set of them",
+        "A binary search over the sorted tails array, about 4,000&#215; faster (9,186 ms to 2.2 ms), since finding the first tail not smaller than the element is a lower-bound search",
+        "A segment tree over value ranges, about 400&#215; faster, since the maximum earlier length below a value is a range query rather than a scan",
+        "A monotonic stack that amortises the scan to O(1), about 4&#215; faster, since each element is pushed and popped at most once across the whole run"
+      ], a: 1,
+      why: "The tails array is kept sorted, so 'find the first entry not smaller than x' is Chapter 13's lower-bound binary search, turning the O(n) inner scan into O(log n) and the whole algorithm into O(n log n). Measured, 20,000 random values fell from 9,186 ms to 2.2 ms, about 4,180x, both reporting length 273. A segment tree also works but is not what the tails method uses." },
+
+    { type: "mc",
+      q: "In the edit-distance grid, a cell where the two characters differ is one plus the minimum of three predecessors. Which move does the cell directly above &#8212; <code>D(i-1, j)</code> &#8212; represent?",
+      opts: [
+        "Substituting s's character for t's, since moving up changes one character of s into the aligned character of t at that position",
+        "Inserting t's character, since the column index is unchanged while the row advances, adding a character from t to the alignment",
+        "A free match, since the diagonal and the vertical coincide when the two characters happen to be equal at that grid position",
+        "Deleting s's character, since it advances through s (the rows) without consuming any character of t (the columns)"
+      ], a: 3,
+      why: "Rows index s and columns index t. Stepping from D(i-1, j) to D(i, j) advances one character of s while staying at the same character of t, so s's character is accounted for without matching anything in t - a deletion. The cell to the left, D(i, j-1), is the insertion; the diagonal is match or substitution." },
+
+    { type: "blank",
+      q: "The divide-and-conquer method that recovers an optimal alignment in O(min(m,n)) space by finding the column where the alignment crosses the midline &#8212; 500&#215; less memory than the full table at 1.5&#215; the time &#8212; is ____ algorithm.",
+      a: ["Hirschberg's", "Hirschberg"],
+      why: "Two rows give the alignment length but discard the traceback trail. Hirschberg computes forward and backward length rows to the midline, adds them to locate the optimal crossing column, splits there, and recurses - assembling the alignment from split points with no full row ever stored. The halving recursion doubles the work, the b/(b-1) overhead pattern from iterative deepening." },
+
+    { type: "mc",
+      q: "Longest common subsequence and edit distance are called the same algorithm. What makes edit distance become LCS?",
+      opts: [
+        "Pricing substitution at or above the cost of a deletion plus an insertion, so it is never used, leaving only kept diagonals and dropped characters &#8212; which is the LCS",
+        "Restricting both strings to the same alphabet, since LCS requires a shared alphabet while edit distance is defined over arbitrary character sets",
+        "Reversing one of the two strings before filling the grid, which converts the minimisation of edits into the maximisation of matches",
+        "Setting all three edit costs to zero, so the distance counts only the matched characters, which are exactly the common subsequence"
+      ], a: 0,
+      why: "With substitution priced out - forbidden, or set to 2 so delete-plus-insert is never worse - every diagonal move must be a match and every mismatch drops a character, so minimising edits maximises matched diagonals: the LCS. The identity is m + n - 2*LCS = the insert-delete edit distance; for kitten and sitting, 6 + 7 - 8 = 5. Both are the one alignment problem under different weights." },
+
+    { type: "mc",
+      q: "For the longest palindromic <em>substring</em>, the O(n&#178;) interval table and expand-around-centre give the same answer, but the centre method is preferred. Why?",
+      opts: [
+        "The centre method is asymptotically faster, running in O(n) against the table's O(n&#178;), because each centre is examined only once across the whole scan",
+        "The centre method finds all palindromes while the table finds only the longest, so it returns strictly more information for the same asymptotic cost",
+        "The centre method examines the same O(n&#178;) pairs but in O(1) space rather than the table's O(n&#178;), so it wins on memory at no cost in time",
+        "The centre method handles even-length palindromes that the interval table cannot represent, since the table indexes only odd-length centres"
+      ], a: 2,
+      why: "Both are O(n^2) time - the centre method expands from each of the 2n-1 centres, the table fills n^2 cells. The difference is space: expanding around a centre needs only a couple of indices, O(1), while the table needs O(n^2). Same answer, same time, far less memory. Manacher's algorithm is the genuine O(n) method, which neither of these is." },
+
+    { type: "order",
+      q: "Order these sequence problems by the algorithm each reduces to, starting from the one that needs a fresh recurrence:",
+      items: [
+        "longest increasing subsequence: an anchored one-dimensional DP with a binary-search speed-up",
+        "longest common subsequence: a two-dimensional alignment grid, diagonal on a match",
+        "edit distance: the same alignment grid with a third predecessor and a choice of weights",
+        "longest palindromic subsequence: the common-subsequence grid run against the reversed string"
+      ],
+      why: "Each reuses more of the last. LIS is its own one-dimensional recurrence. LCS introduces the two-dimensional alignment grid. Edit distance is that grid with one more predecessor and tunable weights - the same object. Longest palindromic subsequence needs no new algorithm at all, only LCS against the reverse. The chapter is a ladder of reductions, not four separate methods." },
+
+    { type: "blank",
+      q: "A selection of elements from a sequence in their original order but not necessarily adjacent &#8212; as opposed to a contiguous substring &#8212; is a ____.",
+      a: ["subsequence"],
+      why: "The distinction drives the algorithms: the longest palindromic subsequence is LCS against the reverse and may skip characters, while the longest palindromic substring must be contiguous and is found by an interval table or centre expansion. Confusing the two is the most common error in this family, because the words differ by one syllable and the problems by a whole method." },
+
+    { type: "mc",
+      q: "Aligning two 1,000-character strings, Hirschberg's output differed character-for-character from the full-table traceback, though both had the same length. Is this a bug?",
+      opts: [
+        "No &#8212; when several alignments share the best score, the two methods break the tie differently, so both are correct optima and merely different objects of the same length",
+        "Yes, in Hirschberg &#8212; the divide-and-conquer split can miss the true optimum when the crossing column is ambiguous, so its answer is only near-optimal",
+        "Yes, in the full-table traceback &#8212; its greedy neighbour choice can overshoot, so the longer Hirschberg output is the correct one when they disagree",
+        "No &#8212; the two are computing altogether different quantities, Hirschberg returning the subsequence and the full table the distance, so their outputs were never meant to match in the first place"
+      ], a: 0,
+      why: "The optimum is a value, and many alignments can achieve it. The full-table traceback and Hirschberg resolve ties by different conventions, so they can return different subsequences that are both valid and both of the optimal length - verified up to 3,000 characters, Hirschberg's output was always a correct common subsequence of the right length. Neither is wrong; the answer object is not unique at all." }
   ]
 });
