@@ -1,4 +1,12 @@
-# Course Plan — The Database Track
+# Course Plan
+
+Three tracks: **Databases**, **AI Engineering**, and **CS Fundamentals**.
+Each is self-contained; the CS Fundamentals track is the earliest entry point on the roster
+and feeds the other two.
+
+---
+
+# The Database Track
 
 Course 01, **Databases in Depth**, teaches the theory: storage engines, B-Trees, LSM,
 transactions, recovery, query processing, distributed systems, consensus — ending with a
@@ -7,8 +15,9 @@ course only *surveys* and go to absolute depth. Together they form a complete da
 track: theory → the two most important engines → building one yourself → making them
 fast → the analytics world.
 
-> Note: `index.html` currently shows placeholder cards for OS / Networking / Compilers.
-> Those get replaced by courses 02–06 below.
+> Note: the Database track's courses 02–06 are additions to the landing page, not
+> replacements. The `index.html` placeholder cards for OS and Networking are claimed by the
+> CS Fundamentals track (see the roster note at the end of this document).
 
 ---
 
@@ -137,3 +146,44 @@ retrieved documents to RAG). The full split is the table in the LLM Charter §5.
 
 Candidate successors, not yet planned: *AI Agents In Depth*, *LLM Inference & Serving In
 Depth* (if the serving chapters outgrow LLM In Depth), *Search & Ranking In Depth*.
+
+---
+
+# The CS Fundamentals Track
+
+A third track, opened by *DSA By Patterns* (Charter,
+`courses/dsa-by-patterns/01-course-charter.md` §5). This is the **earliest entry point on the
+whole roster**: the only course whose prerequisites are one programming language and
+high-school algebra. Both other tracks quietly assume its material — *Databases in Depth*
+re-derives B-trees and hashing from scratch, and *LLM In Depth* lists undergraduate data
+structures and Big-O as a prerequisite — so this track feeds them both.
+
+| # | Course | Status | Shell | What it owns |
+|---|---|---|---|---|
+| 01 | **DSA By Patterns** | In production (Phase 1) | `dsa-by-patterns.html` | Complexity, the word-RAM model and amortized analysis; every core data structure and algorithm from arrays to max-flow and suffix structures; the pattern-recognition procedure; lower bounds and NP-hardness as a working skill. Capstone: the structures library in Python and Java, each layer fuzzed against the standard library. |
+| 02 | **Operating Systems in Depth** | Planned | — | Processes and threads; **concurrency, synchronization, lock-free structures and parallel algorithms**; scheduling; virtual memory and paging; file systems; I/O and the syscall boundary. |
+| 03 | **Computer Networks in Depth** | Planned | — | The stack from the wire up: framing, IP and routing, TCP's state machine and congestion control, TLS, HTTP/1.1 through HTTP/3, DNS. |
+| 04 | **System Design in Depth** | Planned | — | The design interview taught from mechanism rather than from diagrams: load balancing, caching, partitioning, replication, queues, consistency. Rests on tracks 1 and 2 and on *Databases in Depth*. |
+
+**Course 02 exists in this plan because course 01 needs it to.** Guide §2 allows a course to
+mark a topic "out because it belongs to course X" only when course X is listed here.
+*DSA By Patterns* sends concurrency — threads, locks, the parallel algorithms of CLRS 4e
+chapter 26, and the interview banks' "Multi-threaded" pattern — to course 02, and still
+carries the one-paragraph orientation and forward pointer that §2 requires, in its
+complexity-model chapter where the one-operation-at-a-time model is first defined.
+
+**Track boundaries with the other two tracks.** Course 01 owns B-trees, hashing and heaps as
+*mechanisms*; *Databases in Depth* owns them as *storage engines* (page layout, disk access
+patterns, buffer pools) and may point back rather than re-derive once course 01 is live.
+Course 01 owns graph algorithms; *System Design in Depth* owns their application to real
+topologies. Course 01 owns complexity and Big-O; *LLM In Depth* keeps the attention-cost
+arithmetic that depends on it.
+
+---
+
+## Roster note on `index.html` placeholders
+
+The placeholder cards for OS / Networking / Compilers are now claimed: OS becomes CS
+Fundamentals 02, Networking becomes CS Fundamentals 03. The Compilers placeholder is
+**unclaimed** and remains a candidate for a future track. The Database track's courses 02–06
+replace nothing on the landing page; they are additions.

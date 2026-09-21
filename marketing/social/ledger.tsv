@@ -1,0 +1,9 @@
+date	slot	weekday	format	course	chapter	platforms	mentions_product	hook	source
+2026-09-16	1	Wednesday	flagship	llm	3	linkedin+x	no	Two prompts that look identical in a text box: "The capital of Fran	ch3 The Trailing Space
+2026-09-16	2	Wednesday	number	rag	12	x	no	Product quantization: 512 bytes to 16, a 32x reduction. Recall@10 on t	ch12 What Compression Actually Costs
+2026-09-16	3	Wednesday	news	llm	5	x	no	llama.cpp 0.4.1 (Sep 14) adds a --fuse-qkv flag: fold Q, K, V proje	https://github.com/ggml-org/llama.cpp/releases/tag/v0.4.1
+2026-09-16	4	Wednesday	myth-vs-mechanism	db	8	x	no	The usual line: a commit is durable because your row hit disk. What ac	ch8 Recovery: The Write-Ahead Log
+2026-09-16	5	Wednesday	question	rag	9	x	no	BM25: a team sets b = 0 because their long reference pages never r	ch9 BM25 Quiz Q4 (b=0 length norm)
+2026-09-16	6	Wednesday	code	db	29	x	no	PocketDB's crash safety is one ordering rule, not a librar	ch29 The Write Path: Log First, Then the Tree
+2026-09-18	1	Friday	flagship	rag	11	linkedin+x	no	HNSW at M=16: 79% recall@10 on random vectors, 93% on clustered (real-	ch11 Recall, Measured: What M and ef Actually Buy
+2026-09-18	2	Friday	number	llm	9	x	no	Full fine-tuning an 8B model in mixed precision needs 18 bytes per para	ch9 Will It Fit: Training

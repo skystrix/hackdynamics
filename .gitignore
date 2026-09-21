@@ -77,3 +77,4 @@ resources/pocketrag/*.db
 # Phase 5 harness: dev-only, see the LLM course memory
 .splice.py
 .sweep.js
+_preview_dsa*.html
