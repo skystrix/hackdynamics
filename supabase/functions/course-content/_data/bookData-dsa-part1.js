@@ -1,6 +1,26 @@
 /* ==========================================================================
    bookData-dsa-part1.js — DSA By Patterns, Part 1 chapters (1–12)
    Original explanatory writing.
+   Sources consulted for Chapter 18: Jeff Erickson, "Algorithms", 2019, the
+   backtracking chapter; Narayana Pandita, Ganita Kaumudi, 1356, for the
+   lexicographic-successor rule that C++ ships as next_permutation; the eight-
+   queens problem posed by Max Bezzel, 1848 (92 solutions); Richard Korf,
+   "Depth-first iterative-deepening: an optimal admissible tree search",
+   Artificial Intelligence 27(1):97-109, 1985; the most-constrained-variable
+   heuristic is standard in constraint satisfaction; AI Escargot is Arto
+   Inkala's 2006 puzzle. Measured 2026-09-21, CPython 3.13.2 arm64: n-queens
+   nodes visited, pruned (diagonal check at each placement) vs unpruned
+   (distinct rows only, diagonals tested at a complete board), n = 4..11, with
+   solution counts matching 2/10/4/40/92/352/724/2680 and the node ratio
+   growing 3.8x -> 650x (n = 8: 2,057 vs 109,601); duplicate leaves naive vs
+   sort-then-skip (perms [1,1,2] 6->3, [1,1,2,2] 24->6, [2,2,2,2] 24->1;
+   subsets [1,2,2] 8->6, [2,2,2] 8->4), each landing on n! / prod(multiplicity!);
+   next_permutation generating exactly n! orderings in strict lexicographic
+   order (120/5040/40320 at n = 5/7/8); sudoku assignments tried under two cell
+   orderings, left-to-right vs most-constrained-first, on AI Escargot (8,969 vs
+   250, 36x) and a harder puzzle (left-to-right exceeded 8,000,000 unsolved vs
+   2,791); iterative-deepening node expansions against a single depth-d search
+   on complete b-ary trees, overhead b/(b-1) = 2.0 / 1.25 / 1.11 at b = 2/5/10.
    Sources consulted for Chapter 17: J. L. Carter & M. N. Wegman, "Universal
    classes of hash functions", JCSS 18(2):143-154, 1979; Knuth, The Art of
    Computer Programming vol 3, section 6.4, for the linear-probing and
@@ -5792,5 +5812,294 @@ CHAPTERS.push({
       q: "The deleted-slot marker in open addressing that a lookup must probe past but an insertion may reuse, whose absence strands keys later in a probe chain, is called a ____.",
       a: ["tombstone"],
       why: "Clearing a deleted slot to empty plants a false stop signal, because a lookup reads an empty slot as proof the key is absent. Measured on keys 1, 9, 17 in a size-8 table, deleting 9 to empty made the search for 17 report not-found; a tombstone in that slot let the search walk through and find 17 in three probes again." }
+  ]
+});
+
+/* ======================= CHAPTER 18 ======================= */
+CHAPTERS.push({
+  num: 18, part: 3, title: "Backtracking: Enumerate, Prune, Return",
+  blurb: "Backtracking is a paradigm, not a template, and it earns its own chapter for the same reason recursion did: once you see the shape, a dozen problems that looked unrelated become one. Every exhaustive search is three lines &#8212; choose, explore, un-choose &#8212; and every fast exhaustive search is those three lines plus a rule that kills whole subtrees before you walk them. You will generate every subset and permutation, get duplicates right where most people get them wrong, and then watch a single pruning check turn an n-queens search that visits a hundred thousand dead ends into one that visits two thousand.",
+
+  sections: [
+
+    { title: "The Template, and Why It Is a Template",
+      html:
+        "<p>Backtracking builds a solution one decision at a time, and whenever a decision leads nowhere it undoes that decision and tries the next. Jeff Erickson gives it a whole chapter of his <em>Algorithms</em> for the reason this course does: it is not a trick tied to one problem but a shape that a dozen unrelated-looking problems turn out to share. Written out, that shape &#8212; choose, explore, un-choose &#8212; is always the same three lines:</p>" +
+
+        "<pre><code>def solve(state):\n" +
+        "    if state is complete: record(state); return\n" +
+        "    for choice in options(state):\n" +
+        "        make(choice)          # choose\n" +
+        "        solve(state)          # explore\n" +
+        "        unmake(choice)        # un-choose\n</code></pre>" +
+
+        "<p>The recursion walks a tree &#8212; the <strong>state-space tree</strong> &#8212; whose nodes are partial solutions and whose leaves are complete ones. The loop tries each option; the recursive call descends into the subtree that option opens; and the third line is the one everyone forgets. That third line, <strong>un-choose</strong>, restores the state to exactly what it was before the choice, so the next iteration of the loop starts clean. This is the <strong>state restoration</strong> obligation, and it is the entire difference between a backtracking search and a broken one.</p>" +
+
+        "<p>Chapter 6 already built the machine this runs on. The recursion here is the call stack there, and un-choose is what the stack does for you automatically for local variables and does <em>not</em> do for anything you mutated outside the frame. If your state is a fresh list passed by value into each call, the language restores it when the frame returns and you can drop the un-choose line. If your state is one shared array, one board, one <code>used[]</code> flag mutated in place &#8212; which is what every efficient backtracker uses, because copying the state at every node is what makes the slow ones slow &#8212; then un-choose is mandatory and its absence is a bug that leaks earlier choices into later branches.</p>" +
+
+        "<p>The alternative to un-choose is to copy the whole state into each recursive call so nothing is shared, and it is worth knowing why the fast backtrackers refuse it. Copying an n-element board at every one of the tree's nodes multiplies the work per node by O(n), and there are exponentially many nodes, so the copies come to dominate the search &#8212; the enumeration you will meet again as a slow solution in interviews is almost always the one that builds a fresh list at every step. Mutating one shared structure and restoring it costs O(1) per edge of the tree, which is why the disciplined un-choose, awkward as it is, is what production code does.</p>" +
+
+        "<p>That is why this is a paradigm and not a template you can paste. The three lines never change; what changes from problem to problem is three questions. What is a <em>choice</em> &#8212; the next element to include, the next cell to fill, the next queen's row? When is a state <em>complete</em> &#8212; all elements decided, the board full? And, the question that separates a search that finishes from one that does not, which choices can you rule out <em>before</em> exploring them? The first five sections answer the first two questions on the standard problems &#8212; subsets, permutations, combinations, and the duplicate-handling that trips up half the people who write them. The last three answer the third &#8212; pruning, propagation, and iterative deepening &#8212; which is where backtracking stops being brute force and starts being an algorithm.</p>"
+    },
+
+    { title: "Subsets: One Tree, Two Readings",
+      html:
+        "<p>The simplest thing to enumerate is every subset of a set of n elements. The choice at each step is binary &#8212; include this element or exclude it &#8212; so the state-space tree is a perfect binary tree of depth n, and its 2<sup>n</sup> leaves are the 2<sup>n</sup> subsets. Choose means append the element and recurse; un-choose means pop it and recurse down the exclude branch. The tree has 2<sup>n+1</sup>&#8722;1 nodes in all, and since recording a leaf copies a subset of up to n elements, generating every subset is &#920;(n&#183;2<sup>n</sup>) &#8212; which is optimal, because the total size of the output is already that large. No enumeration can beat the cost of writing its answers down, a floor worth remembering whenever a problem asks for all of something.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 300' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>subsets of {1,2,3}: at each level, take the element (left) or leave it (right)</text>" +
+        "<circle cx='380' cy='40' r='4' fill='#4f7cff'/>" +
+        "<text x='388' y='34' fill='#7d8fb0' font-size='9'>{}</text>" +
+        "<line x1='380' y1='44' x2='200' y2='86' stroke='#3ddc97' stroke-width='1.2'/><line x1='380' y1='44' x2='560' y2='86' stroke='#ff5d73' stroke-width='1.2'/>" +
+        "<text x='276' y='60' fill='#3ddc97' font-size='8'>take 1</text><text x='466' y='60' fill='#ff5d73' font-size='8'>leave 1</text>" +
+        "<circle cx='200' cy='90' r='4' fill='#4f7cff'/><circle cx='560' cy='90' r='4' fill='#4f7cff'/>" +
+        "<line x1='200' y1='94' x2='120' y2='140' stroke='#3ddc97' stroke-width='1.2'/><line x1='200' y1='94' x2='280' y2='140' stroke='#ff5d73' stroke-width='1.2'/>" +
+        "<line x1='560' y1='94' x2='480' y2='140' stroke='#3ddc97' stroke-width='1.2'/><line x1='560' y1='94' x2='640' y2='140' stroke='#ff5d73' stroke-width='1.2'/>" +
+        "<circle cx='120' cy='144' r='4' fill='#4f7cff'/><circle cx='280' cy='144' r='4' fill='#4f7cff'/><circle cx='480' cy='144' r='4' fill='#4f7cff'/><circle cx='640' cy='144' r='4' fill='#4f7cff'/>" +
+        "<line x1='120' y1='148' x2='90' y2='196' stroke='#3ddc97' stroke-width='1'/><line x1='120' y1='148' x2='150' y2='196' stroke='#ff5d73' stroke-width='1'/>" +
+        "<line x1='280' y1='148' x2='250' y2='196' stroke='#3ddc97' stroke-width='1'/><line x1='280' y1='148' x2='310' y2='196' stroke='#ff5d73' stroke-width='1'/>" +
+        "<line x1='480' y1='148' x2='450' y2='196' stroke='#3ddc97' stroke-width='1'/><line x1='480' y1='148' x2='510' y2='196' stroke='#ff5d73' stroke-width='1'/>" +
+        "<line x1='640' y1='148' x2='610' y2='196' stroke='#3ddc97' stroke-width='1'/><line x1='640' y1='148' x2='670' y2='196' stroke='#ff5d73' stroke-width='1'/>" +
+        "<text x='90' y='214' text-anchor='middle' fill='#ffd166' font-size='9'>123</text>" +
+        "<text x='150' y='214' text-anchor='middle' fill='#c9d6ea' font-size='9'>12</text>" +
+        "<text x='250' y='214' text-anchor='middle' fill='#c9d6ea' font-size='9'>13</text>" +
+        "<text x='310' y='214' text-anchor='middle' fill='#c9d6ea' font-size='9'>1</text>" +
+        "<text x='450' y='214' text-anchor='middle' fill='#c9d6ea' font-size='9'>23</text>" +
+        "<text x='510' y='214' text-anchor='middle' fill='#c9d6ea' font-size='9'>2</text>" +
+        "<text x='610' y='214' text-anchor='middle' fill='#c9d6ea' font-size='9'>3</text>" +
+        "<text x='670' y='214' text-anchor='middle' fill='#7d8fb0' font-size='9'>{}</text>" +
+        "<line x1='20' y1='236' x2='740' y2='236' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='256' fill='#ffd166' font-size='10'>eight leaves = eight subsets. Read the left/right choices as bits and each leaf is a</text>" +
+        "<text x='20' y='272' fill='#ffd166' font-size='10'>3-bit integer: 111 = {1,2,3}, 101 = {1,3}, 000 = {}. The tree and the counter 0..7 are one object.</text>" +
+        "</svg><div class='fig-cap'>The recursion visits the leaves left to right; the same eight leaves are the integers 0 through 7 written in binary.</div></div>" +
+
+        "<p>There is a second way to read that tree, and it is worth seeing because it recurs throughout the course. Label each element's choice a bit &#8212; 1 for include, 0 for exclude &#8212; and every leaf is an n-bit integer. Subset number 5 in a three-element set is binary 101, meaning take the first and third elements. So the whole enumeration is a single loop from 0 to 2<sup>n</sup>&#8722;1, testing bit j of the counter to decide element j. This <strong>bitmask enumeration</strong> is the same tree the recursion walks, read as integers instead of as a stack of decisions, and for n up to the width of a machine word it is faster and shorter than the recursion because the hardware's increment is doing the tree walk for you. The ceiling is real and hard: a 64-bit word holds a bitmask for at most 64 elements, and 2<sup>64</sup> subsets is already past what any machine will enumerate, so the word-size limit and the running-time limit bite at the same place.</p>" +
+
+        "<p>There is even a third ordering worth knowing: enumerate the subsets so that each differs from the last by a single element, a <em>Gray code</em>, which is what you want when moving between subsets is expensive &#8212; adding or removing one item &#8212; and you would rather not rebuild each from scratch. Which reading you reach for is a real decision. The recursive form generalizes &#8212; the moment the choice is more than binary, or a pruning rule enters, the loop-over-integers stops working and the tree is all you have. The bitmask form is unbeatable when the choice truly is include-or-exclude and n is small, which is exactly the setting of Chapter 12's meet-in-the-middle, where enumerating 2<sup>20</sup> subsets as integers was what made the trick fast. <strong>Step the machine above</strong> through the subset tree and watch each leaf complete; then switch it to permutations and see the same three lines produce a different shape.</p>",
+      viz: "dsaBacktrackTree", vizTitle: "The tree grows as you step; each leaf is one complete answer. Switch problems and toggle duplicates to watch the shape change"
+    },
+
+    { title: "Permutations: Swap, or Mark Used",
+      html:
+        "<p>Permutations enumerate every ordering of n elements, so the tree has n choices at the root, n&#8722;1 at the next level, and n! leaves. There are two standard ways to write the choice, and they are worth comparing because the difference is a lesson in what state you carry.</p>" +
+
+        "<p>The <strong>used-array</strong> method keeps a boolean per element and, at each level, loops over all n elements skipping the ones already used. Choose sets <code>used[i]</code> and appends element i; un-choose clears the flag and pops it. The state is the growing prefix plus the used flags, and both are restored on the way back up. The <strong>swap</strong> method is subtler: to permute the slots from index k onward, it swaps each candidate into position k in turn, recurses on k+1, and swaps back. It carries no auxiliary array at all &#8212; the array itself is the state &#8212; but the swap-back is the un-choose, and forgetting it scrambles the array for every sibling branch.</p>" +
+
+        "<p>A third route does not recurse at all. <strong>next_permutation</strong>, the function C++ ships in its standard library, transforms an ordering into the next one in lexicographic order in place: find the rightmost ascent, swap its base with the smallest larger element to its right, and reverse the suffix. Called n! times from the sorted ordering it enumerates every permutation and then reports there is no next, and measured on this machine it does exactly that &#8212; 120 orderings for n = 5, 5,040 for n = 7, 40,320 for n = 8, each in strictly increasing lexicographic order, no duplicates and none missed. A single call can reverse a suffix of length up to n, so it looks like O(n) work, but averaged over a full enumeration it is O(1) per permutation: the long reversals are rare and the short ones common, in the same amortized way Chapter 4's array doubling averaged out its rare expensive resizes.</p>" +
+
+        "<div class='callout'>The algorithm inside <code>next_permutation</code> is not from the C++ committee. It is the lexicographic-successor rule written down by the Indian mathematician <strong>Narayana Pandita</strong> in the <em>Ganita Kaumudi</em> of 1356, in the course of enumerating the arrangements of poetic metres and the permutations of a set with repeated elements. The problems in this chapter were being solved, correctly and in the modern order, six centuries before the computers that made them routine.</div>" +
+
+        "<p>The choice between the three is the usual one. next_permutation is the shortest when you want them in order and want no recursion, but it needs the elements to be comparable and its cleverness is opaque. The used-array method is the one to reach for by default: it reads exactly like the template, it generalizes to pruning without a rewrite, and its state is explicit. The swap method is the fastest and the most error-prone, and its errors are the pure state-restoration bug &#8212; a missing swap-back &#8212; which is the single most common defect in a hand-written backtracker and the reason the next section exists.</p>"
+    },
+
+    { title: "Duplicates: The Rule You Must Derive",
+      html:
+        "<p>Everything so far assumed the elements were distinct. The moment the input has repeats, every naive enumeration produces the same answer many times, and the fix is a one-line rule that people get wrong constantly because it is almost always <em>stated</em> rather than derived. Here it is derived.</p>" +
+
+        "<p>Take the permutations of <code>[1, 1, 2]</code>. The used-array method treats the two 1s as different objects and produces 3! = 6 leaves, but only 3 are distinct: the duplicate 1 generates each real answer twice. The waste is not a rounding error &#8212; for <code>[1, 1, 2, 2]</code> the naive method produces 24 leaves for 6 distinct answers, and for <code>[2, 2, 2, 2]</code> it produces 24 leaves for the <em>one</em> answer. In general the naive count is n! and the distinct count is n! divided by the factorial of each value's multiplicity, and the gap between them is pure repeated work.</p>" +
+
+        "<p>The rule that removes it: <strong>sort the input, then within one level of the tree skip a value equal to the previous one unless that previous one is currently in use.</strong> Written as a guard, <code>if i &gt; 0 and a[i] == a[i-1] and not used[i-1]: continue</code>. The reason it is exactly right, and not merely a heuristic, is what the derivation shows. Among a run of equal values, we permit only the pattern that uses them left to right: the first equal value may be chosen only when the one before it in the sorted order has already been taken. That forces one canonical ordering of the identical copies and forbids the other multiplicity-minus-one orderings that would produce the same leaf. Measured, the guard turns the 6 leaves of <code>[1,1,2]</code> into exactly 3, the 24 of <code>[1,1,2,2]</code> into 6, and the 24 of <code>[2,2,2,2]</code> into 1 &#8212; in every case exactly the distinct count, nothing pruned that should have survived and nothing survived that should have been pruned.</p>" +
+
+        "<p>The <code>not used[i-1]</code> half is the part that is wrong in most first drafts, and the failure is instructive. Drop it and write only <code>a[i] == a[i-1]: continue</code>, and you forbid ever placing two equal values in the answer at all &#8212; the guard now fires even when the previous copy is deep in the current prefix rather than a sibling being skipped, so <code>[1,1,2]</code> loses the permutation <code>[1,1,2]</code> itself. The condition has to distinguish \"this equal value is a sibling I already tried at this level\" from \"this equal value is one I chose higher up\", and <code>used[i-1]</code> is exactly that distinction.</p>" +
+
+        "<p>Subsets with repeated values need the same idea in its other form. The subset builder from section 2 already avoids order-duplicates by only ever moving forward through the array, but a repeated value defeats that: <code>[1, 2, 2]</code> generates 8 leaves for 6 distinct subsets, and <code>[2, 2, 2]</code> generates 8 for 4. The guard is <code>if j &gt; start and a[j] == a[j-1]: continue</code> &#8212; within one level, having already tried a value, skip its equal copies &#8212; and it takes those counts to exactly 6 and 4. It is the sort-then-skip rule again, keyed on the level's start index rather than a used array, because a subset tree never revisits an earlier position and so needs only the weaker test. <strong>Turn duplicates on in the machine from section 2 without either skip rule</strong> and count the repeated leaves; the count is the multiplicity product, every time.</p>"
+    },
+
+    { title: "Combinations: The Start Index",
+      html:
+        "<p>A combination is a subset of a fixed size k, and it exposes a second kind of duplicate: not equal <em>values</em>, but the same set reached by different <em>orders</em> of choosing. If you generate the k-subsets of <code>{1,2,3,4}</code> by choosing any unused element at each of k levels, you produce <code>{1,2}</code> and <code>{2,1}</code> as separate leaves, because the tree does not know the set is unordered. Enumerating k-subsets of an n-set this way costs n!/(n&#8722;k)! leaves &#8212; the number of ordered sequences &#8212; when there are only \"n choose k\" real answers. For k = 2 out of n = 4 that is 12 ordered pairs against 6 unordered ones, a factor of k! = 2; for k = 3 out of 6 it is 120 against 20, a factor of 6, and the factor is k! at every size because each unordered set has k! orderings that all reach the same leaf.</p>" +
+
+        "<p>The fix is one parameter: a <strong>start index</strong> that the recursion threads through, forbidding any level from choosing an element earlier than the one the level above chose. Each call loops <code>for j in range(start, n)</code> and recurses with <code>start = j + 1</code>. That single constraint forces every combination to come out in increasing order and therefore exactly once. It is the same move as the sort-then-skip rule of the previous section &#8212; impose one canonical order on choices that are otherwise interchangeable &#8212; applied to positions rather than to values, and the two together handle every duplicate a backtracking search can generate.</p>" +
+
+        "<p>The start index also does something the subset enumeration of section 2 did implicitly and worth naming. The subset tree only ever added element j on the way down and never looked back, which is why its 2<sup>n</sup> leaves were distinct: it was carrying a start index of exactly the current depth. Combinations are that same discipline with an early cutoff once the prefix reaches length k, and the k-subsets for all k from 0 to n are precisely the 2<sup>n</sup> subsets partitioned by size. One parameter unifies three problems: subsets, k-combinations, and the many interview problems &#8212; combination sum, letter combinations of a phone number, palindrome partitioning &#8212; that are a combination enumeration with a problem-specific completeness test at the leaf.</p>" +
+
+        "<p>This is the payoff the chapter keeps promising. Subsets, permutations, and combinations are not three algorithms; they are one template with three answers to \"what is a choice\" and two small devices &#8212; the used array and the start index &#8212; for not counting the same thing twice. Everything remaining in the chapter is about the third question from section 1: how to avoid walking a subtree you can already prove is barren.</p>"
+    },
+
+    { title: "Pruning: Where Backtracking Beats Brute Force",
+      html:
+        "<p>The eight-queens problem &#8212; place eight queens on a chessboard so that none attacks another &#8212; was posed in 1848 and has 92 solutions, and it is the standard demonstration of pruning because the naive and the pruned searches differ so violently on it. Brute force places a queen in each column and checks the whole board at the end; backtracking checks each queen against the ones already placed and abandons a column the instant no safe row exists. That instant of abandonment &#8212; refusing to explore a subtree because a partial solution already violates a constraint &#8212; is <strong>pruning</strong>, and it is the difference between a search that runs and one that does not.</p>" +
+
+        "<p>Measured on the same problem, counting how many board positions the search actually visits with and without the diagonal check:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 250' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>n-queens: nodes visited, pruned (check each placement) vs unpruned (check at the leaf)</text>" +
+        "<text x='60' y='40' fill='#7d8fb0' font-size='9'>n</text>" +
+        "<text x='170' y='40' text-anchor='end' fill='#7d8fb0' font-size='9'>solutions</text>" +
+        "<text x='340' y='40' text-anchor='end' fill='#3ddc97' font-size='9'>pruned nodes</text>" +
+        "<text x='540' y='40' text-anchor='end' fill='#ff5d73' font-size='9'>unpruned nodes</text>" +
+        "<text x='700' y='40' text-anchor='end' fill='#ffd166' font-size='9'>ratio</text>" +
+        "<line x1='40' y1='48' x2='720' y2='48' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<g font-size='10' fill='#c9d6ea'>" +
+        "<text x='58' y='68'>6</text><text x='170' y='68' text-anchor='end'>4</text><text x='340' y='68' text-anchor='end' fill='#3ddc97'>153</text><text x='540' y='68' text-anchor='end' fill='#ff5d73'>1,957</text><text x='700' y='68' text-anchor='end' fill='#ffd166'>12.8&#215;</text>" +
+        "<text x='58' y='90'>7</text><text x='170' y='90' text-anchor='end'>40</text><text x='340' y='90' text-anchor='end' fill='#3ddc97'>552</text><text x='540' y='90' text-anchor='end' fill='#ff5d73'>13,700</text><text x='700' y='90' text-anchor='end' fill='#ffd166'>24.8&#215;</text>" +
+        "<text x='58' y='112'>8</text><text x='170' y='112' text-anchor='end'>92</text><text x='340' y='112' text-anchor='end' fill='#3ddc97'>2,057</text><text x='540' y='112' text-anchor='end' fill='#ff5d73'>109,601</text><text x='700' y='112' text-anchor='end' fill='#ffd166'>53.3&#215;</text>" +
+        "<text x='58' y='134'>9</text><text x='170' y='134' text-anchor='end'>352</text><text x='340' y='134' text-anchor='end' fill='#3ddc97'>8,394</text><text x='540' y='134' text-anchor='end' fill='#ff5d73'>986,410</text><text x='700' y='134' text-anchor='end' fill='#ffd166'>117&#215;</text>" +
+        "<text x='58' y='156'>10</text><text x='170' y='156' text-anchor='end'>724</text><text x='340' y='156' text-anchor='end' fill='#3ddc97'>35,539</text><text x='540' y='156' text-anchor='end' fill='#ff5d73'>9,864,101</text><text x='700' y='156' text-anchor='end' fill='#ffd166'>278&#215;</text>" +
+        "<text x='58' y='178'>11</text><text x='170' y='178' text-anchor='end'>2,680</text><text x='340' y='178' text-anchor='end' fill='#3ddc97'>166,926</text><text x='540' y='178' text-anchor='end' fill='#ff5d73'>108,505,112</text><text x='700' y='178' text-anchor='end' fill='#ffd166'>650&#215;</text>" +
+        "</g>" +
+        "<line x1='40' y1='192' x2='720' y2='192' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='40' y='212' fill='#ffd166' font-size='10'>the ratio grows with n &#8212; pruning does not save a constant factor, it changes how fast the</text>" +
+        "<text x='40' y='228' fill='#ffd166' font-size='10'>work grows. At n = 11 the diagonal check is the difference between 167 thousand nodes and 108 million.</text>" +
+        "</svg><div class='fig-cap'>Both columns find the same solutions. The unpruned search reaches them by walking every dead end the pruned one refuses to enter.</div></div>" +
+
+        "<p>The number that matters is not the ratio at any one n but that the ratio <em>grows</em>: 12.8&#215; at n = 6, 53&#215; at n = 8, 650&#215; at n = 11. A constant-factor speedup would hold steady; a growing one means the two searches are in different complexity classes. The unpruned search visits a number of nodes that tracks n! because it is really enumerating row-permutations and only testing them at the end; the pruned search visits far fewer because most permutations share a bad prefix, and pruning charges for that prefix once instead of once per permutation completing it. This is the general shape: <strong>a pruning rule pays off in proportion to how early and how often it fires</strong>, and the diagonal check fires early and often because most placements conflict. At n = 8 the concrete numbers are 2,057 nodes pruned against 109,601 unpruned for the same 92 solutions; the unpruned figure is close to the 8! = 40,320 leaves plus their internal nodes, confirming it is really a permutation enumeration wearing a chessboard, with the diagonal test demoted from a prune to a final exam that most candidates fail.</p>" +
+
+        "<p>Two properties make a check a legal prune, and both matter. It must be <em>sound</em> &#8212; it may abandon a subtree only when that subtree provably contains no solution, or you will miss real answers &#8212; and it should be <em>cheap</em>, because it runs at every node. The diagonal check is both: two queens share a &#8595;-diagonal exactly when they share the value row&#8722;column, and a &#8593;-diagonal exactly when they share row+column, so the whole test is membership in two integer sets and costs O(1) per placement. That encoding is the trick worth keeping &#8212; it turns a geometric constraint into two hash-set lookups, and the same move (name the invariant a coordinate makes constant, then index on it) reappears whenever a grid problem needs a fast conflict test. <strong>Set the machine above to n = 8, run it with pruning off and then on</strong>, and watch the explored-node counter fall from six figures to four.</p>",
+      viz: "dsaNQueens", vizTitle: "Place queens column by column; toggle pruning and watch the explored-node counter change"
+    },
+
+    { title: "Constraint Propagation: Looking Further Ahead",
+      html:
+        "<p>Pruning abandons a branch once it has already gone wrong. <strong>Constraint propagation</strong> is stronger: it looks at the consequences of a choice <em>before</em> committing, and it changes which choice you make next. Sudoku is the standard example, and it separates the two ideas cleanly.</p>" +
+
+        "<p>A backtracking sudoku solver fills empty cells one at a time, trying each digit that does not already appear in the cell's row, column or box, and backtracking when a cell has no legal digit. That is ordinary pruning &#8212; the row/column/box check is the diagonal check of the last section. The question constraint propagation adds is: <em>which</em> empty cell should you fill next? The naive answer is left-to-right, top-to-bottom. The better answer is the <strong>most-constrained-variable heuristic</strong> &#8212; fill the empty cell with the fewest legal digits first &#8212; because a cell with two candidates is a coin flip while a cell with one candidate is not a choice at all, and choosing it can trigger a cascade.</p>" +
+
+        "<p>The measurement is decisive. On Arto Inkala's \"AI Escargot\", built to be hard for solvers, left-to-right ordering tries <strong>8,969</strong> digit placements; most-constrained-first tries <strong>250</strong> &#8212; the same solver, the same pruning, the same puzzle, differing only in which blank cell it picks, and a factor of 36 between them. On a harder puzzle still, left-to-right had not finished after <strong>eight million</strong> placements when most-constrained-first solved it in <strong>2,791</strong>. The heuristic is not chipping at a constant; on the puzzles built to resist, it is the difference between solving and not. It is one of the oldest results in constraint satisfaction &#8212; the general rule is \"assign the most-constrained variable first,\" and every practical solver, from sudoku to timetabling to register allocation, opens with some version of it.</p>" +
+
+        "<p>Full constraint propagation goes one step further than choosing the cell: after each placement it repeatedly fills every cell that has been reduced to a single candidate, and every cell those fills reduce to a single candidate, until nothing more forces. When this cascade hits a cell with <em>no</em> candidate it reports the contradiction immediately, pruning the branch far above where the plain solver would have discovered it by trying digits one at a time. This is the distinction worth carrying out of the chapter: <strong>pruning removes a branch after a choice is shown to fail; propagation deduces forced consequences and failures before the next choice is even made.</strong> The most-constrained heuristic is the cheapest slice of propagation &#8212; it uses the candidate counts without acting on them &#8212; and it already buys the factor of 36.</p>" +
+
+        "<p><strong>Switch the heuristic in the machine above</strong> from left-to-right to most-constrained-first and watch the step counter collapse; the cells it chooses to fill are almost always the ones you, solving by hand, would have filled without thinking.</p>",
+      viz: "dsaSudoku", vizTitle: "Which empty cell should you fill next? Switch the heuristic and watch the step count collapse"
+    },
+
+    { title: "Iterative Deepening: When Depth Is Unknown",
+      html:
+        "<p>One case remains: the tree is deep, possibly infinite, the solution is somewhere at an unknown depth, and you cannot afford the memory to search breadth-first. Depth-first search uses only O(d) memory &#8212; the current path &#8212; but it can dive down one infinite branch and never find a shallow answer. Breadth-first search finds the shallowest answer but holds the entire frontier, O(b<sup>d</sup>) nodes, which is the thing you cannot afford. <strong>Iterative deepening</strong>, analysed by Richard Korf in 1985, takes the memory of the first and the completeness of the second by doing something that looks plainly wasteful: it runs depth-first search to depth 0, then throws the result away and searches to depth 1, then to depth 2, and so on until it finds the answer.</p>" +
+
+        "<p>The objection writes itself &#8212; you re-search the top of the tree every single time &#8212; and the answer is that the top of the tree is the cheap part. In a tree with branching factor b, the number of nodes at depth d is b<sup>d</sup>, which is more than all the levels above it combined. Re-searching those upper levels d times adds only a bounded fraction, and the fraction is exactly b/(b&#8722;1). Measured on complete trees:</p>" +
+
+        "<ul>" +
+        "<li>b = 2: iterative deepening visits <strong>1.995&#215;</strong> the nodes of a single depth-d search &#8212; against the predicted b/(b&#8722;1) = 2.000</li>" +
+        "<li>b = 5: <strong>1.250&#215;</strong>, against 1.250</li>" +
+        "<li>b = 10: <strong>1.111&#215;</strong>, against 1.111</li>" +
+        "</ul>" +
+
+        "<p>The overhead shrinks as the tree widens, and for any branching factor above two it is under a doubling. So iterative deepening buys the completeness and shortest-path guarantee of breadth-first search, keeps the O(d) memory of depth-first search, and pays a constant factor that at b = 10 is eleven percent. For a search over a ten-way branching space to depth eight, the breadth-first frontier would hold on the order of a hundred million nodes; iterative deepening holds a stack eight deep. That is the whole trade, and it is why iterative deepening is the default uninformed search when the depth is unknown and memory is finite &#8212; which, outside a textbook, it always is.</p>" +
+
+        "<p>The technique also connects backward to Chapter 6. Each iteration is a plain depth-limited backtracking search &#8212; the same three lines, with one added base case that stops descending at the current limit &#8212; so nothing new is needed to build it. The redundant work is the price of not knowing the depth in advance, and the measurements are the receipt showing the price is small. Where a problem does know its depth, or can afford the frontier, the plain search is right; iterative deepening is the tool for the case where neither of those holds.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Draw the state-space tree for the subsets of <code>{1, 2, 3}</code>, then read each leaf as a 3-bit integer with the first element as the low bit. <em>What you should find:</em> the eight leaves are the integers 0 through 7, the leaf reached by taking every element is 111 = 7, and the left-to-right order the recursion visits leaves in is not numerical order unless you make the first choice the high bit.</li>" +
+        "<li><strong>Trace.</strong> Run the permutation backtracker on <code>[1, 1, 2]</code> by hand, first without the skip rule and then with <code>if i &gt; 0 and a[i] == a[i-1] and not used[i-1]: continue</code>. <em>What you should find:</em> six leaves collapse to three, and if you drop the <code>not used[i-1]</code> clause you lose the valid permutation <code>[1, 1, 2]</code> itself &#8212; the clause is what distinguishes a skipped sibling from an ancestor already chosen.</li>" +
+        "<li><strong>Investigate.</strong> Write the n-queens search twice, once checking each placement against the diagonals and once checking only at a complete board, and count nodes visited for n from 6 to 10. <em>What you should find:</em> both report the same solution counts (4, 40, 92, 352, 724) but the node ratio grows from about 13 to nearly 280, which tells you pruning changed the growth rate and not merely a constant.</li>" +
+        "<li><strong>Investigate.</strong> Solve a hard sudoku with a backtracking solver under two cell orderings &#8212; leftmost blank, and fewest-candidates blank &#8212; counting digit placements. <em>What you should find:</em> the most-constrained ordering does an order of magnitude or more less work on a puzzle built to be hard, with no change to the pruning or the puzzle, only to which cell is chosen next.</li>" +
+        "<li><strong>Build.</strong> Implement iterative deepening on a complete b-ary tree and count total node expansions against a single search to the final depth, for b of 2, 5 and 10. <em>What you should find:</em> the overhead ratio lands on b/(b&#8722;1) &#8212; 2.0, 1.25, 1.11 &#8212; confirming that re-searching the shallow levels costs a bounded fraction that shrinks as the tree widens.</li>" +
+        "<li><strong>Build.</strong> Write one backtracking routine that takes the choice function, the completeness test and an optional pruning predicate as parameters, and use it to solve subsets, permutations, combinations and n-queens without changing the core. <em>What you should find:</em> the three lines never change, each problem is a few lines of choice-and-test, and the pruning predicate is the only place n-queens differs from a plain permutation enumeration.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "backtracking", d: "A systematic search that builds a solution one decision at a time and undoes a decision as soon as it cannot lead to a valid completion, walking a tree of partial solutions." },
+    { t: "state-space tree", d: "The tree whose nodes are the partial solutions a search can reach and whose leaves are the complete ones; backtracking is a depth-first walk of it." },
+    { t: "choose, explore, un-choose", d: "The three-line template of every backtracker: make a decision, recurse on the rest, then undo the decision so the next option starts from a clean state." },
+    { t: "state restoration", d: "The obligation to return shared mutable state to exactly its pre-decision value on the way back up; its absence leaks earlier choices into later branches and is the classic backtracking bug." },
+    { t: "leaf", d: "A node of the state-space tree where the solution is complete; the search records or tests it, then returns to try the next option." },
+    { t: "bitmask enumeration", d: "Reading the include/exclude subset tree as integers: the counter 0 to 2^n - 1 walks all subsets, bit j deciding element j, with the hardware increment doing the tree walk." },
+    { t: "permutation", d: "An ordering of all n elements; the state-space tree has n! leaves, generated by a used-array loop, by swapping into place, or by repeated lexicographic successor." },
+    { t: "next_permutation", d: "The in-place rule that turns an ordering into the next in lexicographic order; called n! times it enumerates all of them. Written by Narayana Pandita in 1356." },
+    { t: "used array", d: "A boolean per element marking which are already in the current prefix, letting a permutation loop skip them; set on choose and cleared on un-choose." },
+    { t: "sort-then-skip rule", d: "The duplicate-handling guard: sort the input, then skip a value equal to its predecessor unless the predecessor is currently used, forcing one canonical order on identical copies." },
+    { t: "start index", d: "The parameter that forbids a level from choosing an element earlier than the level above did, forcing combinations into increasing order so each unordered set is generated exactly once." },
+    { t: "pruning", d: "Refusing to explore a subtree once the partial solution provably cannot be completed; a prune must be sound (only cuts barren subtrees) and cheap (it runs at every node)." },
+    { t: "constraint propagation", d: "Deducing the forced consequences of a choice before making the next one, and detecting contradictions early; stronger than pruning, which only reacts after a choice fails." },
+    { t: "most-constrained-variable heuristic", d: "Choosing next the decision with the fewest remaining options - the fewest-candidates cell in sudoku - which shrinks the branching factor near the root and often collapses the search." },
+    { t: "iterative deepening", d: "Repeated depth-limited search at increasing limits, giving breadth-first completeness and shortest paths with depth-first O(d) memory, at an overhead of b/(b-1)." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "In a backtracker that mutates one shared array in place, why is the third line &#8212; un-choose &#8212; not optional?",
+      opts: [
+        "Because the shared array is not restored automatically the way a call frame's local variables are, so a choice left in place after the recursion returns leaks into the sibling branches and corrupts the state they begin from",
+        "Because without it the recursion never terminates, since the base case tests the array and it is never reset to its starting configuration between branches",
+        "Because the garbage collector cannot reclaim the array's memory until every reference to its earlier states has been explicitly cleared",
+        "Because un-choose is what appends each completed solution to the results list, without which the search explores the whole tree but records nothing"
+      ], a: 0,
+      why: "The call stack restores a frame's local variables on return, but not anything you mutated outside the frame - a shared array, a board, a used[] flag. Un-choose is the manual restoration of that shared state; omit it and a decision made in one branch is still present when a sibling branch runs. It has nothing to do with termination or garbage collection." },
+
+    { type: "mc",
+      q: "The subset tree for n elements and the loop <code>for i in range(2**n)</code> testing each bit of i are described as the same object. In what sense are they the same?",
+      opts: [
+        "Both run in O(2^n) time and O(n) space, so they are interchangeable for any subset problem regardless of how the choice at each level is structured and whatever pruning you later add",
+        "The recursion compiles down to a single increment instruction, so the two produce identical machine code after optimisation and differ only in their source form",
+        "Both are breadth-first enumerations of the same set, visiting the subsets in order of increasing size",
+        "Each integer from 0 to 2^n - 1 encodes one leaf of the include/exclude tree, bit j giving element j's decision, so the counter enumerates exactly the leaves the recursion visits"
+      ], a: 3,
+      why: "A leaf is a sequence of n include/exclude decisions, which is an n-bit integer; iterating that integer from 0 to 2^n - 1 visits every leaf. They are the same enumeration in two notations. The equivalence breaks the moment the choice is more than binary or a prune enters, which is why the recursive form is the general one and the bitmask form the fast special case." },
+
+    { type: "mc",
+      q: "For permutations of <code>[1, 1, 2]</code>, the correct duplicate guard is <code>if i &gt; 0 and a[i] == a[i-1] and not used[i-1]: continue</code>. What goes wrong if you drop the <code>not used[i-1]</code> clause?",
+      opts: [
+        "Nothing changes for this particular input; the clause only matters once three or more copies of a value are present, and the two-copy case comes out identical either way you write it",
+        "The search now runs in exponential rather than linear time in the number of duplicate values, because the guard stops firing entirely and every ordering is regenerated from scratch",
+        "You forbid two equal values from both appearing in a completed permutation, so a valid answer like [1, 1, 2] is skipped too",
+        "The permutations come out unsorted, no longer in lexicographic order, though the set of distinct answers produced stays correct and complete"
+      ], a: 2,
+      why: "The clause distinguishes an equal value that is a sibling already tried at this level from one chosen higher up in the current prefix. Without it the guard fires even when the earlier copy is an ancestor, so it refuses to place a second 1 after a first, and [1,1,2] - a legitimate permutation - is lost. The bug removes real answers, not only duplicates." },
+
+    { type: "mc",
+      q: "Generating k-subsets of an n-set by choosing any unused element at each of k levels produces every set k! times. What single change fixes it?",
+      opts: [
+        "Thread a start index so each level may only choose an element after the one the level above chose, forcing every combination into increasing order and generating it exactly once",
+        "Sort the whole output and then remove adjacent duplicate sets in a separate post-processing pass, which costs an extra O(n log n) but leaves the enumeration itself and its running time completely unchanged",
+        "Switch from a used array to a swap-based generator, which never revisits an element and so cannot possibly produce the same set by two different orders of choosing",
+        "Keep a hash set of the combinations already produced and skip any repeat, trading memory for the removal"
+      ], a: 0,
+      why: "The duplicates are the same unordered set reached by different orders of choosing. A start index forbids choosing an element earlier than the previous level's, which permits only the increasing order of each set - one canonical ordering, one leaf. It is the position-based twin of the sort-then-skip rule for equal values, and it costs nothing beyond one parameter." },
+
+    { type: "blank",
+      q: "Refusing to explore a subtree once a partial solution provably cannot be completed &#8212; the abandonment that turns n-queens from a hundred thousand nodes into two thousand &#8212; is called ____.",
+      a: ["pruning"],
+      why: "A prune must be sound, cutting only subtrees with no solution, and cheap, since it runs at every node. The n-queens diagonal check is both. Because it fires early and often - most placements conflict - the pruned search visits 2,057 nodes at n = 8 where the unpruned one visits 109,601, and the ratio grows with n because pruning changes the growth rate rather than a constant." },
+
+    { type: "mc",
+      q: "The unpruned n-queens search beats the pruned one by 12.8&#215; at n = 6 but 650&#215; at n = 11. Why does the growing ratio matter more than any single value?",
+      opts: [
+        "A larger board merely has more queens to place, so both node counts rise, and any ratio taken between two rising quantities tends to grow with the input",
+        "A ratio that keeps growing with n means the two searches are in different complexity classes; a constant-factor speedup would show the same ratio at every board size, so a climbing ratio proves pruning changed the growth rate itself and not a constant",
+        "The ratio is really measuring cache efficiency, since larger boards fall out of cache sooner, so its growth reflects a memory-hierarchy effect rather than the pruning",
+        "It shows the pruned search is approaching the floor of one node per solution, which the unpruned search cannot approach at any board size"
+      ], a: 1,
+      why: "A constant-factor improvement shows the same ratio at every n. A ratio that climbs - 13, 53, 650 - means the unpruned node count grows strictly faster than the pruned one, so they are different growth rates, not the same rate scaled. The unpruned search tracks n! by enumerating row-permutations; pruning charges for a shared bad prefix once instead of once per permutation." },
+
+    { type: "mc",
+      q: "A sudoku solver with fixed pruning tried 8,969 placements filling cells left-to-right but 250 filling the fewest-candidates cell first. What distinguishes this speedup from pruning?",
+      opts: [
+        "It is really a form of pruning applied to the columns of the board rather than to its rows, so the two are the very same mechanism acting on a different axis of the grid",
+        "It changes which decision the search makes next rather than reacting after one fails, shrinking the branching factor near the root",
+        "It caches the candidate sets between recursive calls, so the whole saving is memoisation of the row, column and box checks and not any change in the search order",
+        "It quietly relaxes the soundness requirement, accepting some partial boards a strict solver would reject, then recovers correctness with a final validation pass"
+      ], a: 1,
+      why: "Pruning abandons a branch after a choice is shown to fail. Choosing the most-constrained cell is constraint propagation's cheapest slice: it uses the candidate counts to decide what to try next, so the branching factor near the root is small and a forced cell is filled before it can spawn a wide subtree. Same pruning, same puzzle - only the choice of next cell differs, and it is worth a factor of 36." },
+
+    { type: "mc",
+      q: "Iterative deepening re-searches the shallow levels of the tree at every depth limit. Measured overhead was 1.11&#215; at branching factor 10. Why is re-searching the top nearly free?",
+      opts: [
+        "The shallow levels are cached from the previous iteration, so re-searching them is a memory read rather than a recomputation and costs almost nothing at all",
+        "Modern branch predictors learn the shallow levels after the very first pass, so every subsequent re-search of those levels runs at near-zero marginal cost on the hardware itself",
+        "The number of nodes at the deepest level exceeds the sum of all shallower levels, so re-walking the top adds only the bounded fraction b/(b-1), which shrinks as b grows",
+        "The search remembers the shallow levels held no solution and skips them on later passes, so they are visited only on the first"
+      ], a: 2,
+      why: "A b-ary tree has b^d nodes at depth d, more than every level above combined, so the deepest search dominates and re-doing the shallow levels d times adds only b/(b-1) - measured 1.995, 1.250, 1.111 for b of 2, 5, 10, matching the formula. It is arithmetic about tree sizes, not caching or prediction; nothing is remembered between iterations." },
+
+    { type: "order",
+      q: "Order these four searches from fewest nodes explored to most, for the eight-queens problem:",
+      items: [
+        "backtracking with the diagonal prune, abandoning a column the moment no safe row remains",
+        "backtracking that enforces distinct rows but tests the diagonals only at a completed board",
+        "brute force over all row-per-column assignments including repeated rows, tested at the leaf",
+        "brute force over all 64-choose-8 ways to drop eight queens on the board, tested at the leaf"
+      ],
+      why: "Pruning early beats pruning late beats not pruning. The diagonal prune visits 2,057 nodes at n = 8; enforcing distinct rows but testing diagonals late visits 109,601; allowing repeated rows enumerates 8^8 = 16.7 million leaf tests; and dropping eight queens anywhere among 64 squares is 64-choose-8 = 4.4 billion placements. Each step removes a class of doomed candidates earlier than the last." },
+
+    { type: "blank",
+      q: "The search strategy that runs depth-limited passes at increasing limits &#8212; buying breadth-first completeness with depth-first O(d) memory at an overhead of b/(b&#8722;1) &#8212; is called ____ ____.",
+      a: ["iterative deepening"],
+      why: "It re-searches the shallow levels every pass, but because the deepest level holds more nodes than all the ones above it, that redundancy is only the factor b/(b-1) - 11% at branching factor 10. In exchange it needs to store only the current path, O(d), where breadth-first search would hold an O(b^d) frontier: at b = 10, d = 8 that is a stack of 8 against a hundred million nodes." }
   ]
 });
