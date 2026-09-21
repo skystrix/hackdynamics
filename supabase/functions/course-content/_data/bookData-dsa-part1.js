@@ -1,6 +1,24 @@
 /* ==========================================================================
    bookData-dsa-part1.js — DSA By Patterns, Part 1 chapters (1–12)
    Original explanatory writing.
+   Sources consulted for Chapter 22: Knuth, "Optimum binary search trees", Acta
+   Informatica 1:14-25, 1971 (optimal BST and the O(n^2) speed-up); Yao,
+   "Efficient dynamic programming using quadrangle inequalities", STOC 1980;
+   Held & Karp, "A dynamic programming approach to sequencing problems", 1962
+   (the TSP bitmask DP); Kuhn, "The Hungarian method for the assignment
+   problem", 1955; matrix chain multiplication and digit DP are standard.
+   Measured 2026-09-21, CPython 3.13.2 arm64: grid unique paths = C(m+n-2,n-1)
+   (10x10 = 48,620), a single central obstacle on 3x3 taking 6 paths to 2 while
+   a full anti-diagonal cut takes them to 0; matrix chain best vs worst
+   parenthesization (dims 30,35,15,5,10,20,25 -> 15,125 vs 58,000; alternating
+   1,50,1,50,1,50,1,50 -> 202 vs 260,000, a factor of 1,287); Held-Karp TSP
+   state count 2^n*n vs (n-1)! tours (n:8->10 states x5 vs tours x72), timing
+   n=10 brute 269 ms vs Held-Karp 2.4 ms, n=11 2,832 vs 4.8, n=12 abandoned vs
+   11.7; bitmask assignment O(2^n*n), n=10 bitmask 0.9 ms (10,240 states) vs
+   brute 1,844 ms, n=12 4.1 ms vs 479M perms infeasible; domino tilings 2xn =
+   Fibonacci, 3xn even = 3,11,41,153,571; digit DP counting 0..N with no two
+   equal adjacent digits verified against brute (91/820/8,304 at N=100/1000/
+   12345), counting 168,856,464,709,124,011 up to 10^18 in 0.26 ms.
    Sources consulted for Chapter 21: the O(n log n) LIS via patience sorting is
    classic (Aldous & Diaconis, "Longest increasing subsequences: from patience
    sorting to the Baik-Deift-Johansson theorem", 1999, for the name); Wagner &
@@ -7079,5 +7097,279 @@ CHAPTERS.push({
         "No &#8212; the two are computing altogether different quantities, Hirschberg returning the subsequence and the full table the distance, so their outputs were never meant to match in the first place"
       ], a: 0,
       why: "The optimum is a value, and many alignments can achieve it. The full-table traceback and Hirschberg resolve ties by different conventions, so they can return different subsequences that are both valid and both of the optimal length - verified up to 3,000 characters, Hirschberg's output was always a correct common subsequence of the right length. Neither is wrong; the answer object is not unique at all." }
+  ]
+});
+
+/* ======================= CHAPTER 22 ======================= */
+CHAPTERS.push({
+  num: 22, part: 3, title: "Grid, Interval and Bitmask DP",
+  blurb: "Three more shapes a subproblem can take: a position in a grid, a range of a sequence, and a subset of a set. The third is the one that matters most and is taught least &#8212; encoding a subset as an integer turns an n! permutation search into 2ⁿ&#183;n, the difference between a problem that stops at ten elements and one that reaches twenty, and it is how the travelling salesman is actually solved for the small instances that arise in practice. The chapter ends with two counting techniques &#8212; tilings by broken profile and the digit dynamic programming that placement interviews really ask for.",
+
+  sections: [
+
+    { title: "Grid DP: Two Predecessors and an Edge",
+      html:
+        "<p>The simplest new subproblem shape is a cell in a grid, and the canonical problem is counting the monotone paths from the top-left corner to the bottom-right, moving only right or down. Chapter 19 met this in passing; here it is the base case of a family. <strong>Subproblems:</strong> <code>P(i, j)</code> = the number of paths reaching cell (i, j). <strong>Relate:</strong> a path arrives from directly above or directly left, so <code>P(i, j) = P(i-1, j) + P(i, j-1)</code>. <strong>Base:</strong> the top row and left column each have exactly one path, the straight one. <strong>Original:</strong> <code>P(m-1, n-1)</code>. <strong>Time:</strong> O(mn).</p>" +
+
+        "<p>The answer has a closed form &#8212; a monotone path is a sequence of choices, right or down, so the count is the binomial coefficient <code>C(m+n-2, n-1)</code> &#8212; and the dynamic program agrees exactly: a 10&#215;10 grid has 48,620 paths, which is <code>C(18, 9)</code> to the digit. That the table reproduces a formula you already know is the point of starting here: the grid recurrence is trustworthy, and now you can bend it in ways the formula cannot follow.</p>" +
+
+        "<p>Two bends cover most of what interviews ask. <strong>Obstacles</strong>: a blocked cell contributes zero paths, and the recurrence routes around it untouched. The machine's discovery is worth pausing on &#8212; a single obstacle rarely drops the count to zero, because paths route around it; on a 3&#215;3 grid one central wall takes the six paths down to two, not to none. To reach zero you must block an entire <em>cut</em>: every monotone path crosses each anti-diagonal exactly once, so walling off a whole anti-diagonal &#8212; the three cells where <code>i + j</code> equals a constant &#8212; stops every path at once. Zeroing a grid is a min-cut, not a lucky obstacle. <strong>Minimum path sum</strong>: replace addition with \"take the cheaper predecessor and add this cell's cost\", turning the counter into an optimiser over the same two predecessors. The table's structure never changes; only the operation in the cell does, from a sum for counting to a minimum for cost, which is the single most reused shift in dynamic programming.</p>" +
+
+        "<p>The shape to carry away is that grid DP is the sequence problems of the last chapter with two predecessors instead of one and a two-dimensional base case &#8212; an edge rather than a corner. The moment a problem is about reaching positions in a grid by restricted moves, whether the cells are map tiles, string indices, or the (i, j) of an alignment, the recurrence is some version of \"the ways in are the ways to my predecessors,\" and the only real work is naming the predecessors and the edge. An obstacle grid is counted the same way with blocked cells pinned to zero, which is how a real routing grid &#8212; streets with closures, a warehouse floor with racks &#8212; is counted: the walls are the zeros, and every open corner still sums its two neighbours. <strong>Toggle obstacles in the machine above</strong> and watch the counts refill from the corner; the wall that zeroes the corner is the one that completes an anti-diagonal.</p>",
+      viz: "dsaGridDP", vizTitle: "Click cells to add walls; watch the path counts fill in from the corner"
+    },
+
+    { title: "Interval DP: Subproblems Over a Range",
+      html:
+        "<p>The next subproblem shape is a contiguous range <code>[i, j]</code> of a sequence, and it is the one people find hardest because the recurrence does not build the answer left to right &#8212; it splits a range at an interior point and combines the two halves. The archetype is <strong>matrix chain multiplication</strong>: given a chain of matrices to multiply, the product is fixed but the order of multiplications is not, and different orders cost wildly different amounts of scalar arithmetic.</p>" +
+
+        "<p>Multiplying a p&#215;q matrix by a q&#215;r matrix costs p&#183;q&#183;r scalar multiplications, so for a chain the <strong>parenthesization</strong> &#8212; which product to form first &#8212; is a real choice. <strong>Subproblems:</strong> <code>M(i, j)</code> = the cheapest way to multiply matrices i through j into one. <strong>Relate:</strong> the last multiplication joins the left block <code>[i, k]</code> and the right block <code>[k+1, j]</code>, so <code>M(i, j) = min</code> over all split points k of <code>M(i, k) + M(k+1, j) + </code> the cost of that final product. <strong>Order:</strong> by increasing interval length, because a range depends only on shorter ranges inside it. <strong>Base:</strong> a single matrix costs nothing. <strong>Time:</strong> O(n&#178;) subproblems each trying O(n) splits, so O(n&#179;).</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>matrix-chain table dp[i][j] over 4 matrices (dims 30,35,15,5,10), filled by diagonal</text>" +
+        "<text x='180' y='42' text-anchor='middle' fill='#7d8fb0' font-size='9'>j=0</text>" +
+        "<text x='300' y='42' text-anchor='middle' fill='#7d8fb0' font-size='9'>j=1</text>" +
+        "<text x='420' y='42' text-anchor='middle' fill='#7d8fb0' font-size='9'>j=2</text>" +
+        "<text x='540' y='42' text-anchor='middle' fill='#7d8fb0' font-size='9'>j=3</text>" +
+        "<text x='120' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>i=0</text>" +
+        "<text x='120' y='104' text-anchor='middle' fill='#7d8fb0' font-size='9'>i=1</text>" +
+        "<text x='120' y='140' text-anchor='middle' fill='#7d8fb0' font-size='9'>i=2</text>" +
+        "<text x='120' y='176' text-anchor='middle' fill='#7d8fb0' font-size='9'>i=3</text>" +
+        "<rect x='138' y='48' width='84' height='30' rx='3' fill='#111a2e' stroke='#2a3a5a' stroke-width='1.5'/>" +
+        "<text x='180' y='68' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text>" +
+        "<rect x='258' y='48' width='84' height='30' rx='3' fill='#111a2e' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='300' y='68' text-anchor='middle' fill='#c9d6ea' font-size='11'>15,750</text>" +
+        "<rect x='378' y='48' width='84' height='30' rx='3' fill='#111a2e' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='420' y='68' text-anchor='middle' fill='#c9d6ea' font-size='11'>7,875</text>" +
+        "<rect x='498' y='48' width='84' height='30' rx='3' fill='#111a2e' stroke='#ff5d73' stroke-width='1.5'/>" +
+        "<text x='540' y='68' text-anchor='middle' fill='#c9d6ea' font-size='11'>9,375</text>" +
+        "<rect x='258' y='84' width='84' height='30' rx='3' fill='#111a2e' stroke='#2a3a5a' stroke-width='1.5'/>" +
+        "<text x='300' y='104' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text>" +
+        "<rect x='378' y='84' width='84' height='30' rx='3' fill='#111a2e' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='420' y='104' text-anchor='middle' fill='#c9d6ea' font-size='11'>2,625</text>" +
+        "<rect x='498' y='84' width='84' height='30' rx='3' fill='#111a2e' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<text x='540' y='104' text-anchor='middle' fill='#c9d6ea' font-size='11'>4,375</text>" +
+        "<rect x='378' y='120' width='84' height='30' rx='3' fill='#111a2e' stroke='#2a3a5a' stroke-width='1.5'/>" +
+        "<text x='420' y='140' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text>" +
+        "<rect x='498' y='120' width='84' height='30' rx='3' fill='#111a2e' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='540' y='140' text-anchor='middle' fill='#c9d6ea' font-size='11'>750</text>" +
+        "<rect x='498' y='156' width='84' height='30' rx='3' fill='#111a2e' stroke='#2a3a5a' stroke-width='1.5'/>" +
+        "<text x='540' y='176' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text>" +
+        "<text x='20' y='210' fill='#7d8fb0' font-size='9'>fill order by diagonal:</text>" +
+        "<rect x='150' y='202' width='12' height='10' fill='none' stroke='#2a3a5a' stroke-width='2'/>" +
+        "<text x='166' y='211' fill='#c9d6ea' font-size='9'>1  length-1 (all 0)</text>" +
+        "<rect x='295' y='202' width='12' height='10' fill='none' stroke='#3ddc97' stroke-width='2'/>" +
+        "<text x='311' y='211' fill='#c9d6ea' font-size='9'>2  length-2</text>" +
+        "<rect x='440' y='202' width='12' height='10' fill='none' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='456' y='211' fill='#c9d6ea' font-size='9'>3  length-3</text>" +
+        "<rect x='585' y='202' width='12' height='10' fill='none' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='601' y='211' fill='#c9d6ea' font-size='9'>4  length-4 = answer 9,375</text>" +
+        "<text x='20' y='230' fill='#ffd166' font-size='10'>each cell needs only shorter intervals, so filling by increasing length guarantees its inputs are ready.</text>" +
+        "</svg><div class='fig-cap'>The dependency of dp[i][j] on shorter sub-intervals is why the table fills along diagonals, shortest first.</div></div>" +
+
+        "<p>The stakes are not small. On the six-matrix chain with dimensions 30, 35, 15, 5, 10, 20, 25 the optimal order costs 15,125 scalar multiplications and the worst order costs 58,000, nearly four times more; on the alternating dimensions 1, 50, 1, 50, 1, 50, 1, 50 the best parenthesization costs 202 and the worst costs 260,000, a factor of <strong>1,287</strong>. Same matrices, same product, three orders of magnitude of difference in the work, decided entirely by where the parentheses go &#8212; which is exactly what the table finds.</p>" +
+
+        "<p>The move that makes interval DP click is <strong>choosing the last action, not the first</strong>. A left-to-right recurrence asks \"what do I do first,\" which for a range does not decompose cleanly; the interval recurrence asks \"what is the final combination,\" which splits the range into two independent sub-ranges. Burst balloons &#8212; pop a line of balloons to maximise a score that depends on each balloon's surviving neighbours &#8212; is the problem that teaches this, because deciding which balloon to pop <em>first</em> couples the two sides through the neighbour that vanishes, while deciding which to pop <em>last</em> leaves it with two fixed boundaries and two independent sub-ranges. Whenever a range problem will not decompose, try fixing the last action rather than the first; it is the interval-DP move, and it is the reason the table fills by diagonals from the shortest range to the whole.</p>" +
+
+        "<p>The same last-action framing solves a surprising range of problems: the minimum cost to cut a stick at given positions (choose the last cut), the maximum score of merging a row of stones (choose the last merge), the ways to triangulate a polygon (choose the last triangle on a fixed edge). Each looks different and each is <code>M(i, j) = </code> the best over a split point of two sub-ranges plus a joining cost, filled shortest-range first. Interval DP is not a family of tricks but one recurrence wearing costumes, and the costume is always the joining cost.</p>"
+    },
+
+    { title: "Optimal Binary Search Trees, and the Speed-Ups",
+      html:
+        "<p>Interval DP has a famous member that also opens the door to the fastest ideas in this chapter. An <strong>optimal binary search tree</strong> arranges keys with known access frequencies so that the expected comparison cost of a lookup is minimised &#8212; frequent keys near the root, rare keys in the leaves. The recurrence is interval DP: the best tree for keys <code>[i, j]</code> tries each key as the root and pairs the best left subtree on <code>[i, k-1]</code> with the best right subtree on <code>[k+1, j]</code>, adding the total frequency of the range because every key's depth grows by one when it gains a root above it. Knuth gave this in 1971, and it is O(n&#179;) written directly.</p>" +
+
+        "<p>But it is not O(n&#179;) in practice, and the reason is the deepest idea in the chapter. Knuth observed that the optimal root of <code>[i, j]</code> lies between the optimal roots of <code>[i, j-1]</code> and <code>[i-1, j]</code> &#8212; the best split point is <strong>monotone</strong> &#8212; so the inner search over roots does not scan the whole range, only the window between two already-known roots. Summed across the table that window telescopes, and the O(n&#179;) collapses to O(n&#178;). This is <strong>Knuth's optimization</strong>, and it was later explained by a single structural property.</p>" +
+
+        "<p>The saving is not academic. An optimal binary search tree over a large dictionary, or the cheapest order in which to merge a set of sorted files, is exactly this recurrence, and dropping O(n<sup>3</sup>) to O(n<sup>2</sup>) is the difference between preprocessing a hundred thousand keys in a second and in an hour. The optimisation earns its complexity precisely on the inputs large enough for the cubic term to hurt, which are the ones you would actually run it on.</p>" +
+
+        "<div class='callout'>Yao showed in 1980 that a whole family of interval dynamic programs speeds up under one condition, the <strong>quadrangle inequality</strong>: roughly, that widening a range never moves the optimal split point backward. When a cost function satisfies it, three named speed-ups apply, each to a different transition shape. <strong>Divide-and-conquer DP</strong> handles a transition whose optimal split is monotone, computing a row by recursing on the middle column and bounding the split search &#8212; O(n log n) per row instead of O(n&#178;). <strong>Knuth's optimization</strong> is the interval-DP case, O(n&#178;) instead of O(n&#179;). The <strong>convex hull trick</strong> handles a transition that is a minimum over lines, evaluating it by maintaining the lower envelope of those lines; its geometric reading, and the Li Chao tree that implements it, come in Chapter 45. All three turn a quadratic inner loop into a logarithmic or amortised-constant one, and all three need the same monotonicity to be sound.</div>" +
+
+        "<p>The lesson is not to memorise three optimisations but to recognise their precondition. Each one replaces a scan over split points with something cheaper, and each is correct only because the optimal split moves monotonically as the range grows. When you meet an O(n&#179;) or O(n&#178;) interval or partition DP whose split point never seems to jump backward as you widen the window, one of these three applies, and the quadrangle inequality is the property to check before you reach for it. Without the monotonicity the speed-ups are outright wrong, in the silent way Chapter 20's loop direction was wrong: a fast answer to a different problem.</p>"
+    },
+
+    { title: "Bitmask DP: A Subset Is an Integer",
+      html:
+        "<p>The third subproblem shape is a subset of a set, and it is the one this chapter is really about. Chapter 18 already made the identification: a subset of n elements is an n-bit integer, bit j set when element j is in the subset. That was an enumeration trick there; here it becomes a subproblem index. A dynamic program whose state is \"which subset have I dealt with\" has 2<sup>n</sup> states, one per integer from 0 to 2<sup>n</sup>-1, and the whole machinery of dynamic programming &#8212; a table, a recurrence, a fill order &#8212; applies with the subset as the key.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 176' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>a subset of {0,1,2,3} as a 4-bit integer: bit j is 1 when element j is in the set</text>" +
+        "<text x='40' y='58' fill='#7d8fb0' font-size='9'>bits (3..0)</text>" +
+        "<rect x='120' y='44' width='34' height='30' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='137' y='64' text-anchor='middle' fill='#3ddc97' font-size='13'>1</text>" +
+        "<rect x='158' y='44' width='34' height='30' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='175' y='64' text-anchor='middle' fill='#3ddc97' font-size='13'>1</text>" +
+        "<rect x='196' y='44' width='34' height='30' rx='3' fill='#111a2e' stroke='#2a3a5a'/><text x='213' y='64' text-anchor='middle' fill='#7d8fb0' font-size='13'>0</text>" +
+        "<rect x='234' y='44' width='34' height='30' rx='3' fill='#10322a' stroke='#3ddc97' stroke-width='2'/><text x='251' y='64' text-anchor='middle' fill='#3ddc97' font-size='13'>1</text>" +
+        "<text x='137' y='90' text-anchor='middle' fill='#556' font-size='9'>3</text><text x='175' y='90' text-anchor='middle' fill='#556' font-size='9'>2</text><text x='213' y='90' text-anchor='middle' fill='#556' font-size='9'>1</text><text x='251' y='90' text-anchor='middle' fill='#556' font-size='9'>0</text>" +
+        "<text x='300' y='64' fill='#c9d6ea' font-size='12'>= 13 = the set {0, 2, 3}</text>" +
+        "<text x='120' y='120' fill='#ffd166' font-size='11'>add element 1:  1101 | 0010 = 1111  =  {0, 1, 2, 3}</text>" +
+        "<line x1='20' y1='138' x2='740' y2='138' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='158' fill='#c9d6ea' font-size='10'>2^n such integers cover every subset; a dynamic program can key its table on this integer directly.</text>" +
+        "</svg><div class='fig-cap'>The subset, the integer and its bits are one object; adding an element is a single bitwise OR.</div></div>" +
+
+        "<p>The reason this matters is the size it beats. Many problems are naturally a search over <em>orderings</em> of n things &#8212; which is n! &#8212; but their difficulty depends only on <em>which</em> things are done, not the order they were done in. When the future cost depends on the set of completed elements and one more piece of state, such as where you currently are, the state is <strong>(mask, position)</strong>, and there are 2<sup>n</sup>&#183;n of those. Trading n! states for 2<sup>n</sup>&#183;n is the entire technique, and the gap is enormous: at n = 20, n! is 2.4&#215;10<sup>18</sup> while 2<sup>n</sup>&#183;n is 21 million. The move is to notice that the order-of-completion, which the factorial counts, is exactly the information the problem does not need.</p>" +
+
+        "<p>Fixing the state, the recurrence writes itself: to reach a state, come from a state with one fewer element in the mask. <code>dp[mask][i]</code> is built from <code>dp[mask without i][j]</code> for each j that could precede i, and the fill order is by increasing population count of the mask, since removing an element always shrinks the set. The transitions cost O(n) per state &#8212; try each element to add or each predecessor to come from &#8212; so a bitmask DP is O(2<sup>n</sup>&#183;n) states times O(n) transitions, typically O(2<sup>n</sup>&#183;n&#178;). It is still exponential; it is exponential in n with base 2 instead of factorial, which is a different and far kinder curve. The gap is worth feeling: 2<sup>20</sup> is about a million, while 20! is 2.4&#215;10<sup>18</sup> &#8212; a factor of 10<sup>12</sup> at n = 20, which is the whole reason a problem hopeless as a permutation search becomes a few seconds as a subset DP. The exponential is not beaten, it is traded for a much slower one.</p>" +
+
+        "<p>The ceiling is the word size and the exponential together, and they meet at a familiar place. A mask must fit in an integer, and 2<sup>n</sup> states must fit in time and memory, so bitmask DP lives at n around 20 &#8212; comfortably below the 64-bit word limit but bounded well before it by the 2<sup>n</sup> table. That is the same ceiling Chapter 18's subset enumeration hit, for the same two reasons arriving together, and it is why the next three sections are all small-n techniques: bitmask DP is the tool for the problem that is intractable in general but has few enough elements to make 2<sup>n</sup> affordable.</p>"
+    },
+
+    { title: "Held-Karp: The Travelling Salesman, Honestly",
+      html:
+        "<p>The travelling salesman problem &#8212; visit every city once and return, minimising total distance &#8212; is the standard demonstration of bitmask DP, and it is also a chance to be honest about what \"solved\" means for an NP-hard problem. The naive search is over tours, of which there are (n-1)! for n cities. The <strong>Held-Karp algorithm</strong>, from 1962, is the bitmask version.</p>" +
+
+        "<p>The state is exactly <strong>(mask, last)</strong>: the set of cities already visited and the city you are currently in. <code>dp[mask][last]</code> is the shortest path that starts at city 0, visits precisely the cities in mask, and ends at last. The transition extends a path by one unvisited city, and the answer closes the loop back to the start. There are 2<sup>n</sup>&#183;n states and each has O(n) transitions, so Held-Karp is <strong>O(2<sup>n</sup>&#183;n&#178;)</strong>, and the tour it returns is exactly optimal &#8212; no approximation, the true shortest cycle.</p>" +
+
+        "<p>Now the honesty. O(2<sup>n</sup>&#183;n&#178;) is still exponential, so Held-Karp does not make the travelling salesman tractable; it moves the wall from n around 12 to n around 20, and no further. What it buys is measurable and worth having. As n rises from 8 to 10, the number of tours a brute-force search examines multiplies by 72, while the number of Held-Karp states multiplies by only 5 &#8212; the factorial's savage growth against the exponential's merely fast one. Measured, solving a random 10-city instance took 269 milliseconds by brute force and 2.4 by Held-Karp; at 11 cities it was 2,832 milliseconds against 4.8; at 12 cities the brute force was abandoned while Held-Karp finished in 12; at 13 cities, where brute force would sift 479 million tours, Held-Karp is still under a hundred milliseconds. It is the difference between exact answers for a dozen cities and exact answers for twenty, which for many real routing problems &#8212; a technician's daily stops, a circuit board's drill holes &#8212; is exactly the range that matters.</p>" +
+
+        "<p>The framing to keep is that a slower-growing exponential is a genuine and permanent win even though it is not a polynomial one. Chapter 20 drew the line between pseudopolynomial and polynomial; this is a different line, between one exponential and another, and it is as real. Held-Karp will never scale to a thousand cities &#8212; for that you need the approximation algorithms and heuristics that Chapter 46 points to &#8212; but for the small exact instances that arise constantly, turning (n-1)! into 2<sup>n</sup>&#183;n<sup>2</sup> is the whole game, and it is bitmask DP that does it. And the small exact instances are not rare: a delivery van with fifteen stops, a laser cutter with a dozen holes, a tour of eighteen museum rooms &#8212; all sit in Held-Karp's range and none in brute force's, which is why the algorithm from 1962 still ships when the answer must be exact and the cities are few.</p>"
+    },
+
+    { title: "Assignment by Bitmask",
+      html:
+        "<p>The same state idea solves a problem that sounds different and is worth contrasting with the last one. The <strong>assignment problem</strong> is to match n people to n jobs, each person to one job, minimising the total cost of the assignment given a cost for every person-job pair. The naive search is over the n! ways to match them.</p>" +
+
+        "<p>The bitmask insight is that once you decide to assign people in a fixed order &#8212; person 0 first, then person 1, and so on &#8212; the only state you need is <em>which jobs are already taken</em>. <code>dp[mask]</code> is the cheapest way to assign the first <code>popcount(mask)</code> people to exactly the jobs in mask, and the next person &#8212; whose index is that population count &#8212; tries each still-free job. This is O(2<sup>n</sup>&#183;n): 2<sup>n</sup> masks, n job choices each, and the person index comes free from the mask's size, so there is no second dimension. Measured, a 10-person assignment solved in under a millisecond by bitmask against 1.8 seconds of brute-force permutation, and at 12 people the bitmask ran in 4 milliseconds while the 479-million-permutation brute force was hopeless.</p>" +
+
+        "<div class='callout'>Here the contrast with Held-Karp matters. The travelling salesman is NP-hard, so its 2<sup>n</sup>&#183;n<sup>2</sup> is the best exact algorithm known and the exponential is unavoidable. The assignment problem is <em>not</em> hard: it has a polynomial algorithm, the Hungarian method, that Chapter 39 develops from bipartite matching and that solves it in O(n<sup>3</sup>) for any n. So the bitmask solution here is the <em>small-n</em> answer to a problem that is fully solved for large n &#8212; a convenience when n is tiny and you would rather write ten lines than implement the Hungarian algorithm, not a necessity. Knowing which of the two you face &#8212; genuinely hard, or merely not-yet-implemented-the-fast-way &#8212; is the difference between reaching for a bitmask because you must and because it is quick.</div>" +
+
+        "<p>The Hungarian method reaches the same answer by a completely different route &#8212; it reads the assignment problem as a minimum-cost matching in a bipartite graph, solved by repeatedly finding augmenting paths, which Chapter 39 builds from the flow machinery. Its O(n<sup>3</sup>) scales to thousands of people where the bitmask stops near twenty, and that two such different methods solve one problem is itself the signal it is not hard: genuinely hard problems do not accumulate polynomial algorithms.</p>" +
+
+        "<p>The two problems look alike in code and could not be more different in status, and the lesson is to always ask, before settling for an exponential algorithm, whether the problem is actually hard. Bitmask DP is seductive because it is short and it works, and it is exactly right for the travelling salesman and exactly a shortcut for assignment. The state (mask) or (mask, position) is the same tool; whether it is the best tool depends on a complexity fact about the problem that the code cannot tell you and Chapter 46 makes precise.</p>"
+    },
+
+    { title: "Counting and Digit DP",
+      html:
+        "<p>The chapter closes on two techniques where the dynamic program <em>counts</em> rather than optimises &#8212; the cell holds a number of ways, and the recurrence sums instead of taking a minimum. Counting is where dynamic programming is at its least visible and most useful, because the alternative is enumerating an astronomical set.</p>" +
+
+        "<p><strong>Tilings</strong> are the classic counting DP. The number of ways to tile a 2&#215;n strip with dominoes is the Fibonacci sequence &#8212; 1, 2, 3, 5, 8, 13 for n = 1 to 6 &#8212; because the last column is covered by either one vertical domino, leaving a 2&#215;(n-1) strip, or two horizontals shared with the previous column, leaving 2&#215;(n-2). Wider strips need more state: for a 3&#215;n strip the counts are 3, 11, 41, 153, 571 for even n, and the recurrence needs to know the ragged boundary between the filled and unfilled parts. The technique that carries this to any width is <strong>broken profile</strong> DP, whose state is a bitmask of which cells along the current frontier are already filled &#8212; the subset shape from earlier in the chapter, now describing the jagged edge of a partial tiling rather than a set of visited cities. Counting tilings of a wide grid is a bitmask DP over the profile, and it is the same 2<sup>width</sup> ceiling. The profile advances across the grid one cell at a time, at each step either placing a piece over the frontier cell or leaving it for the next column, and the transitions between profiles are the recurrence &#8212; which is why a 2&#215;n strip, whose profile is a single bit, is exactly Fibonacci, and a wider strip is the same idea with more frontier bits to track.</p>" +
+
+        "<p><strong>Digit DP</strong> is the counting technique that placement and competitive rounds ask for by name, and it answers questions of the form \"how many integers from 0 to N have some digit property?\" The trick is to build the number digit by digit from the most significant end, carrying only the state it needs: the position, whether the prefix so far is still equal to N's prefix (the <em>tight</em> flag, which bounds the next digit), and whatever the property needs &#8212; the previous digit, a running sum, a remainder. The count is a walk over these states, and there are only about (digits)&#215;(state) of them, so a bound with eighteen digits is a few hundred states regardless of how astronomically large N is.</p>" +
+
+        "<p>The tight flag is the subtle part. While the prefix built so far still equals N's prefix, the next digit is capped at N's digit and only some choices are legal; the instant a smaller digit is chosen the prefix drops below N and every later digit is free, 0 through 9. Almost the entire count comes from those freed suffixes, each a subproblem computed once and reused across every prefix that reaches it &#8212; which is what collapses a quintillion numbers into a walk over a few hundred states.</p>" +
+
+        "<p>The power is the scale it reaches. Counting the integers up to N with no two equal adjacent digits, the digit DP agrees with brute force exactly &#8212; 91 up to 100, 820 up to 1,000, 8,304 up to 12,345 &#8212; and then keeps going where brute force cannot: up to 10<sup>18</sup> it counts 168,856,464,709,124,011 valid numbers in a quarter of a millisecond, a computation that by enumeration would take longer than the age of the universe. That is the signature of a counting DP done right: the answer is astronomically large, the input is a handful of digits, and the work is proportional to the digits and not to the answer. It is the counting cousin of the whole course's thesis &#8212; the size of the thing you are counting is not the size of the work to count it.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Fill the unique-paths table for a 3&#215;3 grid, then place a single obstacle at the centre and refill, then block the whole middle anti-diagonal. <em>What you should find:</em> six paths, then two, then zero &#8212; a lone obstacle only reroutes, while a full anti-diagonal is a cut every monotone path must cross, so blocking it stops all of them.</li>" +
+        "<li><strong>Trace.</strong> Fill the matrix-chain table for dimensions 30, 35, 15, 5, 10 by increasing interval length, recording the best split point in each cell. <em>What you should find:</em> the table fills along diagonals, the answer 9,375 appears last in the top-right cell, and the split points recorded let you read off the parenthesization by recursion.</li>" +
+        "<li><strong>Investigate.</strong> Compute the best and worst parenthesization cost for the dimensions 1, 50, 1, 50, 1, 50, 1, 50. <em>What you should find:</em> a best of 202 against a worst of 260,000, a factor over a thousand, showing that for alternating thin and fat dimensions the order of multiplication dominates the cost completely.</li>" +
+        "<li><strong>Investigate.</strong> Solve a random travelling-salesman instance by brute force over tours and by Held-Karp, for n from 8 to 11, timing both. <em>What you should find:</em> identical optimal tours, brute-force time growing by the factorial while Held-Karp grows by a factor near five per two cities, and a crossover after which only Held-Karp finishes.</li>" +
+        "<li><strong>Build.</strong> Write the O(2<sup>n</sup>&#183;n) bitmask assignment DP and check it against brute-force permutations for n up to 10, then run it at n = 12. <em>What you should find:</em> agreement on the minimum cost, the bitmask finishing in milliseconds where the permutation search takes seconds, and the person index falling out of the mask's population count with no second dimension needed.</li>" +
+        "<li><strong>Build.</strong> Write a digit DP that counts integers from 0 to N with no two equal adjacent digits, check it against a brute-force loop for N up to a few thousand, then run it at N = 10<sup>18</sup>. <em>What you should find:</em> exact agreement on the small cases and an instant answer at 10<sup>18</sup> &#8212; the work is proportional to the eighteen digits, not to the quintillion numbers, because the tight flag and the previous digit are all the state the count needs.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "grid DP", d: "A dynamic program whose subproblem is a cell in a grid, reached from a fixed set of predecessor cells; counting paths, minimum path sum and obstacle variants are all this shape." },
+    { t: "interval DP", d: "A dynamic program whose subproblem is a contiguous range [i, j], solved by splitting the range at an interior point and combining the two sub-ranges; fills by increasing length." },
+    { t: "matrix chain multiplication", d: "Choosing the order to multiply a chain of matrices to minimise scalar multiplications; the archetypal interval DP, O(n^3) directly and O(n^2) under Knuth's optimization." },
+    { t: "parenthesization", d: "A choice of which sub-products to form first in a matrix chain; the product is fixed but the cost varies by orders of magnitude with the parenthesization." },
+    { t: "optimal binary search tree", d: "A binary search tree arranged to minimise expected lookup cost given key access frequencies; an interval DP due to Knuth (1971) that admits the O(n^2) speed-up." },
+    { t: "quadrangle inequality", d: "Yao's 1980 condition on a cost function under which the optimal split point is monotone, unifying the interval-DP and divide-and-conquer speed-ups." },
+    { t: "Knuth's optimization", d: "Speeding an interval DP from O(n^3) to O(n^2) by searching for each range's optimal split only between the split points of its two sub-ranges, valid when the split is monotone." },
+    { t: "divide-and-conquer DP", d: "A speed-up for a transition whose optimal split point is monotone across a row, found by recursing on the middle column and bounding the search, giving O(n log n) per row." },
+    { t: "convex hull trick", d: "A speed-up for a transition that is a minimum over a set of lines, evaluated by maintaining their lower envelope; its geometry and the Li Chao tree are Chapter 45's." },
+    { t: "bitmask DP", d: "A dynamic program whose subproblem is a subset of n elements encoded as an n-bit integer, giving 2^n states and turning many n! searches into 2^n times n." },
+    { t: "Held-Karp algorithm", d: "The bitmask DP for the travelling salesman, state (visited set, current city), solving it exactly in O(2^n n^2) - exponential, but far below the (n-1)! of brute force." },
+    { t: "travelling salesman problem", d: "Finding the shortest cycle visiting every city once; NP-hard, so Held-Karp's exponential time is the best exact algorithm and only reaches n around 20." },
+    { t: "assignment problem", d: "Matching n people to n jobs at minimum total cost; solvable by bitmask DP for small n but polynomially by the Hungarian method of Chapter 39 for any n." },
+    { t: "counting DP", d: "A dynamic program whose cell holds a number of ways and whose recurrence sums rather than minimises; the alternative to enumerating an astronomically large set." },
+    { t: "broken profile", d: "A counting-DP technique whose state is a bitmask of which cells along the current frontier are filled, used to count tilings and packings of a grid one column or cell at a time." },
+    { t: "digit DP", d: "Counting integers up to a bound with a digit property, by building the number digit by digit with a tight flag and minimal carried state; work scales with the digits, not the bound." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "On a 3&#215;3 grid there are six monotone paths. A single obstacle at the centre leaves two, but to reach zero you must block an entire anti-diagonal. Why does one obstacle rarely suffice?",
+      opts: [
+        "Because the obstacle only blocks paths that would pass through its exact cell, and on a 3&#215;3 grid only a minority of the six paths happen to use the centre cell",
+        "Because the recurrence adds the two predecessors, and a single zeroed cell still leaves one non-zero predecessor for most cells downstream, so paths route around it",
+        "Because monotone paths can move diagonally around a single blocked cell, so no lone obstacle can ever sit on all of them at once",
+        "Because the count is a binomial coefficient, which is never zero, so the dynamic program cannot return zero regardless of where obstacles are placed"
+      ], a: 0,
+      why: "Each monotone path crosses each anti-diagonal exactly once, so a single cell lies on only some paths - the centre is on two of the six - and blocking it removes only those. To stop every path you must block a whole anti-diagonal, a cut that every path must cross. Monotone paths cannot move diagonally, and obstacles certainly can zero the count, but only by completing such a cut." },
+
+    { type: "mc",
+      q: "Matrix chain multiplication is solved by interval DP with the recurrence \"try every split point k and combine <code>[i,k]</code> with <code>[k+1,j]</code>\". Why must the table fill by increasing interval length?",
+      opts: [
+        "Because longer intervals are more expensive, so filling them last keeps the cheap subproblems available in cache when the costly ones need them",
+        "Because the split point k must be tried in order, and a shorter interval fixes a smaller k that the longer intervals then extend one step at a time",
+        "Because a range's value depends only on strictly shorter sub-ranges inside it, so every dependency is already computed once all shorter lengths are done",
+        "Because the answer sits in the top-right cell, and filling by length is the only order that reaches that cell last without revisiting any cell"
+      ], a: 2,
+      why: "M(i,j) is built from M(i,k) and M(k+1,j), both strictly shorter ranges. Filling by increasing length guarantees those inputs exist before the cell that needs them - the topological order of the subproblem graph. It is a correctness requirement, not a cache trick and not a fact about where the answer happens to sit." },
+
+    { type: "mc",
+      q: "Knuth's optimization drops matrix-chain-style DP from O(n&#179;) to O(n&#178;). What property makes it correct, and what breaks if that property fails?",
+      opts: [
+        "That the cost function is convex, which would let a binary search replace the linear scan over the split points; without convexity that search overshoots the minimum and returns a suboptimal split point",
+        "That the optimal split point is monotone as the range grows, so each range searches only between its sub-ranges' splits; without monotonicity the narrowed search misses the true optimum",
+        "That all split points give equal cost, so any one may be chosen in O(1); without that equality the choice among splits reintroduces the full linear scan",
+        "That the matrices are square, which makes the product cost symmetric; without square matrices the split point depends on orientation and cannot be bounded"
+      ], a: 1,
+      why: "The speed-up narrows each range's split search to the window between the optimal splits of its two immediate sub-ranges, which is valid exactly because the optimal split moves monotonically as the range widens - Yao's quadrangle inequality. Without that monotonicity the window can exclude the true optimum, so the algorithm is fast and wrong, the same silent failure as a mis-directed loop." },
+
+    { type: "blank",
+      q: "Encoding a subset of n elements as an n-bit integer so that a dynamic program can index its states by subset &#8212; turning many n! searches into 2<sup>n</sup>&#183;n &#8212; is called ____ DP.",
+      a: ["bitmask"],
+      why: "The state is a subset, and often a subset plus a position, (mask, position), of which there are 2^n times n. It beats the factorial because the difficulty depends on which elements are done, not the order they were done in - at n = 20, n! is 2.4x10^18 while 2^n times n is 21 million. It is Chapter 18's enumeration trick promoted to a subproblem index." },
+
+    { type: "mc",
+      q: "As n rises from 8 to 10, Held-Karp's state count multiplies by about 5 while the number of tours a brute force examines multiplies by 72. What does this contrast establish?",
+      opts: [
+        "That Held-Karp is a polynomial-time algorithm for the travelling salesman, since its growth factor is a small constant while the brute force grows factorially with the input",
+        "That an exponential 2<sup>n</sup> grows far slower than a factorial, so Held-Karp is a real and permanent win over brute force even though both are super-polynomial",
+        "That the travelling salesman becomes tractable for all practical n once Held-Karp is used, since the exponential's growth is slow enough to ignore in real routing",
+        "That the brute-force measurement must be unreliable, since a correct comparison of two exact algorithms should always show the very same growth factor for both of them"
+      ], a: 1,
+      why: "2^n multiplies by 4 per two steps and the n factor adds a little more, giving about 5; (n-1)! multiplies by roughly n^2, here 72. Both are super-polynomial, so Held-Karp is not polynomial and does not make the travelling salesman tractable for large n - it moves the wall from about 12 cities to about 20. But a slower exponential is a genuine, permanent win, which is the honest claim." },
+
+    { type: "mc",
+      q: "The bitmask assignment DP and Held-Karp look almost identical in code, yet the chapter calls one a necessity and the other a shortcut. Why?",
+      opts: [
+        "The assignment problem has a polynomial algorithm, the Hungarian method, so bitmask is merely convenient for small n; the travelling salesman is NP-hard, so its exponential is the best known",
+        "The assignment problem has fewer states because each mask needs no position dimension, so its bitmask DP is polynomial while Held-Karp's is exponential",
+        "Held-Karp returns an approximate tour while the assignment DP is exact, so only the assignment version could be replaced by a faster exact method",
+        "The assignment problem is larger in practice, so it needs the faster Hungarian method, whereas travelling-salesman instances are always small enough for bitmask"
+      ], a: 0,
+      why: "Both use a subset state and both run in exponential time, but the assignment problem is not hard - the Hungarian method solves it in O(n^3) for any n - so the bitmask version is a small-n convenience. The travelling salesman is NP-hard, so its 2^n n^2 is the best exact algorithm known. Dropping the position dimension saves a factor of n, not the exponential itself." },
+
+    { type: "mc",
+      q: "A digit DP counts integers up to 10<sup>18</sup> with no two equal adjacent digits in a quarter of a millisecond. What makes the work independent of how large the bound is?",
+      opts: [
+        "The count is computed by a closed-form combinatorial formula that the digit DP derives on the fly, so no iteration over the range of numbers is ever actually performed at all",
+        "Memoisation caches every individual integer's result the first time that number is seen, so a second pass over the whole range is then a constant-time lookup for each of them",
+        "The tight flag prunes away all but a logarithmic fraction of the numbers, leaving only about log(N) individual integers that still have to be examined one at a time",
+        "The states are (position, previous digit, tight flag), only a few hundred for an 18-digit bound, so the work scales with the digits, not the numbers"
+      ], a: 3,
+      why: "Digit DP builds the number digit by digit, carrying only the position, the previous digit, and whether the prefix is still tight against the bound. That is a few hundred states for eighteen digits, and the count is a walk over them, so the cost is proportional to the digit count and not to the 10^18 numbers. There is no closed form, and it never iterates the numbers themselves." },
+
+    { type: "order",
+      q: "Order these subproblem shapes by the size of their state space, smallest first, for an input of size n:",
+      items: [
+        "grid DP over an n&#215;n board: a cell (i, j), n&#178; states",
+        "interval DP over a length-n sequence: a range [i, j], about n&#178;/2 states",
+        "bitmask DP over n elements: a subset, 2<sup>n</sup> states",
+        "bitmask DP with position over n elements: a subset and a location, 2<sup>n</sup>&#183;n states"
+      ],
+      why: "Grid and interval DP are both quadratic in n - a cell or a range is two indices - with the interval's triangle holding about half a grid's cells. Bitmask DP is exponential, 2^n, and adding a position multiplies by n. The jump from the quadratic shapes to the exponential ones is the jump from problems solvable at n in the thousands to problems that stop near n = 20." },
+
+    { type: "blank",
+      q: "The counting-DP technique whose state is a bitmask of which cells along the current frontier are already filled &#8212; used to count tilings and packings of a grid one step at a time &#8212; is called ____ ____ DP.",
+      a: ["broken profile"],
+      why: "A partial tiling has a ragged edge between its filled and unfilled parts, and the profile is a bitmask recording which frontier cells are covered. Advancing the frontier one cell or column at a time, the state is that mask - the subset shape again - so a wide-grid tiling count is a bitmask DP over the profile, with the same 2^width ceiling as any subset state." },
+
+    { type: "mc",
+      q: "Choosing which balloon to pop <em>last</em> rather than <em>first</em> is the move that makes burst balloons an interval DP. Why does \"last\" decompose where \"first\" does not?",
+      opts: [
+        "Popping last is cheaper to compute because the final balloon has no neighbours left, so its contribution is a constant that factors out of the recurrence",
+        "Popping first is ambiguous because two balloons could be first, while exactly one balloon is last, so the last choice is unique and the first is not",
+        "The balloon popped last splits the range into two parts with fixed boundaries, while the balloon popped first removes a neighbour that couples the two sides together",
+        "Popping last lets the recurrence run strictly left to right, which is a requirement for any interval DP, whereas popping first would force a right-to-left fill that the table cannot support at all"
+      ], a: 2,
+      why: "The score of popping a balloon depends on its surviving neighbours. Choosing the first pop removes a balloon whose neighbours are still present, so the two sides remain coupled through it. Choosing the last pop means that balloon's neighbours are the range's fixed endpoints, splitting the range into two independent sub-ranges - exactly the interval-DP decomposition. It is about independence, not uniqueness or fill direction." }
   ]
 });
