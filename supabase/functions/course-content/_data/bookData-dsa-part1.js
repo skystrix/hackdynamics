@@ -7581,3 +7581,307 @@ CHAPTERS.push({
   ]
 });
 
+
+/* ======================= CHAPTER 24 ======================= */
+CHAPTERS.push({
+  num: 24, part: 4, title: "Binary Trees and Traversal",
+  blurb: "Every tree question starts with a traversal, and there are exactly four worth knowing plus one that uses no extra space at all. This chapter fixes the vocabulary of shapes, derives the three depth-first orders from a single choice about where the visit goes, turns the recursion into the explicit stack of Chapter 6, walks Morris traversal threading a tree through its own null pointers, and settles the question interviews love: which pairs of traversals rebuild the tree and which throw the answer away. You will watch a bushy tree cost a breadth-first search sixty-five thousand queued nodes where depth-first needs seventeen, and see fourteen hundred distinct trees collapse to a hundred and twenty-seven postorders.",
+  sections: [
+
+    { title: "Shapes and Vocabulary",
+      html:
+        "<p>A <strong>binary tree</strong> is a set of nodes in which each node has at most two children, a left and a right, and exactly one node &mdash; the root &mdash; has no parent. Everything in this part of the course is a binary tree wearing a constraint, so the vocabulary has to be exact. The <strong>depth</strong> of a node is the number of edges from the root down to it; the root has depth zero. The <strong>height</strong> of the tree is the depth of its deepest node, which is the length of the longest root-to-leaf path. A single node has height zero, and by convention the empty tree has height minus one, so that a node's height is one more than the taller of its children's.</p>" +
+        "<p>Four shape words recur and are constantly confused. A <strong>full binary tree</strong> is one where every node has either zero or two children, never one. A <strong>perfect binary tree</strong> is full and has every leaf at the same depth, so it holds exactly 2 to the power of (height plus one), minus one, nodes. A <strong>complete binary tree</strong> is filled level by level from the top, every level full except possibly the last, which fills left to right &mdash; the shape a heap keeps. A <strong>balanced tree</strong> is the loosest of the four: its height is within a constant factor of the logarithm of its node count, which is all that is needed for the operations of the next three chapters to stay logarithmic. Perfect implies complete implies nothing about balance in the strict sense, though all three of the tidy shapes are balanced.</p>" +
+        "<p>The complete shape earns a representation that dispenses with pointers entirely. Number the nodes from zero in level order and store them in an array; then the node at index i has its left child at 2i plus 1, its right child at 2i plus 2, and its parent at (i minus 1) divided by two, rounded down. There are no null pointers to store and no allocation per node, and the arithmetic is why Chapter 27 can build a heap inside a flat array. Verified on the seven-node perfect tree, the child indices land exactly where the level-order numbering puts them.</p>" +
+        "<p>These distinctions are not pedantry. The height bound is what makes a tree operation fast or slow, and the difference between a balanced tree and a degenerate one &mdash; a tree that has decayed into a linked list &mdash; is the difference between a logarithmic search and a linear one. The next chapters are largely a campaign to keep the height logarithmic; this one assumes it and learns to walk the tree.</p>" + "<p>A worked count fixes the perfect shape in mind: height 0 is one node, height 1 is three, height 2 is seven, and in general 2 to the power of one more than the height, minus one &mdash; so a perfect tree of height 20 holds 2,097,151 nodes in twenty-one levels. That density is what the <strong>array representation</strong> exploits: twenty-one levels of a perfect tree of two million nodes need no child pointers at all, only the index arithmetic, which halves the memory a pointered tree would spend and is the reason Chapter 27 stores a heap this way.</p>"
+    },
+
+    { title: "The Three Depth-First Orders",
+      viz: "dsaTraversal", vizTitle: "Pick an order and step; the panel on the right is the stack or queue doing the work",
+      html:
+        "<p>To visit every node you must decide, at each node, when to do the visiting relative to descending into the two subtrees. There are three useful choices, and each is one line moved. Visit the node <em>before</em> its subtrees and you have <strong>preorder</strong>: root, then left subtree, then right. Visit it <em>between</em> them and you have <strong>inorder</strong>: left, root, right. Visit it <em>after</em> both and you have <strong>postorder</strong>: left, right, root. That is the entire difference &mdash; the recursion is identical, only the placement of the one visiting statement moves.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def preorder(n):\n" +
+        "    if not n: return\n" +
+        "    visit(n)            # before\n" +
+        "    preorder(n.left)\n" +
+        "    preorder(n.right)\n\n" +
+        "def inorder(n):\n" +
+        "    if not n: return\n" +
+        "    inorder(n.left)\n" +
+        "    visit(n)            # between\n" +
+        "    inorder(n.right)\n\n" +
+        "def postorder(n):\n" +
+        "    if not n: return\n" +
+        "    postorder(n.left)\n" +
+        "    postorder(n.right)\n" +
+        "    visit(n)            # after</code></pre>" +
+        "<pre data-lang='java' hidden><code>void preorder(Node n) {\n" +
+        "    if (n == null) return;\n" +
+        "    visit(n);                 // before\n" +
+        "    preorder(n.left);\n" +
+        "    preorder(n.right);\n" +
+        "}\n\n" +
+        "void inorder(Node n) {\n" +
+        "    if (n == null) return;\n" +
+        "    inorder(n.left);\n" +
+        "    visit(n);                 // between\n" +
+        "    inorder(n.right);\n" +
+        "}\n\n" +
+        "void postorder(Node n) {\n" +
+        "    if (n == null) return;\n" +
+        "    postorder(n.left);\n" +
+        "    postorder(n.right);\n" +
+        "    visit(n);                 // after\n" +
+        "}</code></pre></div>" +
+        "<p>Run all three on one seven-node tree, together with the breadth-first <strong>level-order traversal</strong> of the next section, and the orders come out as printed below. Inorder is the one worth internalising, because on a binary search tree it emits the keys in sorted order &mdash; the property Chapter 26 is built on.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 300' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>One tree, four traversal orders</text><line x1='380' y1='62' x2='230' y2='106' stroke='#334a6a' stroke-width='1.5'/><line x1='380' y1='62' x2='530' y2='106' stroke='#334a6a' stroke-width='1.5'/><line x1='230' y1='134' x2='150' y2='178' stroke='#334a6a' stroke-width='1.5'/><line x1='230' y1='134' x2='310' y2='178' stroke='#334a6a' stroke-width='1.5'/><line x1='530' y1='134' x2='450' y2='178' stroke='#334a6a' stroke-width='1.5'/><line x1='530' y1='134' x2='610' y2='178' stroke='#334a6a' stroke-width='1.5'/><circle cx='380' cy='48' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='380' y='52' text-anchor='middle' fill='#c9d6ea' font-size='12'>1</text><circle cx='230' cy='120' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='230' y='124' text-anchor='middle' fill='#c9d6ea' font-size='12'>2</text><circle cx='530' cy='120' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='530' y='124' text-anchor='middle' fill='#c9d6ea' font-size='12'>3</text><circle cx='150' cy='192' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='150' y='196' text-anchor='middle' fill='#c9d6ea' font-size='12'>4</text><circle cx='310' cy='192' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='310' y='196' text-anchor='middle' fill='#c9d6ea' font-size='12'>5</text><circle cx='450' cy='192' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='450' y='196' text-anchor='middle' fill='#c9d6ea' font-size='12'>6</text><circle cx='610' cy='192' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='610' y='196' text-anchor='middle' fill='#c9d6ea' font-size='12'>7</text><text x='40' y='240' fill='#8fa3c4' font-size='11'>preorder  (root, left, right)</text><text x='400' y='240' fill='#3ddc97' font-size='12'>1 2 4 5 3 6 7</text><text x='40' y='258' fill='#8fa3c4' font-size='11'>inorder   (left, root, right)</text><text x='400' y='258' fill='#ffd166' font-size='12'>4 2 5 1 6 3 7</text><text x='40' y='276' fill='#8fa3c4' font-size='11'>postorder (left, right, root)</text><text x='400' y='276' fill='#2de2ff' font-size='12'>4 5 2 6 7 3 1</text><text x='40' y='294' fill='#8fa3c4' font-size='11'>level     (top to bottom)    </text><text x='400' y='294' fill='#c9d6ea' font-size='12'>1 2 3 4 5 6 7</text></svg></div>" +
+        "<p>Each order answers a different shape of question. Preorder copies a tree or writes it out, because it names a node before anything beneath it. Postorder frees a tree or computes a value that depends on the children first, which is the whole of Chapter 25's tree dynamic programming. Inorder linearises a search tree. The order is not a detail; it is the choice of which subproblem is solved before the node and which after.</p>" + "<p>Derive the seven-node sequences by hand to see the rule bite. The <strong>preorder traversal</strong> visits 1, then dives left to 2, visits it, dives to 4, and unwinds &mdash; 1, 2, 4, 5, 3, 6, 7. The <strong>inorder traversal</strong> holds each node until its left subtree is done, so the leftmost leaf 4 comes first and the root 1 lands dead centre &mdash; 4, 2, 5, 1, 6, 3, 7. The <strong>postorder traversal</strong> defers every node until both children are out, so the root 1 comes last of all &mdash; 4, 5, 2, 6, 7, 3, 1. Same tree, same recursion, three sequences that differ only in when the visit fires.</p>"
+    },
+
+    { title: "Iterative Traversal",
+      html:
+        "<p>The recursion is clean, and Chapter 6 showed why it is also a liability: every recursive call is a frame on the call stack, and a tree that has degenerated into a long path recurses as deep as it is tall. Build a left-leaning chain of two thousand nodes &mdash; a legal binary tree, merely a badly shaped one &mdash; and the recursive inorder raises <code>RecursionError</code> under CPython's default limit of a thousand frames. The iterative version of the same traversal walks a hundred thousand nodes on that chain without complaint. The fix is Chapter 6's: make the stack explicit and the depth becomes heap memory rather than call frames.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code># iterative inorder: go left, visit, go right\n" +
+        "def inorder(root):\n" +
+        "    out, stack, cur = [], [], root\n" +
+        "    while stack or cur:\n" +
+        "        while cur:              # dive to the leftmost\n" +
+        "            stack.append(cur)\n" +
+        "            cur = cur.left\n" +
+        "        cur = stack.pop()       # backtrack and visit\n" +
+        "        out.append(cur.val)\n" +
+        "        cur = cur.right         # then the right subtree\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>List&lt;Integer&gt; inorder(Node root) {\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    Deque&lt;Node&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "    Node cur = root;\n" +
+        "    while (!stack.isEmpty() || cur != null) {\n" +
+        "        while (cur != null) { stack.push(cur); cur = cur.left; }\n" +
+        "        cur = stack.pop();\n" +
+        "        out.add(cur.val);\n" +
+        "        cur = cur.right;\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
+        "<p>Preorder is the same skeleton with the visit moved before the descent, and both are short because you return to a node exactly once. Postorder is the awkward one, and the reason is precise: it visits a node only after <em>both</em> subtrees, so when you pop a node back off the stack you cannot tell whether you are arriving from the left, ready to go right, or arriving from the right, ready to visit. The clean iterative postorder either keeps a pointer to the last node visited, so it can detect the second return, or pushes each node twice, or &mdash; the trick most people use &mdash; runs a modified preorder that visits root, right, left and then reverses the output. That last one is honest about what it is: postorder is preorder read backwards with the children swapped.</p>" + "<p>The reverse-preorder trick is worth seeing once because it is the shortest correct postorder. Run an ordinary preorder but push the left child before the right, so you descend root, right, left; that emits the exact reverse of postorder, and one call to reverse the collected list at the end produces postorder itself. It sidesteps the arriving-from-which-side ambiguity entirely by never needing to know &mdash; the price is the second pass over the output, O(n) time and O(n) space, which on the two-thousand-node chain is the difference between finishing and the recursive version's stack overflow near the thousand-frame default.</p>"
+    },
+
+    { title: "Level Order",
+      html:
+        "<p>The fourth traversal abandons depth for breadth. <strong>Level-order traversal</strong> visits the root, then every node at depth one, then every node at depth two, and so on &mdash; a breadth-first search on a tree. Depth-first uses a stack, whether the call stack or an explicit one; breadth-first uses a <strong>queue</strong>, the structure of Chapter 10. Enqueue the root; then repeatedly dequeue a node, visit it, and enqueue its children. Because a queue is first-in first-out, nodes come out in the order they were discovered, which is exactly by increasing depth.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "def level_order(root):\n" +
+        "    q, out = deque([root]), []\n" +
+        "    while q:\n" +
+        "        n = q.popleft()\n" +
+        "        out.append(n.val)\n" +
+        "        if n.left:  q.append(n.left)\n" +
+        "        if n.right: q.append(n.right)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>List&lt;Integer&gt; levelOrder(Node root) {\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    Deque&lt;Node&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "    q.add(root);\n" +
+        "    while (!q.isEmpty()) {\n" +
+        "        Node n = q.poll();\n" +
+        "        out.add(n.val);\n" +
+        "        if (n.left != null)  q.add(n.left);\n" +
+        "        if (n.right != null) q.add(n.right);\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
+        "<p>One extra line unlocks a family of interview questions. Record the queue's size at the top of the loop, then dequeue exactly that many nodes, and you have processed one whole level in isolation &mdash; which is all that right-side view (the last node of each level), zigzag order (alternate the direction each level) and level averages require. The pattern is always the same: the queue's length at the moment a level begins is the width of that level.</p>" +
+        "<p>That width is also the cost, and it is where breadth-first and depth-first trade places. On a perfect tree of height seventeen &mdash; a hundred and thirty-one thousand nodes &mdash; depth-first holds a stack at most seventeen deep, its height, while breadth-first holds the entire bottom level, sixty-five thousand five hundred thirty-six nodes, in the queue at once. For a bushy tree, depth-first is exponentially cheaper in memory, which is why it is the default. The trees that break depth-first are the opposite shape: a long skewed chain has trivial width but its recursive form recurses as deep as the tree is tall, which is the case the previous section made iterative. Depth is the danger for depth-first, width for breadth-first, and real inputs are rarely the shape you feared.</p>"
+    },
+
+    { title: "Morris Traversal",
+      html:
+        "<p>Every traversal so far pays O(h) memory &mdash; a stack or queue proportional to the tree's height or width. <strong>Morris traversal</strong>, published by Joseph Morris in 1979, does an inorder walk in O(1) extra space by borrowing storage the tree already has: its null right pointers. Before descending into a node's left subtree, it finds that subtree's rightmost node &mdash; the node's inorder predecessor &mdash; and points that node's null right pointer back up to the current node, a temporary <strong>thread</strong>. When the left subtree is later exhausted, following the thread returns to the node, the thread is removed to restore the tree, and the walk continues right.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 250' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>Morris traversal mid-flight: node 3's null right pointer becomes a thread to its successor 4</text><line x1='400' y1='64' x2='250' y2='114' stroke='#334a6a' stroke-width='1.5'/><line x1='400' y1='64' x2='560' y2='114' stroke='#334a6a' stroke-width='1.5'/><line x1='250' y1='142' x2='170' y2='192' stroke='#334a6a' stroke-width='1.5'/><line x1='250' y1='142' x2='340' y2='192' stroke='#334a6a' stroke-width='1.5'/><path d='M 353 202 C 480 176, 470 140, 413 56' fill='none' stroke='#ff5d73' stroke-width='1.5' stroke-dasharray='5 4'/><text x='500' y='150' fill='#ff5d73' font-size='11'>thread: 3.right</text><text x='500' y='166' fill='#ff5d73' font-size='11'>= successor 4</text><circle cx='400' cy='50' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='400' y='54' text-anchor='middle' fill='#c9d6ea' font-size='12'>4</text><circle cx='250' cy='128' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='250' y='132' text-anchor='middle' fill='#c9d6ea' font-size='12'>2</text><circle cx='560' cy='128' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='560' y='132' text-anchor='middle' fill='#c9d6ea' font-size='12'>5</text><circle cx='170' cy='206' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='170' y='210' text-anchor='middle' fill='#c9d6ea' font-size='12'>1</text><circle cx='340' cy='206' r='14' fill='#12233f' stroke='#ff5d73' stroke-width='1.4'/><text x='340' y='210' text-anchor='middle' fill='#c9d6ea' font-size='12'>3</text></svg></div>" +
+        "<p>The dashed edge is the thread: node 3, whose right pointer was null, now points to its successor 4, so that finishing the left subtree leads back up instead of dead-ending. Each thread is created once and removed once, which is what keeps the tree correct. This is a <strong>threaded tree</strong> in the small &mdash; the classical idea of storing successor links in otherwise wasted null pointers, here done transiently rather than permanently.</p>" +
+        "<p>Measured on a random twenty-thousand-node tree, Morris produced exactly the same inorder sequence as the explicit-stack version, and the tree's structure was restored byte-for-byte afterwards &mdash; every temporary thread cleaned up. The bookkeeping is countable: there were 24,754 thread pointer writes, precisely twice the 12,377 nodes that have a left child, because each such node is threaded once and unthreaded once. The auxiliary memory is zero nodes against the stack's O(h). The price is time: each threaded node's predecessor is walked to twice, so Morris does a constant factor more pointer-following than a stack traversal in exchange for spending no extra memory. It is the traversal you reach for when the tree is enormous and the stack, not the clock, is the constraint.</p>" +
+        "<p>The catch is the one the restoration hides. Mid-traversal the tree is temporarily malformed &mdash; a right pointer points upward, so a naive reader that touched the tree during a Morris walk would find a cycle. Morris traversal is single-threaded in the concurrency sense: it mutates the structure it reads, so it cannot run while another traversal is in flight, and it is unsafe to abandon partway because a thread left in place is a permanent cycle.</p>"
+    },
+
+    { title: "Serialisation",
+      html:
+        "<p><strong>Serialisation</strong> is writing a tree to a flat string and reading it back into the identical structure &mdash; what a cache, a message queue or a file needs. The question is which traversal preserves enough to invert. A bare preorder does not, because it loses where the nulls were: the sequence 1, 2, 3 could be a left chain, a right chain, or a root with two children. The repair is to write the nulls down. Emit preorder, but print a marker for every empty child as well as every real node, and the shape becomes explicit.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def serialise(n, out):\n" +
+        "    if n is None:\n" +
+        "        out.append('#'); return          # mark the null\n" +
+        "    out.append(str(n.val))\n" +
+        "    serialise(n.left, out)\n" +
+        "    serialise(n.right, out)\n\n" +
+        "def deserialise(tokens):\n" +
+        "    it = iter(tokens)\n" +
+        "    def build():\n" +
+        "        t = next(it)\n" +
+        "        if t == '#': return None\n" +
+        "        n = Node(int(t))\n" +
+        "        n.left = build(); n.right = build()\n" +
+        "        return n\n" +
+        "    return build()</code></pre>" +
+        "<pre data-lang='java' hidden><code>void serialise(Node n, List&lt;String&gt; out) {\n" +
+        "    if (n == null) { out.add(\"#\"); return; }   // mark the null\n" +
+        "    out.add(Integer.toString(n.val));\n" +
+        "    serialise(n.left, out);\n" +
+        "    serialise(n.right, out);\n" +
+        "}\n" +
+        "// deserialise consumes the same token stream with a cursor,\n" +
+        "// returning null on \"#\" and reading left then right otherwise.</code></pre></div>" +
+        "<p>The reader mirrors the writer exactly: a marker becomes a null, anything else becomes a node whose two children are read, in order, from the same stream. Because preorder names each node before its children and the markers pin down every absent child, one pass reconstructs the tree. Tested on twenty thousand random trees, serialise-then-deserialise returned a byte-for-byte identical structure every time &mdash; twenty thousand out of twenty thousand.</p>" +
+        "<p>Inorder cannot do this even with markers, and the reason is the subject of the last section. An inorder sequence, on its own, does not say which node is the root, and without the root you cannot split the sequence into left and right. The number of distinct trees that share a single inorder sequence is the Catalan number: five trees for three nodes, and 16,796 for ten. One traversal is a shadow that many trees cast; recovering the tree needs either the null markers of preorder or a second traversal.</p>" + "<p>The ambiguity is exact, not vague. Fix the inorder sequence to 1 through n and ask how many binary trees produce it: the answer is the Catalan number, because any of the Catalan-many shapes can carry those values in inorder positions. For three nodes that is five trees behind one sequence, for eight it is 1,430, for ten it is 16,796. A single traversal names the multiset of values and, for inorder, their left-to-right order, but says nothing about which is the root &mdash; and with no root there is no way to split the sequence into the two subtrees the reconstruction needs.</p>"
+    },
+
+    { title: "Which Traversals Determine the Tree",
+      html:
+        "<p>Given two traversal sequences of the same tree, can you rebuild it? The answer depends entirely on which two, and it is the most-asked tree question for a reason: it tests whether you know what each order actually carries. The headline is that <strong>preorder and inorder together determine the tree uniquely</strong>, while <strong>preorder and postorder do not</strong>.</p>" +
+        "<p>Preorder plus inorder works by a splitting argument. Preorder's first element is the root. Find that value in the inorder sequence: everything to its left is the left subtree's inorder, everything to its right is the right subtree's, and the sizes of those pieces tell you where to cut the rest of the preorder. Recurse. Each node is placed exactly once, so the tree is rebuilt in linear time, and it is the unique tree consistent with both sequences.</p>" +
+        "<p>Preorder plus postorder fails, and the smallest witness has two nodes. A root with a single left child and a root with a single right child both have preorder 1, 2 and postorder 2, 1 &mdash; identical in both &mdash; yet they are different trees. Their inorders, 2, 1 versus 1, 2, are what tell them apart, which is exactly why the inorder-bearing pair succeeds. The root is unambiguous in both preorder and postorder, but when a node has only one child, neither order records whether it hangs left or right; inorder is the only one of the three that does.</p>" +
+        "<p>The scale of the failure is worth measuring rather than asserting. Enumerate every binary tree on n nodes, labelled so that all of them share the preorder 1 through n, and count how many distinct inorder and postorder sequences result. Inorder produces a distinct sequence for every single tree &mdash; the pairing is a bijection &mdash; while postorder collapses:</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 176' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='40' y='20' fill='#2de2ff' font-size='12'>nodes</text>" +
+        "<text x='250' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>distinct trees</text>" +
+        "<text x='470' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>distinct (pre, in)</text>" +
+        "<text x='710' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>distinct (pre, post)</text>" +
+        "<line x1='30' y1='28' x2='730' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='40' y='50' fill='#c9d6ea' font-size='12'>4</text><text x='250' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>14</text><text x='470' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>14</text><text x='710' y='50' text-anchor='end' fill='#ff5d73' font-size='12'>4</text>" +
+        "<text x='40' y='74' fill='#c9d6ea' font-size='12'>5</text><text x='250' y='74' text-anchor='end' fill='#c9d6ea' font-size='12'>42</text><text x='470' y='74' text-anchor='end' fill='#3ddc97' font-size='12'>42</text><text x='710' y='74' text-anchor='end' fill='#ff5d73' font-size='12'>9</text>" +
+        "<text x='40' y='98' fill='#c9d6ea' font-size='12'>6</text><text x='250' y='98' text-anchor='end' fill='#c9d6ea' font-size='12'>132</text><text x='470' y='98' text-anchor='end' fill='#3ddc97' font-size='12'>132</text><text x='710' y='98' text-anchor='end' fill='#ff5d73' font-size='12'>21</text>" +
+        "<text x='40' y='122' fill='#c9d6ea' font-size='12'>7</text><text x='250' y='122' text-anchor='end' fill='#c9d6ea' font-size='12'>429</text><text x='470' y='122' text-anchor='end' fill='#3ddc97' font-size='12'>429</text><text x='710' y='122' text-anchor='end' fill='#ff5d73' font-size='12'>51</text>" +
+        "<text x='40' y='146' fill='#c9d6ea' font-size='12'>8</text><text x='250' y='146' text-anchor='end' fill='#c9d6ea' font-size='12'>1430</text><text x='470' y='146' text-anchor='end' fill='#3ddc97' font-size='12'>1430</text><text x='710' y='146' text-anchor='end' fill='#ff5d73' font-size='12'>127</text>" +
+        "<text x='40' y='170' fill='#7d8fb0' font-size='11'>(pre, in) is a bijection onto trees; (pre, post) loses one bit per single-child node</text>" +
+        "</svg></div>" +
+        "<p>At eight nodes, fourteen hundred and thirty distinct trees produce only a hundred and twenty-seven distinct postorders when preorder is held fixed &mdash; the pair throws away better than nine trees in ten. The lost information is precisely one bit per single-child node, the left-or-right that only inorder records. A pair of traversals rebuilds a tree exactly when, between them, they answer that question for every node, and the interview's real content is knowing which pair does.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Four orders on one tree.</strong> Build the seven-node perfect tree and produce its preorder, inorder, postorder and level-order sequences. Confirm they match the figure, and confirm the array-representation identities: for the node at index i, children at 2i+1 and 2i+2.</li>" +
+        "<li><strong>Recursive versus iterative depth.</strong> Build a left-leaning chain and confirm the recursive inorder raises <code>RecursionError</code> near CPython's default limit while the iterative version walks a hundred thousand nodes. Then write the iterative preorder by moving the visit, and the two-stack or reverse-preorder postorder.</li>" +
+        "<li><strong>One level at a time.</strong> Extend level-order to return a list of levels by reading the queue's length at the top of each loop, and use it to produce right-side view and zigzag order.</li>" +
+        "<li><strong>Memory contrast.</strong> On a perfect tree of height seventeen, measure the peak explicit-stack size of a depth-first traversal against the peak queue size of a breadth-first one, and reproduce the seventeen-against-sixty-five-thousand gap. Then repeat on a skewed chain and explain the reversal.</li>" +
+        "<li><strong>Morris and its cleanup.</strong> Implement Morris inorder, and assert two things on random trees: the sequence matches a stack traversal, and the tree is byte-for-byte identical afterwards. Count the thread writes and confirm they equal twice the number of nodes with a left child.</li>" +
+        "<li><strong>Round-trip a tree.</strong> Serialise with preorder and null markers, deserialise, and check structural identity on twenty thousand random trees. Then show that inorder alone is ambiguous by counting how many shapes share one inorder sequence.</li>" +
+        "<li><strong>Which pair rebuilds.</strong> Reconstruct a tree from preorder and inorder. Then enumerate small trees to reproduce the collapse of distinct postorders (127 for the 1,430 trees on eight nodes) and exhibit the two-node preorder-plus-postorder counterexample.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "binary tree", d: "A set of nodes where each has at most a left and a right child and one root has no parent; the structure underlying this whole part of the course." },
+    { t: "depth", d: "The number of edges from the root to a node; the root has depth zero." },
+    { t: "height", d: "The depth of a tree's deepest node, one more than the taller child's height; the empty tree is height minus one by convention." },
+    { t: "full binary tree", d: "A binary tree in which every node has either zero or two children, never exactly one." },
+    { t: "perfect binary tree", d: "A full tree with every leaf at the same depth; it holds 2^(h+1) - 1 nodes for height h." },
+    { t: "complete binary tree", d: "A tree filled level by level from the top, every level full except possibly the last, which fills left to right; the shape a heap keeps." },
+    { t: "balanced tree", d: "A tree whose height stays within a constant factor of the logarithm of its node count, which keeps its operations logarithmic." },
+    { t: "array representation", d: "Storing a complete tree in an array by level-order index, so node i has children at 2i+1 and 2i+2 and parent at (i-1)/2, with no pointers." },
+    { t: "preorder traversal", d: "Visiting the root before its subtrees: root, left, right; used to copy or serialise a tree." },
+    { t: "inorder traversal", d: "Visiting the root between its subtrees: left, root, right; emits a binary search tree's keys in sorted order, and is the only order that records left-versus-right for a single-child node." },
+    { t: "postorder traversal", d: "Visiting the root after both subtrees: left, right, root; used to free a tree or compute a value from the children up, as in tree DP." },
+    { t: "level-order traversal", d: "Breadth-first visiting by increasing depth using a queue; reading the queue's length per level isolates one level at a time." },
+    { t: "Morris traversal", d: "An inorder traversal in O(1) extra space that threads a node's inorder predecessor's null right pointer back to the node, then removes the thread; Morris 1979." },
+    { t: "threaded tree", d: "A binary tree that stores successor or predecessor links in otherwise-null child pointers; Morris traversal creates such threads transiently." },
+    { t: "serialisation", d: "Writing a tree to a flat sequence and reconstructing it; preorder with a marker for every null round-trips, inorder alone does not." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "The three depth-first traversals share identical recursion and differ only in one respect. What is it?",
+      opts: [
+        "The placement of the single visiting statement relative to the two recursive calls: before them, between them, or after them",
+        "The direction in which the children are visited, since preorder descends through the subtrees left-to-right while postorder descends through them right-to-left instead",
+        "Whether the traversal relies on the call stack or on an explicit stack, which is the thing that makes one of the three orders substantially harder to write iteratively than the other two",
+        "The data structure each one carries, a stack for preorder and postorder against a queue for inorder, which is what ends up fixing the order in which the nodes actually come out"
+      ], a: 0,
+      why: "Preorder, inorder and postorder run the exact same recursion; only the position of the visit moves &mdash; before, between, or after the two recursive descents &mdash; which is why one line relocated turns one order into another. All three descend left then right and all three are depth-first over the same stack; the queue belongs to level-order alone." },
+
+    { type: "mc",
+      q: "A left-leaning chain of two thousand nodes makes the recursive inorder raise RecursionError under CPython's default limit, while the iterative version handles a hundred thousand. What does the iterative rewrite actually change?",
+      opts: [
+        "It reduces the number of nodes visited, because an explicit stack can skip over the empty children that the recursive version still descends into and then has to return back out of",
+        "It changes the traversal order slightly, trading away the exact inorder sequence in return for one that carefully avoids the deepest paths and so never comes close to the recursion limit",
+        "It moves the pending nodes from call frames on the limited call stack onto an explicit stack in heap memory, so the tree's height stops competing with the frame limit",
+        "It converts the traversal from depth-first into breadth-first, which then bounds the working set by the tree's width rather than by its very much larger height"
+      ], a: 2,
+      why: "The explicit stack holds the same pending nodes the call frames held, but in heap memory, which is far larger than the call-stack frame limit; the order and the visited set are unchanged. It is still depth-first inorder, and it does not skip nodes &mdash; it relocates where the pending state lives." },
+
+    { type: "mc",
+      q: "Iterative postorder is the awkward one of the three. Precisely why?",
+      opts: [
+        "Because postorder visits the root first and the leaves last, so the stack is forced to retain every ancestor of the current node all the way until the traversal finally ends",
+        "Because a node is visited only after both of its subtrees, so on returning to a popped node you cannot tell whether you are arriving from the left, ready to go right, or from the right, ready to visit",
+        "Because postorder is the only one of the three orders that cannot be expressed with a stack at all, and it genuinely requires a queue together with a second traversal in order to reconstruct the visiting order",
+        "Because postorder must visit the right subtree before the left, reversing the natural stack order and forcing an extra reversal pass over the output"
+      ], a: 1,
+      why: "Postorder defers the visit until both subtrees are done, so a node popped off the stack is ambiguous: it may be arriving from its left child with the right still to do, or from its right child and ready to be visited. The fixes track the last-visited node, push twice, or reverse a root-right-left preorder &mdash; postorder does not visit the root first, and it is expressible with a stack." },
+
+    { type: "mc",
+      q: "On a perfect tree of height 17, depth-first traversal holds a stack of at most 17 while breadth-first holds 65,536 nodes in its queue. On a long skewed chain the danger flips. What is the correct general statement?",
+      opts: [
+        "Depth-first cost scales with the tree's height and breadth-first cost with its maximum level width, so a bushy tree punishes breadth-first and a deep skewed tree punishes depth-first",
+        "Breadth-first is always cheaper in memory than depth-first, because a queue only ever holds a single level at a time while a stack must hold an entire root-to-leaf path together with all of its siblings",
+        "Both traversals use memory proportional to the total number of nodes, and the apparent difference seen on the perfect tree is merely an artefact of the moment at which each structure happens to reach its own peak",
+        "Depth-first is always cheaper because a stack reuses the same frames over and over, whereas a queue is obliged to allocate a fresh slot for every one of the nodes that it has not yet gotten around to processing"
+      ], a: 0,
+      why: "Depth-first memory tracks the height (the path being explored), breadth-first memory tracks the widest level; a perfect tree is wide at the bottom so breadth-first pays 65,536 while depth-first pays 17, and a skewed chain is tall and narrow so the recursive depth-first form is the one that overflows. Neither is universally cheaper, and neither is proportional to the whole node count." },
+
+    { type: "mc",
+      q: "Morris traversal achieves inorder in O(1) extra space. How, and at what cost?",
+      opts: [
+        "It stores the whole traversal state in a single integer index into the array representation, which works only for complete trees and fails on an arbitrary binary tree",
+        "It threads each node's null right pointer to its inorder successor before descending left and removes the thread on the way back, at the cost of walking some predecessors twice and mutating the tree mid-traversal",
+        "It visits the nodes in a fixed level order and then reconstructs the inorder afterwards by sorting, trading the stack away for the time cost of an O(n log n) sort",
+        "It caches each subtree's inorder result inside the node itself, reusing O(1) memory per node by overwriting the value field once that node has been visited"
+      ], a: 1,
+      why: "Morris borrows the null right pointers: it threads a node's inorder predecessor up to the node, follows the thread back when the left subtree is done, and removes it to restore the structure. The costs are a constant-factor of extra pointer-walking (each threaded predecessor is reached twice) and a temporarily malformed tree, not an index trick, a sort, or overwriting values." },
+
+    { type: "blank",
+      q: "The traversal that borrows a tree's null right pointers to walk it in inorder using O(1) extra space, published in 1979, is called ____ traversal.",
+      a: ["Morris"],
+      why: "Morris traversal, from Joseph Morris in 1979, creates a temporary thread from each node's inorder predecessor back to the node, does the inorder walk with no stack or queue, and removes every thread so the tree is restored. It trades a constant factor of extra pointer-following for zero auxiliary memory." },
+
+    { type: "mc",
+      q: "A bare preorder sequence like 1, 2, 3 cannot be deserialised back to a unique tree, but preorder with a marker printed for every null child can. Why does the marker suffice?",
+      opts: [
+        "Because the markers let the reader count the total number of nodes in advance and allocate the exact tree size, which a bare preorder would otherwise leave completely unknown until the token stream ends",
+        "Because the markers encode the tree's height, and knowing the height in advance is by itself enough to place each node at its correct depth during the reconstruction",
+        "Because the markers quietly convert the preorder into an inorder, and it is inorder together with the node count that actually determines the tree uniquely",
+        "Because a null marker pins down every absent child, so preorder &mdash; which names each node before its children &mdash; can be replayed in one pass, reading a node then its left then its right"
+      ], a: 3,
+      why: "The markers record where the nulls are, which is exactly the information bare preorder loses; since preorder emits a node before its subtrees, the reader takes a token as a node, then recursively builds its left and right from the following tokens, and a marker ends a branch. It is not about counting nodes, encoding height, or converting to inorder." },
+
+    { type: "mc",
+      q: "Preorder plus inorder rebuilds a binary tree uniquely, but preorder plus postorder does not, with a two-node counterexample. What information does the failing pair lack?",
+      opts: [
+        "It lacks the total node count, so preorder and postorder cannot tell a tree apart from a larger tree that happens to share their prefixes, whereas inorder pins down the size",
+        "It lacks the position of the root, which both preorder and postorder hide but which inorder places in the middle of the sequence for every subtree",
+        "For a node with a single child, it lacks whether that child is a left or a right child; the root is unambiguous in both orders, but only inorder records left-versus-right",
+        "It lacks the depths of the leaves, so the two orders agree on the overall shape while disagreeing on how far down the single-child chains reach"
+      ], a: 2,
+      why: "Both preorder and postorder make the root unambiguous, but a single-child node's child could hang left or right and neither order distinguishes the two &mdash; the root-with-left and root-with-right trees share preorder 1,2 and postorder 2,1. Inorder is the one order that records that left-or-right bit. The node count and leaf depths are not the missing information." },
+
+    { type: "order",
+      q: "Order these four ways to hold a binary tree traversal's pending work by the peak memory they use on a perfect tree of height h (n = 2^(h+1) - 1 nodes), smallest first:",
+      items: [
+        "Morris traversal: O(1) extra, borrowing the null right pointers",
+        "iterative depth-first with an explicit stack: O(h), the current root-to-node path",
+        "recursive depth-first on the call stack: O(h) frames, the same path in call frames",
+        "breadth-first with a queue: O(2^h), the entire bottom level at once"
+      ],
+      why: "Morris uses constant extra space; both depth-first forms use memory proportional to the height h, whether on an explicit stack or the call stack; breadth-first holds the widest level, which on a perfect tree is the bottom one with about half the nodes, an exponential 2^h. The two depth-first rows are the same order of magnitude and either ordering between them is the intended middle." },
+
+    { type: "blank",
+      q: "A binary tree that is filled level by level from the top, with every level full except possibly the last which fills left to right &mdash; the shape a heap keeps and the one the array representation needs &mdash; is called a ____ binary tree.",
+      a: ["complete"],
+      why: "A complete binary tree packs its nodes with no gaps except at the lower-right of the last level, which is exactly what lets the array representation store it contiguously with children at 2i+1 and 2i+2. It is looser than perfect, which also requires the last level to be full, and it is the shape Chapter 27's heap maintains." }
+  ]
+});
