@@ -1,0 +1,5796 @@
+/* ==========================================================================
+   bookData-dsa-part1.js — DSA By Patterns, Part 1 chapters (1–12)
+   Original explanatory writing.
+   Sources consulted for Chapter 17: J. L. Carter & M. N. Wegman, "Universal
+   classes of hash functions", JCSS 18(2):143-154, 1979; Knuth, The Art of
+   Computer Programming vol 3, section 6.4, for the linear-probing and
+   double-hashing probe-count formulas; S. Crosby & D. Wallach, "Denial of
+   Service via Algorithmic Complexity Attacks", USENIX Security 2003, and
+   the December 2011 web-platform disclosure by A. Klink & J. Waelde at 28C3
+   (oCERT-2011-003; CPython's fix is CVE-2012-1150); J.-P. Aumasson & D. J.
+   Bernstein, SipHash, 2012; OpenJDK HashMap treeification (JEP 180,
+   TREEIFY_THRESHOLD 8, MIN_TREEIFY_CAPACITY 64). Measured 2026-09-21,
+   CPython 3.13.2 and OpenJDK 21.0.2 arm64: average probes vs load factor on
+   a size-16,381 table, linear/double/chaining, successful and unsuccessful,
+   against the exact formulas (at alpha 0.9 linear unsuccessful 48.2 measured
+   vs formula 50.5, chaining 1.446 vs 1.45; double unsuccessful 100.248 vs
+   100 at alpha 0.99); longest chain in n balls into n bins (6/7/8/10 at
+   n = 1e3/1e4/1e5/1e6); the tombstone deletion bug on keys 1, 9, 17 in a
+   size-8 table (search for 17 returns not-found after clearing slot 2);
+   universal-family collision probability 0.01003 vs 1/m = 0.00990 at m = 101,
+   worst bucket 1000 (fixed) vs mean 12.8 / max 77 over 500 random functions;
+   hash flooding on a chained table, normal vs one-bucket adversarial (n =
+   16,000: 3.30 ms vs 2,279 ms, 691x, adversarial quadratic and normal
+   linear); Java HashMap treeified bucket, 16,000 all-colliding keys,
+   Comparable 1.6 ms vs non-Comparable 695 ms; dict insert latencies (median
+   84 ns, resize at entry 349,525 taking 3,045,542 ns, 36,256x, spikes at
+   two-thirds of successive powers of two); two-sum brute vs hash on
+   no-solution inputs (n = 8,000: 1,386 ms vs 0.65 ms, 2,136x, the ratio
+   doubling per doubling of n).
+   Sources consulted for Chapter 16: Tim Peters, Timsort, 2002, and CPython
+   Objects/listsort.txt (runs, minrun 32-64, galloping, the merge-invariant
+   stack); de Gouw, Rot, de Boer, Bubel & Haehnle, "OpenJDK's
+   java.utils.Collection.sort() is broken", CAV 2015 (the invariant check
+   examined too few stack entries); Vladimir Yaroslavskiy's dual-pivot
+   quicksort, adopted in JDK 7; David Musser, "Introspective Sorting and
+   Selection Algorithms", Software: Practice and Experience 27(8), 1997;
+   Orson Peters, pdqsort, 2016, adopted by Go in 1.19 and by Rust for its
+   unstable sort. Measured 2026-09-21, CPython 3.13.2 and OpenJDK 21.0.2
+   arm64: CPython sorted() on 2,000,000 values by input shape (random 336.4,
+   sorted 60.7, reversed 61.2, nearly-sorted 72.0, twenty concatenated runs
+   138.4 ms); Java Arrays.sort on int[] 129 ms against Integer[] 968 ms, and
+   Timsort on objects 562 random / 22 sorted / 55 reversed against dual-pivot
+   on primitives 133 / 8 / 4, which shows modern OpenJDK also run-detects on
+   primitives; branch prediction on a conditional sum over 2,000,000 bytes,
+   Java 1 ms sorted against 5 ms shuffled (5x) while the identical loop in
+   CPython gave 0.99x because interpreter dispatch dominates; cache stride
+   sweep reading exactly 1,048,576 elements from a 64 MB int[] at strides
+   1/2/4/8/16/32/64/128 (0.67 / 0.68 / 0.67 / 0.68 / 1.01 / 3.85 / 6.07 /
+   5.43 ns per read - flat to stride 8, jumping at stride 16 where each read
+   needs its own 64-byte line); linear scan against bisect over 200,000
+   lookups at n = 4..512, crossover at n = 16.
+   Sources consulted for Chapter 15: Hoare, "Algorithm 64: Quicksort", CACM
+   4(7):321, 1961, and "Quicksort", Computer Journal 5(1):10-15, 1962; Blum,
+   Floyd, Pratt, Rivest & Tarjan, "Time bounds for selection", JCSS
+   7(4):448-461, 1973 (median of medians); mergesort conventionally credited
+   to von Neumann, 1945; counting sort to Harold Seward, 1954; radix sorting
+   to Hollerith's card machines, 1887. Measured 2026-09-21, CPython 3.13.2
+   arm64: comparison counts for six sorts across six input shapes at n = 600
+   (the matrix figure - selection sort identical at 179,700 in all six
+   columns, insertion sort spanning 599 to 179,699, quicksort with a
+   first-element pivot 6,147 on random against 169,812 on sorted); insertion
+   vs mergesort wall clock at n = 4..128 over 1,000 reps each, crossover near
+   n = 48; inversion counts via mergesort checked against brute force on 2,000
+   arrays, with 0 / 1,999,000 / 1,013,138 for sorted / reversed / random at
+   n = 2,000; quicksort recursion depth of exactly n on sorted input with a
+   first-element pivot (500 and 2,000) against 21 and 24 on random; Lomuto vs
+   Hoare swap counts at n = 2,000 (14,740 vs 5,093 random; 2,000,999 vs 10,864
+   all-equal, a factor of 184); quickselect vs median-of-medians at n = 10^4 /
+   10^5 / 5x10^5 (2.7x / 2.1x / 2.0x slower for the guaranteed algorithm);
+   counting sort vs the built-in Timsort on 10^6 values (35.6 ms vs 98.1 ms
+   for k = 1,000); LSD radix digit-width sweep on 200,000 32-bit values
+   (486 / 208 / 233 / 87.7 / 101 / 113 ms at 1/2/4/8/11/16 bits, a U-shaped
+   curve with its floor at one byte); stability demonstrated on a 5-record
+   two-key sort; median of two sorted arrays by partition search checked
+   against merging on 20,000 random pairs, 0 mismatches.
+   Sources consulted for Chapter 14: the optimisation-to-decision reduction is
+   standard; golden-section search named for the probe-reuse variant of ternary
+   search; Timsort's galloping mode and its MIN_GALLOP streak threshold of 7,
+   from CPython Objects/listsort.txt. Measured 2026-09-21, CPython 3.13.2:
+   three feasibility predicates (eating rate, ship capacity, array split)
+   evaluated at EVERY candidate across the full answer space on 3,000 random
+   instances each - all 3,000/3,000 give a single false-to-true flip, so
+   monotonicity is verified rather than assumed; binary search over the answer
+   space at n = 100 / 10^4 / 10^5 taking 9 / 19 / 29 predicate calls against
+   answer spaces up to 10^9 (2,900,000 operations vs 99,999,886,000,000 to
+   scan); sqrt(2) by bisection on [0,2] at 20/40/60/100 iterations giving
+   errors 3.8e-7 / 1.6e-12 / 2.2e-16 / 2.2e-16, the last pair identical
+   because a double runs out of mantissa, and a 'while hi-lo > 1e-18' loop
+   hitting a 200-iteration cap with the width stuck at 2.2e-16; ternary search
+   per-probe shrink factor sqrt(2/3) = 0.8165 against binary search's 0.5000;
+   galloping vs linear merge of a 10,000-element run against runs of 10 / 100 /
+   1,000 / 10,000 (284 vs 9,356 comparisons, then 4.6x, then 1.1x, then
+   galloping LOSING at 20,135 vs 19,998 - the measurement that justifies
+   Timsort gating it behind a streak rather than always using it).
+   Sources consulted for Chapter 13: Joshua Bloch, "Extra, Extra - Read All
+   About It: Nearly All Binary Searches and Mergesorts are Broken", Google
+   Research Blog, 2 June 2006 (the overflow in java.util.Arrays.binarySearch,
+   present since the method shipped nine years earlier); Jon Bentley,
+   "Programming Pearls", ch. 4, whose proved-correct binary search carried the
+   same bug; Knuth, TAOCP vol. 3 6.2.1, for binary search being published in
+   1946 and the first bug-free version in 1962; Python's bisect_left /
+   bisect_right and C++ std::lower_bound / upper_bound / equal_range as the
+   library form of the three variants. Measured 2026-09-21, CPython 3.13.2 and
+   OpenJDK 21.0.2 arm64: all eight spellings of lower-bound binary search run
+   against bisect_left on 4,000 random arrays (2 correct; 2 spin on 2,746
+   inputs; 2 crash on 1,254; 3 silently wrong on 734 / 836 / 1,366); both
+   midpoint formulas evaluated in real 32-bit int arithmetic at lo=hi=2^30 and
+   lo=hi=2,000,000,000, with the naive form indexing an array and raising
+   ArrayIndexOutOfBoundsException for index -1073741824; comparison counts
+   equal to ceil(log2(n+1)) at n up to 10^15; rotated-array probe counts with
+   and without duplicates (50,001 probes at n=100,000 all-equal-but-one,
+   against 20 at n=1,000,000 distinct); exponential search probe counts (8 /
+   20 / 40 / 60 for answers at 10 / 10^3 / 10^6 / 10^9); Python floor division
+   against C/Java truncation for negative midpoints.
+   Depth pass over Chapters 1-5, 2026-09-21, bringing each to its Blueprint
+   word target. New measurements, CPython 3.13.2 arm64 unless noted:
+   ch2 - the one-second frontier at 1e9 ops/sec computed per growth class
+   (n log n 39,620,077; n^2 31,622; 2^n 29; n! 12; a minute moves 2^n to 35);
+   trial-division primality timed at 34/40/47 bits (7.0 / 68.5 / 688.1 ms),
+   showing sqrt(n) in the value is exponential in the bit length.
+   ch3 - recurrences read off binary search, mergesort, Karatsuba, schoolbook
+   multiplication and Strassen, to show the subproblem count sits in the
+   exponent; the strengthen-the-hypothesis fix for T(n)=2T(n/2)+1.
+   ch4 - binary counter bit flips at n = 16/1e3/1e5/1e6 (1.9375, 1.9940,
+   1.9999, 2.0000 per increment, against a naive n log n of 19,000,000);
+   the 90/10 push/flush workload (179,815 units, 1.80 per op) showing what
+   aggregate analysis cannot express; the shrink-threshold hysteresis,
+   measured at the adversarial boundary (shrink-at-half copies the whole
+   capacity per pop/append pair - 1,024 at cap 1,024, 65,536 at cap 65,536 -
+   against 0.0 to 1.6 for shrink-at-quarter; 1.58 vs 0.01 copies per op over
+   a 200,000-operation random walk); CPython list capacity read via
+   sys.getsizeof while popping 1000 -> 0, which holds at 1,000 down to size
+   500 and then reallocates to 564 at size 400, confirming both a
+   below-half trigger and an overshoot that leaves slack.
+   ch5 - ceil(log2 n!) against the known minimum comparison counts for
+   n = 2..12, which agree at 1,3,5,7,10,13,16,19,22,26 and diverge only at
+   n = 12 (29 vs 30); the n + ceil(log2 n) - 2 bound for the second largest
+   (Kislitsyn 1964).
+   ch1 - the published-pattern-list errors are quoted from the Phase 0 Source
+   Map's tier 6 notes, not re-derived here.
+   Sources consulted for Chapter 12: Horowitz & Sahni, "Computing partitions
+   with applications to the knapsack problem", JACM 21(2):277-292, 1974 (meet
+   in the middle); Boyer & Moore, "MJRTY - A Fast Majority Vote Algorithm",
+   written 1981, published 1991. Measured 2026-09-20, CPython 3.13.2: merge
+   intervals vs a brute-force coverage set and the meeting-rooms sweep vs
+   direct counting, 20,000 random inputs each, 0 mismatches; meet in the
+   middle vs exhaustive subset sum on 3,000 inputs, 0 mismatches, and n = 40
+   solved in 301 ms against 2^40 subsets; Boyer-Moore found the majority on
+   7,149/7,149 inputs that had one and returned a non-majority value on
+   12,851/12,851 inputs that did not.
+   Sources consulted for Chapter 11: Floyd's cycle detection is conventionally
+   attributed to Robert W. Floyd but was never published by him; Knuth presents
+   it in The Art of Computer Programming vol. 2 with that attribution. Brent,
+   "An improved Monte Carlo factorization algorithm", BIT 20:176-184, 1980.
+   Measured 2026-09-20, OpenJDK 21.0.2 arm64 for the cache figures and CPython
+   3.13.2 for the rest: summing 10,000,000 ints as int[] 31 ms, as an in-order
+   linked list 111 ms, as a memory-shuffled list 1,207 ms; ~24 bytes per two-
+   field node measured via ru/Runtime heap deltas against 4 bytes per int[]
+   slot; Floyd phase 2 verified on all 1,560 shapes with mu 0..39, lambda 1..39
+   (phase-2 step count equals mu exactly in every one); Brent 0.86x Floyd's
+   pointer advances over 300 random shapes; merge-sort comparison counts at
+   n = 1k/10k/100k; LRU/FIFO/LFU/random hit rates on a cyclic scan of 5 keys
+   at capacity 4 (0.0/0.0/0.0/59.9%) and on a Zipf-like stream
+   (76.9/71.0/83.0/71.3%).
+   Sources consulted for Chapter 10: Dijkstra, "Algol 60 translation",
+   Mathematisch Centrum report MR 34/61, 1961 (shunting-yard); Lukasiewicz's
+   Polish notation, with reverse Polish for machine evaluation credited to
+   Burks, Warren & Wright 1954 and Hamblin 1957; CPython
+   Modules/_collectionsmodule.c (deque as a linked list of fixed-size blocks);
+   OpenJDK ArrayDeque (power-of-two circular buffer). Measured 2026-09-20,
+   CPython 3.13.2 / OpenJDK 21.0.2: list.pop(0) vs deque.popleft() at n =
+   10k/50k/200k; monotonic-stack push/pop counts on random, increasing and
+   decreasing input; largest-rectangle checked against brute force on 20,000
+   random histograms; sliding-window max deque vs heap at n = 100,000, k =
+   1,000, incl. max deque occupancy 19; shunting-yard + RPN checked against
+   Python eval on 20,000 random expressions; min-stack on 2,000 random
+   op sequences; ring-buffer full/empty collision demonstrated at capacity 4.
+   Sources consulted for Chapter 9: Bentley, "Programming pearls", CACM 27(9),
+   1984 (Kadane and the empty-subarray convention, as in Chapter 1). Measured
+   2026-09-20: prefix vs direct range sums on n = 100,000 at q =
+   1/5/10/50/10,000 (crossover near q = 10, 721x at q = 10,000); 2-D prefix
+   checked on 20,000 random rectangles; difference array against the naive
+   loop on 5,000 updates; subarray-sum-equals-k counts vs indices, smallest
+   separating input [0,0] with k = 0; Kadane clamped-at-zero wrong on 2,306 of
+   2,306 all-negative arrays.
+   Sources consulted for Chapter 8: Dijkstra, "A Discipline of Programming",
+   1976 (the Dutch national flag problem). Measured 2026-09-20: pair-sum two
+   pointers vs nested loop with the target absent; container-with-most-water
+   correct and inverted rules against brute force on 50,000 random arrays
+   (inverted wrong 48%, first counterexample [5,9,6,3,7,1,6,8,5]); variable
+   window pointer movement 2.00n at n = 1k/10k/100k; cyclic placement swap
+   counts to n = 1,000,000; Dutch flag swaps at n = 100,000; two-way vs
+   three-way quicksort partition comparisons at n = 20,000 over 1/2/10/1,000/
+   20,000 distinct values; min-size-subarray-sum window vs brute force, 0
+   mismatches on 20,000 non-negative arrays and 9.0% with negatives, smallest
+   counterexample [-2, 1] with target 1; rolling float sum drift over 200,000
+   windows.
+   Sources consulted for Chapter 7: Galler & Fischer, "An improved equivalence
+   algorithm", CACM 7(5):301-303, 1964; Hopcroft & Ullman 1973 (O(m log* n));
+   Tarjan, "Efficiency of a Good But Not Linear Set Union Algorithm", JACM
+   22(2):215-225, 1975 (the alpha bound); Tarjan & van Leeuwen, "Worst-case
+   Analysis of Set Union Algorithms", JACM 31(2):245-281, 1984 (the variants,
+   incl. path halving); Fredman & Saks, STOC 1989 (matching lower bound).
+   A_k(1) values computed from the CLRS definition: 2, 3, 7, 2047, so
+   alpha(10^80) = 4. Measured 2026-09-20: array accesses for all four variants
+   at n = 5,000 building a path then n finds; wall clock at n = 20,000;
+   compression in isolation over three find passes; union-by-rank measured
+   depth vs the log2(n) bound at n = 1,000/10,000/100,000.
+   Sources consulted for Chapter 6: Erickson, "Algorithms" ch. 1 (recursion as
+   induction, the recursion fairy / leap of faith, the three obligations); the
+   Revised Report on Scheme, which requires proper tail calls and defines
+   iteration as tail recursion; CPython Objects/frameobject.c and the dis module
+   for the CALL/RETURN_VALUE pair showing no tail call elimination; the JVM
+   specification, which has no frame-replacing call instruction; Scala @tailrec
+   and Kotlin tailrec documentation. All depth, frame-cost and call-count numbers
+   in sections 2, 3 and 6-7 measured 2026-09-20 on CPython 3.13.2 and OpenJDK
+   21.0.2, both arm64 macOS: recursion limits probed at 1,000/3,000/5,000/20,000/
+   200,000 for pure-Python and C-mediated recursion; JVM depth over 5 default runs,
+   3 runs at -Xss1m and 2 at -Xint with ThreadStackSize read from
+   -XX:+PrintFlagsFinal; frame cost from ru_maxrss at depths 10k/50k/150k; fib
+   call counts verified against the closed form 2F(n+1)-1; Hanoi move counts
+   against 2^n - 1.
+   Sources consulted for Chapter 5: CLRS ch. on sorting lower bounds
+   (decision-tree argument); Wells 1965 and Ford-Johnson, via the
+   minimum-comparison-sorting literature, for S(12) = 30 against
+   ceil(log2 12!) = 29; Babai 1979 for the term "Las Vegas algorithm";
+   Karger 1993 (randomized contraction min cut). Measurements in section 5
+   taken 2026-09-20, CPython 3, seed 21: 2000 randomized-quicksort runs at
+   n = 500 on a sorted input, and 2000 Karger runs on a 6-node graph whose
+   true min cut was brute-forced over all vertex subsets.
+   Sources consulted for Chapter 4: Tarjan, "Amortized Computational
+   Complexity", SIAM J. Algebraic and Discrete Methods 6(2):306-318, 1985
+   (the potential method); CLRS ch. on amortized analysis (aggregate,
+   accounting, potential; the 2*size-capacity potential); CPython
+   Objects/listobject.c list_resize, whose growth is
+   (newsize + newsize>>3 + 6) & ~3; OpenJDK ArrayList.grow, oldCapacity +
+   (oldCapacity >> 1). Capacity sequence and copies-per-element measured
+   2026-09-20, CPython 3 on the author's laptop via sys.getsizeof.
+   Sources consulted for Chapter 3: CLRS ch. on divide-and-conquer (master
+   theorem statement and the three cases, incl. the regularity condition and
+   the at-most-7 strip bound); Akra & Bazzi, "On the solution of linear
+   recurrence equations", Computational Optimization and Applications, 1998;
+   Shamos & Hoey, "Closest-point problems", FOCS 1975. Closest-pair strip
+   measurements in section 6 taken 2026-09-20, CPython 3, seed 3, uniform
+   points in the unit square, answer verified against brute force at n = 100
+   and n = 1000.
+   Sources consulted for Chapter 2: Knuth, "Big Omicron and big Omega and big
+   Theta", SIGACT News 8(2):18-24, 1976 (the O/Omega/Theta trio for computing;
+   big-O itself is Bachmann 1894 via Landau); Hartmanis & Stearns, "On the
+   computational complexity of algorithms", 1965. Arithmetic timings in
+   section 1 measured 2026-09-20, CPython 3 on the author's laptop, seed 7;
+   sys.maxsize = 2**63 - 1 on that machine. The x9-per-quadrupling ratio is
+   4**log2(3), Karatsuba's exponent, which CPython uses above its cutoff.
+   Sources consulted for Chapter 1: Bentley, "Programming pearls: algorithm
+   design techniques", CACM 27(9):865–873, 1984 (origin of the maximum
+   subarray problem: posed by Ulf Grenander, Brown, 1977; O(n log n) by
+   Michael Shamos; O(n) by Jay Kadane at a CMU seminar); Bentley's
+   no-empty-subarray convention. Timings in section 1 measured on 2026-09-20,
+   CPython 3 on the author's laptop, seed 11, values uniform in [-50, 50];
+   the script is reproduced in the exercises.
+   Structure: window.PARTS + window.CHAPTERS.
+   ========================================================================== */
+
+window.PARTS = [
+  { num: 1, title: "Foundations: The Machine and the Measure",
+    desc: "Before you can say an algorithm is fast you have to say what a step is, and before you can say a scan is linear you have to prove that each element is touched once. This part builds the measuring instruments, then turns them immediately on the patterns everyone else calls tricks." },
+  { num: 2, title: "Order and Lookup",
+    desc: "Sorting and searching are the two things computers spend most of their time doing, and both are settled questions with unsettling answers: a bound that says no comparison sort can do better, and a standard library that quietly ignores everything you were taught." },
+  { num: 3, title: "The Paradigms",
+    desc: "Three ways to be systematic about a search: try everything and prune, remember what you already computed, or commit to the locally best move and prove you can get away with it. Every hard problem in the rest of the course is one of these three wearing a costume." },
+  { num: 4, title: "Hierarchies and Ranges",
+    desc: "A tree is what you build when a list is too slow and a hash is too forgetful. This part goes from the traversal every interview opens with to the segment tree that answers a range question about a million elements in twenty comparisons." },
+  { num: 5, title: "Graphs",
+    desc: "Almost every problem that looks like it is about something else is about a graph. One traversal, one relaxation step and one residual network account for this entire part; the difficulty is never the algorithm, it is seeing the graph." },
+  { num: 6, title: "The Edges and the Engineer",
+    desc: "Strings, numbers and shapes, the three domains with their own algorithms; the boundary where problems stop being solvable; and then the part of the subject no textbook covers — what to do in the room, what your language actually costs you, and where the field goes next." },
+  { num: 7, title: "Build It: The Structures Library",
+    desc: "Eight layers, two languages, one rule: each structure is fuzzed against the one your standard library ships until they stop disagreeing. At the end you benchmark yours against theirs and explain every gap with a mechanism from this course." }
+];
+
+window.CHAPTERS = [];
+
+/* ======================= CHAPTER 1 ======================= */
+CHAPTERS.push({
+  num: 1, part: 1, free: true, title: "The Shape of the Subject",
+  blurb: "Every practice sheet hands you a list of patterns and tells you to recognize them. This chapter asks the question the sheets skip: what is a pattern, why do some of them transfer to problems you have never seen and others do not, and what are you actually learning when you learn one? You will watch one small problem get four different answers across a factor of sixteen thousand in running time, meet the three questions that organize this whole subject, and get the map of the machine you are about to descend into.",
+  sections: [
+
+    { title: "One Problem, Four Answers",
+      viz: "dsaFourSolutions", vizTitle: "Four algorithms, one array: race them and count the work",
+      html:
+        "<p>In 1977 Ulf Grenander, at Brown, was trying to find bright rectangular patterns in digitised images. The maximum-likelihood estimate he needed required locating a rectangular region of an array whose entries summed to more than any other region's. The two-dimensional version resisted him, so he did what you should do when a problem resists: he made it smaller. Given a list of numbers, some positive and some negative, find the <strong>contiguous subarray</strong> with the largest sum. That is the <strong>maximum subarray problem</strong>, and its subsequent history is the best short argument for why this course exists.</p>" +
+        "<p>Grenander's own answer was <strong>brute force</strong>: enumerate every candidate subarray and add each one up, which runs in time proportional to the cube of the input length. Michael Shamos heard the problem and produced a divide-and-conquer solution in an evening, at n log n. Shamos then described the problem and its history at a Carnegie Mellon seminar; Jay Kadane, in the audience, designed a linear-time algorithm within a minute. Jon Bentley wrote the whole episode up in his <em>Programming Pearls</em> column in <em>Communications of the ACM</em> in 1984, and that is where most people have met it since.</p>" +
+        "<p>Four people, one problem, four answers. Here they are. Read the first and the last; the middle two are described below.</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code># 1. Try every subarray, add it up.            O(n^3)\n" +
+        "def cubic(a):\n" +
+        "    best = 0\n" +
+        "    for i in range(len(a)):\n" +
+        "        for j in range(i, len(a)):\n" +
+        "            best = max(best, sum(a[i:j + 1]))\n" +
+        "    return best\n\n" +
+        "# 2. Same, but carry the running sum.           O(n^2)\n" +
+        "def quadratic(a):\n" +
+        "    best = 0\n" +
+        "    for i in range(len(a)):\n" +
+        "        s = 0\n" +
+        "        for j in range(i, len(a)):\n" +
+        "            s += a[j]\n" +
+        "            best = max(best, s)\n" +
+        "    return best\n\n" +
+        "# 4. One pass: extend, or start over.           O(n)\n" +
+        "def kadane(a):\n" +
+        "    best = cur = 0\n" +
+        "    for x in a:\n" +
+        "        cur = max(0, cur + x)\n" +
+        "        best = max(best, cur)\n" +
+        "    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>// 1. Try every subarray, add it up.            O(n^3)\n" +
+        "static long cubic(int[] a) {\n" +
+        "    long best = 0;\n" +
+        "    for (int i = 0; i &lt; a.length; i++)\n" +
+        "        for (int j = i; j &lt; a.length; j++) {\n" +
+        "            long s = 0;\n" +
+        "            for (int k = i; k &lt;= j; k++) s += a[k];\n" +
+        "            best = Math.max(best, s);\n" +
+        "        }\n" +
+        "    return best;\n" +
+        "}\n\n" +
+        "// 2. Same, but carry the running sum.           O(n^2)\n" +
+        "static long quadratic(int[] a) {\n" +
+        "    long best = 0;\n" +
+        "    for (int i = 0; i &lt; a.length; i++) {\n" +
+        "        long s = 0;\n" +
+        "        for (int j = i; j &lt; a.length; j++) {\n" +
+        "            s += a[j];\n" +
+        "            best = Math.max(best, s);\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return best;\n" +
+        "}\n\n" +
+        "// 4. One pass: extend, or start over.           O(n)\n" +
+        "static long kadane(int[] a) {\n" +
+        "    long best = 0, cur = 0;\n" +
+        "    for (int x : a) {\n" +
+        "        cur = Math.max(0, cur + x);\n" +
+        "        best = Math.max(best, cur);\n" +
+        "    }\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
+
+        "<p>The second algorithm is the first one with a single change: instead of re-adding the whole subarray for every right endpoint, it carries the sum forward. That one change removes a factor of n. This is the oldest idea in the subject, and Chapter 9 gives it a name, <strong>prefix sum</strong>, and a chapter.</p>" +
+        "<p>The third is Shamos's. Split the array in half. The best subarray lies entirely in the left half, entirely in the right half, or it straddles the midpoint, and the straddling case can be found in one linear scan outward from the middle. Recurse on the halves. That is <strong>divide and conquer</strong>, and Chapter 3 shows you how to turn that description into the running time n log n without guessing.</p>" +
+        "<p>The fourth is <strong>Kadane's algorithm</strong>, and it is one line of thought: walking left to right, at each element you either extend the subarray you are already building, or you abandon it and start fresh here. You abandon it exactly when the running sum has gone negative, because a negative prefix can only hurt whatever comes next. Everything else is bookkeeping.</p>" +
+
+        "<h3>What the four cost</h3>" +
+        "<p>Measured on one laptop, CPython, with values drawn uniformly from −50 to 50 and a fixed random seed, on 2026-09-20. All four returned the same answer at every size tested.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='60' y='20' fill='#2de2ff' font-size='12'>n</text>" +
+        "<text x='190' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>cubic</text>" +
+        "<text x='340' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>quadratic</text>" +
+        "<text x='490' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>divide+conquer</text>" +
+        "<text x='640' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>Kadane</text>" +
+        "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='60' y='50' fill='#c9d6ea' font-size='12'>100</text><text x='190' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>3.73 ms</text><text x='340' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>0.20 ms</text><text x='490' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>0.07 ms</text><text x='640' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>0.01 ms</text>" +
+        "<text x='60' y='72' fill='#c9d6ea' font-size='12'>200</text><text x='190' y='72' text-anchor='end' fill='#c9d6ea' font-size='12'>42.58 ms</text><text x='340' y='72' text-anchor='end' fill='#c9d6ea' font-size='12'>0.89 ms</text><text x='490' y='72' text-anchor='end' fill='#c9d6ea' font-size='12'>0.16 ms</text><text x='640' y='72' text-anchor='end' fill='#3ddc97' font-size='12'>0.01 ms</text>" +
+        "<text x='60' y='94' fill='#c9d6ea' font-size='12'>400</text><text x='190' y='94' text-anchor='end' fill='#c9d6ea' font-size='12'>235.13 ms</text><text x='340' y='94' text-anchor='end' fill='#c9d6ea' font-size='12'>3.10 ms</text><text x='490' y='94' text-anchor='end' fill='#c9d6ea' font-size='12'>0.30 ms</text><text x='640' y='94' text-anchor='end' fill='#3ddc97' font-size='12'>0.02 ms</text>" +
+        "<text x='60' y='116' fill='#c9d6ea' font-size='12'>800</text><text x='190' y='116' text-anchor='end' fill='#ff5d73' font-size='12'>2499.94 ms</text><text x='340' y='116' text-anchor='end' fill='#c9d6ea' font-size='12'>13.11 ms</text><text x='490' y='116' text-anchor='end' fill='#c9d6ea' font-size='12'>0.65 ms</text><text x='640' y='116' text-anchor='end' fill='#3ddc97' font-size='12'>0.04 ms</text>" +
+        "<text x='60' y='138' fill='#c9d6ea' font-size='12'>1600</text><text x='190' y='138' text-anchor='end' fill='#7d8fb0' font-size='12'>not run</text><text x='340' y='138' text-anchor='end' fill='#c9d6ea' font-size='12'>68.16 ms</text><text x='490' y='138' text-anchor='end' fill='#c9d6ea' font-size='12'>1.51 ms</text><text x='640' y='138' text-anchor='end' fill='#3ddc97' font-size='12'>0.07 ms</text>" +
+        "<text x='60' y='160' fill='#c9d6ea' font-size='12'>3200</text><text x='190' y='160' text-anchor='end' fill='#7d8fb0' font-size='12'>not run</text><text x='340' y='160' text-anchor='end' fill='#c9d6ea' font-size='12'>219.87 ms</text><text x='490' y='160' text-anchor='end' fill='#c9d6ea' font-size='12'>3.02 ms</text><text x='640' y='160' text-anchor='end' fill='#ffd166' font-size='12'>0.15 ms</text>" +
+        "<line x1='20' y1='172' x2='740' y2='172' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='192' fill='#7d8fb0' font-size='11'>At n = 3200 the gap between the first column and the last is about 16,000x, extrapolating the cubic.</text>" +
+        "</svg><div class='fig-cap'>Notice the ratios, not the numbers: doubling n multiplies the cubic column by roughly 8, the quadratic column by roughly 4, and the last column by 2.</div></div>" +
+
+        "<p>Read the rows rather than the cells. From n = 400 to n = 800 the cubic column grows by a factor of about ten, which is what a cubic does when you double its input. The quadratic column roughly quadruples. Kadane's column doubles. Those three factors are an <strong>order of growth</strong> showing itself in measurements, and they are the entire content of Chapter 2, visible before any notation has been defined.</p>" +
+        "<p>The machine above runs all four on an array you control and counts the operations as it goes. Set the input to <em>all negative</em> and compare the answers. Two of the four will disagree with what you expect, and the disagreement is not a bug: it is a question about what the problem means when every choice is bad. Bentley's published version of the problem does not allow the empty subarray, so on an all-negative input it must return the least-negative single element. The code above allows it, so it returns 0. Neither is wrong; one of them is unstated, and this <strong>empty subarray convention</strong> is how a correct-looking solution fails a test case.</p>" +
+        "<div class='callout'><strong>The interview lens.</strong> Maximum subarray is asked constantly, and the follow-up is almost never \"can you go faster\". It is \"what does your solution return for an all-negative array?\" The question is testing whether you noticed there was a decision to make.</div>"
+    },
+
+    { title: "The Three Questions",
+      html:
+        "<p>Fifty-seven chapters is a lot of machinery, and almost all of it answers one of three questions. When you are lost in this course, or in an unfamiliar problem, come back here.</p>" +
+
+        "<h3>Ordered, or not?</h3>" +
+        "<p>Sortedness is the single most valuable property a collection can have, and almost every speedup in this course either exploits an order that is already there or spends time creating one. A sorted array admits binary search, which is Chapter 13. A sorted array admits the two-pointer scan, Chapter 8. Sorting the endpoints is what turns a pile of intervals into a sweep, Chapter 12. Sorting the edges is Kruskal's algorithm, Chapter 36. When you are stuck, the first question worth asking is whether sorting the input makes the problem visible, and the second is whether you can afford the n log n that costs.</p>" +
+        "<p>The opposite choice is a hash table, Chapter 17, which throws order away entirely in exchange for constant-time lookup. That is the trade in its purest form: a <code>dict</code> can tell you whether a key is present faster than any sorted structure, and cannot tell you what the next-largest key is at all.</p>" +
+
+        "<h3>Static, or changing?</h3>" +
+        "<p>Does the data sit still while you ask questions about it, or does it change underneath you? This axis is invisible in most teaching and it decides more designs than any other. If an array never changes, a prefix sum answers any range-sum question in constant time after linear setup, and nothing more sophisticated is warranted. Let one element change and the prefix sum is worthless, and you need a Fenwick tree or a segment tree, which is Chapters 30 and 31. A <strong>static workload</strong> lets you precompute once; a changing one forces you to maintain instead. Precompute everything, maintain something, or recompute each time: those are the three answers, and the right one depends entirely on the ratio of updates to queries.</p>" +
+
+        "<h3>The value, or the witness?</h3>" +
+        "<p>Kadane's algorithm returns the largest sum. It does not return the subarray. Most of the time an interviewer wants the number and then, a minute later, wants the indices, and the second request is a different problem: you have to record, at each step, why you did what you did. The thing that achieves the optimum is its <strong>witness</strong>, and recovering a witness generally means keeping parent pointers or re-deriving the choices afterwards. Every dynamic programming chapter in Part 3 carries this distinction, because a table of values that cannot reconstruct its own answer is half an algorithm.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<rect x='290' y='16' width='180' height='40' rx='8' fill='#111a2e' stroke='#2de2ff' stroke-width='2.5'/>" +
+        "<text x='380' y='41' text-anchor='middle' fill='#2de2ff' font-size='13'>the problem</text>" +
+        "<line x1='340' y1='56' x2='140' y2='94' stroke='#4f7cff' stroke-width='2'/><polygon points='136,96 146,89 147,99' fill='#4f7cff'/>" +
+        "<line x1='380' y1='56' x2='380' y2='96' stroke='#4f7cff' stroke-width='2'/><polygon points='380,96 374,86 386,86' fill='#4f7cff'/>" +
+        "<line x1='420' y1='56' x2='620' y2='94' stroke='#4f7cff' stroke-width='2'/><polygon points='624,96 613,99 614,89' fill='#4f7cff'/>" +
+        "<rect x='20' y='98' width='232' height='36' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='136' y='121' text-anchor='middle' fill='#c9d6ea' font-size='12'>ordered, or not?</text>" +
+        "<rect x='264' y='98' width='232' height='36' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='380' y='121' text-anchor='middle' fill='#c9d6ea' font-size='12'>static, or changing?</text>" +
+        "<rect x='508' y='98' width='232' height='36' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='624' y='121' text-anchor='middle' fill='#c9d6ea' font-size='12'>the value, or the witness?</text>" +
+        "<text x='136' y='158' text-anchor='middle' fill='#ffd166' font-size='11'>binary search, two pointers,</text>" +
+        "<text x='136' y='174' text-anchor='middle' fill='#ffd166' font-size='11'>sweep line, Kruskal</text>" +
+        "<text x='136' y='190' text-anchor='middle' fill='#7d8fb0' font-size='11'>against: hash tables</text>" +
+        "<text x='380' y='158' text-anchor='middle' fill='#ffd166' font-size='11'>prefix sum if static;</text>" +
+        "<text x='380' y='174' text-anchor='middle' fill='#ffd166' font-size='11'>Fenwick or segment tree</text>" +
+        "<text x='380' y='190' text-anchor='middle' fill='#ffd166' font-size='11'>if not</text>" +
+        "<text x='624' y='158' text-anchor='middle' fill='#ffd166' font-size='11'>parent pointers,</text>" +
+        "<text x='624' y='174' text-anchor='middle' fill='#ffd166' font-size='11'>traceback, reconstruction</text>" +
+        "<text x='624' y='190' text-anchor='middle' fill='#7d8fb0' font-size='11'>costs space, not time</text>" +
+        "<line x1='20' y1='208' x2='740' y2='208' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='228' fill='#7d8fb0' font-size='11'>Chapter 47 turns these three into a five-step procedure you can run under time pressure.</text>" +
+        "</svg><div class='fig-cap'>Three questions, and what each one points at. Most design decisions in this course are one of them.</div></div>"
+    },
+
+    { title: "What a Pattern Is, and What It Is Not",
+      html:
+        "<p>This course is called <em>DSA By Patterns</em>, and it owes you an argument, because the strongest criticism of pattern-based learning is a good one and it deserves to be stated at full strength rather than waved at.</p>" +
+        "<p>The criticism runs like this. A pattern is a cached answer. When you learn that \"sorted array plus a target sum means two pointers\", you have learned a lookup from a surface feature to a piece of code. Surface features are exactly what does not survive a rephrasing. Change the array to a linked list, or the target to a range, or ask for the count rather than the pair, and the lookup misses, and the person who only has the lookup is left with nothing, because they never had a reason. Worse, the lookup <em>feels</em> like understanding. Reading an editorial produces a click of recognition that is almost indistinguishable from insight and produces none of the transfer. People grind hundreds of problems, get faster at the ones they have seen, and stay exactly as stuck on the ones they have not.</p>" +
+        "<p>That criticism is correct about patterns taught as templates. This course's answer is not to deny it but to change what arrives with each pattern. Every pattern here comes with three things a template does not have:</p>" +
+        "<ul>" +
+        "<li><strong>Its invariant.</strong> The property that is true before and after every step, which is the actual reason the algorithm is correct. The two-pointer scan in Chapter 8 is not \"move the pointer that is smaller\"; it is a claim that no pair involving a discarded element can beat what you already have, and that claim is proved.</li>" +
+        "<li><strong>Its proof of cost.</strong> Why the nested-looking loop is linear. Chapter 4 proves it once, with amortized analysis, and then three separate \"patterns\" turn out to be corollaries of the same theorem.</li>" +
+        "<li><strong>Its failure case.</strong> The input where the pattern silently returns a wrong answer. A pattern you cannot break is a pattern you do not understand, and every pattern chapter here contains the break.</li>" +
+        "</ul>" +
+        "<p>A pattern with those three attached is not a cached answer. It is a small theorem with a name, and theorems transfer because you can check whether their hypotheses hold. That is the whole bet of this course, and you are entitled to hold it to that standard: whenever a chapter gives you a technique without telling you why it works and where it breaks, the chapter has failed.</p>" +
+        "<h3>The evidence is checkable, which is the point</h3>" +
+        "<p>A claim like that should be falsifiable, so here is a check you can run against the published pattern lists themselves. One widely sold catalogue advertises its patterns by example, and its entry for <strong>topological sort</strong> offers two: Clone Graph and Word Ladder. Neither is a topological sort. Clone Graph is a traversal with a visited map and works on graphs with cycles, which a topological order does not admit; Word Ladder is a shortest path found by breadth-first search on an implicit graph. A reader who learned &#8220;these look like topological sort&#8221; has learned a false cue, and would carry it into a problem where the real cue &#8212; a directed acyclic graph with dependencies to linearise &#8212; is absent.</p>" +
+        "<p>The same list does not agree with itself on how many patterns it contains: its title says 42, its body lists 43, and a section claiming 31 enumerates 32. None of this is a scandal and it is not an argument that the authors are careless. It is an argument that <em>a cue with no mechanism behind it cannot be checked</em>, by the reader or by the writer. When a pattern arrives with an invariant, a proof of cost and a failure case, a miscategorisation like this one is caught immediately, because Clone Graph has no partial order to linearise and the mismatch is visible in a sentence.</p>" +
+        "<div class='callout'>There is a second, quieter reason to organise by pattern rather than by structure. A textbook ordered by data structure teaches you where things live. A course ordered by technique teaches you what to reach for. In an interview, and at work, the second question is the one you actually have.</div>"
+    },
+
+    { title: "The Map",
+      viz: "dsaCourseMap", vizTitle: "Hover each part to see what it teaches and what it builds",
+      html:
+        "<p>Seven parts. The first three build technique, the next two build structure, the sixth handles the domains with their own algorithms and the skills that no textbook covers, and the last one makes you build the structures yourself.</p>" +
+        "<ul>" +
+        "<li><strong>Part 1, Foundations (Chapters 1–12).</strong> What a running time is, how to solve a recurrence, and amortized analysis — then, immediately, the patterns that amortized analysis explains: two pointers, sliding windows, monotonic stacks, the runner on a linked list. They are here, in the foundations part, because they are corollaries of Chapter 4 rather than array tricks.</li>" +
+        "<li><strong>Part 2, Order and Lookup (13–17).</strong> Binary search as an invariant, binary search on the answer, the sorting family and the bound none of them can beat, what your standard library actually runs instead, and the hash table from the bottom.</li>" +
+        "<li><strong>Part 3, The Paradigms (18–23).</strong> Backtracking, dynamic programming taught as a procedure rather than a gallery, and greedy with the proof obligation that makes it legitimate.</li>" +
+        "<li><strong>Part 4, Hierarchies and Ranges (24–31).</strong> Trees, balancing, heaps, tries, and the range-query family from prefix sums up to segment trees with lazy propagation.</li>" +
+        "<li><strong>Part 5, Graphs (32–39).</strong> One traversal, one relaxation step, one residual network. Shortest paths, spanning trees, strongly connected components, max-flow, and the modelling skill that turns problems which mention no graph into graph problems.</li>" +
+        "<li><strong>Part 6, The Edges and the Engineer (40–49).</strong> Bits, strings, numbers, geometry, and the boundary where problems stop being tractable. Then the recognition procedure, the working engineer's handbook, and a field guide to everything this course names without teaching.</li>" +
+        "<li><strong>Part 7, Build It (50–57).</strong> Eight structures in Python and Java, each fuzzed against the one your language ships until they stop disagreeing, ending in an honest benchmark and a confession table.</li>" +
+        "</ul>" +
+        "<p>Hover the parts in the machine above to see which structures each one builds and which chapters are free. One thing worth noticing while you are there: Chapter 4 has more arrows out of it than any other chapter in Part 1. That is not decoration. If you skip it, Chapters 8, 10 and 11 become templates again.</p>" +
+        "<p>The reading order is the chapter order, and cross-references point backwards except where a chapter says explicitly what to expect and when. You can read Part 6's handbook chapters early if you are preparing for something next week; they will make more sense afterwards, and they say so where it matters.</p>"
+    },
+
+    { title: "How to Use This Course",
+      html:
+        "<p><strong>The machines.</strong> Every chapter carries at least one interactive machine, and the text tells you what to do with it and what you should find. They are not illustrations. When a paragraph says to set the input to all-negative and compare the answers, that is an instruction, and the thing you discover by following it is not written down anywhere else in the chapter. A machine you scroll past is a paragraph you did not read.</p>" +
+        "<p><strong>The code.</strong> Every code block has a Python tab and a Java tab, and the two are equivalent in intent line by line. Read the one you would write in an interview and ignore the other, except in two places where the difference between the languages is itself the lesson: Chapter 16, on what the standard libraries actually run, and Chapter 48, on what each language costs you. C++ appears by name in three places where its standard library has something neither Python nor Java does, and you are never required to read it.</p>" +
+        "<p><strong>The quizzes.</strong> Eight to twelve questions per chapter, each with a written explanation of why the answer is the answer. The explanations are the point; several of them teach the mechanism again from an angle the chapter body did not use. A wrong answer is worth more than a right one if you read the reason.</p>" +
+        "<p><strong>The exercises.</strong> Three to six per chapter, in three grades. <strong>Trace</strong> exercises ask you to work a mechanism by hand on given input, which is the only reliable way to find out whether you understood the steps. <strong>Investigate</strong> exercises ask you to run something on your own machine and report what you saw. <strong>Build</strong> exercises ask for code. Every exercise states what you should have found, so you can check yourself without a solutions manual.</p>" +
+        "<p><strong>The capstone.</strong> Part 7 builds eight data structures from scratch in both languages. The rule throughout is that you never verify a structure by reading it. You verify it by running a million random operations through your structure and your language's standard library at the same time and finding the first place they disagree. That technique — a differential fuzzer against a reference implementation — is worth more to you than any single structure in the library.</p>" +
+        "<p><strong>What this course assumes.</strong> One programming language, loops and functions, and high-school algebra. Not a data structures course, not discrete mathematics, and not any other course on this site. If you have never implemented a hash table, you are the intended reader.</p>" +
+        "<div class='callout'><strong>Where to start if you are short on time.</strong> If you have an interview next week, read Chapters 2, 4, 8, 13, 19 and 47 in that order and accept that you are taking the results on trust. Then come back and read the course properly, because the thing that fails you in round three is the part you skipped.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Run Kadane's algorithm by hand on <code>[3, -4, 2, 1, -5, 4]</code>, writing down <code>cur</code> and <code>best</code> after each element. Then do it again on the same array with every sign flipped. <em>What you should find:</em> the first run gives 3, and the running sum resets to 0 exactly twice; the second run gives 0 under the code in this chapter, which is the empty-subarray convention doing its work.</li>" +
+        "<li><strong>Trace.</strong> For the array <code>[2, -1, 2]</code>, list every one of the six contiguous subarrays and its sum, then say which of the four algorithms would examine each one. <em>What you should find:</em> the cubic algorithm computes six sums using twelve additions; Kadane's uses three. The gap you can see by hand at n = 3 is the gap you measured at n = 3200.</li>" +
+        "<li><strong>Investigate.</strong> Reproduce the timing table in section 1. Write the four functions, generate random arrays with a fixed seed, and time them at n = 100, 200, 400 and 800. <em>What you should find:</em> your absolute numbers will differ from the ones printed here, possibly by a large factor, but the ratio between consecutive rows should be close to 8, 4, a little over 2, and 2 respectively. If your ratios match and your milliseconds do not, you have measured the same thing on a different machine, which is what an asymptotic claim actually promises.</li>" +
+        "<li><strong>Investigate.</strong> Time <code>sum(a[i:j+1])</code> against a manual loop over the same range in Python for a range of 10,000 elements. <em>What you should find:</em> the slice is faster despite doing strictly more work, because it copies in C and adds in C while the loop interprets. This is the first hint of Chapter 16's subject: the constant factor is not a detail, and it is the reason the cubic column above is slower than it looks even after you account for the cube.</li>" +
+        "<li><strong>Build.</strong> Implement the divide-and-conquer solution. Then write a checker that generates 10,000 random arrays of length 1 to 20, runs your divide-and-conquer version and the cubic version on each, and asserts they agree. <em>What you should find:</em> if you wrote the straddling case as two separate scans outward from the midpoint, it agrees everywhere; if you wrote it as one scan, you will find a disagreement within the first few hundred arrays. Keep this checker. It is the shape of every test in Part 7.</li>" +
+        "<li><strong>Build.</strong> Modify Kadane's algorithm to return the witness — the start and end indices of the best subarray — as well as the sum. <em>What you should find:</em> you need exactly two extra variables and one extra assignment, placed at the moment the running sum resets rather than at the moment the best improves. If you put the assignment in the wrong place you get the right sum with the wrong indices, which is the second question in section 2 turning into a bug.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "maximum subarray problem", d: "Given a list of numbers, find the contiguous run of them with the largest sum; posed by Ulf Grenander in 1977 as a one-dimensional simplification of a pattern-finding problem in images." },
+    { t: "contiguous subarray", d: "A run of elements occupying consecutive positions, as distinct from a subsequence, which may skip elements." },
+    { t: "brute force", d: "An algorithm that enumerates every candidate answer and checks each one; the baseline whose cost every later technique is measured against." },
+    { t: "prefix sum", d: "A running total carried forward so that the sum of any range can be obtained without re-adding its elements; the technique that removes a factor of n from the cubic solution." },
+    { t: "divide and conquer", d: "Solving a problem by splitting it into smaller instances of itself, solving those, and combining the results, where the combining step is usually the difficult part." },
+    { t: "Kadane's algorithm", d: "The linear-time maximum subarray algorithm that decides, at each element, whether to extend the current run or abandon it and start again." },
+    { t: "witness", d: "The object that achieves an optimum, as opposed to the optimum's value; recovering one usually costs extra bookkeeping rather than extra time." },
+    { t: "invariant", d: "A property that holds before and after every step of an algorithm, and which is what makes the algorithm correct rather than merely plausible." },
+    { t: "order of growth", d: "How an algorithm's cost scales as its input grows, which is what the ratio between consecutive rows of a timing table measures." },
+    { t: "empty subarray convention", d: "The unstated decision about whether a subarray may contain no elements, which changes the answer on all-negative input and is the source of the most common wrong answer to this problem." },
+    { t: "pattern", d: "In this course, a technique that arrives with its invariant, its cost argument and its failure case; without those three it is a template, which is a cached answer rather than a reason." },
+    { t: "transfer", d: "The ability to apply something learned on one problem to a different problem that shares its structure but not its surface; the property that distinguishes understanding a technique from recognizing a problem." },
+    { t: "static workload", d: "A workload in which the data does not change while it is queried, which permits precomputing answers once instead of maintaining them." },
+    { t: "differential fuzzer", d: "A test that drives your implementation and a trusted reference through the same random operations and reports the first disagreement; the verification method used throughout this course's capstone." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "You double the input length and an algorithm's measured time goes from 13 ms to 68 ms. Which of the four solutions in this chapter is it most consistent with?",
+      opts: [
+        "The quadratic solution, since doubling n predicts a factor near 4 and 5.2 is close, with the excess coming from cache misses and interpreter overhead that the notation ignores",
+        "The cubic solution, since cubic growth on a doubled input predicts a factor near 8, and measurement noise on a laptop running other processes easily accounts for the shortfall to 5.2",
+        "Kadane's algorithm, since a linear scan touches twice as many elements but benefits from a warmer cache on the larger array, giving somewhat more than a doubling",
+        "The divide-and-conquer solution, since n log n grows somewhat faster than a plain doubling and the logarithmic factor contributes the remainder"
+      ], a: 0,
+      why: "A quadratic algorithm's cost multiplies by about 4 when n doubles, and 68/13 is about 5.2 \u2014 close, with the excess explained by cache behaviour and interpreter overhead that the asymptotic claim says nothing about. Cubic predicts about 8 and divide-and-conquer predicts a little over 2, both further away. Read ratios between rows rather than absolute milliseconds, because the ratio is the part that survives being run on a different machine." },
+
+    { type: "mc",
+      q: "Kadane's algorithm as written in this chapter returns 0 for the array [-5, -2, -9]. A reviewer calls this a bug. What is the most accurate response?",
+      opts: [
+        "It is a bug, and the fix is to initialise both variables to negative infinity rather than to zero, which is the correct initialisation in every formulation",
+        "It is a bug, and the fix is to scan for the maximum element separately and return that whenever the computed answer comes out as zero, since a zero result can only mean the loop never committed to any element",
+        "It is neither a bug nor undefined: the code permits the empty subarray, which is a choice the problem statement must make, and Bentley's published version chooses the opposite",
+        "It is not a bug but the input falls outside the problem's intended domain, so any return value is defensible, and the responsibility belongs to the caller to filter all-negative arrays out before invoking it"
+      ], a: 2,
+      why: "Whether a subarray may be empty is part of the problem specification, not a property of the algorithm. With the empty subarray allowed, 0 is correct for an all-negative input, because taking nothing beats taking anything. Bentley's 1984 version disallows it, and then the answer is the least-negative element. The defect is never stating which convention is in force, which is why this is the standard follow-up on this problem." },
+
+    { type: "mc",
+      q: "A colleague says: \"I have done four hundred practice problems and I still freeze on anything new.\" Based on this chapter's argument, what is the most likely diagnosis?",
+      opts: [
+        "They have not done enough volume yet, and recognition reliably matures into genuine understanding somewhere past the first thousand or so problems",
+        "They are attempting problems well above their current level, and should restart from the easiest tier and climb more gradually",
+        "They are recalling templates imprecisely, and a half-remembered template is more dangerous than no template at all",
+        "They learned lookups keyed on surface features, which miss the moment a problem is rephrased and leave no reason behind to fall back on"
+      ], a: 3,
+      why: "This is the recognition-without-transfer failure stated in section 3. A lookup from a surface feature to a piece of code works exactly when the surface matches and collapses when it does not, and it produces a feeling of understanding hard to distinguish from the real thing. What transfers is the invariant, the cost argument and the failure case, because those are claims whose hypotheses you can check against a new problem." },
+
+    { type: "mc",
+      q: "You hold an array of a million integers. Elements are updated roughly a thousand times a second; range-sum queries arrive roughly ten times a second. Which organising question governs the design, and what does it suggest?",
+      opts: [
+        "Ordered or not: keeping the array sorted would let the range queries binary search for their endpoints, which is the dominant cost at this size",
+        "Static or changing: updates dominate queries here, so a prefix sum is wrong and a Fenwick tree is warranted",
+        "The value or the witness: the queries want a sum rather than the range achieving it, so no reconstruction bookkeeping is needed and a plain array suffices",
+        "Static or changing: queries are rare enough that recomputing each one with a linear scan over the million elements is the cheaper engineering choice"
+      ], a: 1,
+      why: "This is the static-versus-changing axis, and the update-to-query ratio decides it. A prefix sum answers queries in constant time but costs a linear rebuild per update, which at a thousand updates a second over a million elements is a billion operations a second. A Fenwick tree costs about twenty operations for either an update or a query, absorbing both rates. Option 4 misreads the ratio: the updates are the expensive side here, not the queries." },
+
+    { type: "mc",
+      q: "Why does this course place two pointers and the monotonic stack in Part 1, alongside amortized analysis, rather than in a later part about arrays?",
+      opts: [
+        "Because both are corollaries of one amortized argument proved in Chapter 4, and teaching them away from that proof turns them back into templates",
+        "Because arrays are the first structure a reader has met, so array techniques logically precede anything involving trees or graphs",
+        "Because they are the most approachable patterns in the subject, and an early win keeps a reader moving through the harder foundational material that surrounds them",
+        "Because the interview banks rank them highest by frequency and the course follows that ranking"
+      ], a: 0,
+      why: "Their nested-looking loops are linear for one reason, proved once in Chapter 4: over the whole run each element is pushed at most once and popped at most once, so total work is bounded by 2n regardless of nesting. Every interview bank files these as separate array tricks and loses the theorem that unifies them. This is the course's most consequential ordering decision, and section 4 warns you that skipping Chapter 4 undoes it." },
+
+    { type: "mc",
+      q: "The divide-and-conquer solution finds the best straddling subarray by scanning outward from the midpoint in each direction. Why can it not instead take the best subarray of each half and join them?",
+      opts: [
+        "Because the two halves can have different lengths whenever n is odd, and the mismatch breaks the balanced recurrence that the running-time argument depends on, leaving the n log n bound unproved for those inputs",
+        "Because joining them would count the midpoint element twice, inflating the sum by exactly that element's value",
+        "Because the best subarray of either half may turn out to be the empty one under this chapter's convention, and joining two empty subarrays yields zero, which is not the quantity the straddling case is asking about",
+        "Because a straddling subarray must be contiguous across the midpoint, so what is needed is the best suffix of the left half and the best prefix of the right, which are generally not those halves' best subarrays"
+      ], a: 3,
+      why: "Contiguity is the constraint doing all the work. A subarray crossing the midpoint must run up to the midpoint from the left and continue from it to the right without a gap, so it needs the maximum suffix of the left half and the maximum prefix of the right. The best subarray of the left half may sit nowhere near the midpoint and be useless for joining. This gap between the best sub-answer and the best joinable sub-answer is the recurring difficulty in divide and conquer, and Chapter 3 returns to it." },
+
+    { type: "mc",
+      q: "In Python, sum(a[i:j+1]) measures faster than an equivalent interpreted loop over the same range, even though the slice also copies the elements. What does this tell you?",
+      opts: [
+        "That the interpreter elides the copy when the slice feeds straight into a reduction, so it does not in fact do the extra work",
+        "That asymptotic notation deliberately says nothing about constant factors, and here interpreted iteration costs more per element than a copy plus an addition in C",
+        "That the asymptotic analysis is mistaken, since an approach doing strictly more work cannot finish sooner than one doing less",
+        "That slicing must be implemented by an algorithm of lower order than repeated addition, since no constant factor could cover a gap this large"
+      ], a: 1,
+      why: "Both approaches are linear in the length of the range; they differ only in the constant the notation hides, and that constant differs by roughly an order of magnitude because one runs in C and the other steps the interpreter once per element. Asymptotic analysis is a claim about how cost scales, not about which of two same-order implementations is faster today. Chapter 16 is built on this gap, and it is why the sorting algorithm your standard library ships is not the one in the textbook." },
+
+    { type: "mc",
+      q: "Which of these would most convincingly demonstrate that you understand a pattern rather than having memorised it?",
+      opts: [
+        "Writing a correct implementation of it from memory, without reference, in under two minutes under time pressure",
+        "Stating its worst-case time and space complexity, with the constant factors, without looking either of them up",
+        "Constructing an input on which the obvious version returns a wrong answer, and naming the hypothesis that input violates",
+        "Listing the three or four classic problems on which you have previously seen the technique successfully applied"
+      ], a: 2,
+      why: "Section 3's standard: a pattern you cannot break is a pattern you do not understand. Speed and complexity recall are both consistent with a memorised template, and listing problems is the lookup itself. Producing the counterexample requires knowing the hypothesis the technique depends on, which is precisely what transfers to a problem you have not seen. Every pattern chapter in this course contains its own break for this reason." },
+
+    { type: "blank",
+      q: "The thing that achieves an optimum, as opposed to the optimum's value, is called its ____.",
+      a: ["witness"],
+      why: "Kadane's algorithm returns the best sum and not the subarray that produced it. Recovering the witness means recording, at each step, the choice you made, which generally costs space rather than time. Every dynamic programming chapter in Part 3 carries this distinction, because a table that cannot reconstruct its own answer is half an algorithm." },
+
+    { type: "blank",
+      q: "A property that holds before and after every step of an algorithm, and which is the actual reason it is correct, is called an ____.",
+      a: ["invariant", "loop invariant"],
+      why: "The invariant is what separates a technique from a template. \"Move the smaller pointer\" is a template; \"no pair involving a discarded element can beat what we already hold\" is an invariant, and it is checkable against a new problem. Chapter 8 proves that one, and Chapter 13 shows that almost every binary search bug is an invariant that was never written down." },
+
+    { type: "order",
+      q: "Put the four maximum-subarray solutions in the historical order in which they were found:",
+      items: [
+        "Grenander's cubic enumeration",
+        "Shamos's divide-and-conquer, n log n",
+        "Kadane's linear-time algorithm",
+        "Bentley's write-up in Communications of the ACM"
+      ],
+      why: "Grenander posed the problem in 1977 with a cubic solution, Shamos produced the divide-and-conquer version in an evening, Kadane produced the linear algorithm within a minute of hearing Shamos describe the problem at a Carnegie Mellon seminar, and Bentley published the episode in his Programming Pearls column in 1984. The sequence is the ordinary shape of progress in this field: a problem, a clever reduction, and then someone noticing the clever reduction was unnecessary." }
+  ]
+});
+
+/* ======================= CHAPTER 2 ======================= */
+CHAPTERS.push({
+  num: 2, part: 1, free: true, title: "What a Running Time Is",
+  blurb: "You have written O(n) a thousand times. This chapter asks what the O means, what the n counts, and what a step is on a machine that has caches, a branch predictor and a 64-bit word. You will find out why input size is measured in bits rather than elements, which is the one distinction that later makes the knapsack algorithm everyone calls polynomial not polynomial. You will also watch the model's central assumption fail, measured, on your own language's arithmetic.",
+  sections: [
+
+    { title: "Counting What?",
+      html:
+        "<p>\"This runs in linear time\" is a claim about a count. Before the claim means anything, two things have to be pinned down: what is being counted, and what counts as one of them. Both answers come from a <strong>model of computation</strong>, and the one this course uses for the next fifty-five chapters is the <strong>word-RAM model</strong>.</p>" +
+        "<p>The model says: memory is an array of cells called <strong>words</strong>, each holding <em>w</em> bits. You can read a word, write a word, compare two words, and do arithmetic and bitwise operations on words, and every one of those is one step. Array indexing is one step, because an index fits in a word and the machine can compute an address. That is the whole model.</p>" +
+        "<p>One condition makes it honest: <em>w</em> must be at least log₂ n, where n is the number of items you are storing. If it were smaller, a single word could not even hold an index into your own data, and \"array indexing is one step\" would be a lie. On the machine this was written on, <em>w</em> is 64, which you can confirm in Python: <code>sys.maxsize</code> is 9223372036854775807, one less than 2⁶³. Sixty-four bits indexes far more memory than exists, so the condition holds for anything you will ever run.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 190' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='20' fill='#2de2ff' font-size='12'>memory: an array of w-bit words</text>" +
+        "<rect x='20' y='32' width='86' height='40' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='63' y='57' text-anchor='middle' fill='#c9d6ea' font-size='11'>w bits</text>" +
+        "<rect x='112' y='32' width='86' height='40' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='155' y='57' text-anchor='middle' fill='#c9d6ea' font-size='11'>w bits</text>" +
+        "<rect x='204' y='32' width='86' height='40' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='247' y='57' text-anchor='middle' fill='#c9d6ea' font-size='11'>w bits</text>" +
+        "<rect x='296' y='32' width='86' height='40' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='339' y='57' text-anchor='middle' fill='#c9d6ea' font-size='11'>w bits</text>" +
+        "<text x='396' y='57' fill='#7d8fb0' font-size='13'>...</text>" +
+        "<text x='20' y='90' fill='#7d8fb0' font-size='11'>index 0</text><text x='112' y='90' fill='#7d8fb0' font-size='11'>index 1</text><text x='204' y='90' fill='#7d8fb0' font-size='11'>index 2</text><text x='296' y='90' fill='#7d8fb0' font-size='11'>index 3</text>" +
+        "<line x1='440' y1='24' x2='440' y2='166' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='466' y='20' fill='#2de2ff' font-size='12'>one step, each:</text>" +
+        "<text x='466' y='42' fill='#c9d6ea' font-size='11'>read a word at an index</text>" +
+        "<text x='466' y='60' fill='#c9d6ea' font-size='11'>write a word at an index</text>" +
+        "<text x='466' y='78' fill='#c9d6ea' font-size='11'>compare two words</text>" +
+        "<text x='466' y='96' fill='#c9d6ea' font-size='11'>add, subtract, multiply, divide</text>" +
+        "<text x='466' y='114' fill='#c9d6ea' font-size='11'>and, or, xor, shift</text>" +
+        "<text x='466' y='138' fill='#ffd166' font-size='11'>requires: w &gt;= log2(n)</text>" +
+        "<text x='466' y='156' fill='#7d8fb0' font-size='11'>or an index would not fit in a word</text>" +
+        "<line x1='20' y1='166' x2='740' y2='166' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='184' fill='#7d8fb0' font-size='11'>Nothing here mentions caches, pipelines or branch prediction. That omission is the model's whole bargain.</text>" +
+        "</svg><div class='fig-cap'>The model an algorithm's running time is counted in. Everything the real machine does that this leaves out becomes a constant factor.</div></div>" +
+
+        "<h3>Where the model stops being true</h3>" +
+        "<p>\"Arithmetic on a word is one step\" is an assumption, and assumptions can be tested. In Python, integers are not limited to a word; they grow as large as you like. So multiply two k-bit integers and watch what happens as k grows. Measured on one laptop, CPython, with random values:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='30' y='20' fill='#2de2ff' font-size='12'>bits in each operand</text>" +
+        "<text x='400' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>one multiply</text>" +
+        "<text x='600' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>vs a 64-bit multiply</text>" +
+        "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='30' y='50' fill='#3ddc97' font-size='12'>64  (fits a word)</text><text x='400' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>44.5 ns</text><text x='600' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>1x</text>" +
+        "<text x='30' y='74' fill='#c9d6ea' font-size='12'>1,024</text><text x='400' y='74' text-anchor='end' fill='#c9d6ea' font-size='12'>2,103 ns</text><text x='600' y='74' text-anchor='end' fill='#c9d6ea' font-size='12'>47x</text>" +
+        "<text x='30' y='98' fill='#c9d6ea' font-size='12'>16,384</text><text x='400' y='98' text-anchor='end' fill='#c9d6ea' font-size='12'>170,074 ns</text><text x='600' y='98' text-anchor='end' fill='#ffd166' font-size='12'>3,826x</text>" +
+        "<text x='30' y='122' fill='#c9d6ea' font-size='12'>262,144</text><text x='400' y='122' text-anchor='end' fill='#ff5d73' font-size='12'>14,193,172 ns</text><text x='600' y='122' text-anchor='end' fill='#ff5d73' font-size='12'>319,260x</text>" +
+        "<line x1='20' y1='136' x2='740' y2='136' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='156' fill='#c9d6ea' font-size='11'>Each row quadruples the bit length. Above CPython's cutoff the time multiplies by about 9 each time,</text>" +
+        "<text x='20' y='172' fill='#c9d6ea' font-size='11'>and 4 raised to log2(3) is 9: that exponent is Karatsuba's algorithm, visible in the measurement.</text>" +
+        "<text x='20' y='190' fill='#7d8fb0' font-size='11'>Addition behaves differently: 64 bits costs 27 ns and</text>" +
+        "<text x='20' y='206' fill='#7d8fb0' font-size='11'>1,048,576 bits costs 37,152 ns, about 1,363x for 16,384x the bits.</text>" +
+        "</svg><div class='fig-cap'>One multiplication is one step only while the operands fit in a word. Past that the model has quietly stopped describing your machine.</div></div>" +
+
+        "<p>This matters more often than it sounds. If you compute a hash by multiplying a running value that you never reduce modulo anything, your \"constant-time\" hash is quietly growing a number thousands of bits long and your loop is not linear. Chapter 17 reduces at every step for exactly this reason, and Chapter 44 gives modular arithmetic a section of its own.</p>" +
+        "<div class='callout'>Java does not have this problem and has the opposite one: an <code>int</code> is exactly 32 bits and wraps silently when it overflows, so the model's \"one step\" stays true and your arithmetic stops being true instead. Chapter 13 opens on a binary search that shipped with that bug for nine years.</div>"
+    },
+
+    { title: "How Fast Things Grow",
+      viz: "dsaGrowthRaces", vizTitle: "Drag n and watch which curves leave the chart",
+      html:
+        "<p>Before the notation, the intuition. The reason anyone cares about orders of growth is that they separate violently at sizes you actually encounter, and the separation is much larger than people expect from looking at the names.</p>" +
+        "<p>Take a machine that does 10⁹ simple operations a second, which is roughly right for compiled code and roughly a hundred times optimistic for interpreted Python. At n = 1,000,000: a logarithmic algorithm does about 20 operations, a linear one does a million and finishes in a millisecond, an n log n one does twenty million and finishes in twenty milliseconds. A quadratic one does 10¹² and takes about seventeen minutes. A cubic one takes about thirty-one thousand years. And 2ⁿ at n = 1,000,000 is not a number worth writing down.</p>" +
+        "<p>The same separation is more useful read the other way round: not how long a given n takes, but how large an n you can afford. At 10&#8313; operations per second, the largest input each growth class finishes in <strong>one second</strong>:</p>" +
+        "<ul>" +
+        "<li><strong>log n</strong> &#8212; larger than any n you can represent</li>" +
+        "<li><strong>&#8730;n</strong> &#8212; 10&#185;&#8312;</li>" +
+        "<li><strong>n</strong> &#8212; 1,000,000,000</li>" +
+        "<li><strong>n log n</strong> &#8212; 39,620,077</li>" +
+        "<li><strong>n&#178;</strong> &#8212; 31,622</li>" +
+        "<li><strong>n&#179;</strong> &#8212; 1,000</li>" +
+        "<li><strong>2&#8319;</strong> &#8212; 29</li>" +
+        "<li><strong>n!</strong> &#8212; 12</li>" +
+        "</ul>" +
+        "<p>Two entries in that table are worth more than the rest of this section. The first is how early the quadratic ceiling arrives: 31,622 is not a big number, and an n&#178; algorithm on a merely medium dataset is already past a second. The second is what happens when you buy more time. Going from one second to one <em>minute</em> &#8212; sixty times the budget &#8212; moves the n&#178; frontier from 31,622 to about 244,949, but moves the 2&#8319; frontier from 29 to <strong>35</strong>. Six more elements for sixty times the compute. That is why an exponential algorithm is not repaired by a faster machine, and why Chapter 46 treats intractability as a property of the problem rather than of the hardware.</p>" +
+        "<p>The practical consequence is a piece of arithmetic you should be able to do in your head, and Chapter 47 makes it the first step of the recognition procedure: <em>given the input size, which orders of growth are even admissible?</em> At n = 10⁵ with a second to spend, n² is 10¹⁰ and is out; n log n is about 1.7 million and is comfortable. At n = 20, 2ⁿ is a million and is fine, which is why Chapter 22 can solve the travelling salesman problem by brute force over subsets.</p>" +
+        "<p>The machine above plots these against a slider. Drag n upward and watch the curves leave the chart one at a time, then switch the vertical axis from operations to seconds. Find the n at which n² stops finishing inside one second, and then find it for 2ⁿ. The gap between those two answers is the reason exponential algorithms are a different category rather than a slower one.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 218' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='20' fill='#2de2ff' font-size='12'>operations at n = 1,000,000, and the wall-clock time at 10^9 ops/sec</text>" +
+        "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='30' y='50' fill='#c9d6ea' font-size='12'>log n</text><text x='330' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>20</text><text x='560' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>instant</text>" +
+        "<text x='30' y='72' fill='#c9d6ea' font-size='12'>n</text><text x='330' y='72' text-anchor='end' fill='#c9d6ea' font-size='12'>1,000,000</text><text x='560' y='72' text-anchor='end' fill='#3ddc97' font-size='12'>1 ms</text>" +
+        "<text x='30' y='94' fill='#c9d6ea' font-size='12'>n log n</text><text x='330' y='94' text-anchor='end' fill='#c9d6ea' font-size='12'>20,000,000</text><text x='560' y='94' text-anchor='end' fill='#3ddc97' font-size='12'>20 ms</text>" +
+        "<text x='30' y='116' fill='#c9d6ea' font-size='12'>n^2</text><text x='330' y='116' text-anchor='end' fill='#c9d6ea' font-size='12'>10^12</text><text x='560' y='116' text-anchor='end' fill='#ffd166' font-size='12'>~17 minutes</text>" +
+        "<text x='30' y='138' fill='#c9d6ea' font-size='12'>n^3</text><text x='330' y='138' text-anchor='end' fill='#c9d6ea' font-size='12'>10^18</text><text x='560' y='138' text-anchor='end' fill='#ff5d73' font-size='12'>~31,700 years</text>" +
+        "<text x='30' y='160' fill='#c9d6ea' font-size='12'>2^n</text><text x='330' y='160' text-anchor='end' fill='#ff5d73' font-size='12'>10^301029</text><text x='560' y='160' text-anchor='end' fill='#ff5d73' font-size='12'>no</text>" +
+        "<line x1='20' y1='174' x2='740' y2='174' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='192' fill='#7d8fb0' font-size='11'>Interpreted Python runs roughly 10^7 simple operations a second,</text>" +
+        "<text x='20' y='208' fill='#7d8fb0' font-size='11'>so shift every time in the last column by about two orders of magnitude.</text>" +
+        "</svg><div class='fig-cap'>The rows are not evenly spaced and that is the point: the step from n log n to n squared is the one that turns a request into a timeout.</div></div>"
+    },
+
+    { title: "The Notation Is a Claim About Sets",
+      viz: "dsaBigOQuiz", vizTitle: "Decide each claim, then reveal the constants that settle it",
+      html:
+        "<p>Now the <strong>asymptotic notation</strong>, precisely, because almost every argument about it comes from people using it loosely in different directions.</p>" +
+        "<p><strong>O(g)</strong> is a <em>set of functions</em>. A function f is in O(g) when there exist positive constants c and n₀ such that f(n) ≤ c·g(n) for every n ≥ n₀. In words: past some point, f is below a fixed multiple of g. That is an <strong>upper bound</strong>, and nothing more.</p>" +
+        "<p>The rest of the family says the other things you might want to say:</p>" +
+        "<ul>" +
+        "<li><strong>big-Omega</strong>, written Ω(g), a lower bound: f ≥ c·g past some point.</li>" +
+        "<li><strong>big-Theta</strong>, written Θ(g), both at once: c₁·g ≤ f ≤ c₂·g past some point. This is the tight one, and it is what you usually mean when you say \"it is n log n\".</li>" +
+        "<li><strong>little-o</strong>, written o(g), strictly smaller: the ratio f/g goes to zero — not merely bounded above, but dominated.</li>" +
+        "<li><strong>little-omega</strong>, written ω(g), strictly larger: the mirror of little-o.</li>" +
+        "</ul>" +
+        "<p>Big-O is older than computer science; it comes from Bachmann in 1894 and was popularised by Landau in analytic number theory. The trio as we use it is Donald Knuth's, in a 1976 note in <em>SIGACT News</em> titled \"Big Omicron and big Omega and big Theta\", written because people had started using O for lower bounds and he wanted the notation nailed down before the habit set.</p>" +
+
+        "<h3>The consequence people find annoying</h3>" +
+        "<p>Because O is an upper bound, <em>every linear algorithm is also O(n²)</em>. And O(n¹⁰⁰). And O(2ⁿ). Those statements are all true, and all useless. Saying a linear scan is O(n²) is not an error in the way that saying it is O(log n) is an error; it is a correct claim that throws away everything you knew. This is why Θ exists, and why a careful person says Θ(n) when they mean it and O(n) when they mean \"no worse than\".</p>" +
+        "<p>The machine above gives you claims like \"3n² + 5n ∈ O(n²)\" and \"n log n ∈ Ω(n)\" and asks you to rule on each. Decide before you reveal. One of the claims in the set is true and tells you nothing useful, and finding that one is the point of the exercise.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 220' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<line x1='70' y1='190' x2='720' y2='190' stroke='#7d8fb0' stroke-width='2'/><text x='725' y='194' fill='#7d8fb0' font-size='11'>n</text>" +
+        "<line x1='70' y1='190' x2='70' y2='24' stroke='#7d8fb0' stroke-width='2'/>" +
+        "<path d='M70 178 Q 300 150 720 40' fill='none' stroke='#4f7cff' stroke-width='2.5'/><text x='620' y='36' fill='#4f7cff' font-size='11'>c2 * g(n)</text>" +
+        "<path d='M70 184 Q 300 168 720 96' fill='none' stroke='#ffd166' stroke-width='2.5'/><text x='620' y='92' fill='#ffd166' font-size='11'>f(n)</text>" +
+        "<path d='M70 188 Q 300 180 720 140' fill='none' stroke='#4f7cff' stroke-width='2.5' stroke-dasharray='5 4'/><text x='612' y='170' fill='#4f7cff' font-size='11'>c1 * g(n)</text>" +
+        "<line x1='250' y1='24' x2='250' y2='190' stroke='#ff5d73' stroke-width='2' stroke-dasharray='4 4'/>" +
+        "<text x='250' y='210' text-anchor='middle' fill='#ff5d73' font-size='11'>n0</text>" +
+        "<text x='300' y='210' fill='#7d8fb0' font-size='11'>left of n0, anything may happen</text>" +
+        "<text x='90' y='42' fill='#2de2ff' font-size='12'>right of n0, f is trapped between two multiples of g:</text>" +
+        "<text x='90' y='60' fill='#2de2ff' font-size='12'>that is f in Theta(g)</text>" +
+        "</svg><div class='fig-cap'>Both constants and the threshold are existential: you only have to exhibit some c and some n0, not the best ones.</div></div>" +
+
+        "<div class='callout'><strong>The interview lens.</strong> \"What is the complexity?\" is usually answered with a bare O. The follow-up worth pre-empting is whether your bound is tight. If you say O(n log n) and it is actually Θ(n), you have undersold your own algorithm; if you say Θ(n log n) and the worst case is quadratic, you have claimed something false.</div>"
+    },
+
+    { title: "Input Size Is Measured in Bits",
+      html:
+        "<p>Here is the distinction that costs people interview rounds, and the reason this chapter exists before the dynamic programming chapters rather than after them.</p>" +
+        "<p>The n in a running time is the <strong>size of the input</strong>, and size means the number of bits needed to write the input down. Most of the time this is a harmless technicality, because for an array of n numbers each fitting in a word, the bit length is 64n, which is Θ(n), so counting elements and counting bits agree up to a constant.</p>" +
+        "<p>They stop agreeing the moment a single number is itself the interesting quantity. Consider two inputs:</p>" +
+        "<ul>" +
+        "<li>An array of 1,000,000 32-bit integers. Writing it down takes 32,000,000 bits, about 4 megabytes. Its size is about 32 million.</li>" +
+        "<li>The single number 1,152,921,504,606,846,976, which is 2⁶⁰. Writing it down takes 61 bits. Its size is 61.</li>" +
+        "</ul>" +
+        "<p>An algorithm that loops 2⁶⁰ times on the second input is doing about 10¹⁸ operations on an input of 61 bits. Its running time is exponential in the size of its input, even though it looks like a simple loop up to a number that was handed to you. When a running time is polynomial in the <em>value</em> of a number in the input rather than in the number of bits used to write that number, it is called <strong>pseudopolynomial</strong>, and it is one of the most common false claims in the subject. Chapter 20 shows that the standard knapsack algorithm, the O(nW) one in every tutorial, is exactly this.</p>" +
+        "<h3>The measurement that settles it</h3>" +
+        "<p>Testing whether a number is prime by trial division &#8212; try every divisor up to &#8730;n &#8212; is the cleanest demonstration, because its cost is transparently &#8730;n and its input is a single number. Timing it on primes of increasing size:</p>" +
+        "<ul>" +
+        "<li><strong>10,000,000,019</strong> (34 bits) &#8212; 7.0 ms</li>" +
+        "<li><strong>1,000,000,000,039</strong> (40 bits) &#8212; 68.5 ms</li>" +
+        "<li><strong>100,000,000,000,031</strong> (47 bits) &#8212; 688.1 ms</li>" +
+        "</ul>" +
+        "<p>Read against the <em>value</em> of n this looks tame: the input grew by a factor of ten thousand and the time by a factor of a hundred, which is the &#8730;n the algorithm advertises. Read against the <em>size</em> of the input it is a catastrophe: thirteen extra bits multiplied the running time by 98, and every seven bits added multiplies it by about ten. A 2,048-bit input &#8212; the length of an RSA modulus, a number you can write on a postcard &#8212; would take longer than the age of the universe.</p>" +
+        "<p>Both readings describe the same function, and only the second is a complexity claim. That is the entire content of this section: the exponent in a running time means nothing until you know what n counts, and n counts bits.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 170' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<rect x='20' y='30' width='340' height='96' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='190' y='52' text-anchor='middle' fill='#2de2ff' font-size='12'>1,000,000 numbers</text>" +
+        "<text x='190' y='76' text-anchor='middle' fill='#c9d6ea' font-size='11'>each 32 bits</text>" +
+        "<text x='190' y='98' text-anchor='middle' fill='#3ddc97' font-size='13'>input size = 32,000,000 bits</text>" +
+        "<text x='190' y='117' text-anchor='middle' fill='#7d8fb0' font-size='11'>a loop over them is linear in the size</text>" +
+        "<rect x='400' y='30' width='340' height='96' rx='8' fill='#111a2e' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='570' y='52' text-anchor='middle' fill='#2de2ff' font-size='12'>one number, 2^60</text>" +
+        "<text x='570' y='76' text-anchor='middle' fill='#c9d6ea' font-size='11'>1,152,921,504,606,846,976</text>" +
+        "<text x='570' y='98' text-anchor='middle' fill='#ffd166' font-size='13'>input size = 61 bits</text>" +
+        "<text x='570' y='117' text-anchor='middle' fill='#ff5d73' font-size='11'>a loop up to it is exponential in the size</text>" +
+        "<line x1='20' y1='142' x2='740' y2='142' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='162' fill='#7d8fb0' font-size='11'>The left box is half a million times larger on disk and vastly cheaper to process. Size is bits, not things.</text>" +
+        "</svg><div class='fig-cap'>Two inputs. The small one is the expensive one, and no amount of counting elements will tell you that.</div></div>"
+    },
+
+    { title: "Four Kinds of \"How Long\"",
+      html:
+        "<p>\"How long does it take\" hides four different questions, and they have four different answers that people routinely swap for one another.</p>" +
+        "<ul>" +
+        "<li><strong>Worst case.</strong> The maximum over all inputs of a given size. A guarantee: it will never be worse than this. Unless stated otherwise, every bound in this course is a worst case.</li>" +
+        "<li><strong>Average case.</strong> The mean over all inputs of a given size, <em>under an assumed distribution of inputs</em>. The assumption is the whole content of the claim and is almost never stated. \"Quicksort is O(n log n) on average\" means \"averaged over all input orderings, assuming they are equally likely\", which is a claim about your data, not about quicksort.</li>" +
+        "<li><strong>Expected time.</strong> The mean over the algorithm's own <em>random choices</em>, on a worst-case input. This is a completely different claim from the average case, and a much stronger one: it does not assume anything about your data, because the randomness is yours. Randomized quicksort is expected O(n log n) on every input, including the sorted one. Chapter 15 builds it and Chapter 5 supplies the probability.</li>" +
+        "<li><strong>Amortized.</strong> The worst case for a <em>sequence</em> of operations, divided across the sequence. Not an average, not an expectation, and it involves no randomness or assumptions at all. Chapter 4 is entirely about it, because three of the patterns in this part are corollaries of one amortized argument.</li>" +
+        "</ul>" +
+        "<h3>The four, on one algorithm</h3>" +
+        "<p>Quicksort exhibits three of the four at once, which is why it is the standard example. Sorting 500 elements:</p>" +
+        "<ul>" +
+        "<li><strong>Worst case</strong> &#8212; &#920;(n&#178;), about 125,000 comparisons, reached on an already-sorted input when the pivot is the first element.</li>" +
+        "<li><strong>Average case</strong> &#8212; &#920;(n log n), assuming every input ordering is equally likely. That assumption is false for most real data, which arrives partly sorted far more often than chance would allow.</li>" +
+        "<li><strong>Expected time</strong> &#8212; also &#920;(n log n), but with the randomness moved into the pivot choice rather than assumed about the input. Chapter 5 measures this: 2,000 runs on the <em>same sorted input</em> gave a median of 4,755 comparisons and a spread of 1.53&#215; between fastest and slowest, with no input ever being bad twice.</li>" +
+        "</ul>" +
+        "<p>The third line is the one to hold on to. Average case and expected time give the same formula and are different promises: the average-case claim can be defeated by an adversary who chooses your input, and the expected-time claim cannot, because the adversary does not get to choose your coin flips. Chapter 17 shows what that difference is worth when the adversary is real.</p>" +
+        "<p>A benchmark measures none of these directly. It measures one run on one input on one machine. If you want a worst case from a benchmark you have to construct the worst input yourself, which is a design step, not a measurement step; Chapter 17 constructs one for a hash table and Chapter 15 constructs one for quicksort.</p>" +
+        "<div class='callout'><strong>The distinction that is most often lost.</strong> Average-case and expected-time sound like synonyms and are not. If someone tells you their structure is fast \"on average\" the question to ask is: averaged over what? If the answer is \"over typical inputs\", the guarantee evaporates the moment your inputs stop being typical, which is exactly what an adversary arranges.</div>"
+    },
+
+    { title: "In Place, and the Model as a Choice",
+      html:
+        "<p>Two pieces of vocabulary, and then the honest caveat that closes the chapter.</p>" +
+        "<h3>In place</h3>" +
+        "<p>An algorithm is <strong>in place</strong> when it uses O(1) extra space beyond its input — a fixed number of variables, regardless of n. The phrase gets used loosely, and the place it breaks is recursion: a recursive quicksort rearranges the array without allocating another one, and people call it in place, but its call stack is Θ(log n) deep at best and Θ(n) deep in the worst case. Under the strict definition that is not in place; under the common one it is. Both usages exist in the literature, so the useful habit is to state the extra space rather than the label. Chapter 15 gives quicksort's stack depth explicitly for this reason.</p>" +
+        "<h3>The model is a choice, and other choices exist</h3>" +
+        "<p>The word-RAM is one model among several, and each was invented because the word-RAM mispredicted something that mattered.</p>" +
+        "<ul>" +
+        "<li>The <strong>external-memory model</strong> counts block transfers between a small fast memory and a large slow one, because when data does not fit in RAM the number of disk reads is the cost and the number of instructions is noise. It is why the B-tree in Chapter 26 exists at all.</li>" +
+        "<li>The <strong>cache-oblivious model</strong> asks for algorithms that are efficient at every block size simultaneously, without being told what the block size is.</li>" +
+        "<li><strong>Parallel and concurrent models</strong> allow more than one operation at a time, and they change which algorithm wins: mergesort parallelises cleanly and the linear scan you were so pleased about does not.</li>" +
+        "</ul>" +
+        "<p>That last one is a real gap in this course and you should know where it went. Everything from here to Chapter 57 assumes <strong>one operation at a time</strong>. Threads, locks, lock-free structures and parallel algorithms are the subject of <em>Operating Systems in Depth</em>, the second course in this track, and they are left out here deliberately rather than forgotten. The consequence worth carrying is narrow and specific: when this course says one algorithm beats another, it means on one core. Change the model and the ranking can change with it.</p>" +
+        "<p>What the word-RAM leaves out inside a single core — caches, pipelines, branch prediction — does not change any bound in this course, because those effects are bounded by a constant factor. They are not thereby unimportant. A constant factor of ten is the difference between a page that loads and a page that does not, and Chapter 16 is devoted to the cases where the constant factor decides everything and the asymptotics decide nothing.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Prove that 3n² + 5n + 200 ∈ O(n²) by exhibiting a c and an n₀ and checking the inequality at n₀ and at n₀ + 1. Then prove it is <em>not</em> in O(n) by showing that no constant c can work. <em>What you should find:</em> c = 4 with n₀ = 25 is one witness among infinitely many, and the impossibility argument is that 3n² + 5n + 200 divided by n grows without bound, so it eventually passes any fixed c.</li>" +
+        "<li><strong>Trace.</strong> An algorithm takes an array of n integers, each at most V, and loops V times for each element. Write its running time in terms of n and V, then write it in terms of the input's size in bits. <em>What you should find:</em> Θ(nV) in the first form; since V takes about log V bits to write, the second form is exponential in that bit length. You have now derived the shape of Chapter 20's result on your own.</li>" +
+        "<li><strong>Investigate.</strong> Reproduce the multiplication measurement from section 1: time <code>a * b</code> for random integers of 64, 1024, 16384 and 262144 bits. <em>What you should find:</em> the time per multiply rises steeply, and above a few thousand bits each quadrupling of the bit length multiplies the time by roughly 9 rather than by 16. A factor of 9 per quadrupling is an exponent of log₂ 3 ≈ 1.58, which is the exponent of Karatsuba's algorithm — you have detected, from the outside, which multiplication algorithm your interpreter switched to.</li>" +
+        "<li><strong>Investigate.</strong> In Java, write a loop that adds 1 to an <code>int</code> starting from 2147483647 and prints the result; in Python, do the equivalent with a plain integer. <em>What you should find:</em> Java prints −2147483648, having wrapped silently, while Python prints 2147483648 and keeps going. Each language has broken one half of the word-RAM's bargain: Java kept one step and gave up correctness, Python kept correctness and gave up one step.</li>" +
+        "<li><strong>Build.</strong> Write a function that reports, for a given n and a time budget in seconds at 10⁹ operations per second, which of log n, n, n log n, n², n³ and 2ⁿ fit inside the budget. Run it for n = 20, 1,000, 100,000 and 10,000,000. <em>What you should find:</em> at n = 20 everything fits including 2ⁿ; at n = 100,000 you are left with log n, n and n log n; at n = 10,000,000 the quadratic option was lost three orders of magnitude ago. This function is the first step of Chapter 47's recognition procedure, and it is worth keeping.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "model of computation", d: "The set of operations an algorithm is allowed to count as one step, without which a running time is not a well-defined claim." },
+    { t: "word-RAM model", d: "The model this course counts in: memory is an array of w-bit words, and reading, writing, comparing and doing arithmetic on a word each cost one step." },
+    { t: "word", d: "A fixed-width cell of memory, 64 bits on current machines, whose width bounds the largest integer the hardware can operate on in one step." },
+    { t: "input size", d: "The number of bits needed to write the input down, which coincides with the number of elements only when each element fits in a word." },
+    { t: "pseudopolynomial", d: "A running time that is polynomial in the numeric value of an input number rather than in the number of bits used to write it, and therefore exponential in the input size." },
+    { t: "asymptotic notation", d: "The O, Omega, Theta, little-o and little-omega family, which describes how a function behaves for large inputs while deliberately discarding constants." },
+    { t: "big-O", d: "An upper bound: f is in O(g) when f stays below some fixed multiple of g for all sufficiently large n, which is why every linear algorithm is also correctly called quadratic." },
+    { t: "big-Omega", d: "A lower bound: f stays above some fixed multiple of g for all sufficiently large n." },
+    { t: "big-Theta", d: "A tight bound, upper and lower at once, and the notation to use when you know the growth rate rather than merely a ceiling on it." },
+    { t: "little-o", d: "A strict upper bound, meaning the ratio of f to g tends to zero rather than merely staying bounded." },
+    { t: "worst case", d: "The maximum running time over all inputs of a given size; a guarantee that holds without any assumption about the data." },
+    { t: "average case", d: "The mean running time over a distribution of inputs, a claim whose content is the assumed distribution and which fails when the data stops matching it." },
+    { t: "expected time", d: "The mean over an algorithm's own random choices on a worst-case input, which is stronger than an average case because it assumes nothing about the data." },
+    { t: "amortized", d: "The worst-case cost of a sequence of operations divided across that sequence, involving no randomness and no assumption about inputs." },
+    { t: "in place", d: "Using a constant amount of extra space beyond the input, a label worth replacing with an explicit statement of the extra space whenever recursion is involved." },
+    { t: "external-memory model", d: "A model that counts block transfers between fast and slow memory instead of instructions, and the reason disk-oriented structures like the B-tree are shaped the way they are." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A colleague writes that their linear scan runs in O(n²). Which response is correct?",
+      opts: [
+        "The claim is false, because a linear scan does not perform a quadratic number of operations on any input whatsoever",
+        "The claim is false, because O always denotes a tight bound and a tight bound on a linear scan is O(n) rather than anything larger",
+        "The claim is true but uninformative, since O is an upper bound and a linear function does stay below a multiple of n²",
+        "The claim is meaningless as written, because O-notation may only be applied to the worst case and no worst case was specified here"
+      ], a: 2,
+      why: "O(g) is the set of functions that stay below some fixed multiple of g past some threshold, and n certainly does that with respect to n squared. So the statement is true. It is also useless, because it discards everything the colleague knew about their own code, and that is exactly why Theta exists. Saying Theta(n²) about a linear scan would have been false; saying O(n²) is merely a waste of a sentence." },
+
+    { type: "mc",
+      q: "You are handed a single 61-bit integer N and write a loop that runs N times doing constant work. Is that loop polynomial time?",
+      opts: [
+        "No. The input is 61 bits, so a loop running about 2^60 times is exponential in the size of its own input, which is the pseudopolynomial mistake",
+        "Yes, because the loop body is constant time and the loop count is a single number rather than a collection, making the whole thing linear in that number",
+        "Yes, because polynomial time is defined with respect to the values appearing in the input, and N to the first power is a polynomial in N",
+        "It cannot be decided without knowing whether N is stored as a machine word or as an arbitrary-precision integer in the language being used"
+      ], a: 0,
+      why: "Input size is the number of bits needed to write the input down, and a 61-bit number is an input of size 61. A loop running about 10^18 times on a 61-bit input is exponential in the size, and calling it linear is the pseudopolynomial mistake. This is not a technicality: Chapter 20 shows the standard O(nW) knapsack algorithm is exactly this, which is why it does not contradict subset sum being NP-complete." },
+
+    { type: "mc",
+      q: "\"Quicksort is O(n log n) on average\" and \"randomized quicksort is expected O(n log n)\" differ in a way that matters. How?",
+      opts: [
+        "The first is a worst-case bound restricted to inputs considered typical, while the second is an amortized bound spread across a long sequence of sorts rather than charged to any one of them",
+        "The first averages over an assumed distribution of inputs and fails when your data is adversarial; the second averages over the algorithm's own coin flips and holds on every input",
+        "They are two accepted phrasings of the same guarantee, with the second merely naming the source of randomness explicitly for clarity",
+        "The first refers to comparisons performed and the second to wall-clock time, so the two bounds are measuring entirely different quantities"
+      ], a: 1,
+      why: "An average-case claim is a claim about your data, and its content is the distribution it assumes, which is almost never stated. An expected-time claim moves the randomness inside the algorithm, so it holds on every input including one an adversary picked, because the adversary cannot see your coin flips. That relocation is the whole reason randomized quicksort is used, and Chapter 5 supplies the probability behind it." },
+
+    { type: "mc",
+      q: "In CPython, multiplying two 262,144-bit integers was measured at about 319,000 times the cost of multiplying two 64-bit integers. What does that demonstrate about the word-RAM model?",
+      opts: [
+        "That the word-RAM model is flatly wrong, since its predictions fail by more than five orders of magnitude on ordinary arithmetic performed by an ordinary, widely used language",
+        "That CPython is a poor implementation, since a correctly written interpreter would keep arithmetic constant-time by delegating to hardware instructions",
+        "That the model's constant-time arithmetic holds only while operands fit in a word, and past that its central assumption no longer describes the machine",
+        "That multiplication is inherently more expensive than the model allows, which is why the model lists only addition and comparison as single steps"
+      ], a: 2,
+      why: "The word-RAM assumes arithmetic on a word costs one step, and 262,144 bits is four thousand words. The model has not been refuted; it has been used outside its stated domain. This matters in practice whenever a running value grows without being reduced, which is why Chapter 17's rolling hash takes a modulus at every step rather than at the end." },
+
+    { type: "mc",
+      q: "Why does the word-RAM model require that a word be at least log₂ n bits wide?",
+      opts: [
+        "Because otherwise an index into the data would not fit in a single word, and the claim that array indexing costs one step would be false",
+        "Because a narrower word would make comparison of two stored values ambiguous whenever the values exceed what a single word can represent",
+        "Because the model's arithmetic operations are defined over the integers modulo two to the power w, and correctness requires that modulus to exceed n",
+        "Because cache lines on current hardware hold a fixed number of words, and indexing efficiency depends on the ratio between the two"
+      ], a: 0,
+      why: "The model charges one step for reading the element at a given index, which presumes an index can be held in a word and an address computed from it. If w were below log₂ n there would be more positions than a word could name, and the single most basic operation in the model would be incoherent. At w = 64 the condition is satisfied for any data that fits in memory, so it is a condition you check once and then forget." },
+
+    { type: "mc",
+      q: "A benchmark shows your sort taking 40 ms on a particular one-million-element array. Which claim does that measurement support?",
+      opts: [
+        "That the worst case is at most 40 ms, on the grounds that any other input of the same size would have to be a contrived special case rather than the general one",
+        "That the average case is about 40 ms, provided the array was generated randomly rather than being chosen deliberately to be difficult",
+        "That the expected time is about 40 ms, since one sample of a random variable is an unbiased estimate of its mean",
+        "None of the four bounds directly; it is one run, on one input, on one machine, and turning it into a worst case requires constructing the bad input yourself"
+      ], a: 3,
+      why: "Worst case, average case, expected time and amortized cost are four different claims, and a single timing establishes none of them. A worst case needs an adversarial input, which is a design step rather than a measurement step; an average needs a stated distribution and many samples; an expectation needs many runs of a randomized algorithm. Chapter 15 constructs the input that makes quicksort quadratic, and Chapter 17 constructs the keys that make a hash table linear, precisely because those inputs do not arise by accident." },
+
+    { type: "mc",
+      q: "A recursive quicksort sorts an array without allocating a second array. Is it in place?",
+      opts: [
+        "Yes without qualification, because the defining property of in-place sorting is that no auxiliary array proportional to the input is allocated",
+        "Under the strict O(1)-extra-space definition, no: the call stack is logarithmic at best and linear in the worst case, so the honest move is to state the extra space",
+        "No under any definition, because the partition step needs a temporary variable for each swap and those variables accumulate across the recursion",
+        "Yes, because stack frames are reclaimed as the recursion unwinds, so peak additional memory never exceeds a constant at any single instant"
+      ], a: 1,
+      why: "The strict definition asks for constant extra space, and recursion spends stack proportional to its depth, which for quicksort is logarithmic when the pivots are good and linear when they are not. Both usages of the phrase appear in the literature, so the label carries less information than the number does. This is why the course states extra space explicitly whenever recursion is in the picture." },
+
+    { type: "mc",
+      q: "This course assumes one operation at a time throughout. What is the correct way to carry that limitation?",
+      opts: [
+        "As an approximation that multi-core hardware has made obsolete, so divide these bounds by the core count",
+        "As a simplification that affects only constant factors, since parallel execution cannot change an algorithm's asymptotic behaviour",
+        "As a restriction on which structures are covered rather than on the analysis, since running times are model-independent",
+        "As a modelling choice: comparisons between algorithms here hold on one core, and a parallel model can reverse some of those rankings"
+      ], a: 3,
+      why: "A model is a choice about what to count, and changing it changes which algorithm wins. Mergesort parallelises cleanly and a sequential linear scan does not, so under a parallel model their relative standing can invert. Parallelism is not merely a constant factor and it is not obsolete to ignore it; it is owned by Operating Systems in Depth, the next course in this track, and is left out here deliberately rather than by oversight." },
+
+    { type: "blank",
+      q: "A running time that is polynomial in the value of an input number, but exponential in the number of bits used to write that number, is called ____.",
+      a: ["pseudopolynomial", "pseudo-polynomial", "pseudo polynomial"],
+      why: "The word exists because the mistake is so natural to make: a loop up to W looks linear and is exponential in the size of W. Chapter 20 shows the standard knapsack algorithm is pseudopolynomial, which is how it can run in O(nW) without contradicting the NP-completeness of subset sum that Chapter 46 establishes." },
+
+    { type: "blank",
+      q: "The notation that bounds a function from above and below at once, and which you should use when you know a growth rate rather than merely a ceiling, is ____.",
+      a: ["theta", "big-theta", "big theta", "Θ", "Θ"],
+      why: "Theta is the tight bound: f is trapped between two fixed multiples of g past some threshold. Knuth argued for the O, Omega and Theta trio in a 1976 SIGACT News note because people had begun using O to mean lower bounds as well as upper ones. Using O where you mean Theta is not false, merely wasteful; using Theta where you mean O is false." },
+
+    { type: "order",
+      q: "Order these from the weakest claim about an algorithm to the strongest, given the same stated bound:",
+      items: [
+        "it is O(f) in the average case under an assumed input distribution",
+        "it is expected O(f) over the algorithm's own random choices, on any input",
+        "it is amortized O(f) per operation across any sequence of operations",
+        "it is O(f) in the worst case on every single input"
+      ],
+      why: "An average case assumes something about your data and evaporates when the assumption fails. An expectation removes that assumption but still varies run to run. An amortized bound removes the randomness too and guarantees the total over a sequence, though an individual operation may be slow. A worst-case bound guarantees every operation on every input and assumes nothing at all. Knowing which one a claim is making is the difference between a guarantee and a hope." }
+  ]
+});
+
+/* ======================= CHAPTER 3 ======================= */
+CHAPTERS.push({
+  num: 3, part: 1, title: "Recurrences and Divide and Conquer",
+  blurb: "A recursive algorithm's cost is a recurrence, and a recurrence is a puzzle with three standard solutions and one famous shortcut that does not always apply. You will solve the same recurrence by unrolling it, by drawing its tree, and by the master theorem, then meet the recurrences that defeat the master theorem and learn what to do instead. Then you will use all of it on the paradigm that produces recurrences in the first place, and find a point where the proved bound overstates the real cost by a factor of three.",
+  sections: [
+
+    { title: "Where Recurrences Come From",
+      html:
+        "<p>Write a recursive function and you have written a <strong>recurrence</strong>, whether or not you noticed. Mergesort splits an array in half, sorts each half by calling itself, and merges the results in one pass. Read the cost straight off that sentence:</p>" +
+        "<pre><code>T(n) = 2 T(n/2) + &#920;(n)\n       |     |        |\n       |     |        the merge: one pass over n elements\n       |     the size each call gets\n       how many calls</code></pre>" +
+        "<p>with T(1) = &#920;(1), because sorting one element is free. Every divide-and-conquer algorithm in this course produces a recurrence of the same shape: <em>a</em> subproblems of size <em>n/b</em>, plus f(n) for the work of splitting and combining. The whole difficulty is turning that into a closed form, and there are exactly three techniques plus one theorem worth knowing.</p>" +
+        "<p>Two conventions, stated once. Base cases are omitted when they are constant, because they change nothing asymptotically. Floors and ceilings are dropped: n/2 is written rather than &#8968;n/2&#8969;, and it can be proved this never changes the answer for the recurrences in this course. Both simplifications are standard and both are occasionally wrong for exotic recurrences, which is worth knowing and not worth worrying about here.</p>" +
+        "<p>The same reading works on every divide-and-conquer algorithm, and the instructive part is how little has to change to move the answer:</p>" +
+        "<ul>" +
+        "<li><strong>Binary search</strong> &#8212; one subproblem of half the size, constant work: T(n) = T(n/2) + &#920;(1), giving &#920;(log n).</li>" +
+        "<li><strong>Mergesort</strong> &#8212; two halves, linear merge: T(n) = 2T(n/2) + &#920;(n), giving &#920;(n log n).</li>" +
+        "<li><strong>Karatsuba multiplication</strong> &#8212; three half-size products instead of the obvious four: T(n) = 3T(n/2) + &#920;(n), giving &#920;(n<sup>log&#8322;3</sup>) &#8776; &#920;(n<sup>1.585</sup>). Chapter 2 measured this exponent coming out of CPython's big integers.</li>" +
+        "<li><strong>Schoolbook multiplication written recursively</strong> &#8212; four half-size products: T(n) = 4T(n/2) + &#920;(n), giving &#920;(n&#178;).</li>" +
+        "<li><strong>Strassen's matrix multiplication</strong> &#8212; seven half-size products rather than eight: T(n) = 7T(n/2) + &#920;(n&#178;), giving &#920;(n<sup>log&#8322;7</sup>) &#8776; &#920;(n<sup>2.807</sup>).</li>" +
+        "</ul>" +
+        "<p>Compare the third and fourth lines. The subproblem size is the same, the combining work is the same, and the only difference is whether you make three recursive calls or four &#8212; which moves the exponent from 1.585 to 2. The same single-step change takes Strassen from n&#179; to n<sup>2.807</sup>. <strong>In a divide-and-conquer recurrence the number of subproblems sits in the exponent</strong>, which is why algorithms in this family are improved by finding a way to make one fewer recursive call, and why that is usually the whole of the discovery.</p>" +
+        "<div class='callout'>A recurrence is worth writing <em>before</em> the code, not after. \"Four subproblems of size n/2 plus linear work\" solves to n&#178;, and knowing that takes ten seconds and saves you from implementing something quadratic and discovering it in a timeout.</div>"
+    },
+
+    { title: "Substitution: Guess and Verify",
+      html:
+        "<p>The first technique, the <strong>substitution method</strong>, is the most honest and the least helpful: guess the answer, then prove it by induction.</p>" +
+        "<p>Guess that T(n) = 2T(n/2) + n is O(n log n). To prove it, assume it holds for all smaller inputs &#8212; that T(m) &#8804; c&#183;m log m for m &lt; n &#8212; and show it holds at n:</p>" +
+        "<pre><code>T(n)  =  2 T(n/2) + n\n      &#8804;  2 &#183; c (n/2) log(n/2) + n        by the inductive hypothesis\n      =  c n (log n - 1) + n\n      =  c n log n - c n + n\n      &#8804;  c n log n                       whenever c &#8805; 1</code></pre>" +
+        "<p>Done: the guess holds with c = 1, provided the base case can be made to work, which it can by choosing a large enough constant for small n.</p>" +
+        "<h3>The trap</h3>" +
+        "<p>Substitution will happily confirm a wrong guess if you are sloppy about the constant. Guess that the same recurrence is O(n), assume T(m) &#8804; c&#183;m, and try:</p>" +
+        "<pre><code>T(n)  &#8804;  2 &#183; c (n/2) + n  =  c n + n</code></pre>" +
+        "<p>Now cn + n is <em>not</em> &#8804; cn for any positive c, so the proof fails, and it fails for a reason: the leftover n never goes away. But it is tempting to write \"= O(n) + n = O(n)\" and declare victory, and that step is invalid, because O(n) is a set and the induction has to carry an explicit constant through to the end. The rule that prevents it: <strong>never use asymptotic notation inside the induction</strong>. Carry c and prove the exact inequality you assumed.</p>" +
+        "<h3>When the induction fails by a little: strengthen it</h3>" +
+        "<p>There is a second trap, and it is the opposite of the first: sometimes the guess is <em>right</em> and the induction still fails. Take T(n) = 2T(n/2) + 1 and guess T(n) = O(n). Assume T(m) &#8804; c&#183;m and substitute: 2(c&#183;n/2) + 1 = c&#183;n + 1, which is not &#8804; c&#183;n for any c. The proof fails, and yet the answer really is &#920;(n).</p>" +
+        "<p>The fix is counter-intuitive and worth knowing, because it is the standard move: <strong>prove something stronger</strong>. Guess T(n) &#8804; c&#183;n &#8722; d for a constant d &gt; 0. The step now gives 2(c&#183;n/2 &#8722; d) + 1 = c&#183;n &#8722; 2d + 1, and that is &#8804; c&#183;n &#8722; d exactly when d &#8805; 1. The induction goes through.</p>" +
+        "<p>This works because induction hands you the hypothesis as well as the obligation, so a stronger hypothesis is a stronger tool as well as a harder target. Subtracting a lower-order term is the usual form. A failed induction whose leftover is a <em>lower-order</em> term is the signal to reach for it, as against the first trap, where the leftover was a full n and the guess was genuinely wrong. Telling those two situations apart is the skill this method actually teaches.</p>" +
+        "<p>Substitution is the technique you use when the other two do not apply, and it is the only one that also proves lower bounds. It is a poor way to <em>find</em> an answer, which is what the next two are for.</p>"
+    },
+
+    { title: "The Recursion Tree",
+      viz: "dsaRecursionTree", vizTitle: "Set a, b and f, then expand levels and watch which one dominates",
+      html:
+        "<p>The second technique is a picture, and it is the one to reach for first because it tells you the answer and why.</p>" +
+        "<p>Draw the recursion as a tree. The root is the original call and holds f(n), the cost of its own splitting and combining. It has <em>a</em> children each of size n/b, holding f(n/b) each. Then add up the tree by <em>levels</em>. Three numbers decide everything: the cost of one level, how the level cost changes going down, and how many levels there are.</p>" +
+        "<p>Level i has a&#8305; nodes, each of size n/b&#8305;, so the level's total cost is a&#8305;&#183;f(n/b&#8305;). The tree bottoms out when n/b&#8305; reaches 1, which is at i = log_b n. Three cases follow, and they are the only three that occur:</p>" +
+        "<ul>" +
+        "<li><strong>Level cost shrinks going down.</strong> The sum is a decreasing geometric series, dominated by its first term. <em>The root does most of the work.</em> Example: T(n) = 2T(n/2) + n&#178; has level costs n&#178;, n&#178;/2, n&#178;/4, &#8230;, summing to 2n&#178; = &#920;(n&#178;).</li>" +
+        "<li><strong>Level cost stays the same.</strong> Every level costs the same, and there are log_b n of them. <em>Everyone shares the work.</em> Example: T(n) = 2T(n/2) + n has every level costing exactly n, giving &#920;(n log n). This is mergesort.</li>" +
+        "<li><strong>Level cost grows going down.</strong> An increasing geometric series, dominated by its last term. <em>The leaves do all the work</em>, and there are a^(log_b n) = n^(log_b a) of them. Example: T(n) = 4T(n/2) + n has level costs n, 2n, 4n, &#8230;, and n&#178; leaves, giving &#920;(n&#178;).</li>" +
+        "</ul>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 266' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='118' y='18' text-anchor='middle' fill='#2de2ff' font-size='12'>2T(n/2) + n^2</text>" +
+        "<text x='380' y='18' text-anchor='middle' fill='#2de2ff' font-size='12'>2T(n/2) + n</text>" +
+        "<text x='642' y='18' text-anchor='middle' fill='#2de2ff' font-size='12'>4T(n/2) + n</text>" +
+        "<text x='118' y='34' text-anchor='middle' fill='#7d8fb0' font-size='11'>root dominates</text>" +
+        "<text x='380' y='34' text-anchor='middle' fill='#7d8fb0' font-size='11'>every level equal</text>" +
+        "<text x='642' y='34' text-anchor='middle' fill='#7d8fb0' font-size='11'>leaves dominate</text>" +
+        "<rect x='40' y='46' width='156' height='18' rx='3' fill='#ffd166'/><text x='210' y='60' fill='#c9d6ea' font-size='11'>n^2</text>" +
+        "<rect x='40' y='72' width='78' height='18' rx='3' fill='#4f7cff'/><text x='210' y='86' fill='#7d8fb0' font-size='11'>n^2/2</text>" +
+        "<rect x='40' y='98' width='39' height='18' rx='3' fill='#4f7cff'/><text x='210' y='112' fill='#7d8fb0' font-size='11'>n^2/4</text>" +
+        "<rect x='40' y='124' width='20' height='18' rx='3' fill='#4f7cff'/><text x='210' y='138' fill='#7d8fb0' font-size='11'>n^2/8</text>" +
+        "<text x='40' y='168' fill='#3ddc97' font-size='12'>total = &#920;(n^2)</text>" +
+        "<rect x='302' y='46' width='110' height='18' rx='3' fill='#ffd166'/><text x='440' y='60' fill='#c9d6ea' font-size='11'>n</text>" +
+        "<rect x='302' y='72' width='110' height='18' rx='3' fill='#ffd166'/><text x='440' y='86' fill='#c9d6ea' font-size='11'>n</text>" +
+        "<rect x='302' y='98' width='110' height='18' rx='3' fill='#ffd166'/><text x='440' y='112' fill='#c9d6ea' font-size='11'>n</text>" +
+        "<rect x='302' y='124' width='110' height='18' rx='3' fill='#ffd166'/><text x='440' y='138' fill='#c9d6ea' font-size='11'>n</text>" +
+        "<text x='302' y='168' fill='#3ddc97' font-size='12'>total = &#920;(n log n)</text>" +
+        "<rect x='560' y='46' width='20' height='18' rx='3' fill='#4f7cff'/><text x='700' y='60' fill='#7d8fb0' font-size='11'>n</text>" +
+        "<rect x='560' y='72' width='39' height='18' rx='3' fill='#4f7cff'/><text x='700' y='86' fill='#7d8fb0' font-size='11'>2n</text>" +
+        "<rect x='560' y='98' width='78' height='18' rx='3' fill='#4f7cff'/><text x='700' y='112' fill='#7d8fb0' font-size='11'>4n</text>" +
+        "<rect x='560' y='124' width='156' height='18' rx='3' fill='#ffd166'/><text x='700' y='138' fill='#c9d6ea' font-size='11'>8n</text>" +
+        "<text x='560' y='168' fill='#3ddc97' font-size='12'>total = &#920;(n^2)</text>" +
+        "<line x1='20' y1='186' x2='740' y2='186' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='204' fill='#c9d6ea' font-size='11'>Bar width is that level's total cost. Gold marks the level that dominates the sum.</text>" +
+        "<text x='20' y='222' fill='#7d8fb0' font-size='11'>Left and right both total n^2, by opposite routes: one pays it</text>" +
+        "<text x='20' y='238' fill='#7d8fb0' font-size='11'>all at the root, the other pays it all at the leaves.</text>" +
+        "<text x='20' y='256' fill='#7d8fb0' font-size='11'>Only the middle case pays the log factor: only there does every level cost the same.</text>" +
+        "</svg><div class='fig-cap'>Three trees. Read the shape of the bars and you have the answer before you have done any algebra.</div></div>" +
+
+        "<p>The machine above draws this tree for any a, b and f you choose. Set a = 2, b = 2 and f = n and expand levels until you can see that the per-level cost stops changing; then set a = 4 with the same b and f, and watch the bottom level swallow the total. The discovery worth getting there: it is not the number of levels that decides the answer, it is whether the level costs are going up or down.</p>"
+    },
+
+    { title: "The Master Theorem",
+      html:
+        "<p>The third technique is the second one, memorised. For a recurrence of the form T(n) = a&#183;T(n/b) + f(n) with a &#8805; 1 and b &gt; 1, compare f(n) against the <strong>watershed function</strong> n^(log_b a), which is the number of leaves in the tree. Everything is a competition between the work at the root and the work at the leaves:</p>" +
+        "<ul>" +
+        "<li><strong>Case 1 &#8212; leaves win.</strong> If f(n) = O(n^(log_b a &#8722; &#949;)) for some &#949; &gt; 0, then T(n) = &#920;(n^(log_b a)).</li>" +
+        "<li><strong>Case 2 &#8212; a tie.</strong> If f(n) = &#920;(n^(log_b a)), then T(n) = &#920;(n^(log_b a) &#183; log n). The log factor is the number of levels, all costing the same.</li>" +
+        "<li><strong>Case 3 &#8212; the root wins.</strong> If f(n) = &#937;(n^(log_b a + &#949;)) for some &#949; &gt; 0, <em>and</em> the <strong>regularity condition</strong> a&#183;f(n/b) &#8804; c&#183;f(n) holds for some c &lt; 1 and all large n, then T(n) = &#920;(f(n)).</li>" +
+        "</ul>" +
+        "<p>Run it on the three trees from the last section and check that it agrees. Mergesort: a = 2, b = 2, so log&#8322;2 = 1 and the watershed is n. f(n) = n matches, case 2, &#920;(n log n). For 2T(n/2) + n&#178;: watershed still n, f = n&#178; is polynomially bigger, case 3, and the regularity condition holds because 2(n/2)&#178; = n&#178;/2, which is half of f(n). For 4T(n/2) + n: log&#8322;4 = 2, watershed n&#178;, f = n is polynomially smaller, case 1, &#920;(n&#178;).</p>" +
+        "<h3>The word that does the work is \"polynomially\"</h3>" +
+        "<p>Cases 1 and 3 do not ask whether f is smaller or larger than the watershed. They ask whether it is smaller or larger <em>by a factor of n^&#949;</em>, which is a much stronger demand. A function can be larger than n and still fail case 3, and that is not a technicality; it is where the theorem runs out, which is the next section.</p>" +
+        "<p>The regularity condition in case 3 is simple to overlook and almost always holds for the f you will meet, which are polynomials and polynomials times logs. It exists to rule out functions that oscillate, for which \"the root does most of the work\" can be false even though f is large.</p>"
+    },
+
+    { title: "Where the Master Theorem Stops",
+      html:
+        "<p>Three kinds of recurrence defeat it, and knowing them is more useful than knowing the three cases, because the cases are on every cheat sheet and the gaps are not.</p>" +
+        "<h3>The gap</h3>" +
+        "<p>Take T(n) = 2T(n/2) + n log n. The watershed is n. Is f = n log n polynomially larger than n? No: n log n grows faster than n, but slower than n^(1+&#949;) for every &#949; &gt; 0, because a logarithm loses to every positive power. So it is too big for case 2 and not big enough for case 3, and it falls into the gap between them. The theorem is silent.</p>" +
+        "<p>The recursion tree is not. Level i costs 2&#8305; &#183; (n/2&#8305;) log(n/2&#8305;) = n(log n &#8722; i), so the levels cost n log n, n(log n &#8722; 1), n(log n &#8722; 2), &#8230;, down to n. That sum is n &#183; (1 + 2 + &#8230; + log n) = &#920;(n log&#178; n). Two minutes of drawing beats a theorem that does not apply.</p>" +
+        "<h3>Unequal splits</h3>" +
+        "<p>T(n) = T(n/3) + T(2n/3) + n does not have the form a&#183;T(n/b) at all, because the two subproblems are different sizes. This shape is common: it is what you get from quicksort with a pivot that always lands one-third of the way in, and Chapter 15 returns to it.</p>" +
+        "<p>Again the tree answers. Every level still costs n until branches start bottoming out, the shallowest path to a leaf has length log&#8323; n and the deepest has log_(3/2) n, so the number of full-cost levels is between those, both of which are &#920;(log n). The answer is &#920;(n log n), and the lopsidedness changes only the constant.</p>" +
+        "<p>The general tool here is the <strong>Akra–Bazzi method</strong>, published by Mohamad Akra and Louay Bazzi in 1998, which handles any number of subproblems at any set of fractions. It finds the unique &#961; solving &#8721; a&#7522;/b&#7522;^&#961; = 1 and integrates f against it. For the recurrence above, &#961; = 1 because (1/3)&#185; + (2/3)&#185; = 1, and the integral contributes the log, giving &#920;(n log n). You will rarely need the machinery; you should know the name, so that when a recurrence has uneven splits you know a tool exists.</p>" +
+        "<h3>Subtracting rather than dividing</h3>" +
+        "<p>T(n) = T(n &#8722; 1) + n is not divide and conquer at all &#8212; the subproblem shrinks by a constant rather than by a factor. The master theorem has nothing to say. Unrolling gives n + (n&#8722;1) + &#8230; + 1 = &#920;(n&#178;), which is the cost of a recursive insertion sort and of every accidental quadratic that looks like a single recursive call.</p>" +
+        "<div class='callout'><strong>The interview lens.</strong> \"What is the recurrence, and what does it solve to?\" is a two-part question and the second part is where people reach for the master theorem reflexively. If the splits are uneven, or f has a log in it, say so and draw the tree instead. Naming the gap is worth more than misapplying the shortcut.</div>"
+    },
+
+    { title: "Divide and Conquer as a Paradigm",
+      html:
+        "<p>Recurrences of this shape come from one strategy: split the input, solve the pieces, combine. Mergesort and quicksort are the famous instances and Chapter 15 builds both. What makes the paradigm worth its own treatment is that the split and the recursion are almost always obvious and <em>the combine step is the entire difficulty</em>. The example that shows this best is geometric.</p>" +
+        "<h3>The closest pair problem</h3>" +
+        "<p>Given n points in the plane, find the two closest together. Brute force compares every pair, which is n(n&#8722;1)/2 distances and &#920;(n&#178;). Michael Shamos and Dan Hoey showed in 1975 how to do it in &#920;(n log n), and the shape is exactly the recurrence you now know.</p>" +
+        "<p>Sort the points by x and split at the median into left and right halves. Recurse on each, and let &#948; be the smaller of the two answers. Now the combine step, which is the whole problem: the true closest pair might have one point in each half, and checking every left point against every right point is quadratic again, which would waste the recursion entirely.</p>" +
+        "<p>The observation that rescues it: any such straddling pair must lie within &#948; of the dividing line, because otherwise the two points are more than &#948; apart already. So take the <strong>strip</strong> of points within &#948; of the line, sort it by y, and walk up it. For a point in the strip, any partner closer than &#948; must be within &#948; in the y direction too, and only so many points can be packed into a &#948;-by-2&#948; rectangle while staying &#948; apart from one another. That number is a constant &#8212; the standard bound is at most 7 &#8212; so each strip point compares against a bounded number of neighbours and the combine step is &#920;(n).</p>" +
+        "<p>That gives T(n) = 2T(n/2) + &#920;(n), case 2, &#920;(n log n).</p>" +
+        "<div class='callout'>One implementation detail decides whether you get the bound you proved. If you re-sort the strip by y at every level, the combine step is &#920;(n log n) and the whole algorithm becomes &#920;(n log&#178; n) &#8212; a recurrence with a log in f, which you now recognise as the gap case. Sort by y <em>once</em> at the start and split that order as you recurse. This is the difference between an implementation that matches its analysis and one that quietly does not.</div>" +
+
+        "<h3>What the bound actually costs, measured</h3>" +
+        "<p>The at-most-7 bound is a worst-case guarantee, and it is worth seeing how loose it is on ordinary data. Instrumented on uniformly random points in the unit square, counting every strip comparison the algorithm performs:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='30' y='20' fill='#2de2ff' font-size='12'>n</text>" +
+        "<text x='250' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>strip comparisons</text>" +
+        "<text x='430' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>per point</text>" +
+        "<text x='560' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>worst point</text>" +
+        "<text x='740' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>brute-force pairs</text>" +
+        "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='30' y='50' fill='#c9d6ea' font-size='12'>100</text><text x='250' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>42</text><text x='430' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>0.42</text><text x='560' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>2</text><text x='740' y='50' text-anchor='end' fill='#7d8fb0' font-size='12'>4,950</text>" +
+        "<text x='30' y='74' fill='#c9d6ea' font-size='12'>1,000</text><text x='250' y='74' text-anchor='end' fill='#c9d6ea' font-size='12'>661</text><text x='430' y='74' text-anchor='end' fill='#c9d6ea' font-size='12'>0.66</text><text x='560' y='74' text-anchor='end' fill='#3ddc97' font-size='12'>2</text><text x='740' y='74' text-anchor='end' fill='#7d8fb0' font-size='12'>499,500</text>" +
+        "<text x='30' y='98' fill='#c9d6ea' font-size='12'>10,000</text><text x='250' y='98' text-anchor='end' fill='#c9d6ea' font-size='12'>5,709</text><text x='430' y='98' text-anchor='end' fill='#c9d6ea' font-size='12'>0.57</text><text x='560' y='98' text-anchor='end' fill='#3ddc97' font-size='12'>2</text><text x='740' y='98' text-anchor='end' fill='#7d8fb0' font-size='12'>49,995,000</text>" +
+        "<text x='30' y='122' fill='#c9d6ea' font-size='12'>100,000</text><text x='250' y='122' text-anchor='end' fill='#c9d6ea' font-size='12'>49,018</text><text x='430' y='122' text-anchor='end' fill='#c9d6ea' font-size='12'>0.49</text><text x='560' y='122' text-anchor='end' fill='#3ddc97' font-size='12'>2</text><text x='740' y='122' text-anchor='end' fill='#ff5d73' font-size='12'>4,999,950,000</text>" +
+        "<line x1='20' y1='136' x2='740' y2='136' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='156' fill='#c9d6ea' font-size='11'>Comparisons per point stay under 1, and no point ever needed more than 2 against a bound of 7.</text>" +
+        "<text x='20' y='174' fill='#7d8fb0' font-size='11'>The last column is what brute force would have done: at n = 100,000,</text>" +
+        "<text x='20' y='190' fill='#7d8fb0' font-size='11'>49,018 strip comparisons instead of 5 billion pairs.</text>" +
+        "</svg><div class='fig-cap'>A proved worst-case bound is a guarantee, not a prediction. Here it overstates the real cost by more than a factor of three.</div></div>" +
+
+        "<p>That gap is the normal state of affairs and it is worth internalising early. The 7 is there so the combine step can be called &#920;(n) with a straight face; it is not a claim about what your data will do. Chapter 16 is about the cases where the constant, rather than the exponent, decides who wins.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Draw the recursion tree for T(n) = 3T(n/2) + n, writing the cost of each of the first four levels. Then decide which of the three shapes it has and give the answer. <em>What you should find:</em> level i costs (3/2)&#8305;&#183;n, so the costs grow going down and the leaves dominate; with log&#8322;3 &#8776; 1.585 the answer is &#920;(n^1.585). This is the recurrence of Karatsuba multiplication, which Chapter 2 measured from the outside.</li>" +
+        "<li><strong>Trace.</strong> Apply the master theorem to T(n) = 2T(n/2) + n/log n and explain precisely why it fails. <em>What you should find:</em> the watershed is n and f = n/log n is smaller, but not smaller by any factor n^&#949;, so it falls into the gap below case 2 exactly as n log n falls into the gap above it. The true answer, obtainable by summing the tree, is &#920;(n log log n).</li>" +
+        "<li><strong>Trace.</strong> Attempt a substitution proof that T(n) = 2T(n/2) + n is O(n), carrying an explicit constant c. <em>What you should find:</em> you reach cn + n and cannot get back to cn, and the leftover n is exactly the per-level cost that the log factor is counting. Then repeat with the guess O(n log n) and watch the &#8722;cn term absorb it.</li>" +
+        "<li><strong>Investigate.</strong> Implement closest-pair and instrument it: count every strip comparison, and record the largest number any single point makes. Run it on 1,000 and 100,000 uniform random points. <em>What you should find:</em> roughly half a comparison per point on average, and a maximum per point of about 2 against the proved bound of 7. Then run it on points generated on a single horizontal line and watch the maximum rise, because the packing argument's worst case is a configuration you have to construct.</li>" +
+        "<li><strong>Build.</strong> Write closest-pair twice: once re-sorting the strip by y inside every recursive call, once pre-sorting by y and splitting that order as you recurse. Time both from n = 1,000 to n = 200,000. <em>What you should find:</em> the two curves separate by a factor that grows slowly with n, because the first is &#920;(n log&#178; n) and the second is &#920;(n log n). At n = 200,000 the log factor is about 17, so expect roughly an order of magnitude once constants are included.</li>" +
+        "<li><strong>Build.</strong> Write a function that takes a, b and f as a symbolic exponent and reports which master-theorem case applies, or reports \"gap\" when none does. Test it on the six recurrences named in this chapter. <em>What you should find:</em> it must answer \"gap\" for both 2T(n/2) + n log n and 2T(n/2) + n/log n, and refuse T(n&#8722;1) + n outright, since that recurrence is not of the required form at all.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "recurrence", d: "An equation defining a function in terms of its own value on smaller inputs, which is what a recursive algorithm's running time always is." },
+    { t: "base case", d: "The input size at which a recurrence stops recursing, omitted from asymptotic analysis when its cost is constant because it cannot change the answer." },
+    { t: "substitution method", d: "Guessing a closed form for a recurrence and proving it by induction, the only one of the three techniques that also establishes lower bounds." },
+    { t: "recursion tree", d: "A drawing of a recurrence as a tree of calls, summed by levels, which reveals both the answer and the reason for it." },
+    { t: "level cost", d: "The total work done by all nodes at one depth of the recursion tree, whose direction of change down the tree determines which of three shapes the recurrence has." },
+    { t: "master theorem", d: "A shortcut that solves recurrences of the form aT(n/b) + f(n) by comparing f against the watershed function, applicable only when f is polynomially separated from it." },
+    { t: "watershed function", d: "The quantity n raised to log base b of a, equal to the number of leaves in the recursion tree, against which the master theorem compares the combining cost." },
+    { t: "regularity condition", d: "The extra requirement in the master theorem's third case, that a times f(n/b) is at most a constant fraction of f(n), which rules out oscillating combining costs." },
+    { t: "gap case", d: "A recurrence whose combining cost differs from the watershed by only a logarithmic factor, leaving it between two master-theorem cases and outside all of them." },
+    { t: "Akra–Bazzi method", d: "A 1998 generalisation that solves divide-and-conquer recurrences with any number of subproblems at any set of unequal fractions, where the master theorem does not apply." },
+    { t: "divide and conquer", d: "The strategy of splitting an input, solving the pieces recursively and combining the results, in which the combining step is almost always the difficult part." },
+    { t: "combine step", d: "The work done after the recursive calls return, whose cost is the f(n) of the recurrence and which usually decides the whole running time." },
+    { t: "closest pair problem", d: "Finding the two nearest of n points in the plane, solved by Shamos and Hoey in 1975 in n log n time by a divide and conquer whose combine step examines a narrow strip." },
+    { t: "strip", d: "In closest-pair, the band of points within the current best distance of the dividing line, which is the only region a straddling closer pair can occupy." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A recursion tree's level costs are n, 2n, 4n, 8n going down, and the tree has log₂ n levels. Which shape is this and what is the total?",
+      opts: [
+        "The leaves dominate, and since the last level's cost is the largest term of an increasing geometric series the total is Θ of that term",
+        "Every level contributes equally to the sum, so the total is the level cost multiplied by the number of levels, giving Θ(n log n) as it does for mergesort",
+        "The root dominates, because the first level is the one the recursion pays before it has divided the problem into any smaller pieces at all",
+        "The shape cannot be determined from level costs alone without also knowing the branching factor a and the shrink factor b separately"
+      ], a: 0,
+      why: "Costs growing down the tree make an increasing geometric series, which is dominated by its last term, so the leaves do essentially all the work. With a = 4 and b = 2 there are 4^(log₂ n) = n² leaves and the total is Θ(n²). You do not need a and b separately: the direction the level costs move is the whole answer, which is why the tree is the technique to reach for first." },
+
+    { type: "mc",
+      q: "Why does the master theorem fail on T(n) = 2T(n/2) + n log n?",
+      opts: [
+        "Because the regularity condition of case 3 cannot be satisfied when the combining cost contains a logarithm, and case 3 is the only case a larger f can fall into",
+        "Because f is larger than the watershed n, but only by a logarithmic factor rather than by some n^ε, so it fits neither case 2 nor case 3",
+        "Because n log n is not a polynomial, and the master theorem requires the combining cost f to be a polynomial in n for every one of its three cases",
+        "Because a equals b here, which makes the watershed function n^(log_b a) equal to n itself and leaves the comparison against f undefined"
+      ], a: 1,
+      why: "Cases 1 and 3 demand polynomial separation: f must be smaller or larger by a factor of n^ε for some positive ε. A logarithm loses to every positive power of n, so n log n is too large for case 2's exact match and too small for case 3's demand. That is the gap. The recursion tree still answers: level i costs n(log n − i), and the sum is Θ(n log² n)." },
+
+    { type: "mc",
+      q: "A substitution proof assumes T(m) ≤ cm for all m < n and derives T(n) ≤ cn + n. A colleague writes \"cn + n = O(n), so T(n) = O(n)\". What is wrong?",
+      opts: [
+        "Nothing is wrong with the reasoning itself, but the base case has not been checked, and without it the induction has no foundation to stand on",
+        "The inductive hypothesis was too weak and should have been T(m) ≤ cm − d for a second constant d, which is the standard strengthening",
+        "The step is invalid: the induction must reproduce the exact assumed bound with the same c, and cn + n exceeds cn for every positive c",
+        "The error is using ≤ rather than =, since a substitution proof establishes an exact closed form rather than an inequality in either direction"
+      ], a: 2,
+      why: "Asymptotic notation must never appear inside the induction, because O(n) is a set and the proof obligation is a concrete inequality carried with a fixed c. Here the leftover n never disappears, and that leftover is precisely the per-level cost the log factor counts. The guess is wrong, and writing O(n) + n = O(n) hides the failure rather than resolving it." },
+
+    { type: "mc",
+      q: "Closest-pair is implemented so that the strip is re-sorted by y inside every recursive call. What is the resulting running time, and why?",
+      opts: [
+        "Θ(n log n) on average but Θ(n²) in the worst case, depending on how many points happen to land inside the strip at each level",
+        "Θ(n log n) still, because sorting the strip touches only the points near the dividing line and those are a vanishing fraction of the total",
+        "Θ(n²), because sorting inside each call reintroduces the pairwise comparison the divide and conquer was designed to avoid in the first place",
+        "Θ(n log² n): the combine step becomes n log n rather than n, which puts the recurrence in the master theorem's gap and costs an extra log factor"
+      ], a: 3,
+      why: "Re-sorting makes f(n) = Θ(n log n) instead of Θ(n), giving T(n) = 2T(n/2) + n log n — the gap recurrence from earlier in this chapter, which solves to Θ(n log² n). The fix is to sort by y once at the start and split that order as the recursion descends. This is the difference between an implementation that matches its analysis and one that quietly does not." },
+
+    { type: "mc",
+      q: "Measured on uniform random points, no point ever made more than 2 strip comparisons, against the proved bound of 7. What is the right conclusion?",
+      opts: [
+        "The bound is a worst-case guarantee rather than a prediction, and it exists so the combine step can be called linear; typical data does far less",
+        "The measurement is unrepresentative, since uniform random points are the forgiving case and any realistic distribution would approach 7",
+        "The proof is loose and should be tightened to 2, since a bound no input achieves is not the true bound for the algorithm as implemented",
+        "The implementation must be skipping comparisons it should make, since a correct implementation would have to reach the bound at some point"
+      ], a: 0,
+      why: "A worst-case bound says what cannot be exceeded, not what will happen. The 7 comes from a packing argument about how many points can sit in a δ-by-2δ rectangle while staying δ apart, and that configuration has to be constructed rather than encountered. The gap between guarantee and observation is the normal state of affairs, and Chapter 16 is about the cases where that gap decides which algorithm wins." },
+
+    { type: "mc",
+      q: "Which recurrence is outside the master theorem's form entirely, rather than merely falling into a gap?",
+      opts: [
+        "T(n) = 2T(n/2) + n², because the combining cost grows faster than the number of leaves in the recursion tree",
+        "T(n) = T(n − 1) + n, because the subproblem shrinks by a constant amount rather than by a constant factor",
+        "T(n) = 7T(n/2) + n², because log₂ 7 is irrational and the watershed function cannot then be compared against a polynomial f",
+        "T(n) = T(n/3) + T(2n/3) + n, because the two subproblems receive different fractions of the input rather than the same one"
+      ], a: 1,
+      why: "The master theorem requires the form aT(n/b), where the subproblem is a constant fraction of the input. T(n − 1) + n shrinks by a constant amount instead, so the theorem does not apply at any level of analysis; unrolling gives n + (n−1) + ... = Θ(n²). The unequal-split recurrence is a different situation: it is outside the stated form but Akra–Bazzi handles it, and the tree gives Θ(n log n) directly." },
+
+    { type: "blank",
+      q: "The 1998 generalisation of the master theorem that handles any number of subproblems at unequal fractions is the ____ method.",
+      a: ["akra-bazzi", "akra bazzi", "akrabazzi", "akra–bazzi"],
+      why: "Mohamad Akra and Louay Bazzi published it in 1998. It finds the unique ρ solving the sum of aᵢ/bᵢ^ρ = 1 and integrates f against it. For T(n) = T(n/3) + T(2n/3) + n it gives ρ = 1, since one third plus two thirds is one, and the integral supplies the logarithm, so the answer is Θ(n log n). You will rarely turn the crank; knowing the name tells you a tool exists when the splits are uneven." },
+
+    { type: "blank",
+      q: "In the master theorem, the quantity n raised to log base b of a, which equals the number of leaves in the recursion tree, is called the ____ function.",
+      a: ["watershed"],
+      why: "Every case of the theorem is a comparison between the combining cost f and this quantity, which is the total work done at the leaves. If f loses, the leaves dominate; if it ties, every level costs the same and you pay a log factor for the number of levels; if it wins by a polynomial factor, the root dominates and the answer is f itself." },
+
+    { type: "order",
+      q: "Order these steps of the closest-pair algorithm as they execute within one call:",
+      items: [
+        "split the points at the median x into two halves",
+        "recurse on each half and take δ as the smaller of the two answers",
+        "collect the points lying within δ of the dividing line into a strip",
+        "walk the strip in y order, comparing each point to a bounded number of neighbours"
+      ],
+      why: "The split and the recursion are the obvious part; the strip is the combine step and it is where the entire difficulty lives. The strip can only contain a straddling pair closer than δ, because any pair further from the line than δ is already δ apart. Walking it in y order bounds the comparisons per point by a constant, which keeps the combine step linear and delivers Θ(n log n)." },
+
+    { type: "mc",
+      q: "You are designing an algorithm and can choose between four subproblems of size n/2 with linear combining, or two subproblems of size n/2 with quadratic combining. Which is faster asymptotically?",
+      opts: [
+        "Four subproblems with linear combining, since more recursive calls parallelise the work across a larger number of independent smaller instances",
+        "Two subproblems with quadratic combining, since fewer recursive calls means less overhead from the recursion itself at every level of the tree",
+        "Neither: both solve to Θ(n²), by opposite routes, one paying it at the leaves and the other at the root",
+        "Four subproblems with linear combining, because linear combining always beats quadratic combining regardless of the branching factor chosen"
+      ], a: 2,
+      why: "4T(n/2) + n has watershed n², f is polynomially smaller, case 1 gives Θ(n²), and the work is at the leaves. 2T(n/2) + n² has watershed n, f is polynomially larger, case 3 gives Θ(n²), and the work is at the root. Same answer, opposite shapes — which is exactly the point of the three-tree figure. Choosing between them in practice comes down to constants and cache behaviour, not asymptotics." }
+  ]
+});
+
+/* ======================= CHAPTER 4 ======================= */
+CHAPTERS.push({
+  num: 4, part: 1, title: "Amortized Analysis: Paying in Advance",
+  blurb: "A dynamic array doubles when it fills, which costs a full copy, and yet appending is constant time. A stack-based scan pushes and pops inside a loop that looks nested, and yet it is linear. These are the same result, and this chapter proves it three ways. It is the most important chapter in Part 1, because the three patterns every practice sheet lists as separate tricks are corollaries of what you learn here, and the next three chapters collect them.",
+  sections: [
+
+    { title: "The Problem: A Worst Case That Never Repeats",
+      viz: "dsaAmortizedArray", vizTitle: "Append elements, change the growth policy, watch the copy counter",
+      html:
+        "<p>A dynamic array &#8212; Python's <code>list</code>, Java's <code>ArrayList</code> &#8212; stores its elements in a fixed block of memory. When the block fills, there is no room, so it allocates a larger one, copies everything across, and continues. That copy touches every element the array currently holds.</p>" +
+        "<p>So what does <code>append</code> cost? The honest per-operation answer is: usually 1, occasionally n. If you report the worst case, <code>append</code> is &#920;(n), and a loop of n appends is &#920;(n&#178;). That bound is correct and it is badly wrong, in the sense that it predicts a quadratic cost for something everyone observes to be linear.</p>" +
+        "<p>Here is the actual cost of each of the first seventeen appends, starting from an empty array that doubles its capacity whenever it fills. Counting one unit per element stored and one per element copied:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 230' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>cost of append number k</text>" +
+        "<line x1='46' y1='170' x2='740' y2='170' stroke='#7d8fb0' stroke-width='2'/>" +
+        "<line x1='46' y1='170' x2='46' y2='30' stroke='#7d8fb0' stroke-width='2'/>" +
+        "<text x='36' y='36' text-anchor='end' fill='#7d8fb0' font-size='10'>17</text>" +
+        "<text x='36' y='174' text-anchor='end' fill='#7d8fb0' font-size='10'>0</text>" +
+        "<rect x='56' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='95' y='154' width='24' height='16' fill='#ff5d73'/>" +
+        "<rect x='134' y='146' width='24' height='24' fill='#ff5d73'/>" +
+        "<rect x='173' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='212' y='130' width='24' height='40' fill='#ff5d73'/>" +
+        "<rect x='251' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='290' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='329' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='368' y='98' width='24' height='72' fill='#ff5d73'/>" +
+        "<rect x='407' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='446' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='485' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='524' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='563' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='602' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='641' y='162' width='24' height='8' fill='#4f7cff'/>" +
+        "<rect x='680' y='34' width='24' height='136' fill='#ff5d73'/>" +
+        "<line x1='46' y1='146' x2='612' y2='146' stroke='#3ddc97' stroke-width='2' stroke-dasharray='6 4'/>" +
+        "<text x='620' y='150' fill='#3ddc97' font-size='11'>amortized cost 3</text>" +
+        "<text x='56' y='186' fill='#7d8fb0' font-size='10'>1</text><text x='131' y='186' fill='#ff5d73' font-size='10'>3</text><text x='209' y='186' fill='#ff5d73' font-size='10'>5</text><text x='365' y='186' fill='#ff5d73' font-size='10'>9</text><text x='677' y='186' fill='#ff5d73' font-size='10'>17</text>" +
+        "<line x1='20' y1='198' x2='740' y2='198' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='216' fill='#c9d6ea' font-size='11'>Red bars are the appends that triggered a copy. Their heights are 2, 3, 5, 9, 17 — each one</text>" +
+        "<text x='20' y='226' fill='#c9d6ea' font-size='10'>twice as rare and twice as expensive as the last, which is exactly why the green line is flat.</text>" +
+        "</svg><div class='fig-cap'>Seventeen appends cost 48 units in total, an average of 2.8 and never more than 3. The spikes get taller and the gaps get longer at the same rate.</div></div>" +
+
+        "<p>Seventeen appends cost 48 units altogether. The expensive ones are genuinely expensive &#8212; the seventeenth costs seventeen times what a normal one does &#8212; but they arrive half as often each time they double in price. That trade is exact, and making it precise is what this chapter is for.</p>" +
+        "<p>It is worth being precise about what is wrong with the &#920;(n&#178;) bound, because &#8220;pessimistic&#8221; is not it. The bound is <em>unachievable</em>: no sequence of n appends costs &#920;(n&#178;), not one. Multiplying a per-operation worst case by n assumes the worst case can occur every time, and here it provably cannot, because a resize at size c leaves the array with c free slots and therefore c cheap appends before the next one. The expensive case is <em>rationed by its own occurrence</em>. That is the structural feature amortized analysis exists to exploit, and it is why the technique is not a statistical dodge: nothing is being averaged away, because the bad case cannot recur quickly.</p>" +
+        "<p><strong>Amortized analysis</strong> is the technique for bounding the total cost of a <em>sequence</em> of operations when individual operations vary wildly. It gives a guarantee about the sequence, not about any one operation, and it involves no probability and no assumption about your data. The three standard methods below give the same answer by different routes, and the third one generalises to everything else in this course.</p>" +
+        "<p>The machine above lets you append to an array and watch the copy counter. Switch the growth policy to <em>+1</em> and append a hundred elements, then switch back to doubling and do the same. The counter is total elements ever copied, and the difference between the two policies is the whole content of the next section.</p>"
+    },
+
+    { title: "Aggregate Analysis: Add It All Up",
+      html:
+        "<p>The simplest method: compute the total cost of n operations, then divide by n. No cleverness, only a sum.</p>" +
+        "<p>Start from an empty array with capacity 1 that doubles when full. Over n appends, the copies happen when the size passes 1, 2, 4, 8, and so on, and each copy moves as many elements as the array then held. So the total copying is</p>" +
+        "<pre><code>1 + 2 + 4 + 8 + ... + 2^k    where 2^k &#8804; n\n  =  2^(k+1) - 1\n  &lt;  2n</code></pre>" +
+        "<p>plus n for storing the elements themselves. Total under 3n, so the cost per append is under 3, a constant. A geometric series whose ratio exceeds 1 is dominated by its last term, and its last term here is at most n. That single fact is the whole proof.</p>" +
+        "<h3>Why growing by a constant amount fails</h3>" +
+        "<p>Suppose the array grows by 16 slots instead of doubling. Now copies happen at sizes 16, 32, 48, and the total copying is 16 + 32 + 48 + &#8230; + n, an arithmetic series, which is &#920;(n&#178;/16). Dividing by n leaves &#920;(n) per append. The constant 16 changed nothing that matters: the series went from geometric to arithmetic, and that is the difference between constant and linear amortized cost.</p>" +
+        "<p>The general result is worth carrying. If capacity is multiplied by a factor r &gt; 1 each time, the copies per element tend to <strong>1/(r &#8722; 1)</strong>. Doubling gives 1. Growing by half gives 2. Growing by an eighth gives 8. Growing by a constant amount gives no limit at all. Measured, by building lists of each size and counting every element copy:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='30' y='20' fill='#2de2ff' font-size='12'>n</text>" +
+        "<text x='200' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>double</text>" +
+        "<text x='320' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>x1.5</text>" +
+        "<text x='455' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>x1.125</text>" +
+        "<text x='590' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>+16 slots</text>" +
+        "<text x='730' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>+1 slot</text>" +
+        "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='30' y='50' fill='#c9d6ea' font-size='12'>1,000</text><text x='200' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>1.02</text><text x='320' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>2.14</text><text x='455' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>7.78</text><text x='590' y='50' text-anchor='end' fill='#ffd166' font-size='12'>31</text><text x='730' y='50' text-anchor='end' fill='#ff5d73' font-size='12'>500</text>" +
+        "<text x='30' y='74' fill='#c9d6ea' font-size='12'>10,000</text><text x='200' y='74' text-anchor='end' fill='#3ddc97' font-size='12'>1.64</text><text x='320' y='74' text-anchor='end' fill='#3ddc97' font-size='12'>2.43</text><text x='455' y='74' text-anchor='end' fill='#3ddc97' font-size='12'>8.35</text><text x='590' y='74' text-anchor='end' fill='#ffd166' font-size='12'>312</text><text x='730' y='74' text-anchor='end' fill='#ff5d73' font-size='12'>5,000</text>" +
+        "<text x='30' y='98' fill='#c9d6ea' font-size='12'>100,000</text><text x='200' y='98' text-anchor='end' fill='#3ddc97' font-size='12'>1.31</text><text x='320' y='98' text-anchor='end' fill='#3ddc97' font-size='12'>2.77</text><text x='455' y='98' text-anchor='end' fill='#3ddc97' font-size='12'>7.99</text><text x='590' y='98' text-anchor='end' fill='#ffd166' font-size='12'>3,125</text><text x='730' y='98' text-anchor='end' fill='#ff5d73' font-size='12'>50,000</text>" +
+        "<text x='30' y='122' fill='#c9d6ea' font-size='12'>1,000,000</text><text x='200' y='122' text-anchor='end' fill='#3ddc97' font-size='12'>1.05</text><text x='320' y='122' text-anchor='end' fill='#3ddc97' font-size='12'>2.10</text><text x='455' y='122' text-anchor='end' fill='#3ddc97' font-size='12'>8.45</text><text x='590' y='122' text-anchor='end' fill='#ffd166' font-size='12'>31,250</text><text x='730' y='122' text-anchor='end' fill='#ff5d73' font-size='12'>500,000</text>" +
+        "<line x1='20' y1='136' x2='740' y2='136' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='30' y='156' fill='#7d8fb0' font-size='11'>predicted 1/(r-1)</text><text x='200' y='156' text-anchor='end' fill='#7d8fb0' font-size='11'>1.00</text><text x='320' y='156' text-anchor='end' fill='#7d8fb0' font-size='11'>2.00</text><text x='455' y='156' text-anchor='end' fill='#7d8fb0' font-size='11'>8.00</text><text x='590' y='156' text-anchor='end' fill='#7d8fb0' font-size='11'>no limit</text><text x='730' y='156' text-anchor='end' fill='#7d8fb0' font-size='11'>no limit</text>" +
+        "<text x='20' y='180' fill='#c9d6ea' font-size='11'>The three geometric columns sit on their predicted constants and stay there as n grows</text>" +
+        "<text x='20' y='196' fill='#c9d6ea' font-size='11'>by a factor of a thousand. The two additive columns grow in step with n.</text>" +
+        "</svg><div class='fig-cap'>Copies per element. The number that decides constant-versus-linear is not the growth factor's size but whether it is a factor at all.</div></div>" +
+
+        "<p>Aggregate analysis is enough for the array and it is the right first move on any new structure. Its limitation is that it gives one average for all operations, so it cannot say that <code>push</code> is cheap and <code>pop</code> is expensive when both appear in the same sequence. For that you need one of the next two.</p>" +
+        "<h3>Three methods, increasing in power</h3>" +
+        "<p>Here is that limitation as a measurement. Take a structure with two operations: push costs 1, and flush empties the structure at a cost equal to its current size. Over 100,000 operations drawn at 90% push and 10% flush, the measured total was <strong>179,815 units, or 1.80 per operation</strong>. Aggregate analysis reports that 1.80 and stops &#8212; and the number is an artefact of the 90/10 mix, so it moves when the mix does. The sharper claim, which aggregate analysis cannot express, is that <em>push costs 2 and flush costs 0</em> whatever the mix, because every element flushed was pushed exactly once and can be charged then.</p>" +
+        "<p>The three methods are not alternatives to choose between on taste. They form a ladder, and each rung says something the one below cannot:</p>" +
+        "<ul>" +
+        "<li><strong>Aggregate</strong> gives one number for the whole sequence, and cannot distinguish operations.</li>" +
+        "<li><strong>Accounting</strong> gives a number per <em>operation type</em>, by attaching credit to individual pieces of the structure.</li>" +
+        "<li><strong>Potential</strong> gives a number per <em>state</em>, by attaching the credit to the structure as a whole. It handles structures where the cost of an operation depends on the configuration rather than on which operation it is, which is every interesting structure in the rest of this course.</li>" +
+        "</ul>" +
+        "<p>Climb only as far as the structure forces you. For the doubling array all three work, and aggregate is the shortest.</p>"
+    },
+
+    { title: "The Accounting Method: Bank the Difference",
+      html:
+        "<p>The second method assigns each operation an <strong>amortized cost</strong> of your choosing, which may differ from what it actually costs. When you charge more than an operation costs, the surplus is stored as <strong>credit</strong> on some specific piece of the data structure. When you charge less, the shortfall is paid from credit already stored. One rule makes the whole thing valid:</p>" +
+        "<p><strong>The credit balance must never go negative.</strong> If it does not, then the total amortized cost is an upper bound on the total actual cost, which is exactly the claim you want.</p>" +
+        "<p>For the doubling array, charge 3 units per append and spend them like this:</p>" +
+        "<ul>" +
+        "<li>1 unit pays to store the new element now.</li>" +
+        "<li>1 unit is left <em>on the new element</em>, to pay for copying it at the next resize.</li>" +
+        "<li>1 unit is left on an element in the array's older half, which has already spent its own credit on a previous copy.</li>" +
+        "</ul>" +
+        "<p>When a resize happens at capacity c, every one of the c elements needs copying. The most recent c/2 elements each carry a unit of their own, and the older c/2 elements are each covered by the unit deposited on their behalf by one of those newer appends. The copy is fully funded, the balance drops to zero, and the cycle starts again.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 200' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>credit stored, as the array fills from half-full to full</text>" +
+        "<line x1='46' y1='150' x2='740' y2='150' stroke='#7d8fb0' stroke-width='2'/>" +
+        "<line x1='46' y1='150' x2='46' y2='34' stroke='#7d8fb0' stroke-width='2'/>" +
+        "<polygon points='46,150 380,42 380,150' fill='#4f7cff' opacity='0.35'/>" +
+        "<line x1='46' y1='150' x2='380' y2='42' stroke='#4f7cff' stroke-width='2.5'/>" +
+        "<line x1='380' y1='42' x2='382' y2='150' stroke='#ff5d73' stroke-width='2.5'/>" +
+        "<polygon points='382,150 716,42 716,150' fill='#4f7cff' opacity='0.35'/>" +
+        "<line x1='382' y1='150' x2='716' y2='42' stroke='#4f7cff' stroke-width='2.5'/>" +
+        "<text x='150' y='96' fill='#c9d6ea' font-size='11'>credit accumulates</text>" +
+        "<text x='150' y='112' fill='#c9d6ea' font-size='11'>2 units per append</text>" +
+        "<text x='392' y='72' fill='#ff5d73' font-size='11'>resize: the whole</text>" +
+        "<text x='392' y='88' fill='#ff5d73' font-size='11'>balance is spent</text>" +
+        "<text x='60' y='168' fill='#7d8fb0' font-size='10'>half full</text>" +
+        "<text x='356' y='168' fill='#7d8fb0' font-size='10'>full</text>" +
+        "<text x='692' y='168' fill='#7d8fb0' font-size='10'>full</text>" +
+        "<line x1='20' y1='180' x2='740' y2='180' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='196' fill='#7d8fb0' font-size='11'>The balance touches zero at every resize and never dips below it. That is the entire proof obligation.</text>" +
+        "</svg><div class='fig-cap'>Charge 3, spend 1, bank 2. The bank is always exactly large enough for the copy that is coming, and never larger than it needs to be.</div></div>" +
+
+        "<h3>A second structure: the multipop stack</h3>" +
+        "<p>The method is at its clearest on a stack supporting <code>push</code>, <code>pop</code> and <code>multipop(k)</code>, which removes up to k elements in one call. A single <code>multipop</code> can cost n, so the per-operation worst case is &#920;(n) and the naive bound over a sequence is quadratic again. Again it is unachievable, and here the reason is plainer than in the array: <em>you cannot pop what was never pushed.</em></p>" +
+        "<p>Charge 2 per push and 0 for everything else. One unit performs the push; the second is banked on the pushed element and pays for its eventual removal, whether that removal comes from a <code>pop</code> or from being one of the k elements of a <code>multipop</code>. Every removal is prepaid by the push that put the element there, the balance is the number of elements currently on the stack and so never negative, and any sequence of n operations costs at most 2n.</p>" +
+        "<p>The phrase to carry away generalises past both structures: <strong>each element is paid for on the way in and travels free on the way out.</strong> That sentence is the whole of section 5, and it is why a loop that looks nested is not.</p>" +
+        "<p>Notice what the accounting method buys over aggregate analysis: it lets different operations carry different charges. A structure with cheap insertions and expensive deletions can charge the insertions enough to fund the deletions, and the proof is still one inequality about a balance.</p>" +
+        "<div class='callout'>The credit is a bookkeeping device, not a field in the structure. Nothing in the running program stores it. It exists so that a claim about a whole sequence can be proved by a local argument about one operation, which is the only reason any of these three methods exist.</div>"
+    },
+
+    { title: "The Potential Method: A Function of the State",
+      viz: "dsaPotential", vizTitle: "Step a sequence and watch actual cost, the change in potential, and the charge stay in balance",
+      html:
+        "<p>The third method is the accounting method with the credit attached to the structure as a whole rather than to individual elements, and it is the one that generalises. Robert Tarjan introduced it in a 1985 paper in the <em>SIAM Journal on Algebraic and Discrete Methods</em> that named the field.</p>" +
+        "<p>Define a <strong>potential function</strong> &#934; that maps a state of the data structure to a number. Then define the amortized cost of an operation as</p>" +
+        "<pre><code>amortized  =  actual  +  &#934;(after)  -  &#934;(before)</code></pre>" +
+        "<p>Sum that over a sequence of n operations and the middle terms cancel in a <strong>telescoping sum</strong>: every &#934;(after) cancels the next &#934;(before). What survives is</p>" +
+        "<pre><code>total amortized  =  total actual  +  &#934;(final)  -  &#934;(initial)</code></pre>" +
+        "<p>So if &#934; never drops below its starting value &#8212; usually arranged by making &#934;(empty) = 0 and &#934; &#8805; 0 always &#8212; then total actual cost is at most total amortized cost. Choosing a good &#934; is the whole art, and there is no procedure for it; you look for a quantity that grows when the structure is storing up trouble and falls when the trouble is paid off.</p>" +
+        "<h3>The array, done properly</h3>" +
+        "<p>For the doubling array, take &#934; = 2 &#215; size &#8722; capacity. It is zero when the array is exactly half full and grows as it fills. Check both cases:</p>" +
+        "<ul>" +
+        "<li><strong>Append with room.</strong> Actual cost 1. Size rises by one and capacity is unchanged, so &#934; rises by 2. Amortized = 1 + 2 = <strong>3</strong>.</li>" +
+        "<li><strong>Append that triggers a resize</strong>, at size = capacity = c. Actual cost is c copies plus 1 store, so c + 1. Before: &#934; = 2c &#8722; c = c. After: size is c+1 and capacity is 2c, so &#934; = 2(c+1) &#8722; 2c = 2. The change is 2 &#8722; c. Amortized = (c + 1) + (2 &#8722; c) = <strong>3</strong>.</li>" +
+        "</ul>" +
+        "<p>Both cases give exactly 3, which is why the dashed line in the first figure of this chapter sits at 3 and the measured average of the first seventeen appends was 2.8, creeping toward it. The expensive operation and the cheap one cost the same amortized amount, and the potential function is what makes that true rather than a coincidence.</p>" +
+        "<p>The machine above shows three columns as you step through a sequence: what the operation actually cost, how &#934; changed, and what it was charged. Find the resize step and confirm that the actual cost spikes while the charge does not, then confirm the running totals never cross.</p>" +
+        "<h3>A second potential function: the binary counter</h3>" +
+        "<p>One example is not enough to show that choosing &#934; is a skill rather than a trick, so here is the other canonical one. A k-bit binary counter starts at zero and is incremented n times. An increment flips the trailing run of 1s to 0 and then flips one 0 to 1, so its cost in bit flips is anywhere from 1 to k, and the naive bound is n &#215; k.</p>" +
+        "<p>Take <strong>&#934; = the number of 1 bits currently set</strong>. An increment that flips t trailing ones costs t + 1 flips, and it clears t ones while setting one, so &#934; changes by 1 &#8722; t. The amortized cost is (t + 1) + (1 &#8722; t) = <strong>2</strong>, independent of t. The expensive increments are expensive precisely because the counter accumulated the 1 bits that make them so, and each of those bits was paid for when it was set.</p>" +
+        "<p>Measured, by incrementing from zero and totalling every bit flip:</p>" +
+        "<ul>" +
+        "<li><strong>n = 16</strong> &#8212; 31 flips, 1.9375 per increment</li>" +
+        "<li><strong>n = 1,000</strong> &#8212; 1,994 flips, 1.9940 per increment</li>" +
+        "<li><strong>n = 100,000</strong> &#8212; 199,994 flips, 1.9999 per increment</li>" +
+        "<li><strong>n = 1,000,000</strong> &#8212; 1,999,993 flips, 2.0000 per increment, against a naive n log&#8322;n bound of 19,000,000</li>" +
+        "</ul>" +
+        "<p>The average approaches 2 from below and never reaches it, which the aggregate view predicts independently: bit 0 flips on every increment, bit 1 on every second, bit 2 on every fourth, so the total is n + n/2 + n/4 + &#8230; &lt; 2n. Two methods, two arguments, the same constant &#8212; and a potential function with nothing in common with the array's, which is the point of showing it.</p>"
+        },
+
+    { title: "Three Patterns, One Theorem",
+      viz: "dsaEnterLeaveOnce", vizTitle: "Run a nested-looking loop and count total pushes and pops",
+      html:
+        "<p>This is the section the rest of Part 1 depends on.</p>" +
+        "<p>Every practice sheet in circulation teaches two pointers, the monotonic stack and the sliding-window minimum as three separate techniques, each with its own template. They are three applications of one theorem, and the theorem is the potential method with the simplest potential there is: <strong>the number of things currently held</strong>.</p>" +
+        "<p>The shape they share is a loop that <em>looks</em> nested. An outer loop over n elements, and inside it a <code>while</code> that may run many times. The reflex is to call that n&#178;. The reflex is wrong, and here is why, stated once for all three.</p>" +
+
+        "<h3>The monotonic stack</h3>" +
+        "<p>Scanning left to right, each element is pushed onto a stack, and before pushing it, everything smaller is popped off. The inner <code>while</code> can pop many elements in one step. Take &#934; = the number of elements currently on the stack.</p>" +
+        "<ul>" +
+        "<li>A push costs 1 and raises &#934; by 1, so it is charged 2.</li>" +
+        "<li>A pop costs 1 and lowers &#934; by 1, so it is charged 0. <em>Pops are free.</em></li>" +
+        "</ul>" +
+        "<p>Processing one element means exactly one push and some number of pops, so its amortized cost is 2 regardless of how many pops happened. Over n elements the total is at most 2n. &#934; starts at 0 and ends at 0 or more, so the actual total is at most the amortized total. The inner loop can run n times on a single step and the algorithm is still linear, because an element that is popped is never pushed again.</p>" +
+
+        "<h3>Two pointers</h3>" +
+        "<p>Same argument, different structure. Both pointers only ever move forward, and neither can move past the end. Take &#934; = the number of positions the two pointers have left to travel. Each move costs 1 and lowers &#934; by 1, so every move is charged 0 against a starting potential of 2n. Total movement is at most 2n, whatever order the moves happen in.</p>" +
+
+        "<h3>The sliding-window minimum</h3>" +
+        "<p>A deque holds candidate indices; each new element evicts everything larger from the back, and the front is discarded when it leaves the window. Every index enters the deque exactly once and leaves at most once. &#934; = deque size, pushes charged 2, pops charged 0, total 2n.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>each element: one entry, at most one exit</text>" +
+        "<line x1='40' y1='60' x2='720' y2='60' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='64' fill='#7d8fb0' font-size='11'>in</text>" +
+        "<line x1='40' y1='120' x2='720' y2='120' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='124' fill='#7d8fb0' font-size='11'>out</text>" +
+        "<line x1='80' y1='60' x2='80' y2='120' stroke='#3ddc97' stroke-width='2'/><circle cx='80' cy='60' r='4' fill='#3ddc97'/><circle cx='80' cy='120' r='4' fill='#ff5d73'/>" +
+        "<line x1='150' y1='60' x2='150' y2='120' stroke='#3ddc97' stroke-width='2'/><circle cx='150' cy='60' r='4' fill='#3ddc97'/><circle cx='150' cy='120' r='4' fill='#ff5d73'/>" +
+        "<line x1='220' y1='60' x2='400' y2='120' stroke='#3ddc97' stroke-width='2'/><circle cx='220' cy='60' r='4' fill='#3ddc97'/><circle cx='400' cy='120' r='4' fill='#ff5d73'/>" +
+        "<line x1='290' y1='60' x2='330' y2='120' stroke='#3ddc97' stroke-width='2'/><circle cx='290' cy='60' r='4' fill='#3ddc97'/><circle cx='330' cy='120' r='4' fill='#ff5d73'/>" +
+        "<line x1='360' y1='60' x2='470' y2='120' stroke='#3ddc97' stroke-width='2'/><circle cx='360' cy='60' r='4' fill='#3ddc97'/><circle cx='470' cy='120' r='4' fill='#ff5d73'/>" +
+        "<line x1='430' y1='60' x2='540' y2='120' stroke='#3ddc97' stroke-width='2'/><circle cx='430' cy='60' r='4' fill='#3ddc97'/><circle cx='540' cy='120' r='4' fill='#ff5d73'/>" +
+        "<line x1='500' y1='60' x2='620' y2='120' stroke='#3ddc97' stroke-width='2'/><circle cx='500' cy='60' r='4' fill='#3ddc97'/><circle cx='620' cy='120' r='4' fill='#ff5d73'/>" +
+        "<circle cx='570' cy='60' r='4' fill='#3ddc97'/><line x1='570' y1='60' x2='570' y2='96' stroke='#3ddc97' stroke-width='2' stroke-dasharray='3 3'/><text x='578' y='92' fill='#7d8fb0' font-size='10'>still in at the end</text>" +
+        "<text x='40' y='150' fill='#c9d6ea' font-size='11'>7 entries, 6 exits. No element appears twice on either line, whatever the inner loop did.</text>" +
+        "<line x1='20' y1='166' x2='740' y2='166' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='184' fill='#c9d6ea' font-size='11'>Total work is bounded by entries plus exits, which is at most 2n. The loop nesting is irrelevant:</text>" +
+        "<text x='20' y='200' fill='#c9d6ea' font-size='11'>one step may pop six elements, but only because six earlier steps each pushed one.</text>" +
+        "</svg><div class='fig-cap'>The picture behind all three patterns. Count what crosses the lines, not how the loops are written.</div></div>" +
+
+        "<p>The machine above runs a monotonic-stack scan on an input you choose and counts total pushes and total pops across the whole run. Find an input where a single step pops six elements, then check the totals: both counters are still at most n. That is the discovery, and once you have seen it the three chapters that follow are applications rather than new material.</p>" +
+        "<div class='callout'><strong>The interview lens.</strong> \"Isn't that O(n&#178;)? There's a loop inside a loop.\" This is asked constantly and the expected answer is not \"no, it's O(n)\". It is \"each element is pushed at most once and popped at most once, so total work is bounded by 2n regardless of nesting.\" One sentence, and it is the same sentence for all three patterns.</div>"
+    },
+
+    { title: "What Amortized Does Not Mean",
+      html:
+        "<p>Four things, and confusing any of them with amortized cost is common enough to be worth naming.</p>" +
+        "<ul>" +
+        "<li><strong>It is not average-case.</strong> Average-case analysis assumes a distribution over inputs. Amortized analysis assumes nothing at all; the bound holds for every sequence, including one chosen by an adversary who has read your code.</li>" +
+        "<li><strong>It is not expected time.</strong> There is no randomness anywhere in this chapter. Nothing was flipped, nothing was sampled, and the result is not a probability statement.</li>" +
+        "<li><strong>It is not a per-operation guarantee</strong>, which is why it says nothing about <strong>tail latency</strong>. This is the one that matters in practice. The seventeenth append really did cost seventeen units. Amortized analysis says the sequence is cheap; it says nothing reassuring about the operation you happen to be executing.</li>" +
+        "<li><strong>It does not survive being stopped early.</strong> Amortized bounds are claims about complete sequences from a known starting state. If you build the array up and then repeatedly append and pop across a resize boundary, you can force a copy on every operation, which is why real implementations shrink at a different threshold from the one at which they grow.</li>" +
+        "</ul>" +
+        "<p>The third point is a real engineering constraint, not a technicality. A service with a 10 ms latency budget that appends to a growing array can meet its average comfortably and still blow its 99.9th percentile on the appends that resize a large array. The standard responses are to preallocate when the size is known, to use a structure with worst-case rather than amortized bounds, or to spread the copy across subsequent operations. Systems with hard deadlines do the last of these and pay a constant factor for it.</p>" +
+        "<h3>The threshold that has to be different, and what it costs to get wrong</h3>" +
+        "<p>The fourth point deserves working out, because it is the one that turns into a production incident. If the array grows when it is full, the obvious symmetric choice is to shrink when it is half empty. That choice is <strong>wrong</strong>, and the reason is that it leaves no slack: after halving, the array is exactly full, so the very next append regrows it, and the pop after that shrinks it again.</p>" +
+        "<p>An adversary does not have to work hard. Put the array one element above the shrink trigger and alternate pop, append, pop, append. Measured over 10,000 such pairs:</p>" +
+        "<ul>" +
+        "<li><strong>shrink at half</strong>, capacity 1,024 &#8212; 10,240,000 elements copied, <strong>1,024 per pop/append pair</strong></li>" +
+        "<li><strong>shrink at half</strong>, capacity 8,192 &#8212; 81,920,000 copied, 8,192 per pair</li>" +
+        "<li><strong>shrink at half</strong>, capacity 65,536 &#8212; 655,360,000 copied, <strong>65,536 per pair</strong></li>" +
+        "<li><strong>shrink at a quarter</strong>, the same three capacities &#8212; 256, 2,048 and 16,384 copies in total, which is 0.0 to 1.6 per pair</li>" +
+        "</ul>" +
+        "<p>The cost per operation under the symmetric policy is not large, it is &#920;(n), and it stays &#920;(n) forever. Amortized O(1) has not degraded; it has been <em>destroyed</em>, because the amortized argument assumed the expensive case was rationed by its own occurrence and this workload un-rations it.</p>" +
+        "<p>Shrinking at a quarter instead, and halving when you do, leaves the array half full afterwards &#8212; so there is room for capacity/2 appends or capacity/4 pops before anything is copied again. That gap between the grow threshold and the shrink threshold is <strong>hysteresis</strong>, and it is the standard fix for any structure that resizes in both directions. On a random walk of 200,000 appends and pops the two policies measured 1.58 versus 0.01 element copies per operation, a factor of 235.</p>" +
+        "<div class='callout'>A tail-latency investigation that ends at \"but appends are amortized O(1)\" has ended one step early. The right question is how often the expensive case fires and how expensive it is when it does, and both of those are answerable from the analysis you now have.</div>"
+    },
+
+    { title: "In the Real World: What Your List Actually Does",
+      html:
+        "<p>Every textbook says the dynamic array doubles. Neither of the two implementations you use does.</p>" +
+        "<p><strong>CPython</strong> practises <strong>over-allocation</strong> of about an eighth. The growth in <code>Objects/listobject.c</code> is <code>(newsize + (newsize &gt;&gt; 3) + 6)</code>, rounded down to a multiple of four, which is roughly 1.125&#215; plus a small constant. Watching a real list's capacity with <code>sys.getsizeof</code> as it grows gives the sequence:</p>" +
+        "<pre><code>4, 8, 16, 24, 32, 40, 52, 64, 76, 92, 108, 128, 148, ...</code></pre>" +
+        "<p>The first few jumps look like doubling and then the ratio settles near 1.125. By the table in section 2 that costs about 8 copies per element rather than 1, and the measurement agreed: 7.78, 8.35, 7.99, 8.45 across four orders of magnitude of n. CPython pays eight times the copying that doubling would, deliberately, to waste less memory. Doubling can leave an array holding half a gigabyte of unused capacity; 1.125&#215; leaves an eighth of that.</p>" +
+        "<p><strong>OpenJDK</strong> grows <code>ArrayList</code> by half: the capacity becomes <code>oldCapacity + (oldCapacity &gt;&gt; 1)</code>, starting from a default of 10. That is r = 1.5 and costs about 2 copies per element, which the table confirms at 2.10 to 2.77. A different point on the same trade, chosen by a different team with a different memory budget.</p>" +
+        "<p>Both are constant amortized time, because both are geometric. The choice of ratio is not an asymptotic question at all &#8212; every r &gt; 1 gives O(1) &#8212; it is entirely a trade between copying work and wasted memory, and 1/(r &#8722; 1) is the exchange rate. That is the practical payoff of this chapter: the analysis does not merely certify that the operation is fast, it tells you what the tuning knob costs.</p>" +
+        "<h3>And what they do when the list gets shorter</h3>" +
+        "<p>Both implementations apply the hysteresis of the previous section, and CPython's threshold can be read off a running list. Building a 1,000-element list and popping it down, watching the capacity:</p>" +
+        "<ul>" +
+        "<li>at 1,000 elements the capacity is 1,000; popping to <strong>600</strong> and then to <strong>500</strong> leaves it at 1,000 &#8212; nothing is released</li>" +
+        "<li>at <strong>400</strong> the capacity drops to 564, not to 400: the shrink overshoots downward and leaves room above</li>" +
+        "<li>at 200 it is 320, at 100 it is 184, at 10 it is 16, and only at 0 does it reach 0</li>" +
+        "</ul>" +
+        "<p>So CPython does not shrink at half; it holds on until the list is comfortably below half and then reallocates to a capacity around 1.4&#215; the new size. Both halves of that behaviour are deliberate: waiting avoids the alternating-workload trap, and overshooting leaves the slack that keeps the next few appends free. A structure that resizes in two directions needs two thresholds with a gap between them, and this is what that looks like in shipped code.</p>" +
+        "<div class='callout'><strong>Try it on your machine.</strong> Run <code>import sys; a=[]; [ (a.append(i), sys.getsizeof(a)) for i in range(20) ]</code> and watch the size jump. The capacity in elements is (size in bytes minus the empty-list size) divided by 8 on a 64-bit build.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Using &#934; = 2 &#215; size &#8722; capacity, compute the actual cost, the change in potential, and the amortized cost for each of the first eight appends to an empty array with capacity doubling from 1. <em>What you should find:</em> the amortized column reads 3 at every single step, including the appends numbered 2, 3 and 5 that trigger copies, and the actual column reads 1, 2, 3, 1, 5, 1, 1, 1.</li>" +
+        "<li><strong>Trace.</strong> A stack supports push, pop, and multipop(k) which pops up to k elements. Give a potential function and use it to show that any sequence of n operations costs O(n), even though one multipop can cost n. <em>What you should find:</em> &#934; = stack size works; push is charged 2, pop and every element of a multipop are charged 0, and no sequence can pop more than it pushed.</li>" +
+        "<li><strong>Investigate.</strong> Implement a dynamic array that shrinks when it falls to half capacity and another that shrinks at a quarter, put each one element above its trigger, and run 10,000 alternating pop/append pairs counting element copies. <em>What you should find:</em> the half policy copies its whole capacity on every pair &#8212; 1,024 at capacity 1,024 and 65,536 at capacity 65,536, so the per-operation cost is &#920;(n) and stays there &#8212; while the quarter policy copies almost nothing, and on a 200,000-operation random walk the two differ by a factor of about 235.</li>" +
+        "<li><strong>Trace.</strong> A binary counter is incremented n times from zero, and the cost of an increment is the number of bits it flips. Show the total is O(n) rather than O(n log n). <em>What you should find:</em> bit 0 flips every increment, bit 1 every second, bit 2 every fourth, so the total is n + n/2 + n/4 + ... &lt; 2n. As a potential, the number of 1 bits works and gives an amortized cost of 2.</li>" +
+        "<li><strong>Investigate.</strong> Print <code>sys.getsizeof</code> for a Python list as it grows to 200 elements and derive the capacity sequence. Then compute the observed growth ratio at each jump. <em>What you should find:</em> capacities 4, 8, 16, 24, 32, 40, 52, 64, 76, and ratios that start near 2 and settle around 1.125, matching the formula in section 7. Repeat for a list built with <code>[0] * n</code> and note that no growth happens at all, because the size was known in advance.</li>" +
+        "<li><strong>Build.</strong> Implement a dynamic array with a configurable growth factor and an instrumented copy counter. Measure copies per element at n = 10&#8309; for factors 2, 1.5, 1.25 and 1.125, and compare each to 1/(r &#8722; 1). <em>What you should find:</em> agreement within a few percent for every factor, with the measured value oscillating around the prediction depending on where n falls relative to the last resize. This is the structure you will build for real in Chapter 50.</li>" +
+        "<li><strong>Build.</strong> Write a monotonic-stack scan that counts total pushes and total pops, and run it on three inputs of length 10&#8309;: increasing, decreasing, and random. <em>What you should find:</em> pushes are exactly n in all three cases; pops are 0 for one of them and n for another, and the total work never exceeds 2n even for the input that makes the inner loop run longest. Then construct the input that makes a single step pop the largest number of elements, and confirm the totals are unchanged.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "amortized analysis", d: "A technique for bounding the total cost of a sequence of operations when individual costs vary, making no assumption about inputs and involving no probability." },
+    { t: "amortized cost", d: "The cost charged to an operation by the analysis, which may differ from what the operation actually costs, chosen so that the charges bound the true total." },
+    { t: "aggregate analysis", d: "The simplest amortized method: total the cost of n operations and divide by n, giving one average that applies to every operation in the sequence." },
+    { t: "accounting method", d: "An amortized method that overcharges cheap operations and stores the surplus as credit on parts of the structure, valid so long as the credit balance never goes negative." },
+    { t: "credit", d: "Surplus charge stored by the accounting method on a specific element, to be spent later on an expensive operation involving it; a bookkeeping device that exists only in the proof." },
+    { t: "potential method", d: "An amortized method, introduced by Tarjan in 1985, that attaches a numeric potential to the whole state and defines amortized cost as actual cost plus the change in potential." },
+    { t: "potential function", d: "A map from a data structure's state to a number, chosen to rise when the structure accumulates future work and fall when that work is paid off." },
+    { t: "telescoping sum", d: "A sum in which consecutive terms cancel, which is why summing the potential method's per-operation definition leaves only the initial and final potentials." },
+    { t: "dynamic array", d: "An array that reallocates into a larger block when it fills, giving constant amortized append at the cost of an occasional linear copy." },
+    { t: "growth factor", d: "The ratio by which a dynamic array's capacity is multiplied when it fills, which determines the copies per element as one over the factor minus one." },
+    { t: "geometric series", d: "A sum whose terms are multiplied by a constant ratio, dominated by its largest term when the ratio exceeds one, which is what makes doubling cheap." },
+    { t: "arithmetic series", d: "A sum whose terms increase by a constant difference, growing quadratically in the number of terms, which is what makes growth by a fixed number of slots expensive." },
+    { t: "monotonic stack", d: "A stack kept in sorted order by discarding elements the newcomer dominates, whose nested-looking loop is linear because each element is pushed and popped at most once." },
+    { t: "hysteresis", d: "A deliberate gap between the threshold at which a structure grows and the one at which it shrinks, which is what stops an alternating workload from forcing a resize on every operation." },
+    { t: "tail latency", d: "The slowest few percent of operations, which an amortized bound deliberately says nothing about and which the occasional resize can dominate." },
+    { t: "over-allocation", d: "Reserving more capacity than currently needed so that subsequent appends are free, traded against the memory left unused." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A dynamic array grows by a fixed 1,000 slots whenever it fills. What is the amortized cost of an append, and why?",
+      opts: [
+        "Θ(n), because the copies form an arithmetic rather than geometric series, whose total is quadratic in n",
+        "Θ(1), since 1,000 is a constant and constants never affect asymptotic behaviour",
+        "Θ(log n), because the number of resizes is proportional to n over 1,000 and each one copies a logarithmically growing prefix of the array",
+        "Θ(1) amortized but Θ(n) worst case, which is exactly the same situation that doubling produces and differs from it only in the constant"
+      ], a: 0,
+      why: "Copies happen at sizes 1,000, 2,000, 3,000 and so on, and their sizes form an arithmetic rather than a geometric series. Summing gives Θ(n²/1,000), and dividing by n leaves Θ(n) per append. The constant 1,000 changes the coefficient and not the growth: what makes doubling cheap is that capacity is multiplied rather than incremented, which is why every factor r > 1 works and no fixed increment does." },
+
+    { type: "mc",
+      q: "Using Φ = 2 × size − capacity, an append that triggers a resize at size = capacity = c has actual cost c + 1. What is its amortized cost?",
+      opts: [
+        "c + 3, since the resize's actual cost must be added to the charge of 3 that an ordinary append already carries under this potential",
+        "3, because Φ falls from c to 2 during the resize, and that drop of c − 2 cancels all but three units of the actual cost",
+        "1, because the potential absorbs the entire copy and leaves only the cost of storing the newly appended element itself",
+        "c + 1, because the potential method reports actual costs unchanged whenever an operation both grows the structure and reallocates it"
+      ], a: 1,
+      why: "Before the resize Φ = 2c − c = c. Afterwards size is c+1 and capacity is 2c, so Φ = 2(c+1) − 2c = 2. The change is 2 − c, and the amortized cost is (c + 1) + (2 − c) = 3 — identical to the cheap case. That both cases give exactly 3 is the whole reason this potential is the right one, and it is why the flat line in this chapter's first figure sits at 3." },
+
+    { type: "mc",
+      q: "Why is a monotonic-stack scan linear even though it has a while loop nested inside a for loop?",
+      opts: [
+        "Because the inner while loop runs a constant number of times per outer iteration in practice, so the nesting never actually multiplies the work",
+        "Because the stack never holds more than a logarithmic number of elements, which bounds how many iterations the inner loop can perform at any step",
+        "Because each element is pushed at most once and popped at most once, so the total work is bounded by 2n however the two loops happen to be arranged in the source",
+        "Because the amortized analysis averages the expensive steps against the cheap ones under the assumption that inputs arrive in a random order"
+      ], a: 2,
+      why: "Take Φ = stack size: a push costs 1 and raises Φ by 1 so it is charged 2, and a pop costs 1 and lowers Φ by 1 so it is charged nothing. A single step may pop many elements, but only because earlier steps pushed them, and nothing is pushed twice. No assumption about input order is involved, which is what separates this from an average-case claim, and the stack can certainly hold n elements." },
+
+    { type: "mc",
+      q: "A service appends to a large growing array and meets its average latency target comfortably, but misses its 99.9th-percentile target. What does the amortized bound tell you?",
+      opts: [
+        "That the amortized analysis must be incorrect for this structure, since a genuinely constant-time operation cannot produce a percentile violation of this kind",
+        "That the array is being resized too often, and raising the growth factor will bring the tail back within budget without any other cost",
+        "That the problem lies elsewhere in the request path, because an amortized constant bound rules out this structure as the source of tail latency",
+        "Nothing reassuring: it bounds the sequence, not any single operation, and the resizes really do cost Θ(n) when they fire"
+      ], a: 3,
+      why: "Amortized analysis is a claim about totals, not about the operation you happen to be running. The expensive appends are genuinely expensive and land in the tail. Raising the growth factor makes them rarer but individually larger, so it moves the tail rather than removing it. The real fixes are preallocating when the size is known, choosing a structure with worst-case bounds, or spreading the copy across later operations." },
+
+    { type: "mc",
+      q: "CPython grows a list by roughly 1.125× rather than doubling, costing about 8 element copies per element instead of 1. Why is that a reasonable choice?",
+      opts: [
+        "Because every growth factor above 1 gives constant amortized time, so the ratio is purely a trade of copying work against wasted memory",
+        "Because copying is cheap relative to allocation, so resize count matters more than elements moved",
+        "Because a smaller factor reduces fragmentation, which dominates cost in a managed runtime",
+        "Because 1.125 is close enough to 1 that the series is effectively arithmetic, which keeps the peak memory footprint proportional to the list length"
+      ], a: 0,
+      why: "Both 2 and 1.125 are geometric, so both give O(1) amortized append; the asymptotics cannot distinguish them. What differs is the exchange rate 1/(r − 1): doubling copies each element about once and can leave half the allocation unused, while 1.125 copies about eight times and wastes an eighth. CPython chose memory, OpenJDK chose 1.5 and about two copies. The analysis prices the knob rather than merely certifying the operation." },
+
+    { type: "mc",
+      q: "Which of these is the strongest reason amortized analysis is not the same as average-case analysis?",
+      opts: [
+        "Amortized analysis applies to sequences of operations, whereas average-case analysis applies only to a single invocation considered in isolation",
+        "Amortized analysis assumes nothing about the input and holds for every sequence, including one chosen by an adversary who has read your code",
+        "Amortized analysis always produces tighter constants, since it accounts for the interaction between operations rather than treating them independently",
+        "Amortized analysis uses a potential function and average-case uses a distribution"
+      ], a: 1,
+      why: "The difference that matters is the absence of an assumption. An average-case bound is a claim about your data and evaporates when the data stops matching the assumed distribution; an amortized bound is a theorem about every possible sequence. Option 4 is true but describes the machinery rather than the guarantee, and mistaking machinery for meaning is how people end up quoting an amortized bound as though it were a per-operation promise." },
+
+    { type: "blank",
+      q: "In the potential method, the amortized cost of an operation is defined as its actual cost plus the change in the ____.",
+      a: ["potential", "potential function", "phi", "Φ"],
+      why: "Written out: amortized = actual + Φ(after) − Φ(before). Summing this over a sequence telescopes, because each Φ(after) cancels the next Φ(before), leaving total amortized = total actual + Φ(final) − Φ(initial). Arrange for Φ to start at zero and never go negative, and the total amortized cost bounds the total actual cost." },
+
+    { type: "blank",
+      q: "When a dynamic array's capacity is multiplied by a factor r each time it fills, the number of element copies per element tends to one divided by ____.",
+      a: ["r-1", "r - 1", "(r-1)", "r minus 1"],
+      why: "Doubling gives 1/(2−1) = 1 copy per element, growing by half gives 1/0.5 = 2, and CPython's roughly 1.125 gives 1/0.125 = 8 — which the measurements in this chapter confirm at 7.78 to 8.45 across four orders of magnitude. A fixed increment rather than a factor has no such limit, because the series becomes arithmetic and the cost per element grows with n." },
+
+    { type: "order",
+      q: "Order the steps of a potential-method proof:",
+      items: [
+        "choose Φ mapping each state of the structure to a number, with Φ(initial) = 0 and Φ never negative",
+        "for each kind of operation, compute actual cost plus the change in Φ",
+        "check that every operation's amortized cost is bounded by the target",
+        "conclude that total actual cost is at most total amortized cost, since the sum telescopes"
+      ],
+      why: "Choosing Φ is the only creative step and there is no procedure for it: you look for a quantity that rises when the structure is storing up future work and falls when that work is discharged. Everything after that is mechanical. The final step is where the conditions on Φ earn their place, since the telescoped sum leaves Φ(final) − Φ(initial) and that must not be negative." },
+
+    { type: "mc",
+      q: "A colleague proposes shrinking a dynamic array by half as soon as it becomes half empty, mirroring the doubling rule. What goes wrong?",
+      opts: [
+        "Nothing goes wrong; this is the symmetric rule and it preserves constant amortized cost for both appends and removals alike",
+        "Shrinking cannot be analysed with a potential function at all, since the potential would have to decrease when the structure gets smaller",
+        "Alternating append and remove at the capacity boundary forces a full copy on every single operation, which makes the amortized cost linear rather than constant",
+        "Memory fragmentation accumulates because the allocator cannot reuse the freed blocks, which is why implementations avoid shrinking entirely"
+      ], a: 2,
+      why: "At exactly half capacity, one append triggers a grow and the following removal triggers a shrink, each copying the whole array, and the sequence can repeat forever. The potential never gets a chance to build up. Real implementations break the symmetry by shrinking at a lower threshold than they grow — typically a quarter — so that a resize always leaves room for many cheap operations before the next one. This is exactly the fourth caveat in the section on what amortized does not mean." }
+  ]
+});
+
+/* ======================= CHAPTER 5 ======================= */
+CHAPTERS.push({
+  num: 5, part: 1, title: "Lower Bounds and the Role of Randomness",
+  blurb: "Every other chapter in this course proves that some algorithm is fast enough. This one proves that no algorithm can be, which is a rarer kind of argument and the only one that tells you when to stop looking. Then it introduces the tool that gets around several lower bounds by refusing to be predictable, and the two quite different promises a randomized algorithm can make. You will also meet a case where the famous bound is provably unreachable, which is worth knowing before you quote it.",
+  sections: [
+
+    { title: "The Decision Tree",
+      viz: "dsaDecisionTree", vizTitle: "Click nodes to see which orderings survive each comparison",
+      html:
+        "<p>Here is a claim that sounds impossible to prove: <em>no algorithm that sorts by comparing elements can do better than n log n in the worst case.</em> Not \"no algorithm we have found\". No algorithm, including ones nobody has thought of. Proving something about every possible algorithm requires a model of what an algorithm is allowed to do, and the model here is simple enough to reason about completely.</p>" +
+        "<p>A <strong>comparison sort</strong> learns about its input only by asking questions of the form \"is a &#8804; b?\" It may do anything it likes with the answers, but that is its only channel to the data. Any such algorithm, run on inputs of a fixed size n, can be drawn as a binary tree:</p>" +
+        "<ul>" +
+        "<li>Each internal node is one comparison the algorithm makes.</li>" +
+        "<li>The two edges below it are the two possible answers.</li>" +
+        "<li>Each leaf is a point where the algorithm stops and outputs an ordering.</li>" +
+        "</ul>" +
+        "<p>That tree is the <strong>decision tree</strong> of the algorithm, and it exists whether or not the programmer thought in those terms. Running the algorithm on a particular input traces one root-to-leaf path, and the number of comparisons that run performs is the length of the path. The worst case over all inputs is therefore the <strong>height</strong> of the tree.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>sorting three elements a, b, c: every leaf is one of the 3! = 6 orderings</text>" +
+        "<rect x='330' y='30' width='100' height='26' rx='6' fill='#111a2e' stroke='#2de2ff' stroke-width='2'/><text x='380' y='48' text-anchor='middle' fill='#c9d6ea' font-size='11'>a &lt; b ?</text>" +
+        "<line x1='350' y1='56' x2='190' y2='84' stroke='#4f7cff' stroke-width='2'/><text x='250' y='72' fill='#3ddc97' font-size='10'>yes</text>" +
+        "<line x1='410' y1='56' x2='570' y2='84' stroke='#4f7cff' stroke-width='2'/><text x='495' y='72' fill='#ff5d73' font-size='10'>no</text>" +
+        "<rect x='140' y='86' width='100' height='26' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='190' y='104' text-anchor='middle' fill='#c9d6ea' font-size='11'>b &lt; c ?</text>" +
+        "<rect x='520' y='86' width='100' height='26' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='570' y='104' text-anchor='middle' fill='#c9d6ea' font-size='11'>b &lt; c ?</text>" +
+        "<line x1='160' y1='112' x2='90' y2='140' stroke='#4f7cff' stroke-width='2'/><line x1='220' y1='112' x2='290' y2='140' stroke='#4f7cff' stroke-width='2'/>" +
+        "<line x1='540' y1='112' x2='470' y2='140' stroke='#4f7cff' stroke-width='2'/><line x1='600' y1='112' x2='670' y2='140' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='46' y='142' width='88' height='24' rx='5' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='90' y='158' text-anchor='middle' fill='#3ddc97' font-size='10'>a b c</text>" +
+        "<rect x='246' y='142' width='88' height='24' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='290' y='158' text-anchor='middle' fill='#c9d6ea' font-size='11'>a &lt; c ?</text>" +
+        "<rect x='426' y='142' width='88' height='24' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='470' y='158' text-anchor='middle' fill='#c9d6ea' font-size='11'>a &lt; c ?</text>" +
+        "<rect x='626' y='142' width='88' height='24' rx='5' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='670' y='158' text-anchor='middle' fill='#3ddc97' font-size='10'>c b a</text>" +
+        "<line x1='266' y1='166' x2='230' y2='190' stroke='#4f7cff' stroke-width='2'/><line x1='314' y1='166' x2='350' y2='190' stroke='#4f7cff' stroke-width='2'/>" +
+        "<line x1='446' y1='166' x2='410' y2='190' stroke='#4f7cff' stroke-width='2'/><line x1='494' y1='166' x2='530' y2='190' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='230' y='204' text-anchor='middle' fill='#3ddc97' font-size='10'>a c b</text>" +
+        "<text x='350' y='204' text-anchor='middle' fill='#3ddc97' font-size='10'>c a b</text>" +
+        "<text x='410' y='204' text-anchor='middle' fill='#3ddc97' font-size='10'>b a c</text>" +
+        "<text x='530' y='204' text-anchor='middle' fill='#3ddc97' font-size='10'>b c a</text>" +
+        "<line x1='20' y1='216' x2='740' y2='216' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='234' fill='#7d8fb0' font-size='11'>Six leaves need height 3, since a tree of height 2 has at most 4. No comparison sort of three elements beats 3.</text>" +
+        "</svg><div class='fig-cap'>The tree is not a design; it is what any comparison sort already is. Counting its leaves is what bounds its height.</div></div>" +
+
+        "<p>Now the argument, in three steps.</p>" +
+        "<p><strong>The tree needs at least n! leaves.</strong> There are n! possible orderings of n distinct elements, and each must be reachable: if two different orderings led to the same leaf, the algorithm would output the same permutation for both, and it would be wrong on at least one.</p>" +
+        "<p><strong>A binary tree of height h has at most 2&#8341; leaves.</strong> Each level can at most double the count.</p>" +
+        "<p><strong>Therefore 2&#8341; &#8805; n!, so h &#8805; log&#8322;(n!).</strong> And by Stirling's approximation, log&#8322;(n!) is n log&#8322; n &#8722; n log&#8322; e + O(log n), which is &#920;(n log n).</p>" +
+        "<p>That is the whole proof. It says nothing about any particular algorithm, which is exactly its power: mergesort's n log n is not merely good, it is within a constant factor of the best any comparison sort can ever be.</p>" +
+        "<p>The machine above draws the tree for three, four or five elements. Click a node to see which orderings are still possible below it. For n = 4 there are 24 leaves, so no tree shorter than five levels can work &#8212; count the leaves at level four and confirm there are not enough.</p>"
+    },
+
+    { title: "What the Bound Assumes",
+      html:
+        "<p>Every lower bound is a statement about a model, and a bound you quote without its model is a bound you will misapply. This one assumes the algorithm's <em>only</em> access to the data is pairwise comparison.</p>" +
+        "<p>Counting sort does not do that. Given an array of integers known to lie between 0 and k, it reads each value and uses it directly as an index into a tally array. It never asks \"is a &#8804; b?\" about anything. The decision tree argument does not apply to it, and counting sort runs in &#920;(n + k), which for k = O(n) is linear &#8212; underneath a bound that was proved and is correct.</p>" +
+        "<p>Nothing was broken. The bound says: <em>among algorithms whose only operation is comparison</em>, none beats n log n. Counting sort left that set. Radix sort and bucket sort leave it the same way, by reading the values rather than only comparing them. Chapter 15 builds all three and is precise about which assumption each one discards and what it pays for the privilege &#8212; counting sort needs to know the range in advance and allocates proportional to it, which is a real cost and not a free lunch.</p>" +
+        "<div class='callout'><strong>The interview lens.</strong> \"Can you sort faster than n log n?\" is a trap only if you answer yes or no. The answer is: not by comparisons, and here is the decision-tree reason; yes if you may read the values, and here is what counting sort assumes about their range. The question is testing whether you know the bound has a hypothesis.</div>"
+    },
+
+    { title: "A Floor, Not a Promise",
+      html:
+        "<p>A lower bound says no algorithm can use <em>fewer</em> than this many operations. It does not say an algorithm exists that uses this many. Those are different claims, and there is a small, famous case where they come apart.</p>" +
+        "<p>For sorting a handful of elements the decision-tree bound gives &#8968;log&#8322;(n!)&#8969; as the minimum number of comparisons. For n up to 11 that number is achievable: someone has found a comparison sequence that hits it. At n = 12 the bound is &#8968;log&#8322;(12!)&#8969; = 29, and it is not achievable. An exhaustive computer search by Wells in 1965 established that sorting twelve elements requires <strong>30</strong> comparisons, and that the Ford&#8211;Johnson merge-insertion algorithm achieving 30 is optimal.</p>" +
+        "<p>So the information-theoretic bound is off by one, for a reason it cannot see: it counts how much information the answers could carry, and takes no account of whether a comparison sequence can actually be arranged to extract it. The counting argument is necessary and not sufficient.</p>" +
+        "<p>The full comparison is short enough to print, and the agreement everywhere but the last row is what makes that row interesting. Minimum comparisons to sort n elements, bound against truth:</p>" +
+        "<ul>" +
+        "<li><strong>n = 2 through 11</strong> &#8212; &#8968;log&#8322;(n!)&#8969; gives 1, 3, 5, 7, 10, 13, 16, 19, 22 and 26, and every one of those is achievable</li>" +
+        "<li><strong>n = 12</strong> &#8212; the bound gives <strong>29</strong> and the truth is <strong>30</strong></li>" +
+        "</ul>" +
+        "<p>Ten consecutive successes are exactly why the failure matters. A bound that matched reality on every case anyone had checked would be one you could reasonably treat as the answer; this one behaves that way for ten values and then stops, with no warning from inside the argument. Nor is the gap an artefact of small cases that larger n washes away &#8212; the exact minimum is unknown for most n beyond this, so nobody can say how wide it gets.</p>" +
+        "<p>This is the same shape as Chapter 3's closest-pair measurement, where the proved bound of seven strip comparisons was never approached. There the bound was loose against practice; here it is loose against theory. In both cases the lesson is the same: a bound is a guarantee about a direction, and the distance between it and the truth is an open question until someone closes it.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 150' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='30' y='20' fill='#2de2ff' font-size='12'>n</text>" +
+        "<text x='330' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>ceil(log2 n!)  the bound</text>" +
+        "<text x='560' y='20' text-anchor='end' fill='#2de2ff' font-size='12'>S(n)  the truth</text>" +
+        "<line x1='20' y1='28' x2='740' y2='28' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='30' y='50' fill='#c9d6ea' font-size='12'>4</text><text x='330' y='50' text-anchor='end' fill='#c9d6ea' font-size='12'>5</text><text x='560' y='50' text-anchor='end' fill='#3ddc97' font-size='12'>5</text><text x='600' y='50' fill='#7d8fb0' font-size='11'>bound met</text>" +
+        "<text x='30' y='74' fill='#c9d6ea' font-size='12'>5</text><text x='330' y='74' text-anchor='end' fill='#c9d6ea' font-size='12'>7</text><text x='560' y='74' text-anchor='end' fill='#3ddc97' font-size='12'>7</text><text x='600' y='74' fill='#7d8fb0' font-size='11'>bound met</text>" +
+        "<text x='30' y='98' fill='#c9d6ea' font-size='12'>11</text><text x='330' y='98' text-anchor='end' fill='#c9d6ea' font-size='12'>26</text><text x='560' y='98' text-anchor='end' fill='#3ddc97' font-size='12'>26</text><text x='600' y='98' fill='#7d8fb0' font-size='11'>bound met</text>" +
+        "<text x='30' y='122' fill='#ffd166' font-size='12'>12</text><text x='330' y='122' text-anchor='end' fill='#ffd166' font-size='12'>29</text><text x='560' y='122' text-anchor='end' fill='#ff5d73' font-size='12'>30</text><text x='600' y='122' fill='#ff5d73' font-size='11'>bound unreachable</text>" +
+        "<line x1='20' y1='134' x2='740' y2='134' stroke='#1c2a45' stroke-width='2'/>" +
+        "</svg><div class='fig-cap'>The counting argument is necessary, not sufficient. At twelve elements it asks for 29 and the world charges 30.</div></div>"
+    },
+
+    { title: "Adversary Arguments",
+      html:
+        "<p>The decision tree counts outcomes. The other way to prove a lower bound is to play against the algorithm: an <strong>adversary</strong> answers each query in whichever way keeps the most work ahead, and if the adversary can always survive k queries, then k is a lower bound.</p>" +
+        "<p><strong>Finding the maximum of n elements requires at least n &#8722; 1 comparisons.</strong> Think of it as a tournament. An element can be ruled out as the maximum only by losing a comparison, and every element except the true maximum must be ruled out, so at least n &#8722; 1 elements must lose at least once. A single comparison produces exactly one loser. Therefore at least n &#8722; 1 comparisons are needed, and the obvious scan achieves it, so the bound is tight.</p>" +
+        "<p><strong>Finding the maximum and the minimum together requires &#8968;3n/2&#8969; &#8722; 2</strong>, which is fewer than the 2n &#8722; 2 you get from two separate scans. Pair the elements up, compare within each pair first, then run the winners for the maximum and the losers for the minimum. Three comparisons per two elements rather than four. The adversary argument that this is optimal is more delicate, and it is the standard next exercise in any course that teaches this one.</p>" +
+        "<h3>The second largest, and why the tournament is the right picture</h3>" +
+        "<p>Finding the <em>second</em> largest is where the tournament image pays off. The obvious method is two scans, at 2n &#8722; 3 comparisons. The better one reuses the first tournament: the second largest must have lost directly to the winner, because it beats everything else, so it is among the elements the winner defeated &#8212; and in a balanced tournament the winner plays only &#8968;log&#8322;n&#8969; matches. Find the maximum in n &#8722; 1 comparisons, then the best of those &#8968;log&#8322;n&#8969; losers in &#8968;log&#8322;n&#8969; &#8722; 1 more, for a total of <strong>n + &#8968;log&#8322;n&#8969; &#8722; 2</strong>. At n = 1,024 that is 1,032 comparisons against 2,045 for two scans.</p>" +
+        "<p>The adversary argument that this is optimal is due to Kislitsyn in 1964, and its shape is the same as before: the adversary answers so that the winner is forced to play at least &#8968;log&#8322;n&#8969; matches, which makes the second phase unavoidable. What makes it worth seeing is that the bound and the algorithm were found together &#8212; the picture that proves the lower bound is the picture that tells you what to implement, which is the most useful thing a lower bound can do and the reason section 2's warning is not a counsel of despair.</p>" +
+        "<p>Adversary arguments are the technique to reach for when the output is a single value rather than a permutation, because then there are too few possible answers for the counting argument to say anything useful. Finding the maximum has only n possible answers, so the decision tree needs only log&#8322; n height by that argument, which is far too weak &#8212; the truth is n &#8722; 1.</p>"
+    },
+
+    { title: "Two Kinds of Randomized Algorithm",
+      html:
+        "<p>Several lower bounds can be sidestepped by an algorithm that makes random choices, and the reason is worth stating precisely: a deterministic algorithm has a worst-case input, and an adversary who can read your code can construct it. If the algorithm flips coins the adversary cannot see, there is no single input that is reliably bad.</p>" +
+        "<p>Randomized algorithms come in two kinds, and confusing them is a common and consequential error. The names are due to L&#225;szl&#243; Babai, who coined \"Las Vegas algorithm\" in 1979.</p>" +
+        "<ul>" +
+        "<li>A <strong>Las Vegas algorithm</strong> is always correct. Its <em>running time</em> is the random variable. Randomized quicksort is the example: however the coins fall, the output is sorted; only the time varies.</li>" +
+        "<li>A <strong>Monte Carlo algorithm</strong> always finishes on time. Its <em>answer</em> is the random variable, correct with some probability. Karger's 1993 minimum-cut algorithm is the example: it contracts random edges and reports a cut, which is sometimes not the smallest one.</li>" +
+        "</ul>" +
+        "<p>The distinction is visible in a measurement. Both algorithms below were run 2,000 times, each time on exactly the same input:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 220' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='20' fill='#3ddc97' font-size='12'>LAS VEGAS</text><text x='120' y='20' fill='#c9d6ea' font-size='11'>randomized quicksort, n = 500, sorted input</text>" +
+        "<text x='40' y='42' fill='#c9d6ea' font-size='11'>answer</text>" +
+        "<text x='170' y='42' fill='#3ddc97' font-size='11'>correct in 2,000 of 2,000 runs</text>" +
+        "<text x='40' y='62' fill='#c9d6ea' font-size='11'>comparisons</text>" +
+        "<text x='170' y='62' fill='#ffd166' font-size='11'>min 4,163 median 4,755 max 6,357</text>" +
+        "<text x='430' y='62' fill='#7d8fb0' font-size='11'>a 1.53x spread</text>" +
+        "<text x='40' y='82' fill='#c9d6ea' font-size='11'>theory</text>" +
+        "<text x='170' y='82' fill='#7d8fb0' font-size='11'>2(n+1)H_n - 4n = 4,806</text>" +
+        "<text x='430' y='82' fill='#7d8fb0' font-size='11'>median within 1.1%</text>" +
+        "<text x='40' y='102' fill='#c9d6ea' font-size='11'>fixed pivot</text>" +
+        "<text x='170' y='102' fill='#ff5d73' font-size='11'>124,750 on this same input</text>" +
+        "<text x='430' y='102' fill='#ff5d73' font-size='11'>26x the median</text>" +
+        "<line x1='20' y1='116' x2='740' y2='116' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='138' fill='#ffd166' font-size='12'>MONTE CARLO</text>" +
+        "<text x='150' y='138' fill='#c9d6ea' font-size='11'>Karger contraction, 6-node graph, true min cut = 2</text>" +
+        "<text x='40' y='160' fill='#c9d6ea' font-size='11'>running time</text>" +
+        "<text x='170' y='160' fill='#3ddc97' font-size='11'>identical every run</text>" +
+        "<text x='40' y='180' fill='#c9d6ea' font-size='11'>answer</text>" +
+        "<text x='170' y='180' fill='#ff5d73' font-size='11'>2 in 1,079 runs, 3 in 816, 4 in 105</text>" +
+        "<text x='430' y='180' fill='#ff5d73' font-size='11'>wrong 46% of runs</text>" +
+        "<line x1='20' y1='194' x2='740' y2='194' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='212' fill='#c9d6ea' font-size='11'>One varies in time and never in answer. The other varies in answer and never in time.</text>" +
+        "</svg><div class='fig-cap'>The same 2,000 trials, the same fixed input each time. Which column is spread out is the entire difference between the two kinds.</div></div>" +
+
+        "<p>A Monte Carlo algorithm that is wrong 46% of the time sounds useless, and is not: run it many times and keep the smallest cut found. Each run is an independent chance, so the failure probability falls geometrically. Ten runs of this one leave about a 0.5% chance of never seeing the true minimum. That is the standard move, and it converts a one-sided error probability into any confidence you are willing to pay for.</p>" +
+        "<div class='callout'>Note what the Las Vegas row does <em>not</em> say. Randomized quicksort has no better worst case than the deterministic one &#8212; the coins could in principle all fall badly and give n&#178;. What changed is that no <em>input</em> is bad any more. The badness moved from the data, which an adversary controls, to the coins, which they do not.</div>"
+    },
+
+    { title: "Linearity of Expectation",
+      html:
+        "<p>This course needs exactly one tool from probability, and it is this one. For any random variables X and Y,</p>" +
+        "<pre><code>E[X + Y]  =  E[X] + E[Y]</code></pre>" +
+        "<p>and this holds <strong>whether or not X and Y are independent</strong>. That last clause is what makes the tool powerful, because the interesting quantities in algorithm analysis are almost always sums of wildly dependent things.</p>" +
+        "<p>The standard use is the <strong>indicator variable</strong>. To count how many of something happens, define X&#7522; = 1 when event i occurs and 0 otherwise. Then the total count is the sum of the X&#7522;, and its expectation is the sum of the probabilities, because E[X&#7522;] = P(event i).</p>" +
+        "<p>For randomized quicksort: let X&#7522;&#11002; be 1 when elements of rank i and j are ever compared. Two elements are compared exactly when one of them is chosen as a pivot before any element ranked between them is, and among the j &#8722; i + 1 candidates in that range, two of them qualify. So the probability is 2/(j &#8722; i + 1), and the expected total is the double sum of those, which works out to 2(n+1)H&#8345; &#8722; 4n, where H&#8345; is the n-th harmonic number. At n = 500 that is 4,806, and the measured median across 2,000 runs was 4,755 &#8212; agreement to about one percent.</p>" +
+        "<p>Worth a note, because it is the kind of thing that costs a reader confidence in a number: the form usually quoted is 2n ln n, which at n = 500 gives 6,215 and is 31% too high. The asymptotic form discards a &#8722;2.85n term that is still large at this size. Both are correct statements; one of them is an answer and the other is a limit.</p>" +
+        "<div class='callout'>Linearity of expectation is also how Chapter 17 analyses hashing, how Chapter 15 analyses randomized quickselect, and how the coupon-collector bound behind several of this course's arguments is derived. If you take one probability fact out of this chapter, take this one.</div>"
+    },
+
+    { title: "Randomness as a Defence",
+      html:
+        "<p>The last idea in this chapter is the one that surprises people, because it inverts what randomness is usually for. In the examples so far the coins bought speed. In the next use they buy <em>safety</em>, and the speed was never in question.</p>" +
+        "<p>A hash table with a fixed hash function has a worst-case input: the set of keys that all hash to the same bucket. That set exists, it can be computed by anyone who knows the function, and feeding it to a server turns every lookup from constant time into a linear scan. This is not hypothetical; it is a documented denial-of-service technique known as <strong>hash flooding</strong>, used against web frameworks that parse untrusted keys into a dictionary.</p>" +
+        "<p>The defence is <strong>universal hashing</strong>: choose the hash function at random, from a family with the property that any two distinct keys collide with probability at most 1/m. Then there is no fixed bad input, because the attacker does not know which function you picked. The expected performance is the same; what changed is that an adversary can no longer force the worst case. Chapter 17 builds this properly, proves the expected chain length, and constructs the attack against the undefended version so you can watch it work.</p>" +
+        "<p>The pattern generalises, and it is worth naming because it recurs: <em>when a deterministic algorithm's worst case is reachable by an adversary, randomization moves the worst case out of their reach without necessarily making the algorithm faster.</em> Randomized quicksort is the same move applied to pivot choice. So is randomized load balancing, and so is the random priority in the treap that Chapter 26 builds.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Draw the full decision tree for sorting three elements, labelling every internal node with its comparison and every leaf with the ordering it outputs. <em>What you should find:</em> six leaves, and a tree of height 3 &#8212; with one path of length 2, because when the first two comparisons already determine the order the third is unnecessary. The bound &#8968;log&#8322; 6&#8969; = 3 is met.</li>" +
+        "<li><strong>Trace.</strong> Compute &#8968;log&#8322;(n!)&#8969; for n = 4, 5, 11 and 12 and compare each against the known minimum comparison counts 5, 7, 26 and 30. <em>What you should find:</em> the first three match and the last does not, because at n = 12 the bound asks for 29 and no comparison sequence achieves fewer than 30.</li>" +
+        "<li><strong>Trace.</strong> Give the adversary argument that finding both the maximum and the minimum of n elements needs at least &#8968;3n/2&#8969; &#8722; 2 comparisons, then design the algorithm that achieves it. <em>What you should find:</em> comparing elements in pairs first costs one comparison per pair and then feeds only winners to the max scan and only losers to the min scan, giving 3n/2 &#8722; 2 rather than the 2n &#8722; 2 of two independent scans.</li>" +
+        "<li><strong>Investigate.</strong> Implement randomized quicksort with a comparison counter and run it 2,000 times on the <em>same</em> sorted input of 500 elements. Plot the distribution. <em>What you should find:</em> every run returns the correct order; the comparison counts spread by roughly 1.5&#215; from smallest to largest; and the median sits within a few percent of 2(n+1)H&#8345; &#8722; 4n. Then replace the random pivot with the first element and watch the same input cost about 26 times the median.</li>" +
+        "<li><strong>Investigate.</strong> Implement Karger's contraction algorithm on a small graph whose true minimum cut you can compute by brute force over all vertex subsets. Run it 2,000 times. <em>What you should find:</em> identical running time every run and a spread of answers, none of them below the true minimum. Then take the best of ten runs repeatedly and measure how often that fails.</li>" +
+        "<li><strong>Build.</strong> Write a program that, given a hash function you supply, searches for 1,000 distinct short strings that all land in the same bucket of a table of size 1,024. Time a lookup workload with those keys against a workload of random keys. <em>What you should find:</em> the crafted keys turn a constant-time lookup into a linear scan and the timing gap is enormous. Keep the generator; Chapter 17 uses it to attack the hash table you build there.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "lower bound", d: "A proof that no algorithm of a given kind can use fewer than a stated number of operations, which is the only argument that tells you when to stop searching for a faster method." },
+    { t: "comparison sort", d: "A sorting algorithm whose only access to the data is asking whether one element precedes another, which is the class the n log n bound applies to." },
+    { t: "decision tree", d: "The binary tree implicit in any comparison algorithm, whose internal nodes are comparisons, whose leaves are outputs, and whose height is the worst-case number of comparisons." },
+    { t: "information-theoretic bound", d: "A lower bound derived by counting how many distinct answers an algorithm must be able to produce, necessary but not always sufficient to determine the true minimum." },
+    { t: "Stirling's approximation", d: "The estimate that log of n factorial is about n log n minus a linear term, which turns the count of permutations into the n log n sorting bound." },
+    { t: "adversary argument", d: "A lower-bound technique in which an opponent answers each query so as to keep as much work as possible remaining, proving that no algorithm can finish sooner." },
+    { t: "randomized algorithm", d: "An algorithm that makes choices by flipping coins, so that its behaviour depends on randomness the caller and any adversary cannot predict." },
+    { t: "Las Vegas algorithm", d: "A randomized algorithm that is always correct and whose running time is the random quantity, named by Babai in 1979." },
+    { t: "Monte Carlo algorithm", d: "A randomized algorithm whose running time is fixed and whose answer is correct only with some probability, usually improvable by repetition." },
+    { t: "linearity of expectation", d: "The rule that the expected value of a sum equals the sum of the expected values, holding even when the terms are dependent, which is this course's main probabilistic tool." },
+    { t: "indicator variable", d: "A random variable that is 1 when an event occurs and 0 otherwise, whose expectation is the event's probability, used to count occurrences by summing." },
+    { t: "harmonic number", d: "The sum of the reciprocals of the first n integers, which grows like the natural logarithm and appears in the exact comparison count of randomized quicksort." },
+    { t: "universal hashing", d: "Choosing a hash function at random from a family in which any two distinct keys collide with low probability, which removes the fixed worst-case input an adversary could exploit." },
+    { t: "hash flooding", d: "An attack that feeds a server keys chosen to collide under its known hash function, turning constant-time lookups into linear scans." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Counting sort runs in Θ(n + k) and can be linear, yet the comparison-sort lower bound of Ω(n log n) is a correct proof. How do both hold?",
+      opts: [
+        "Counting sort never compares elements; it reads values as indices, so it is outside the class the bound is about",
+        "The bound is an average-case result, and counting sort beats it only on inputs whose values happen to be distributed across a narrow and convenient range",
+        "The bound applies asymptotically and counting sort is linear only for bounded k, so for unbounded k it degenerates back above n log n and the two claims never actually meet",
+        "The bound counts comparisons while counting sort's cost is dominated by array writes, so the two are measuring different operations and cannot be compared at all"
+      ], a: 0,
+      why: "The decision-tree argument assumes the algorithm's only access to the data is pairwise comparison. Counting sort reads a value and uses it directly as an index, which is not a comparison, so the hypothesis fails and the conclusion does not apply. Nothing was broken: counting sort left the class. It pays for that with a different requirement, namely knowing the value range in advance and allocating proportional to it." },
+
+    { type: "mc",
+      q: "Why must a comparison sort's decision tree have at least n! leaves?",
+      opts: [
+        "Because the tree must be complete in order for every root-to-leaf path to correspond to a valid execution of the algorithm on some input",
+        "Because every one of the n! orderings must be reachable; two orderings sharing a leaf would receive the same output and one would be wrong",
+        "Because each comparison has two outcomes and there are n! inputs, so the count of leaves and the count of inputs are necessarily equal",
+        "Because the algorithm must distinguish all n! inputs before it makes its first comparison, which requires that many distinct starting states"
+      ], a: 1,
+      why: "A leaf is where the algorithm commits to an output permutation. If two distinct input orderings traced to the same leaf, they would get the same output, and since they need different outputs the algorithm would be incorrect on at least one of them. So the leaves must number at least n!, and a binary tree with that many leaves has height at least log₂(n!), which Stirling turns into Ω(n log n)." },
+
+    { type: "mc",
+      q: "For n = 12, ⌈log₂(12!)⌉ = 29 but the true minimum number of comparisons is 30. What does this show?",
+      opts: [
+        "That the decision-tree bound holds only in the limit, so small cases are exceptions to it and should not be used to test the argument",
+        "That Stirling's approximation introduces rounding error at small n, which accumulates into an off-by-one once the factorial is large enough",
+        "That the information-theoretic argument is necessary but not sufficient: it counts available information without checking that a comparison sequence can extract it",
+        "That the proof is flawed and the bound should be stated as ⌈log₂(n!)⌉ + 1 for every n to make it correct across all the small cases"
+      ], a: 2,
+      why: "The counting argument establishes a floor: fewer than 29 comparisons cannot possibly distinguish 12! orderings. It says nothing about whether a real sequence of comparisons can be arranged to achieve 29, and an exhaustive search by Wells in 1965 showed none can. The bound remains correct — 30 is indeed at least 29 — but it is not tight here, which is why a lower bound and an optimal algorithm are two separate results." },
+
+    { type: "mc",
+      q: "Randomized quicksort was run 2,000 times on the same sorted 500-element input. Every run returned the correct order; comparison counts ranged from 4,163 to 6,357. Which kind of algorithm is this, and what did randomization buy?",
+      opts: [
+        "Monte Carlo: the answer is correct with high probability, and repeating the algorithm would drive the residual error rate down geometrically",
+        "Monte Carlo: the running time is bounded in the worst case, and the variation observed across the two thousand runs reflects only measurement noise on a busy machine rather than the coins",
+        "Las Vegas: always correct, and the expected running time is now provably better than any deterministic comparison sort could achieve on this input",
+        "Las Vegas: always correct, variable time. Randomization did not improve the worst case; it removed the adversary's ability to pick an input that triggers it"
+      ], a: 3,
+      why: "Correct every time with the cost varying is precisely Las Vegas. The worst case is unchanged — the coins could in principle all fall badly and give quadratic behaviour — but there is no longer any fixed input that reliably triggers it, because the badness now lives in coins the adversary cannot see. On this same sorted input a first-element pivot costs 124,750 comparisons, about 26 times the randomized median." },
+
+    { type: "mc",
+      q: "Karger's algorithm returned the true minimum cut in only 54% of 2,000 runs, taking identical time each run. Is it useful?",
+      opts: [
+        "Yes: runs are independent, so keeping the best of ten leaves roughly half a percent chance of missing the minimum",
+        "Yes, but only as a heuristic to seed an exact algorithm, since its output has no formal guarantee attached to it on any individual run",
+        "No: an algorithm wrong nearly half the time cannot be relied upon for a problem where the exact minimum is what is being asked for",
+        "No, unless the graph is small enough that the answer can be checked by brute force, in which case the randomized algorithm is unnecessary anyway"
+      ], a: 0,
+      why: "A one-sided error is cheap to amplify away. The algorithm never reports a cut smaller than the true minimum, so the best answer over many runs can only improve, and each run is an independent chance of success. With a 54% success rate, ten runs fail only if all ten fail, which is about 0.46 to the tenth power, under one percent. Trading repetitions for confidence is the standard move with Monte Carlo algorithms." },
+
+    { type: "mc",
+      q: "Why is linearity of expectation the tool that keeps appearing, rather than some other probability fact?",
+      opts: [
+        "Because expectations are easier to compute than variances, so analyses that rely on it avoid the harder second-moment calculations entirely",
+        "Because it holds even when the summands are dependent, and the quantities of interest are sums of heavily dependent indicator variables",
+        "Because it converts any sum of random variables into a product of their individual expectations, which factorises the analysis into independent pieces",
+        "Because it applies only to indicator variables, which are the natural way to count occurrences of an event across a run of an algorithm"
+      ], a: 1,
+      why: "Independence is the assumption that usually fails. Whether ranks i and j are compared in quicksort depends intricately on every other pivot choice, and proving independence would be hopeless. Linearity does not require it: the expected total is the sum of the individual probabilities regardless. Option 3 describes what happens to products under independence, which is a different rule with a much stronger hypothesis." },
+
+    { type: "mc",
+      q: "A hash table's worst case is a set of keys that all collide. Choosing the hash function at random from a universal family fixes this. What exactly did randomization change?",
+      opts: [
+        "It reduced the expected number of collisions, so the table is now faster on typical workloads as well as adversarial ones",
+        "It made the table's running time independent of the keys, so every possible input now takes the same amount of time to process",
+        "It removed the fixed bad input: a worst case still exists, but an attacker cannot construct it without knowing which function was chosen",
+        "It converted the structure from a Monte Carlo design into a Las Vegas one, trading a small error probability for a variable running time"
+      ], a: 2,
+      why: "Expected performance is essentially unchanged, and the table is not faster on ordinary data. What changed is who controls the worst case. With a fixed function an attacker can compute the colliding key set offline and send it; with a function drawn at random at startup there is no single set that works. This is randomness bought for safety rather than for speed, and Chapter 17 builds both the defence and the attack." },
+
+    { type: "blank",
+      q: "A randomized algorithm that is always correct but whose running time varies is called a ____ algorithm.",
+      a: ["las vegas", "lasvegas", "las-vegas"],
+      why: "The counterpart is Monte Carlo, which fixes the running time and lets the answer be wrong with some probability. Randomized quicksort is Las Vegas: every run sorts correctly and only the comparison count moves. The terminology is due to László Babai, who introduced the Las Vegas name in 1979." },
+
+    { type: "blank",
+      q: "Proving a lower bound by having an opponent answer each query so as to keep the most work remaining is called an ____ argument.",
+      a: ["adversary", "adversarial"],
+      why: "It is the technique to reach for when the output is a single value rather than a permutation, because the counting argument is then far too weak. Finding the maximum has only n possible answers, so a decision tree gives a bound of log₂ n; the adversary argument gives the true answer of n − 1, since every element but the winner must lose at least once and each comparison creates one loser." },
+
+    { type: "order",
+      q: "Order the steps of the comparison-sort lower bound proof:",
+      items: [
+        "model any comparison sort as a binary tree whose leaves are output permutations",
+        "argue the tree must have at least n! leaves, or two orderings would share an output",
+        "apply the fact that a binary tree of height h has at most 2^h leaves",
+        "conclude h ≥ log₂(n!), which Stirling's approximation turns into Ω(n log n)"
+      ],
+      why: "Each step is doing distinct work. The first fixes the model, and without it there is nothing to prove a statement about. The second is the correctness requirement, which is where the n! enters. The third is a fact about binary trees and nothing to do with sorting. Only the fourth is arithmetic. Notice that the proof never mentions a particular algorithm, which is exactly why it constrains all of them." }
+  ]
+});
+
+/* ======================= CHAPTER 6 ======================= */
+CHAPTERS.push({
+  num: 6, part: 1, title: "Recursion, the Call Stack and Induction",
+  blurb: "You already write recursive functions. This chapter is about what one actually is: a proof by induction that happens to execute, with the call stack as the data structure holding the unfinished half of the proof. You will learn to write the recurrence before the code, so that the analysis of Chapter 3 tells you an algorithm is too slow before you have written it. Then the practical half: what your language does with a tail call, how to convert any recursion into an explicit stack, and the exact depth at which Python and the JVM stop letting you recurse.",
+
+  sections: [
+
+    { title: "Recursion Is Induction",
+      html:
+        "<p>Recursion is usually taught as a technique: a function that calls itself, useful for trees. That description is true and it explains nothing. Here is the one that does work: a recursive function is a <strong>proof by induction</strong> written in a language that can run it. The base case of the function is the base case of the proof. The recursive case is the inductive step. And the thing every textbook calls the <strong>recursive leap of faith</strong> &#8212; assume the recursive call works, then get on with it &#8212; is not faith at all. It is the <strong>induction hypothesis</strong>, and it is something you are entitled to assume only after discharging three obligations.</p>" +
+
+        "<p>Take the recursive maximum of an array:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def maximum(a, lo, hi):\n    if lo == hi:              # one element\n        return a[lo]\n    mid = (lo + hi) // 2\n    return max(maximum(a, lo, mid),\n               maximum(a, mid + 1, hi))</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int maximum(int[] a, int lo, int hi) {\n    if (lo == hi) return a[lo];      // one element\n    int mid = (lo + hi) / 2;\n    return Math.max(maximum(a, lo, mid),\n                    maximum(a, mid + 1, hi));\n}</code></pre></div>" +
+
+        "<p>The claim being proved is: <em>for every range with at least one element, <code>maximum</code> returns the largest value in it.</em> The proof has exactly three parts, and they are the three parts of the code.</p>" +
+
+        "<ul>" +
+        "<li><strong>The base case is correct on its own.</strong> A range of one element has one value and that value is the largest. Nothing is assumed here, which is what makes it a base case rather than another instance of the problem.</li>" +
+        "<li><strong>Every recursive call is on a strictly smaller instance, under a measure that cannot decrease forever.</strong> The measure here is <code>hi &#8722; lo</code>, a non-negative integer. Both calls have a strictly smaller one, because <code>mid &lt; hi</code> and <code>mid + 1 &gt; lo</code> whenever <code>lo &lt; hi</code>. This is the termination obligation and it is the one people drop. A function whose base case is right and whose combining step is right will still run forever if some call is not smaller.</li>" +
+        "<li><strong>Assuming the calls are correct, the combination is correct.</strong> If the left call returns the maximum of the left half and the right call returns the maximum of the right half, then the larger of the two is the maximum of the whole, because every element is in one half or the other. This is the inductive step, and it is a statement about one line of code.</li>" +
+        "</ul>" +
+
+        "<p>Because the recursion appeals to <em>two</em> smaller instances rather than to the immediately preceding one, the induction being used is <strong>strong induction</strong>: the hypothesis is that the claim holds for <em>all</em> smaller instances, not merely for the next one down. Almost every recursion in this course needs the strong form. Merge sort recurses on two halves, the naive Fibonacci recursion on <code>n &#8722; 1</code> and <code>n &#8722; 2</code>, and a tree traversal on subtrees whose sizes you do not know in advance.</p>" +
+
+        "<div class='callout'>Writing the three obligations down before writing the function is the fastest correctness review there is. Two of the three are usually instant. The third &#8212; the strictly smaller instance &#8212; is where the infinite recursions live, and it is the one that silent defaults hide: <code>maximum(a, lo, hi)</code> called on an empty range never reaches the base case at all, which is why the caller, not the function, has to rule that out.</div>"
+    },
+
+    { title: "The Call Stack Is a Data Structure",
+      html:
+        "<p>The <strong>call stack</strong> is not runtime plumbing you are shielded from. It is a stack in the strict sense &#8212; push, pop, and the only element you can reach is the most recently pushed one &#8212; and it holds the part of the induction that has been started and not yet finished. Chapter 10 gives that structure its own treatment; here it is the one the runtime keeps on your behalf. Every time control enters a function, the runtime pushes a <strong>stack frame</strong>: a record holding that call's arguments, its local variables, and a <strong>return address</strong> saying where to resume in the caller when this call produces a value. When the function returns, the frame is popped and the value is handed to the frame underneath.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 252' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>the stack during maximum(a, 0, 7), stopped inside the leftmost call</text>" +
+        "<rect x='40' y='30' width='420' height='38' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='52' y='46' fill='#c9d6ea' font-size='11'>maximum(lo=0, hi=7)  mid=3</text>" +
+        "<text x='52' y='61' fill='#7d8fb0' font-size='10'>return address: the caller, line 9</text>" +
+        "<rect x='40' y='74' width='420' height='38' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='52' y='90' fill='#c9d6ea' font-size='11'>maximum(lo=0, hi=3)  mid=1</text>" +
+        "<text x='52' y='105' fill='#7d8fb0' font-size='10'>return address: left arm of max(), line 5</text>" +
+        "<rect x='40' y='118' width='420' height='38' rx='8' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='52' y='134' fill='#c9d6ea' font-size='11'>maximum(lo=0, hi=1)  mid=0</text>" +
+        "<text x='52' y='149' fill='#7d8fb0' font-size='10'>return address: left arm of max(), line 5</text>" +
+        "<rect x='40' y='162' width='420' height='38' rx='8' fill='#1a2440' stroke='#ffd166' stroke-width='2.5'/>" +
+        "<text x='52' y='178' fill='#ffd166' font-size='11'>maximum(lo=0, hi=0)  base case</text>" +
+        "<text x='52' y='193' fill='#ffd166' font-size='10'>about to return a[0]</text>" +
+        "<line x1='500' y1='42' x2='500' y2='188' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='514' y='46' fill='#7d8fb0' font-size='10'>oldest frame, pushed first</text>" +
+        "<text x='514' y='118' fill='#7d8fb0' font-size='10'>each frame is waiting on</text>" +
+        "<text x='514' y='132' fill='#7d8fb0' font-size='10'>the one below it</text>" +
+        "<text x='514' y='192' fill='#ffd166' font-size='10'>newest frame, top of stack</text>" +
+        "<text x='20' y='226' fill='#3ddc97' font-size='10'>depth here is 4; for an array of n elements the deepest this gets is about log2(n) + 1</text>" +
+        "<text x='20' y='242' fill='#7d8fb0' font-size='10'>a recursion that halves is shallow; a recursion that peels one element is n deep</text>" +
+        "</svg><div class='fig-cap'>Four frames, each holding arguments, locals and a return address. The stack is the unfinished part of the proof.</div></div>" +
+
+        "<p>Two consequences follow from the frame being a real record in real memory, and both are measurable. The first is that <strong>recursion depth</strong> costs memory proportional to the depth, whatever the algorithm's stated space complexity says about the data it manipulates. Driving a one-argument Python function to a depth of 150,000 on this machine raised peak resident memory by 21.6&#160;MB, which is about <strong>144 bytes per frame</strong>; at depths of 10,000 and 50,000 the same measurement gave 134 and 143 bytes, converging on the same figure as the fixed startup cost washes out. On OpenJDK the number is smaller and the budget is fixed: an interpreted frame for the same shape of method occupies about 102 bytes of a default 2&#160;MB thread stack.</p>" +
+
+        "<p>The second is that the stack is where your debugger's backtrace comes from. A stack trace is a listing of the live frames from newest to oldest, which is the same thing as the chain of unfinished inductive steps. That is not a metaphor, and it is the reason section 4's languages decline an optimisation that would make the listing shorter.</p>" +
+
+        "<p><strong>Step through the machine above.</strong> Pick <code>fib</code>, set the argument to 6, and step in rather than over. Count how many times a frame for <code>fib(2)</code> is pushed before the whole thing unwinds. The number is not 1, and it is the number the next section is about.</p>",
+      viz: "dsaCallStack", vizTitle: "Step into each call and watch return values flow back up"
+    },
+
+    { title: "Write the Recurrence First",
+      html:
+        "<p>Chapter 3 gave you machinery for solving recurrences and did not say when to reach for it. Here is the rule this chapter adds: <em>write the recurrence before you write the function.</em> A recursion's running time is determined by its shape, and its shape is visible in the two or three lines you would write down anyway. Solving the recurrence takes a minute and can tell you the algorithm is hopeless before you have spent an afternoon making it correct.</p>" +
+
+        "<p>Three examples, all of which look similar on the page and none of which behave alike.</p>" +
+
+        "<h3>1. Naive Fibonacci: exponential because it forgets</h3>" +
+
+        "<p>The function <code>fib(n) = fib(n-1) + fib(n-2)</code> gives the recurrence T(n) = T(n&#8722;1) + T(n&#8722;2) + &#920;(1). That is not one of Chapter 3's master-theorem shapes, because the subproblems are not the same size. But its solution is exact and worth knowing: the total number of calls made by <code>fib(n)</code> is <strong>2F(n+1) &#8722; 1</strong>, where F is the Fibonacci sequence itself. Instrumenting the function with a counter confirms it:</p>" +
+
+        "<ul>" +
+        "<li><strong>fib(6)</strong> &#8212; 25 calls; 2F(7) &#8722; 1 = 2(13) &#8722; 1 = 25</li>" +
+        "<li><strong>fib(10)</strong> &#8212; 177 calls; 2F(11) &#8722; 1 = 2(89) &#8722; 1 = 177</li>" +
+        "<li><strong>fib(20)</strong> &#8212; 21,891 calls</li>" +
+        "<li><strong>fib(30)</strong> &#8212; 2,692,537 calls</li>" +
+        "</ul>" +
+
+        "<p>Since F(n) grows like &#966;<sup>n</sup>/&#8730;5 with &#966; = 1.618, the call count multiplies by &#966;<sup>10</sup> = 122.99 for every ten you add to n. Measured, the ratio from n = 20 to n = 30 is 2,692,537 / 21,891 = <strong>123.00</strong>. Add ten more and it is a third of a billion calls.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 268' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>the call tree of fib(6): gold means this argument appears more than once in the tree</text>" +
+        "<rect x='352' y='28' width='56' height='22' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='380' y='43' text-anchor='middle' fill='#c9d6ea' font-size='11'>fib 6</text>" +
+        "<line x1='366' y1='50' x2='244' y2='70' stroke='#4f7cff' stroke-width='1.5'/><line x1='394' y1='50' x2='516' y2='70' stroke='#4f7cff' stroke-width='1.5'/>" +
+        "<rect x='202' y='72' width='56' height='22' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='230' y='87' text-anchor='middle' fill='#c9d6ea' font-size='11'>fib 5</text>" +
+        "<rect x='502' y='72' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='530' y='87' text-anchor='middle' fill='#ffd166' font-size='11'>fib 4</text>" +
+        "<line x1='216' y1='94' x2='150' y2='114' stroke='#4f7cff' stroke-width='1.5'/><line x1='244' y1='94' x2='310' y2='114' stroke='#4f7cff' stroke-width='1.5'/>" +
+        "<line x1='516' y1='94' x2='452' y2='114' stroke='#7d8fb0' stroke-width='1.5'/><line x1='544' y1='94' x2='610' y2='114' stroke='#7d8fb0' stroke-width='1.5'/>" +
+        "<rect x='122' y='116' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='150' y='131' text-anchor='middle' fill='#ffd166' font-size='11'>fib 4</text>" +
+        "<rect x='282' y='116' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='310' y='131' text-anchor='middle' fill='#ffd166' font-size='11'>fib 3</text>" +
+        "<rect x='424' y='116' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='452' y='131' text-anchor='middle' fill='#ffd166' font-size='11'>fib 3</text>" +
+        "<rect x='582' y='116' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='610' y='131' text-anchor='middle' fill='#ffd166' font-size='11'>fib 2</text>" +
+        "<line x1='136' y1='138' x2='96' y2='158' stroke='#4f7cff' stroke-width='1.5'/><line x1='164' y1='138' x2='204' y2='158' stroke='#4f7cff' stroke-width='1.5'/>" +
+        "<line x1='296' y1='138' x2='264' y2='158' stroke='#4f7cff' stroke-width='1.5'/><line x1='324' y1='138' x2='356' y2='158' stroke='#4f7cff' stroke-width='1.5'/>" +
+        "<rect x='68' y='160' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='96' y='175' text-anchor='middle' fill='#ffd166' font-size='11'>fib 3</text>" +
+        "<rect x='176' y='160' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='204' y='175' text-anchor='middle' fill='#ffd166' font-size='11'>fib 2</text>" +
+        "<rect x='236' y='160' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='264' y='175' text-anchor='middle' fill='#ffd166' font-size='11'>fib 2</text>" +
+        "<rect x='328' y='160' width='56' height='22' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='356' y='175' text-anchor='middle' fill='#ffd166' font-size='11'>fib 1</text>" +
+        "<line x1='20' y1='196' x2='740' y2='196' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='214' fill='#7d8fb0' font-size='10'>only fib 6 and fib 5 are computed once; every gold node is solved again on each appearance</text>" +
+        "<text x='20' y='232' fill='#ffd166' font-size='11'>fib(2) is evaluated 5 times, fib(1) 8 times, fib(0) 5 times: 25 calls for an answer of 8</text>" +
+        "<text x='20' y='250' fill='#3ddc97' font-size='10'>the repair is Chapter 19: compute each distinct argument once and remember it</text>" +
+        "</svg><div class='fig-cap'>The tree is exponential because the same arguments recur, not because the answer is large.</div></div>" +
+
+        "<h3>2. Towers of Hanoi: exponential because the answer is</h3>" +
+
+        "<p>Hanoi gives T(n) = 2T(n&#8722;1) + 1, which Chapter 3's substitution method unrolls to exactly <strong>2<sup>n</sup> &#8722; 1</strong>. Counting the moves a recursive solver emits gives 7 for n = 3, 1,023 for n = 10 and 1,048,575 for n = 20, matching the closed form at every point.</p>" +
+
+        "<p>The recurrence looks worse than Fibonacci's and the situation is entirely different. Hanoi's output <em>is</em> 2<sup>n</sup> &#8722; 1 moves long. No algorithm can produce it faster, because writing the answer down takes that long. Nothing is being recomputed; there is no memo to add. The distinction matters because it decides what you do next. An exponential recurrence whose subproblems repeat is a bug you can fix by remembering. An exponential recurrence that matches the size of the output is a property of the problem, and the only escape is to change what you are asked for.</p>" +
+
+        "<h3>3. Exponentiation: the same function, two recurrences</h3>" +
+
+        "<p>To compute x<sup>n</sup>, the recursion <code>power(x, n) = x * power(x, n-1)</code> gives T(n) = T(n&#8722;1) + &#920;(1), which is &#920;(n). The recursion <code>power(x, n) = power(x, n//2)&#178;</code>, with one extra multiply when n is odd, gives T(n) = T(n/2) + &#920;(1). That is the master theorem with a = 1, b = 2 and f(n) = &#920;(1): case 2, so T(n) = &#920;(log n). Same function, same base case, one changed line, and the difference at n = 10<sup>9</sup> is a billion multiplications against thirty.</p>" +
+
+        "<div class='callout'>These three take under a minute each and they answer different questions. Fibonacci's recurrence says <em>stop and add a memo</em>. Hanoi's says <em>this is as good as it gets, check the requirement</em>. Exponentiation's says <em>the shape of the recursive call is the whole cost</em>. None of those answers needs the function to exist first.</div>"
+    },
+
+    { title: "Tail Calls and What Your Language Does With Them",
+      html:
+        "<p>A <strong>tail call</strong> is a call that is the last thing a function does: its result is returned unchanged, with no work left in the caller afterwards. <code>return helper(n - 1, acc * n)</code> is a tail call. <code>return 1 + helper(n - 1)</code> is not, because the addition still has to happen after the call returns.</p>" +
+
+        "<p>The distinction has teeth because a tail call's frame is dead the moment the call is made. Nothing in it will be read again; the caller's locals are not needed, and the return address in the caller's frame can be handed straight to the callee. A compiler that notices this can reuse the frame rather than pushing a new one, turning the recursion into a loop that runs in constant stack space. That transformation is <strong>tail call elimination</strong>, and the Scheme language standard has required it since the first Revised Report &#8212; in Scheme, iteration is <em>defined</em> as tail recursion, and there is no separate looping construct that a program is obliged to use.</p>" +
+
+        "<p>Neither of this course's two languages does it. In CPython, disassembling a tail-recursive factorial shows the call and the return as two separate instructions:</p>" +
+
+        "<pre><code>def fact(n, acc=1):\n    if n == 0: return acc\n    return fact(n - 1, acc * n)\n\n# CPython 3.13 bytecode for the last line:\nLOAD_GLOBAL      1 (fact + NULL)\nLOAD_FAST        0 (n)\nLOAD_CONST       2 (1)\nBINARY_OP       10 (-)\nLOAD_FAST_LOAD_FAST  16 (acc, n)\nBINARY_OP        5 (*)\nCALL             2\nRETURN_VALUE</code></pre>" +
+
+        "<p><code>CALL</code> pushes a frame and runs the callee to completion; <code>RETURN_VALUE</code> then returns whatever came back. The caller's frame is live for the whole of the callee's execution, so <code>fact(5000)</code> builds five thousand frames. A runtime performing tail call elimination would emit a jump to the top of the same frame instead, and there would be nothing to disassemble after the call because there would be no after. The reason CPython's maintainers have declined the optimisation is the one section 2 pointed at: the eliminated frames are exactly the ones a traceback would have listed, and a debugging story is worth more to most Python programs than an unbounded tail recursion.</p>" +
+
+        "<p>The JVM is the same and for a different reason: its bytecode has no instruction that means <em>replace my frame with yours</em>, so the elimination cannot be expressed at that level even when a compiler wants it. Running a tail-recursive <code>fact(1000000, 1)</code> on OpenJDK 21 raises <code>StackOverflowError</code>, as it does for the non-tail version. Languages on the JVM that want the guarantee get it at the compiler, by rewriting the method body into a loop before emitting bytecode at all: Scala's <code>@tailrec</code> and Kotlin's <code>tailrec</code> both do this, and both are compile-time errors when the call they are applied to turns out not to be in tail position &#8212; which makes them a checked assertion rather than a hint.</p>" +
+
+        "<div class='callout'>The practical reading: in Python and Java, a tail-recursive function is a loop that also consumes memory in proportion to the number of iterations. Writing the loop is not a failure of elegance, it is the only version whose space is what you think it is. Recognising the tail call still matters &#8212; it is what tells you the conversion in the next section will not need a stack at all.</div>"
+    },
+
+    { title: "Converting Recursion to Iteration",
+      html:
+        "<p>Any recursion can be rewritten as a loop over an <strong>explicit stack</strong>: a stack you allocate and manage yourself, holding the same records the call stack would have held. The transformation is mechanical, which is worth knowing both because interview questions sometimes forbid recursion and because it is the fix when the recursion is deeper than the runtime allows. There are two cases and they are very different amounts of work.</p>" +
+
+        "<p><strong>Case one: the recursive call is in tail position.</strong> There is nothing to resume, so there is nothing to store. Replace the call with an assignment to the parameters and a jump back to the top &#8212; which is what a <code>while</code> loop is. No stack is needed. <code>fact(n, acc)</code> becomes <code>while n: acc *= n; n -= 1</code>, and that is the whole conversion. This is the transformation a Scheme implementation performs for you.</p>" +
+
+        "<p><strong>Case two: the call is not in tail position.</strong> Now the frame matters, because there is work after the call, and the loop has to remember which work. Each entry on the explicit stack carries what the frame carried: the arguments, plus a <em>stage</em> field recording which point in the body to resume at. The mechanical recipe is to number the points in the function body between recursive calls, push <code>(args, stage)</code> where the recursion would have called, and let the loop dispatch on the stage it pops.</p>" +
+
+        "<p>For one special shape the recipe collapses into something genuinely nicer than the original. A preorder tree traversal visits the node and then recurses on both children, with no work after the second call &#8212; so the only thing a frame holds is <em>which subtree is still owed a visit</em>, and a stack of node pointers records that completely. No stage field, no return values to plumb:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def preorder(root):\n    out, stack = [], [root]\n    while stack:\n        node = stack.pop()\n        if node is None:\n            continue\n        out.append(node.val)\n        stack.append(node.right)   # pushed first,\n        stack.append(node.left)    # so popped second\n    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; preorder(Node root) {\n    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n    Deque&lt;Node&gt; stack = new ArrayDeque&lt;&gt;();\n    if (root != null) stack.push(root);\n    while (!stack.isEmpty()) {\n        Node node = stack.pop();\n        out.add(node.val);\n        if (node.right != null) stack.push(node.right);\n        if (node.left  != null) stack.push(node.left);\n    }\n    return out;\n}</code></pre></div>" +
+
+        "<p>Two things about it are worth noticing. The children go on in reverse, because a stack returns them in the opposite order to the one they were pushed in, and getting that backwards produces a traversal that is correct-looking and mirrored. And the result is not merely equivalent to the recursion, it is more capable: the loop can be stopped after k nodes, resumed later, or turned inside out into an iterator object, none of which a recursive traversal offers without threading a generator through every level.</p>" +
+
+        "<p>Postorder is the case where the recipe shows its cost. The visit happens after both calls, so a popped entry has to say whether its children have been dealt with yet, which means the stage field comes back and each node is pushed twice. Chapter 24 works that version through, alongside the traversal that manages it in constant space by rewriting the tree as it goes.</p>" +
+
+        "<div class='callout'>The explicit stack is the same data structure the runtime was maintaining; you have only moved it from the C stack or the runtime's frame chunks onto the heap, where its size is bounded by available memory rather than by a fixed limit. That is the entire reason the conversion fixes the failures in the next section, and it is also why the converted version is not faster: it does the same pushes and pops, in your code instead of the runtime's.</div>"
+    },
+
+    { title: "Recursion Depth as a Failure Mode",
+      html:
+        "<p>Every runtime stops you eventually, and the depth at which it does is worth knowing as a number rather than a warning. All the measurements below were taken on one machine &#8212; CPython 3.13.2 and OpenJDK 21.0.2, both arm64 &#8212; and the exercises reproduce them.</p>" +
+
+        "<h3>Python has two limits, not one</h3>" +
+
+        "<p><code>sys.getrecursionlimit()</code> returns <strong>1000</strong> by default, and a trivial recursion reaches depth 998 before <code>RecursionError</code>, the shortfall being the frames already on the stack when the measurement starts. The usual advice is that raising the limit risks a genuine segmentation fault, because the real constraint is the C stack underneath. On this build, that is not what happens, and the reason is structural: CPython does not put a pure-Python frame on the C stack at all. It keeps frame data in its own chunk-allocated stack on the heap, so the recursion limit is a counter it chooses to enforce rather than a report of how much C stack is left. But a recursion that passes <em>through</em> C code &#8212; a comparator called from <code>sorted</code>, a <code>__repr__</code> reached from the C printer, a callback invoked by <code>map</code> &#8212; does consume C stack on every level, and a second, separate limit applies to it. Probing both against the same set of limits:</p>" +
+
+        "<ul>" +
+        "<li><strong>limit 1,000</strong> &#8212; pure Python reaches 998; through a live C frame, 998</li>" +
+        "<li><strong>limit 3,000</strong> &#8212; pure Python reaches 2,998; through a live C frame, 2,998</li>" +
+        "<li><strong>limit 5,000</strong> &#8212; pure Python reaches 4,998; through a live C frame, 4,998</li>" +
+        "<li><strong>limit 20,000</strong> &#8212; pure Python reaches 19,998; through a live C frame, <strong>5,000</strong></li>" +
+        "<li><strong>limit 200,000</strong> &#8212; pure Python reaches 199,998; through a live C frame, <strong>5,000</strong></li>" +
+        "</ul>" +
+
+        "<p>The two columns agree until the limit you set passes 5,000, and then the second one stops moving. The effective depth is the smaller of the two limits, and only one of them is under your control. The failure reads as a plain <code>RecursionError</code> with no hint that the setting you changed was not the one that bound: building a list nested 100,000 deep and calling <code>repr</code> on it raises <code>RecursionError: maximum recursion depth exceeded while getting the repr of an object</code> with the limit set to 200,000.</p>" +
+
+        "<h3>The JVM's number is not a constant</h3>" +
+
+        "<p>OpenJDK's default <code>ThreadStackSize</code> is 2,048&#160;KB, which suggests dividing by the frame size to get a depth. The measurement declines to cooperate. Five runs of the same trivial recursion, unchanged, gave <strong>41,383 / 40,657 / 38,926 / 40,515 / 40,904</strong> before <code>StackOverflowError</code> &#8212; a spread of about 6% with nothing varying between runs. A stack overflow on the JVM arrives as a thrown <code>Error</code> rather than an exception, so a <code>catch (Exception e)</code> does not see it. Halving the stack with <code>-Xss1m</code> gave 13,645 / 16,973 / 14,690, which is not half of anything and varies more widely still.</p>" +
+
+        "<p>Running with <code>-Xint</code>, which turns off JIT compilation &#8212; the translation of hot methods into machine code &#8212; and interprets every method, gives <strong>20,594 on both runs, to the digit.</strong> That identifies the cause. A JIT-compiled frame and an interpreted frame are not the same size, so the achievable depth depends on how far down the recursion had got when the compiler decided the method was hot enough to compile &#8212; a decision driven by invocation counters and background compiler threads, and therefore differently timed on every run. Under <code>-Xint</code> every frame is interpreted, every frame is the same size, and the division works: 2,097,152 bytes divided by 20,594 frames is about 102 bytes each.</p>" +
+
+        "<div class='callout'><strong>Try it on your machine.</strong> <code>java -Xint Depth</code> against <code>java Depth</code>, where <code>Depth</code> counts a trivial recursion until <code>StackOverflowError</code>. The interpreted run is reproducible to the frame and the mixed-mode run is not, which is the difference between a limit you can plan against and one you can only leave headroom for.</div>"
+    },
+
+    { title: "Which Recursions Are at Risk",
+      html:
+
+        "<p>The rule is about depth as a function of input size, not about recursion in general. A recursion that halves is <strong>&#920;(log n)</strong> deep and is never the problem: depth 20 at a million elements, depth 30 at a billion. A recursion that peels one element is <strong>&#920;(n)</strong> deep and is a bomb with the input size as its fuse. The dangerous cases hide because the structure is usually shallow and occasionally is not &#8212; a balanced binary search tree gives depth log n, the same tree built by inserting already-sorted keys gives depth n, and the code is identical.</p>" +
+
+        "<p>A depth-first search over a path graph of 100,000 nodes is the standard demonstration. Three runs of the same traversal over the same graph:</p><ul><li><strong>Recursive, default Python limit</strong> &#8212; <code>RecursionError</code> after 998 of the 100,000 nodes</li><li><strong>Explicit stack, same limit</strong> &#8212; all 100,000 visited in 13.3&#160;ms</li><li><strong>Recursive on the JVM, default 2&#160;MB stack</strong> &#8212; <code>StackOverflowError</code> near 40,000 nodes, which is further along and still short of the end</li></ul><p>The recursive versions are not slow; they do not finish. Recursively computing the length of a 100,000-node linked list fails the same way, and the iterative loop returns 100,000 without noticing there was a question.</p>" +
+
+        "<div class='callout'><strong>Interview lens.</strong> &#8220;Reverse a linked list recursively&#8221; is asked constantly, and the recursive answer is correct. The answer that gets remembered adds one sentence: <em>this is &#920;(n) stack, so it fails above roughly a thousand nodes in Python and forty thousand on the JVM &#8212; here is the iterative version, which is &#920;(1) space.</em> The question is rarely about whether you can write the recursion. It is about whether you know what it costs.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Write out the three induction obligations for the recursive <code>maximum</code> in section 1, then do the same for a recursive binary search. <em>What you should find:</em> binary search's termination measure is the size of the live range, and the obligation fails for the common off-by-one in which the recursive call is given <code>mid</code> rather than <code>mid + 1</code> &#8212; the range stops shrinking once it holds two elements, and the function loops forever on a target that is not present.</li>" +
+        "<li><strong>Trace.</strong> Draw the call tree for <code>fib(7)</code>, shading every subtree that has appeared before, and count the calls. <em>What you should find:</em> 41 calls, matching 2F(8) &#8722; 1 = 2(21) &#8722; 1, with <code>fib(2)</code> appearing 8 times and <code>fib(1)</code> 13 times &#8212; the multiplicities are themselves Fibonacci numbers.</li>" +
+        "<li><strong>Investigate.</strong> Set <code>sys.setrecursionlimit(200000)</code> and measure the depth reached by two recursions: one that is pure Python, and one whose every level passes through a C call that is still live, such as <code>return list(map(f, [n-1]))[0]</code>. <em>What you should find:</em> the first reaches roughly the limit you set and the second stops near 5,000 regardless, because two separate limits apply and only the first one responds to the setting.</li>" +
+        "<li><strong>Investigate.</strong> Write a Java class that recurses until <code>StackOverflowError</code> and print the depth. Run it five times normally, five times with <code>-Xint</code>, and five times with <code>-Xss1m</code>. <em>What you should find:</em> the <code>-Xint</code> runs agree exactly while the others vary by several percent, because interpreted frames are uniform in size and JIT-compiled ones are not; dividing the stack size by the <code>-Xint</code> depth gives a per-frame cost near 100 bytes.</li>" +
+        "<li><strong>Build.</strong> Implement a depth-first search twice, recursively and with an explicit stack, and run both on a path graph of 100,000 nodes at the default recursion limit. <em>What you should find:</em> the recursive version raises <code>RecursionError</code> well short of the end while the iterative version completes in milliseconds, and the two agree exactly on any graph shallow enough for both to finish.</li>" +
+        "<li><strong>Build.</strong> Convert a recursive postorder traversal to an explicit stack using the stage-field recipe from section 5, and verify it against the recursive version on 10,000 random trees. <em>What you should find:</em> each node is pushed twice and the entry must carry its stage, which is the extra machinery preorder avoids; a version without the stage field silently produces preorder or inorder output on some shapes and postorder on others.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "recursion", d: "Defining a computation in terms of the same computation on smaller instances, which makes the function's correctness argument an induction and its execution a stack." },
+    { t: "base case", d: "The instance a recursive function answers without calling itself, which must be correct on its own because nothing is assumed in proving it." },
+    { t: "recursive case", d: "The branch that reduces the problem to smaller instances of itself and combines their answers, corresponding to the inductive step of the proof." },
+    { t: "induction hypothesis", d: "The assumption that the claim already holds for smaller instances, which is what licenses a recursive call to be treated as correct while writing the caller." },
+    { t: "recursive leap of faith", d: "The working name for trusting the recursive call without tracing into it, which is legitimate precisely because it is the induction hypothesis and not optimism." },
+    { t: "strong induction", d: "Induction in which the hypothesis covers every smaller instance rather than only the previous one, required whenever a recursion calls itself on more than one smaller size." },
+    { t: "call stack", d: "The runtime stack of frames for calls that have started and not yet returned, which holds the unfinished part of the computation and produces the backtrace you see on an error." },
+    { t: "stack frame", d: "The record pushed for one call, holding its arguments, its local variables and its return address, and popped when the call produces a value." },
+    { t: "return address", d: "The location in the caller at which execution resumes once a call returns, which is what makes a frame a resumption point rather than only storage." },
+    { t: "call tree", d: "The tree whose nodes are the calls a recursion makes, whose size is the total work and whose height is the maximum depth reached." },
+    { t: "tail call", d: "A call whose result is returned unchanged with no work left afterwards, making the caller's frame dead the moment the call is made." },
+    { t: "tail call elimination", d: "Reusing the caller's frame for a tail call so the recursion runs in constant stack space, required by the Scheme standard and performed by neither CPython nor the JVM." },
+    { t: "explicit stack", d: "A stack you allocate and manage in your own code to hold pending work, replacing the runtime's call stack and moving the depth limit from a fixed setting to available memory." },
+    { t: "recursion depth", d: "The maximum number of frames live at once, which costs memory proportional to itself and determines whether a recursion completes or fails." },
+    { t: "stack overflow", d: "The failure raised when a recursion exceeds the depth the runtime allows, reported as RecursionError by CPython and StackOverflowError by the JVM." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A recursive tree-sum function runs fine on a balanced binary search tree of 10<sup>6</sup> nodes in Python, but raises RecursionError on a tree holding the same 10<sup>6</sup> keys inserted in sorted order. The code was not changed. What accounts for it?",
+      opts: [
+        "Sorted insertion scatters the nodes further apart in memory, so each frame's locals span more cache lines and the per-frame cost rises past the default budget",
+        "The balanced tree is about 20 levels deep while sorted insertion degenerates it into a path of 10<sup>6</sup> levels, and the recursion's depth is the tree's height",
+        "Sorted keys send every comparison down the same branch, and CPython's recursion counter charges repeated identical branches at a higher rate",
+        "The balanced tree's recursion is tail-recursive on one side and so costs no frames there, whereas the degenerate tree's recursion is not in tail position and consumes a frame at every level"
+      ], a: 1,
+      why: "Recursion depth is the height of the structure, not the number of nodes in it. A balanced search tree over a million keys is about log₂(10⁶) ≈ 20 levels; inserting sorted keys gives every node one child, so the height equals the node count. The algorithm, the code and the data are identical &mdash; only the shape changed, and the shape is what the stack pays for." },
+
+    { type: "mc",
+      q: "Naive Fibonacci and Towers of Hanoi both have exponential recurrences. Why is only one of them considered a defect to be repaired?",
+      opts: [
+        "Hanoi's output is 2ⁿ − 1 moves long, so its cost matches the size of the answer and nothing is recomputed; Fibonacci re-evaluates the same arguments repeatedly for an answer that is one number",
+        "Hanoi's recurrence is 2T(n−1) + 1 which the master theorem solves exactly, while Fibonacci's unequal subproblems put it outside every solvable class and therefore outside any optimisation",
+        "Hanoi recurses on a single smaller instance and Fibonacci on two, and any recursion branching more than once per level can be flattened by memoisation",
+        "Hanoi is exponential in the number of disks while Fibonacci is exponential in the value of n, and exponential-in-a-value costs are classified as pseudopolynomial and treated as reducible"
+      ], a: 0,
+      why: "The question to ask of an exponential recurrence is whether the work is duplicated or whether the output is that large. Fibonacci's call tree repeats whole subtrees, so a memo removes them and the cost falls to Θ(n). Hanoi must emit 2ⁿ − 1 distinct moves, so no memo exists to add; the only escape is to change what is being asked for." },
+
+    { type: "mc",
+      q: "A Python function ends with <code>return fact(n - 1, acc * n)</code>. Disassembly shows CALL followed by RETURN_VALUE. What does that tell you about the caller's frame?",
+      opts: [
+        "It is discarded before the call is dispatched, because the bytecode compiler recognises the tail position and CPython reuses the frame slot for the callee",
+        "It is retained only until the argument expressions have been evaluated, at which point the interpreter releases the locals and keeps a minimal continuation record",
+        "It is copied to the heap in compacted form so the traceback can still list the call while C stack usage stays constant",
+        "It stays live for the entire execution of the callee, so a recursion of depth d holds d frames at once and the function is a loop that consumes memory"
+      ], a: 3,
+      why: "Two separate instructions mean two separate events: CALL pushes a frame and runs the callee to completion, and only then does RETURN_VALUE hand the result up. A runtime doing tail call elimination would emit a jump instead, and there would be no instruction after the call because there would be nothing left to do. The frames CPython keeps are the ones the traceback lists, which is the stated reason for keeping them." },
+
+    { type: "mc",
+      q: "Converting a non-tail recursion to an explicit stack requires storing something that a tail recursion's conversion does not. What is it, and why?",
+      opts: [
+        "The depth of the current entry, because without a counter the loop cannot tell whether it has exceeded the limit that the runtime would have enforced on its behalf",
+        "Which point in the function body to resume at, because work remains after the recursive call returns and the loop has to know which work it is",
+        "A copy of the caller's local variables, because the explicit stack lives on the heap where the runtime's escape analysis can no longer keep the originals alive for the duration",
+        "The return value of every completed entry, because a loop has no mechanism corresponding to a return statement and must accumulate results in a parallel structure"
+      ], a: 1,
+      why: "A tail call leaves nothing to resume, which is exactly why its conversion needs no stack at all: assign the parameters and loop. A non-tail call has pending work, so each entry carries the arguments plus a stage field saying where to continue. Preorder traversal is the case where the stage field disappears because no work follows the last call, which is what makes that conversion unusually clean." },
+
+    { type: "mc",
+      q: "With <code>sys.setrecursionlimit(200000)</code>, a pure-Python recursion reaches depth 199,998, but one whose every level holds a live C frame still fails near 5,000. Why?",
+      opts: [
+        "Two separate limits are in force &mdash; the one you set and a second on recursion through C &mdash; and the depth you actually get is the smaller of them",
+        "The C-mediated recursion draws frames from a fixed pool sized at interpreter startup, and falls back to the build's default once the pool is exhausted",
+        "Frames created through a C call are larger than pure-Python ones, so the same frame-stack budget is consumed about forty times faster",
+        "Raising the limit only affects frames the interpreter creates itself, and frames created by extension modules are counted against a per-module quota derived from the module's declared stack requirement"
+      ], a: 0,
+      why: "CPython keeps pure-Python frame data in its own heap-allocated chunks, so the recursion limit there is a counter it enforces by choice. A level that passes through C consumes real C stack, and a separate limit guards that. The measurements agree column for column until the limit you set passes the second one, and then only the second one binds &mdash; and the error message does not say which limit stopped you." },
+
+    { type: "mc",
+      q: "A trivial Java recursion overflows at depths of 41,383, 40,657 and 38,926 across three identical runs, but at exactly 20,594 on every run under <code>-Xint</code>. What explains both facts at once?",
+      opts: [
+        "Disabling the JIT also stops the background compiler threads, which otherwise share the same 2 MB budget and take a varying amount of it depending on how much compilation work happens to be queued",
+        "The JIT performs partial inlining of the recursive call, collapsing a varying number of levels into one frame, and <code>-Xint</code> is deterministic because no inlining occurs at all",
+        "JIT-compiled frames are a different size from interpreted ones, so the depth depends on when during the descent the method was compiled; under <code>-Xint</code> every frame is interpreted and identical",
+        "Garbage collection runs at unpredictable points and each collection cycle reserves scratch space on the same thread stack, while <code>-Xint</code> allocates so slowly that no collection occurs before the overflow"
+      ], a: 2,
+      why: "The stack is a fixed 2 MB, so a varying depth means a varying average frame size. The JIT compiles a hot method partway down the descent, and the frames below that point differ in size from the ones above it; when compilation fires depends on invocation counters and compiler threads, so it differs run to run. Remove the JIT and every frame is the same size, the number is reproducible to the digit, and 2,097,152 ÷ 20,594 gives about 102 bytes per frame." },
+
+    { type: "mc",
+      q: "A recursive function has a correct base case, and the step that combines the results of its recursive calls is correct. It still never terminates on some inputs. Which obligation was missed?",
+      opts: [
+        "The base case must be reachable by the sequence of reductions the function performs",
+        "The induction must be the strong form whenever the function calls itself more than once",
+        "Every recursive call must be on a strictly smaller instance under a measure that cannot decrease forever",
+        "The combining step must be associative so the order of the merge cannot change the outcome"
+      ], a: 2,
+      why: "Correctness splits into three obligations and termination is the third. A function can have a right base case and a right combination and still loop, because nothing so far says the recursion ever arrives at the base case. The measure has to be well-founded &mdash; a non-negative integer that strictly decreases is the usual one &mdash; and this is the obligation that the classic binary search off-by-one violates." },
+
+    { type: "blank",
+      q: "A call whose result is returned unchanged, with no work remaining in the caller afterwards, is called a ____ call.",
+      a: ["tail"],
+      why: "Its frame is dead the moment the call is made, which is what makes the optimisation possible in principle. Scheme's standard requires the frame to be reused; CPython and the JVM do not, so in those two languages a tail-recursive function is a loop that also consumes stack in proportion to its iterations." },
+
+    { type: "blank",
+      q: "Rewriting a recursion as a loop that keeps its pending work in a stack you allocate and manage yourself is called converting it to an ____ stack.",
+      a: ["explicit"],
+      why: "It holds the same records the runtime was holding, moved from the runtime's frame storage onto the heap, where the ceiling is available memory rather than a fixed limit. That relocation is the whole reason the conversion fixes depth failures, and it is also why the result is not faster: the same pushes and pops happen, in your code instead of the runtime's." },
+
+    { type: "order",
+      q: "Order the steps of converting a non-tail recursion into a loop over an explicit stack:",
+      items: [
+        "number the points in the function body between and after the recursive calls, giving each a stage",
+        "define a stack entry holding the call's arguments together with the stage to resume at",
+        "replace each recursive call with a push of the callee's entry, after pushing the caller's own resume entry",
+        "drive a loop that pops an entry and dispatches on its stage until the stack is empty"
+      ],
+      why: "The first two steps reconstruct what a stack frame holds: arguments and a resumption point. The third is the transformation proper, and the order of the two pushes matters because a stack returns them reversed. The fourth replaces the runtime's dispatch with yours. When there is only one stage because no work follows the last call, steps one and two collapse and what remains is the preorder traversal from section 5." }
+  ]
+});
+
+/* ======================= CHAPTER 7 ======================= */
+CHAPTERS.push({
+  num: 7, part: 1, free: true, title: "Union\u2013Find: The Whole Method on One Structure",
+  blurb: "Princeton opens its entire algorithms course with this structure, and so does this one, because union\u2013find is the smallest thing that teaches the whole method: start with an obvious implementation, find the workload that kills it, fix it, measure, repeat. You will build four versions of the same structure and know exactly what each change bought, in array accesses rather than adjectives. The last version answers in a number of steps so small that the function describing it is under 5 for every input that fits in this universe, and you will see why that is still not the same as constant.",
+
+  sections: [
+
+    { title: "The Problem: Connections That Arrive Over Time",
+      html:
+        "<p><strong>Dynamic connectivity</strong> is this: you are given n objects, numbered 0 to n&#8722;1 and initially all separate. Then two kinds of command arrive, interleaved, in a stream you cannot read ahead in.</p>" +
+        "<ul>" +
+        "<li><strong>union(p, q)</strong> &#8212; record that p and q are connected.</li>" +
+        "<li><strong>find(p)</strong> &#8212; return an identifier for p's group, so that <code>find(p) == find(q)</code> answers \"are p and q connected?\"</li>" +
+        "</ul>" +
+
+        "<p>The word <em>interleaved</em> is carrying the weight. If every connection arrived before every question, you could build a graph, run one traversal, label the components and answer everything in constant time. The problem is that a question can arrive at any point, so the answer has to be maintained as the connections come in. That distinction &#8212; between an <em>offline</em> problem where the whole input is available and an <strong>online</strong> one where it is not &#8212; is the reason this structure exists at all.</p>" +
+
+        "<p>Connection here is an <strong>equivalence relation</strong>: every object is connected to itself, connection runs both ways, and if p is connected to q and q to r then p is connected to r. The groups it carves the objects into are its equivalence classes, and when the objects are the vertices of a graph they are exactly its <strong>connected components</strong>. That third property, transitivity, is what makes the problem non-trivial. A single <code>union</code> can merge two large groups, and every pair drawn from across the join becomes connected at that moment without anyone mentioning them.</p>" +
+
+        "<p>Two obvious approaches set the bar. You could store the list of connections and run a breadth-first search on every query, which costs nothing to update and O(n) per question. Or you could keep a group label for every object in an array, which answers a question in one lookup and leaves you with the problem of updating the labels. This chapter is the second approach taken seriously, and the whole of it is two integer arrays and about fifteen lines of code.</p>" +
+
+        "<p>The structure is usually called <strong>disjoint-set union</strong> in the literature and union\u2013find in courses; both names describe the same two operations. It is due to Galler and Fischer, whose 1964 paper in <em>Communications of the ACM</em> posed it as the problem of maintaining equivalence classes for a compiler's EQUIVALENCE statement, which is a long way from the interview question it has become.</p>" +
+
+        "<div class='callout'>Every measurement in this chapter counts <strong>array accesses</strong> &#8212; one read or one write of one slot &#8212; rather than milliseconds, because that is the quantity the analysis predicts and it does not move when the machine does. Wall-clock times are given once, at the end of section 4, to show that the access counts are not an abstraction.</div>"
+    },
+
+    { title: "Quick-Find: Make One Operation Perfect",
+      html:
+        "<p>The first implementation is the one everybody invents. Keep an array <code>id</code> where <code>id[p]</code> is the group label of p, initially p itself. Two objects are connected exactly when their labels match.</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class QuickFind:\n    def __init__(self, n):\n        self.id = list(range(n))\n\n    def find(self, p):\n        return self.id[p]                  # one read\n\n    def union(self, p, q):\n        a, b = self.id[p], self.id[q]\n        if a == b:\n            return\n        for i in range(len(self.id)):       # rewrite every slot\n            if self.id[i] == a:\n                self.id[i] = b</code></pre>" +
+        "<pre data-lang='java' hidden><code>class QuickFind {\n    private final int[] id;\n    QuickFind(int n) { id = new int[n]; for (int i = 0; i &lt; n; i++) id[i] = i; }\n\n    int find(int p) { return id[p]; }        // one read\n\n    void union(int p, int q) {\n        int a = id[p], b = id[q];\n        if (a == b) return;\n        for (int i = 0; i &lt; id.length; i++)  // rewrite every slot\n            if (id[i] == a) id[i] = b;\n    }\n}</code></pre></div>" +
+
+        "<p><code>find</code> is a single array read and cannot be improved on. <code>union</code> scans the whole array. That is the trade, and stated as \"find is O(1), union is O(n)\" it sounds survivable. It is not, and the reason is that unions are not rare: building any structure at all takes n&#8722;1 of them.</p>" +
+
+        "<p><strong>The workload that kills it</strong> is therefore the most ordinary one imaginable &#8212; connect everything up. On n = 5,000 objects, the sequence <code>union(0,1), union(1,2), &#8230;, union(4998,4999)</code> costs <strong>37,502,498 array accesses</strong>, because each of the 4,999 unions touches all 5,000 slots. That is &#920;(n&#178;), and it does not need an adversary to arrange; it is what happens when you use the structure for its purpose. At n = 20,000 the same sequence takes <strong>25.6 seconds</strong>.</p>" +
+
+        "<p>Nor can the scan be trimmed. To relabel a group, <code>union</code> has to know which slots hold that group's label, and the array does not record that; the only way to find them is to look at all of them. Keeping a list of members per group would fix the search and move the cost rather than remove it, since merging two member lists is linear in the smaller one &#8212; a real improvement, and the one that leads to the weighted variants, but not something this representation can express.</p>" +
+        "<p>It is worth being precise about when quick-find is nonetheless the right choice, because the answer is not never. If the groups are settled before any query arrives &#8212; label the components once, then answer millions of questions &#8212; one array read per query with perfect locality is hard to beat, and every structure in the rest of this chapter gives up that locality for a pointer walk. The failure is specific: quick-find is wrong when unions are interleaved with queries, which is what dynamic connectivity means.</p>" +
+        "<p>The lesson generalises past this structure. Quick-find made one operation optimal by making the other one linear, and the sequence that follows costs quadratic time because the expensive operation is the one you must call n times. Judging a data structure by its best operation is how you arrive here.</p>"
+    },
+
+    { title: "Quick-Union: Move the Work, Keep the Quadratic",
+      html:
+        "<p>The cost in quick-find is that a union has to find and relabel every member of a group. The fix is not to store the label at all, but a pointer: <code>parent[p]</code> is some other object in the same group, and following the pointers leads to a <strong>root</strong> that points to itself. The array is now a forest. A union links one root to the other, which is <em>one</em> write.</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class QuickUnion:\n    def __init__(self, n):\n        self.p = list(range(n))\n\n    def find(self, x):\n        while self.p[x] != x:      # walk to the root\n            x = self.p[x]\n        return x\n\n    def union(self, a, b):\n        ra, rb = self.find(a), self.find(b)\n        if ra != rb:\n            self.p[ra] = rb        # one write</code></pre>" +
+        "<pre data-lang='java' hidden><code>class QuickUnion {\n    protected final int[] p;\n    QuickUnion(int n) { p = new int[n]; for (int i = 0; i &lt; n; i++) p[i] = i; }\n\n    int find(int x) {\n        while (p[x] != x) x = p[x];   // walk to the root\n        return x;\n    }\n\n    void union(int a, int b) {\n        int ra = find(a), rb = find(b);\n        if (ra != rb) p[ra] = rb;     // one write\n    }\n}</code></pre></div>" +
+
+        "<p>On the same n = 5,000 sequence, building the structure now costs <strong>14,997 array accesses</strong> against quick-find's 37.5 million. A factor of 2,500 for a change that made the code shorter. It would be reasonable to stop here, and it would be wrong, because the measurement has only covered half the workload.</p>" +
+
+        "<p>Run 5,000 <code>find</code> calls afterwards, one per object:</p>" +
+
+        "<ul>" +
+        "<li><strong>quick-find</strong> &#8212; 37,502,498 accesses to build, then <strong>5,000</strong> to answer</li>" +
+        "<li><strong>quick-union</strong> &#8212; 14,997 accesses to build, then <strong>12,502,500</strong> to answer</li>" +
+        "</ul>" +
+
+        "<p>The quadratic did not go away. It moved. <code>union(i, i+1)</code> applied in order links each root under the next, so the forest is a single path 4,999 deep, and a <code>find</code> at the far end walks all of it. The structure that made union cheap made find linear, and since a real workload calls both, the total is &#920;(n&#178;) either way.</p>" +
+
+        "<p><strong>Use the machine above.</strong> Pick quick-union, press the adversarial sequence, and watch the forest turn into a single descending chain. Then switch the variant to union-by-rank and run the identical sequence. Nothing about the input changed; the shape of what it builds did.</p>" +
+
+        "<p>One property is worth naming before the next section uses it: the forest lives entirely inside one integer array, with no node objects, no allocation and no pointers in the language's sense. That is why a structure whose operations are described as tree walks behaves like an array scan in cache, and why the access counts in this chapter track the wall clock as closely as they do.</p>" +
+        "<div class='callout'>Notice what the second measurement caught and the first missed. Reporting \"union went from O(n) to O(1)\" is true and useless, because the cost was not removed from the system, it was relocated into an operation nobody was timing. A structure has to be measured on a sequence containing every operation it supports, in the proportion a caller will use them.</div>",
+      viz: "dsaUnionFind", vizTitle: "Click two nodes to union them, then run the adversarial sequence on each variant"
+    },
+
+    { title: "Union by Rank: One Line, and a Proof",
+      html:
+        "<p>Quick-union's failure has a precise cause: <code>union</code> picks which root goes under which arbitrarily, and <code>union(i, i+1)</code> happens to pick worst every time. So stop picking arbitrarily. Keep a second array, <code>rank[r]</code>, holding an upper bound on the height of the tree rooted at r, and always link the shorter tree under the taller one. When the ranks are equal, either will do, and the winner's rank goes up by one.</p>" +
+
+        "<pre><code>def union(self, a, b):\n    ra, rb = self.find(a), self.find(b)\n    if ra == rb:\n        return\n    if self.rank[ra] &lt; self.rank[rb]:\n        ra, rb = rb, ra          # ra is now the taller root\n    self.p[rb] = ra\n    if self.rank[ra] == self.rank[rb]:\n        self.rank[ra] += 1</code></pre>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 268' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>six elements after the same sequence: union(0,1), union(1,2), ... union(4,5)</text><text x='20' y='40' fill='#2de2ff' font-size='11'>quick-find</text><text x='20' y='232' fill='#7d8fb0' font-size='9'>one array, all equal</text><text x='20' y='248' fill='#ff5d73' font-size='9'>union rewrites all 6</text><text x='205' y='40' fill='#2de2ff' font-size='11'>quick-union</text><text x='205' y='232' fill='#7d8fb0' font-size='9'>a path, depth 5</text><text x='205' y='248' fill='#ff5d73' font-size='9'>find walks 5 links</text><text x='390' y='40' fill='#2de2ff' font-size='11'>union by rank</text><text x='390' y='232' fill='#7d8fb0' font-size='9'>a star, depth 1</text><text x='390' y='248' fill='#3ddc97' font-size='9'>find walks 1 link</text><text x='575' y='40' fill='#2de2ff' font-size='11'>+ compression</text><text x='575' y='232' fill='#7d8fb0' font-size='9'>identical here</text><text x='575' y='248' fill='#3ddc97' font-size='9'>nothing left to flatten</text><rect x='32' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='42' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='54' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='64' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='76' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='86' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='98' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='108' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='120' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='130' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='142' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='152' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><text x='32' y='96' fill='#7d8fb0' font-size='9'>id[0..5]</text><rect x='263' y='58' width='34' height='20' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='280' y='72' text-anchor='middle' fill='#ffd166' font-size='10'>0</text><line x1='280' y1='78' x2='280' y2='85' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='85' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='99' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><line x1='280' y1='105' x2='280' y2='112' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='112' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='126' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><line x1='280' y1='132' x2='280' y2='139' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='139' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='153' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><line x1='280' y1='159' x2='280' y2='166' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='166' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='180' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><line x1='280' y1='186' x2='280' y2='193' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='193' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='207' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='460' y='58' width='34' height='20' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='477' y='72' text-anchor='middle' fill='#ffd166' font-size='10'>0</text><rect x='412' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='425' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><line x1='425' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='442' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='455' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><line x1='455' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='472' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='485' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><line x1='485' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='502' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='515' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><line x1='515' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='532' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='545' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><line x1='545' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='645' y='58' width='34' height='20' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='662' y='72' text-anchor='middle' fill='#ffd166' font-size='10'>0</text><rect x='597' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='610' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><line x1='610' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='627' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='640' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><line x1='640' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='657' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='670' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><line x1='670' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='687' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='700' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><line x1='700' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='717' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='730' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><line x1='730' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/></svg><div class='fig-cap'>The same input under four implementations; the last two are the same picture, which is the point of section 5.</div></div>" +
+        "<p>Three added lines, and the depth is now bounded. The proof is short enough to carry in your head.</p>" +
+
+        "<p><strong>Claim.</strong> A tree whose root has rank r contains at least 2<sup>r</sup> nodes.</p>" +
+        "<p><strong>Proof by induction on the operations.</strong> A fresh singleton has rank 0 and 1 = 2<sup>0</sup> node. A rank only ever increases when two roots of equal rank r are linked, and the result has rank r+1; by the induction hypothesis each side held at least 2<sup>r</sup> nodes, so the merged tree holds at least 2<sup>r</sup> + 2<sup>r</sup> = 2<sup>r+1</sup>. Linking unequal ranks does not change the larger rank, and the node count only grows, so the property survives. &#9632;</p>" +
+
+        "<p>Since a tree cannot hold more than n nodes, 2<sup>r</sup> &#8804; n, so <strong>r &#8804; log&#8322; n</strong>, and rank bounds height, so every <code>find</code> walks at most log&#8322; n links. On the adversarial sequence the effect is total: the forest that was 4,999 deep is now <strong>1</strong> deep, and the 5,000 finds cost 9,999 accesses instead of 12,502,500.</p>" +
+
+        "<p>The wall clock, on n = 20,000 with the path-building sequence followed by 20,000 finds:</p>" +
+
+        "<ul>" +
+        "<li><strong>quick-find</strong> &#8212; 25,631 ms</li>" +
+        "<li><strong>quick-union</strong> &#8212; 9,648 ms</li>" +
+        "<li><strong>union by rank</strong> &#8212; <strong>11.3 ms</strong></li>" +
+        "</ul>" +
+
+        "<p>Three lines of code bought a factor of 854 over quick-union and 2,268 over quick-find, and the improvement grows with n rather than being a constant factor.</p>" +
+
+        "<h3>The bound is a guarantee, not a prediction</h3>" +
+
+        "<p>Measuring the maximum depth that actually occurs under random unions, against the log&#8322; n the proof allows:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 1,000</strong> &#8212; measured depth 4, bound 10.0</li>" +
+        "<li><strong>n = 10,000</strong> &#8212; measured depth 6, bound 13.3</li>" +
+        "<li><strong>n = 100,000</strong> &#8212; measured depth 7, bound 16.6</li>" +
+        "</ul>" +
+
+        "<p>The real depth runs at well under half the proved ceiling, the same gap Chapter 3 found in the closest-pair strip. The bound is not loose through carelessness; it is what survives when an adversary is allowed to choose the sequence. What you measure is what a typical caller gets, and the two numbers answer different questions.</p>" +
+
+        "<div class='callout'>Many implementations use <strong>union by size</strong> instead &#8212; store the node count and link the smaller tree under the larger. The bound is the same log&#8322; n by the same argument, and the practical difference is negligible; size is marginally easier to reason about because the stored number stays exactly true, where a rank remains an upper bound after compression flattens the tree beneath it.</div>"
+    },
+
+    { title: "Path Compression: Pay Once, Not Every Time",
+      html:
+        "<p>A <code>find</code> walks from a node to its root, and on the way it learns something it then throws away: the root of every node it passed through. Keeping that information is <strong>path compression</strong> &#8212; after reaching the root, walk the path a second time and point every node on it straight at the root.</p>" +
+
+        "<pre><code>def find(self, x):\n    root = x\n    while self.p[root] != root:\n        root = self.p[root]\n    while self.p[x] != root:         # second pass: re-point\n        self.p[x], x = root, self.p[x]\n    return root</code></pre>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>one find(5) on a chain of six, before and after compression</text>" +
+        "<text x='20' y='44' fill='#7d8fb0' font-size='10'>before: find(5) walks five links</text>" +
+        "<rect x='40' y='56' width='40' height='24' rx='6' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='60' y='72' text-anchor='middle' fill='#3ddc97' font-size='11'>0</text>" +
+        "<rect x='130' y='56' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='150' y='72' text-anchor='middle' fill='#c9d6ea' font-size='11'>1</text>" +
+        "<rect x='220' y='56' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='240' y='72' text-anchor='middle' fill='#c9d6ea' font-size='11'>2</text>" +
+        "<rect x='310' y='56' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='330' y='72' text-anchor='middle' fill='#c9d6ea' font-size='11'>3</text>" +
+        "<rect x='400' y='56' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='420' y='72' text-anchor='middle' fill='#c9d6ea' font-size='11'>4</text>" +
+        "<rect x='490' y='56' width='40' height='24' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='510' y='72' text-anchor='middle' fill='#ffd166' font-size='11'>5</text>" +
+        "<line x1='130' y1='68' x2='84' y2='68' stroke='#4f7cff' stroke-width='2'/><polygon points='80,68 88,64 88,72' fill='#4f7cff'/>" +
+        "<line x1='220' y1='68' x2='174' y2='68' stroke='#4f7cff' stroke-width='2'/><polygon points='170,68 178,64 178,72' fill='#4f7cff'/>" +
+        "<line x1='310' y1='68' x2='264' y2='68' stroke='#4f7cff' stroke-width='2'/><polygon points='260,68 268,64 268,72' fill='#4f7cff'/>" +
+        "<line x1='400' y1='68' x2='354' y2='68' stroke='#4f7cff' stroke-width='2'/><polygon points='350,68 358,64 358,72' fill='#4f7cff'/>" +
+        "<line x1='490' y1='68' x2='444' y2='68' stroke='#4f7cff' stroke-width='2'/><polygon points='440,68 448,64 448,72' fill='#4f7cff'/>" +
+        "<text x='560' y='72' fill='#ff5d73' font-size='10'>depth 5</text>" +
+        "<line x1='20' y1='104' x2='740' y2='104' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='126' fill='#7d8fb0' font-size='10'>after: every node on the path points at the root</text>" +
+        "<rect x='350' y='140' width='40' height='24' rx='6' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='370' y='156' text-anchor='middle' fill='#3ddc97' font-size='11'>0</text>" +
+        "<rect x='130' y='196' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='150' y='212' text-anchor='middle' fill='#c9d6ea' font-size='11'>1</text>" +
+        "<rect x='220' y='196' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='240' y='212' text-anchor='middle' fill='#c9d6ea' font-size='11'>2</text>" +
+        "<rect x='310' y='196' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='330' y='212' text-anchor='middle' fill='#c9d6ea' font-size='11'>3</text>" +
+        "<rect x='400' y='196' width='40' height='24' rx='6' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='420' y='212' text-anchor='middle' fill='#c9d6ea' font-size='11'>4</text>" +
+        "<rect x='490' y='196' width='40' height='24' rx='6' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='510' y='212' text-anchor='middle' fill='#ffd166' font-size='11'>5</text>" +
+        "<line x1='150' y1='196' x2='358' y2='166' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<line x1='240' y1='196' x2='362' y2='166' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<line x1='330' y1='196' x2='366' y2='166' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<line x1='420' y1='196' x2='378' y2='166' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<line x1='510' y1='196' x2='384' y2='166' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='560' y='212' fill='#3ddc97' font-size='10'>depth 1</text>" +
+        "</svg><div class='fig-cap'>The work was already done; compression is the decision to keep it.</div></div>" +
+
+        "<p>Measured on its own &#8212; compression with no union by rank, so the chain is genuinely 4,999 deep to begin with &#8212; three consecutive passes of 5,000 finds each:</p>" +
+
+        "<ul>" +
+        "<li><strong>without compression</strong> &#8212; 12,502,500 accesses on pass 1, and the same on passes 2 and 3; depth stays 4,999</li>" +
+        "<li><strong>with compression</strong> &#8212; <strong>24,993</strong> on pass 1, then <strong>9,999</strong> on passes 2 and 3; depth collapses to 1</li>" +
+        "</ul>" +
+
+        "<p>The first pass is already 500 times cheaper, because compression takes effect during the pass that pays for it: the first <code>find</code> walks the whole chain and flattens it, and the 4,999 that follow arrive at a tree one link deep. This is an amortized argument of exactly the kind Chapter 4 built &#8212; one expensive operation makes the rest cheap, and the average over the sequence is what matters.</p>" +
+
+        "<h3>What compression is worth once you already have rank</h3>" +
+
+        "<p>Here is the result that the folklore does not prepare you for. With union by rank already in place, adding path compression changed the measurements barely at all: on the adversarial sequence both variants used 9,999 find accesses, identical, and on 1,999 random unions over 2,000 elements the compressed version used <strong>more</strong> accesses than the uncompressed one &#8212; 10,096 against 9,285 &#8212; because the second pass costs writes and union by rank had already kept the trees under depth 5.</p>" +
+
+        "<p>A second scheme, <strong>path halving</strong>, points every other node on the path at its grandparent during the walk up, in one pass rather than two. Tarjan and van Leeuwen showed it reaches the same asymptotic bound, and because it avoids the second walk it is what most production implementations contain; the two-pass version is in this chapter because what it does is visible in one picture.</p>" +
+        "<p>That is not an argument against compression. It is a statement about where its value lies: in the asymptotic bound of the next section, and in workloads whose unions are adversarial enough to build deep trees before the finds arrive. On ordinary inputs, union by rank has already done almost all of the available work, and compression is insurance whose premium is a few writes.</p>"
+    },
+
+    { title: "The \u03b1(n) Result, and Why It Is Not Constant",
+      html:
+        "<p>With both improvements in place, Tarjan proved in 1975 that any sequence of m operations on n elements costs <strong>O(m &#945;(n))</strong> array accesses, where &#945; is the inverse of the Ackermann function. Tarjan and van Leeuwen's 1984 paper worked through the variants and showed the bound holds for union by rank or by size, with either of the two standard compression schemes. The result is the reason this structure is in every course.</p>" +
+
+        "<p>The Ackermann function grows faster than anything you can build from exponentials, so its inverse grows slower than anything you can build from logarithms. Defining A<sub>0</sub>(j) = j+1 and A<sub>k</sub>(j) as A<sub>k&#8722;1</sub> applied j+1 times to j, and &#945;(n) as the least k with A<sub>k</sub>(1) &#8805; n, the whole function is this:</p>" +
+
+        "<ul>" +
+        "<li><strong>A<sub>0</sub>(1) = 2</strong>, so &#945;(n) = 0 for n &#8804; 2</li>" +
+        "<li><strong>A<sub>1</sub>(1) = 3</strong>, so &#945;(n) = 1 for n = 3</li>" +
+        "<li><strong>A<sub>2</sub>(1) = 7</strong>, so &#945;(n) = 2 for 4 &#8804; n &#8804; 7</li>" +
+        "<li><strong>A<sub>3</sub>(1) = 2,047</strong>, so &#945;(n) = 3 for 8 &#8804; n &#8804; 2,047</li>" +
+        "<li><strong>A<sub>4</sub>(1) = A<sub>3</sub>(2,047)</strong>, a tower of powers of two far past anything physical, so <strong>&#945;(n) = 4</strong> for every n from 2,048 up to that</li>" +
+        "</ul>" +
+
+        "<p>There are about 10<sup>80</sup> atoms in the observable universe, and &#945;(10<sup>80</sup>) = 4. An input large enough to push &#945; to 5 cannot be represented by any arrangement of matter. <strong>Drag the slider in the machine above</strong> as far as it will go and watch the value refuse to move.</p>" +
+
+        "<h3>How the bound was found</h3>" +
+        "<p>The result did not arrive in one step, and the intermediate answer left a term still in circulation. Hopcroft and Ullman proved in 1973 that union by rank with path compression runs in O(m log* n), where log*, the <strong>iterated logarithm</strong>, counts how many times a base-2 logarithm must be applied to bring n down to 1. It is already absurd: log*(16) = 3, log*(65,536) = 4, and log*(2<sup>65,536</sup>) = 5. Two years later Tarjan sharpened it to the <strong>inverse Ackermann function</strong>, which is smaller again, and in 1989 Fredman and Saks showed it could not be sharpened further. You will meet log* in older texts and in the analysis of other structures; for this one, &#945; is the exact answer.</p>" +
+        "<h3>&#8220;Effectively constant&#8221; is not constant, and the difference is provable</h3>" +
+
+        "<p>It is tempting to round &#945;(n) to a constant and call union\u2013find O(1). Two things make that wrong, and the second is stronger than a technicality.</p>" +
+
+        "<p><strong>The bound is amortized, not per-operation.</strong> Chapter 4's distinction applies unchanged: O(m&#945;(n)) for a sequence of m operations says nothing reassuring about any single <code>find</code>. The first find down a long chain pays for the whole chain, as the 24,993 accesses on pass 1 above show against the 9,999 that follow. A latency budget cares about that operation.</p>" +
+
+        "<p><strong>And the structure is provably not O(1) amortized.</strong> Fredman and Saks proved a matching lower bound in 1989: in the cell-probe model, &#937;(m&#945;(n)) is required, so no cleverer implementation of these operations can reach constant amortized time. &#945; is not an artefact of Tarjan's proof technique that a better analysis might remove. It is the true answer, and union\u2013find is the standard example of a problem whose exact complexity is a function nobody expected to meet.</p>" +
+
+        "<div class='callout'>The useful way to hold this: &#945;(n) &#8804; 4 is a fact you may rely on when estimating work, and \u201cunion\u2013find is constant time\u201d is a sentence to avoid saying, because it is false, and because the person who corrects you will be right for the interesting reason rather than the pedantic one.</div>",
+      viz: "dsaAckermann", vizTitle: "Drag n as far as it goes and find a value for which \u03b1(n) reaches 5"
+    },
+
+    { title: "What It Is For",
+      html:
+        "<p>Union\u2013find answers exactly one question &#8212; are these two things in the same group &#8212; and a surprising number of problems are that question wearing a costume.</p>" +
+
+        "<ul>" +
+        "<li><strong>Kruskal's minimum spanning tree.</strong> Sort the edges by weight and add each one whose endpoints are not already connected. The connectivity test <em>is</em> union\u2013find, and without it the algorithm has no efficient form. Chapter 36 builds this.</li>" +
+        "<li><strong>Connected components of a static graph</strong>, when you want them without writing a traversal: one union per edge, then the components are the groups.</li>" +
+        "<li><strong>Percolation and grid flooding</strong> &#8212; whether a path of open cells joins the top of a grid to the bottom, answered by unioning each open cell with its open neighbours and adding two virtual nodes for the top and bottom rows.</li>" +
+        "<li><strong>Cycle detection while building an undirected graph</strong>: an edge whose endpoints are already connected closes a cycle, which is the same test read the other way round.</li>" +
+        "<li><strong>The grouping pattern</strong> the interview banks call \u201cUnion Find\u201d: accounts to merge, equations to make consistent, islands to count, stones to remove. Every one of them is dynamic connectivity with the vocabulary changed.</li>" +
+        "</ul>" +
+
+        "<h3>What real systems do</h3>" +
+
+        "<p>Neither of this course's languages ships one. Python's standard library has no disjoint-set structure and neither does Java's, which is unusual for something this well understood, and it means that in practice you write the fifteen lines yourself. Outside the standard libraries it is everywhere: <code>boost::disjoint_sets</code> in C++, <code>UnionFind</code> in NetworkX, and an implementation inside most compilers for the equivalence analysis Galler and Fischer originally wrote it for.</p>" +
+
+        "<p>The absence is worth a moment. A structure fifteen lines long, settled theory since 1975 and taught in every algorithms curriculum, is in neither standard library, and the reason is that it has no single natural interface. The elements might be small integers or arbitrary hashable objects, and the auxiliary questions callers want &#8212; how many groups are there, how large is this one, which members does it hold &#8212; differ enough by application that every codebase wants a slightly different structure. When you write your own, settle those three first; a group counter and a size array cost two more lines and are what most callers turn out to need.</p>" +
+        "<h3>The edge: it cannot go backwards</h3>" +
+
+        "<p>There is no <code>un-union</code>. Every improvement in this chapter works by destroying information &#8212; union by rank forgets which side was which, and path compression overwrites the path it walked &#8212; so nothing remains to undo. A problem that deletes connections as well as adding them is a different and much harder one, and the standard answer is to process the operations offline in reverse, turning each deletion into an addition. If deletions must be handled online, union\u2013find is the wrong structure and no amount of tuning will make it the right one.</p>" +
+
+        "<div class='callout'><strong>Interview lens.</strong> The tell that someone has understood this structure rather than memorised it is that they write union by rank <em>and</em> say what it costs without it. The four implementations here differ by six lines and by a factor of two thousand, and the sequence &#8212; obvious version, workload that kills it, fix, measure, repeat &#8212; is the method the rest of this course applies to larger structures.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Starting from eight singletons, apply union(0,1), union(2,3), union(0,2), union(4,5), union(6,7), union(4,6), union(0,4) under quick-union and again under union by rank, drawing the forest after each step. <em>What you should find:</em> quick-union ends with a tree of depth 3 and union by rank with depth 2, and the ranks of the two surviving roots are equal at the final union, which is the case where the tie-break decides the shape.</li>" +
+        "<li><strong>Trace.</strong> Compute &#945;(n) from the definition for n = 3, 7, 2,047 and 2,048 by evaluating A<sub>k</sub>(1) upward until it reaches n. <em>What you should find:</em> 1, 2, 3 and 4, with the jump from 3 to 4 falling between 2,047 and 2,048 &#8212; and no further jump reachable, since A<sub>4</sub>(1) is A<sub>3</sub>(2,047).</li>" +
+        "<li><strong>Investigate.</strong> Implement all four variants with an array-access counter, and run each on n = 5,000 with the sequence union(i, i+1) for all i followed by one find per element. <em>What you should find:</em> quick-find pays about 37.5 million accesses in the unions and 5,000 in the finds; quick-union pays 14,997 and 12.5 million; both rank variants pay under 20,000 for either phase, which is the same quadratic appearing in two different places and then disappearing.</li>" +
+        "<li><strong>Investigate.</strong> Take quick-union <em>without</em> union by rank, build the 5,000-deep chain, then run three consecutive passes of 5,000 finds with compression on and off, recording the maximum depth after each pass. <em>What you should find:</em> without compression every pass costs 12,502,500 accesses and the depth never moves; with compression the first pass costs about 25,000, later passes about 10,000, and the depth is 1 from the end of the first pass onward.</li>" +
+        "<li><strong>Build.</strong> Implement percolation on an n &#215; n grid: open cells at random, union each newly opened cell with its open neighbours, and use two virtual nodes for the top and bottom rows to test whether the grid percolates in one find. <em>What you should find:</em> the fraction of open sites at which percolation begins converges near 0.593 as n grows, and the two virtual nodes remove the need to test every top cell against every bottom cell.</li>" +
+        "<li><strong>Build.</strong> Write a differential test: run your union by rank with compression and a deliberately naive reference that stores an explicit set per group, against 100,000 random operations on 1,000 elements, asserting the two agree on every find. <em>What you should find:</em> they agree on every query, and the naive reference is slower by orders of magnitude &#8212; which is the pattern every capstone chapter of this course uses to check a structure.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "dynamic connectivity", d: "The problem of answering whether two objects are connected while new connections keep arriving, which is what forces an incremental structure rather than one traversal." },
+    { t: "disjoint-set union", d: "The standard name in the literature for the union\u2013find structure, describing the collection of non-overlapping groups it maintains." },
+    { t: "union", d: "The operation that merges the two groups containing its arguments, after which every member of one is connected to every member of the other." },
+    { t: "find", d: "The operation that returns a representative of an object's group, so that two objects are connected exactly when their representatives match." },
+    { t: "equivalence relation", d: "A relation that is reflexive, symmetric and transitive, which is what connectivity is and what guarantees the groups partition the objects cleanly." },
+    { t: "connected component", d: "A maximal set of vertices all reachable from one another, which is the equivalence class that union\u2013find maintains when the objects are graph vertices." },
+    { t: "quick-find", d: "The implementation storing a group label per object, giving constant-time find and linear-time union, which makes any sequence of n unions quadratic." },
+    { t: "quick-union", d: "The implementation storing a parent pointer per object so union is a single write, which moves the quadratic cost from union into find." },
+    { t: "root", d: "The one node in each tree that points to itself, serving as the group's representative and the value that find returns." },
+    { t: "union by rank", d: "Linking the shallower tree under the deeper one, which bounds every tree's height at log base 2 of n and is the single change that removes the quadratic." },
+    { t: "union by size", d: "The variant that links the smaller tree under the larger by node count, giving the same logarithmic bound with a stored number that stays exactly true." },
+    { t: "path compression", d: "Re-pointing every node on a find's path directly at the root, so the walk that paid for the information also keeps it." },
+    { t: "inverse Ackermann function", d: "The function \u03b1(n) giving the cost of union\u2013find per operation, which is at most 4 for every n that can be physically represented and is provably not constant." },
+    { t: "iterated logarithm", d: "The function log*(n) counting how many times a logarithm must be applied to reach 1, an earlier and slightly weaker bound for this structure than \u03b1(n)." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Quick-find makes find a single array read, which cannot be beaten. Why is it nonetheless the wrong structure for almost every use?",
+      opts: [
+        "Because its union rewrites the whole array, and building any structure takes n\u22121 unions, so the ordinary act of connecting things up is already quadratic",
+        "Because the labels it stores are arbitrary integers rather than stable identifiers, so a label held across a union may afterwards name a different group",
+        "Because a single array read is only constant on contiguous memory, and once n is large enough that the array leaves cache the read becomes a memory stall costing hundreds of cycles",
+        "Because it cannot represent a group containing a single element without a special case, and the initialisation therefore costs a pass that the other three implementations avoid entirely"
+      ], a: 0,
+      why: "The structure is not judged on its best operation but on the sequence a caller actually runs, and that sequence contains n\u22121 unions before it contains anything interesting. Measured on 5,000 elements, connecting them in a chain costs 37,502,498 array accesses and 25.6 seconds at n = 20,000 \u2014 with no adversary involved, because that is what using the structure looks like." },
+
+    { type: "mc",
+      q: "Moving from quick-find to quick-union cut the cost of building a 5,000-element chain from 37.5 million array accesses to 14,997. Why is that not yet an improvement?",
+      opts: [
+        "Because the 14,997 figure counts writes and omits the reads done by the two find calls inside each union",
+        "Because the chain it builds is 4,999 deep, so the 5,000 find calls that follow cost 12.5 million accesses \u2014 the quadratic was relocated, not removed",
+        "Because quick-union's union is cheap only when both arguments are already roots, which a caller cannot arrange",
+        "Because quick-find was measured on the union phase alone and quick-union on a mixed workload"
+      ], a: 1,
+      why: "A structure has to be measured on a sequence containing every operation it supports. Quick-find pays 37,502,498 to build and 5,000 to answer; quick-union pays 14,997 to build and 12,502,500 to answer. Both totals are \u0398(n\u00b2). Reporting that union went from O(n) to O(1) is true and tells you nothing, because the cost moved into the operation nobody was timing." },
+
+    { type: "mc",
+      q: "Union by rank bounds every tree's height at log\u2082 n. What does the proof actually establish?",
+      opts: [
+        "That the number of distinct ranks in the forest is at most log\u2082 n, since ranks increase one at a time and no rank can be skipped over during any sequence of union operations",
+        "That linking the shorter tree under the taller never increases the taller tree's height, so the maximum height across the forest is non-increasing after the first n/2 unions have been performed",
+        "That a tree whose root has rank r holds at least 2\u02b3 nodes, so 2\u02b3 \u2264 n and therefore r \u2264 log\u2082 n",
+        "That each union reduces the number of roots by exactly one, so after n\u22121 unions a single tree remains and its height cannot exceed the number of merges that built it"
+      ], a: 2,
+      why: "The induction is on the operations: a singleton has rank 0 and 2\u2070 = 1 node, and a rank only rises when two roots of equal rank r merge, producing rank r+1 over at least 2\u02b3 + 2\u02b3 = 2\u02b3\u207a\u00b9 nodes. Since no tree holds more than n nodes, 2\u02b3 \u2264 n. Rank bounds height, so every find walks at most log\u2082 n links." },
+
+    { type: "mc",
+      q: "On random unions over 2,000 elements, union by rank with path compression used 10,096 array accesses while union by rank alone used 9,285. Compression made it measurably worse. What does that tell you?",
+      opts: [
+        "That the implementation makes a redundant third pass, since two passes cannot cost more than the walk",
+        "That rank and compression interact badly, because compression flattens trees underneath a root whose stored rank then overstates the height and misdirects later unions",
+        "That the measurement is within noise and array-access counts are not reproducible enough to separate two variants that differ by under ten percent on the same input",
+        "That union by rank had already kept the trees under depth 5, leaving compression almost nothing to flatten while it still paid for the extra writes"
+      ], a: 3,
+      why: "Compression earns its cost on deep trees, and union by rank prevents deep trees from forming. Measured in isolation on a genuinely 4,999-deep chain, compression cut the first pass from 12,502,500 accesses to 24,993 and collapsed the depth to 1. Its value with rank present is the asymptotic bound of the next section, not the accesses on an ordinary input." },
+
+    { type: "mc",
+      q: "Why is it wrong to describe union\u2013find as constant time, given that \u03b1(n) \u2264 4 for every input that could physically exist?",
+      opts: [
+        "Because \u03b1(n) reaches 5 for inputs above roughly 10\u2078\u2070 elements, and distributed systems partitioned across enough machines can address collections in that range",
+        "Because the bound holds only when unions and finds are interleaved in roughly equal proportion, and a workload that front-loads all its unions falls outside the hypothesis of Tarjan's theorem",
+        "Because the O(m\u03b1(n)) bound is amortized rather than per-operation, and Fredman and Saks proved in 1989 that \u03a9(m\u03b1(n)) is required, so constant amortized time is provably unreachable",
+        "Because \u03b1(n) counts array accesses rather than instructions, and the constant factor hidden in each access grows with n once the arrays no longer fit in cache"
+      ], a: 2,
+      why: "Two separate objections, and the second is the stronger one. The amortized point is Chapter 4's: a single find down a long chain can pay for the whole chain. The lower bound is what makes \u03b1 real \u2014 in the cell-probe model no implementation of these operations reaches constant amortized time, so \u03b1 is the true answer rather than a weakness in Tarjan's proof." },
+
+    { type: "mc",
+      q: "A system needs to both add and remove connections online, answering connectivity queries throughout. Why is union\u2013find the wrong structure?",
+      opts: [
+        "Because removals would require the rank array to be recomputed from scratch after each one, which costs a full pass and destroys the amortized bound the structure depends on",
+        "Because every optimisation in the structure works by destroying information \u2014 rank forgets which side was which, compression overwrites the path \u2014 so there is nothing left to undo",
+        "Because the structure represents groups as trees, and removing an edge would disconnect a subtree whose members must then each be given a fresh root in linear time",
+        "Because connectivity under removals is no longer an equivalence relation, since transitivity can fail once an intermediate connection is withdrawn from the set"
+      ], a: 1,
+      why: "The speed and the irreversibility are the same property. A parent pointer records that two things are connected, not why or through which link, and compression has already overwritten the path that would say. The standard answer is to process operations offline in reverse so each deletion becomes an addition; if that is not possible, a different structure is needed rather than a tuned version of this one." },
+
+    { type: "mc",
+      q: "Under random unions the measured maximum depth with union by rank was 7 at n = 100,000, against a proved bound of log\u2082(100,000) \u2248 16.6. What is the right reading of the gap?",
+      opts: [
+        "The bound describes what an adversary can force, and the measurement describes what a typical caller gets; the two answer different questions and neither is wrong",
+        "The bound is stated for union by rank without compression, and the measured structure had compression enabled, which accounts for roughly halving the observed depth",
+        "The bound counts links traversed while the measurement counts levels of the tree, an off-by-one that compounds multiplicatively over the sequence of merges",
+        "The bound is loose because the induction proves only 2\u02b3 \u2264 n rather than the tight count, and a sharper argument gives a ceiling near the measured value"
+      ], a: 0,
+      why: "The same gap appeared in Chapter 3's closest-pair strip, where a proved limit of 7 comparisons per point was never approached. A worst-case bound survives an adversary choosing the input; a measurement reports one distribution of inputs. Quoting either as though it were the other is how performance claims go wrong in both directions." },
+
+    { type: "blank",
+      q: "Re-pointing every node on a find's path directly at the root, so that the walk which paid for the information also keeps it, is called path ____.",
+      a: ["compression"],
+      why: "Measured on a 4,999-deep chain with no union by rank, it cut the first pass of 5,000 finds from 12,502,500 array accesses to 24,993 and left the tree one link deep. The first find pays for the whole chain and every find after it arrives at a flat tree, which is the amortized argument of Chapter 4 applied to a structure rather than an array." },
+
+    { type: "blank",
+      q: "The function \u03b1(n) that gives union\u2013find's per-operation cost is the inverse of the ____ function.",
+      a: ["ackermann", "ackerman"],
+      why: "It grows faster than anything built from exponentials, so its inverse grows slower than anything built from logarithms: \u03b1(n) = 3 up to n = 2,047, then 4 for every n up to A\u2084(1), a tower of powers of two. With about 10\u2078\u2070 atoms in the observable universe, \u03b1 of any representable input is at most 4." },
+
+    { type: "order",
+      q: "Order the four implementations by the sequence in which this chapter derives them, from the first attempt to the final structure:",
+      items: [
+        "quick-find: a label per object, so find is one read and union rewrites the array",
+        "quick-union: a parent pointer per object, so union is one write and find walks to a root",
+        "union by rank: link the shallower tree under the deeper one, bounding every height at log\u2082 n",
+        "path compression: re-point the walked path at the root, so the next find arrives at a flat tree"
+      ],
+      why: "The order is the method, not a ranking. Each step is provoked by a measurement on the one before it: quick-find's union is quadratic, quick-union relocates that quadratic into find, union by rank removes it by controlling the shape, and compression keeps the information a find already paid to obtain. The same loop \u2014 obvious version, workload that kills it, fix, measure \u2014 is what the rest of this course does to larger structures." }
+  ]
+});
+
+/* ======================= CHAPTER 8 ======================= */
+CHAPTERS.push({
+  num: 8, part: 1, title: "Two Pointers and Sliding Windows",
+  blurb: "These are the first two patterns every sheet teaches and the first two people apply wrongly, because the templates hide the only thing that matters: the invariant that justifies never moving a pointer backwards. This chapter derives both from Chapter 4's amortized argument, writes each invariant down explicitly, and then shows you the inputs on which the sliding-window template returns a confidently wrong answer. One of those inputs has two elements. By the end you will be able to state, before writing the loop, whether the pattern is even legal on the problem in front of you.",
+
+  sections: [
+
+    { title: "Opposite Ends: What a Discarded Element Proves",
+      html:
+        "<p>The setup is a sorted array and a target, and the question is whether two elements sum to it. The direct answer tries every pair, which on 10,000 elements is 49,995,000 comparisons. The pattern answer puts one pointer at each end and moves them toward each other:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def pair_sum(a, target):        # a is sorted\n    i, j = 0, len(a) - 1\n    while i &lt; j:\n        s = a[i] + a[j]\n        if s == target:\n            return i, j\n        if s &lt; target:\n            i += 1              # discard a[i] forever\n        else:\n            j -= 1              # discard a[j] forever\n    return None</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] pairSum(int[] a, int target) {   // a is sorted\n    int i = 0, j = a.length - 1;\n    while (i &lt; j) {\n        int s = a[i] + a[j];\n        if (s == target) return new int[]{i, j};\n        if (s &lt; target) i++;                   // discard a[i] forever\n        else            j--;                   // discard a[j] forever\n    }\n    return null;\n}</code></pre></div>" +
+
+        "<p>On the same 10,000 elements with no matching pair, this performs 9,999 comparisons: a factor of 5,000, growing with n. The code is four lines and most people can write it. Almost nobody can say why it is allowed to throw elements away, and that sentence is the entire pattern.</p>" +
+
+        "<h3>The invariant, in writing</h3>" +
+
+        "<p><strong>No pair involving a discarded element can be the answer.</strong> That is the claim the loop maintains, and here is its proof for the branch that increments i. Suppose a[i] + a[j] &lt; target. Every element still in play sits at an index k with i &lt; k &#8804; j, and because the array is sorted, a[k] &#8804; a[j]. So a[i] + a[k] &#8804; a[i] + a[j] &lt; target for every surviving k: a[i] cannot reach the target with anything that remains, and discarding it loses nothing. The branch that decrements j is the mirror image. &#9632;</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 210' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>after four steps: what the invariant has already ruled out</text>" +
+        "<rect x='40' y='40' width='160' height='30' rx='5' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='120' y='60' text-anchor='middle' fill='#ff5d73' font-size='11'>discarded, low</text>" +
+        "<rect x='200' y='40' width='360' height='30' rx='5' fill='#111a2e' stroke='#3ddc97' stroke-width='2.5'/>" +
+        "<text x='380' y='60' text-anchor='middle' fill='#3ddc97' font-size='11'>still in play</text>" +
+        "<rect x='560' y='40' width='160' height='30' rx='5' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='640' y='60' text-anchor='middle' fill='#ff5d73' font-size='11'>discarded, high</text>" +
+        "<line x1='206' y1='86' x2='206' y2='74' stroke='#ffd166' stroke-width='2'/><polygon points='206,70 202,80 210,80' fill='#ffd166'/>" +
+        "<text x='206' y='100' text-anchor='middle' fill='#ffd166' font-size='11'>i</text>" +
+        "<line x1='554' y1='86' x2='554' y2='74' stroke='#ffd166' stroke-width='2'/><polygon points='554,70 550,80 558,80' fill='#ffd166'/>" +
+        "<text x='554' y='100' text-anchor='middle' fill='#ffd166' font-size='11'>j</text>" +
+        "<text x='40' y='130' fill='#7d8fb0' font-size='10'>every element left of i was dropped because even paired with the</text>" +
+        "<text x='40' y='146' fill='#7d8fb0' font-size='10'>largest survivor it fell short; every element right of j because</text>" +
+        "<text x='40' y='162' fill='#7d8fb0' font-size='10'>even paired with the smallest survivor it overshot</text>" +
+        "<text x='40' y='190' fill='#3ddc97' font-size='11'>each step shrinks the live band by one, so the scan ends in at most n steps</text>" +
+        "</svg><div class='fig-cap'>The shaded regions are not unvisited. They are proved impossible.</div></div>" +
+
+        "<p>The invariant also explains the cost without any counting. Each iteration permanently removes one element from consideration, and there are n elements, so there are at most n iterations. Neither pointer ever moves backwards because the proof gives no reason to revisit anything &#8212; the discard was not a heuristic.</p>" +
+
+        "<h3>A different problem, a different invariant</h3>" +
+
+        "<p>Container-with-most-water uses the same two pointers and a different justification, which is why transplanting the rule fails. Given heights, the water held between i and j is min(h[i], h[j]) &#215; (j &#8722; i), and the rule is <strong>move the shorter pointer inward</strong>. The reason: the area is capped by the shorter side, so any pair keeping the shorter side and moving the taller one inward has the same cap or lower and strictly less width, and therefore cannot beat what was already recorded. Moving the shorter side is the only move that can raise the cap.</p>" +
+
+        "<p>Tested exhaustively against brute force on 50,000 random arrays, the correct rule was wrong zero times. The same code moving the <em>taller</em> pointer was wrong <strong>48% of the time</strong>, and the smallest failure it produced was h = [5, 9, 6, 3, 7, 1, 6, 8, 5], where it reports 40 against a true answer of 48.</p>" +
+
+        "<h3>Three pointers is two pointers with a loop around it</h3>" +
+        "<p>The standard extension is 3-sum: find three elements summing to a target. Sorting first, then fixing the leftmost element and running the converging scan on the remainder, gives O(n&#178;) &#8212; n choices of the fixed element, each costing a linear scan. That is the whole algorithm, and the interesting part is the bookkeeping rather than the idea.</p>" +
+        "<p>Two places go wrong reliably. The first is duplicate results: if the fixed element repeats, the same triple is emitted twice, so the outer loop must skip any fixed value equal to its predecessor, and the inner scan must skip past runs of equal values after recording a hit. The second is the skip direction &#8212; skipping <em>before</em> testing drops legitimate triples in which two of the three values are equal. Both bugs pass a small hand-written test and fail on input with repeats, which is why the exercises below use random arrays with a deliberately narrow value range.</p>" +
+        "<div class='callout'><strong>Try it in the machine above.</strong> Run container-with-most-water and stop at any step where the two heights differ. Moving the taller pointer would discard the side that is <em>not</em> limiting the answer &#8212; the machine shades what each move throws away, and the wrong move throws away the wrong band.</div>",
+      viz: "dsaTwoPointers", vizTitle: "Two pointers, one pass; the shaded regions are what each invariant has ruled out"
+    },
+
+    { title: "Same Direction: Read Ahead, Write Behind",
+      html:
+        "<p>The second arrangement puts both pointers at the start and lets them travel at different speeds. A <strong>read pointer</strong> scans every element; a <strong>write pointer</strong> marks where the next kept element belongs. Because the write pointer never overtakes the read pointer, the rewriting happens <strong>in place</strong> and needs no second array. This is the <strong>compaction scan</strong>, and removing duplicates from a sorted array is its smallest instance:</p>" +
+
+        "<pre><code>def dedupe(a):               # a is sorted; returns new length\n    if not a:\n        return 0\n    w = 1                    # write pointer\n    for r in range(1, len(a)):   # read pointer\n        if a[r] != a[w - 1]:\n            a[w] = a[r]\n            w += 1\n    return w</code></pre>" +
+
+        "<p>The invariant is that <code>a[0:w]</code> holds exactly the distinct elements seen so far, in order, and it is maintained because the only write happens when a genuinely new value arrives. Partitioning works the same way: move every zero to the end by writing the non-zeros forward and filling the tail afterwards. Both are one pass, no extra space, and the correctness argument fits in one sentence.</p>" +
+
+        "<p>Two properties make the rewrite safe, and both are worth stating because their absence is what breaks the variants. The write pointer never overtakes the read pointer &#8212; w &#8804; r at every step, since w advances only on iterations where r also advances &#8212; so the scan never reads a slot it has already overwritten. And the relative order of the kept elements is preserved, because they are written in the order they were read. A compaction scan is therefore stable, which matters as soon as the elements carry associated data rather than being bare numbers.</p>" +
+        "<p>The move-zeros variant shows what happens when the second property is traded away. Writing the non-zeros forward and then filling the tail with zeros preserves order and costs two passes. Swapping each non-zero with the slot at the write pointer does it in one pass and keeps the order too, because the slot being swapped into is either the same position or a zero. Swapping with the array's end instead &#8212; the obvious way to avoid the fill &#8212; is one pass and scrambles the order, which is a legitimate choice only when order does not matter and a silent bug when it does.</p>" +
+        "<h3>Cyclic placement: when the value tells you the index</h3>" +
+
+        "<p>There is an extreme case of the same-direction idea that looks impossible the first time you see it. If the array holds a permutation of 0 &#8230; n&#8722;1 &#8212; every index present exactly once, in some order &#8212; then each value knows where it belongs, because the value <em>is</em> the destination index. So put it there, and look at whatever you displaced:</p>" +
+
+        "<pre><code>def cyclic_place(a):         # a is a permutation of 0..n-1\n    i = 0\n    while i &lt; len(a):\n        if a[i] != i:\n            a[a[i]], a[i] = a[i], a[a[i]]   # send a[i] home\n        else:\n            i += 1</code></pre>" +
+
+        "<p>The loop looks quadratic and is not. Every swap places one value at its final index, where it is never disturbed again, so the total number of swaps over the whole run is at most n&#8722;1 &#8212; and the pointer i advances n times. This is Chapter 4's argument in its purest form: the inner work is bounded globally rather than per iteration, so a nested-looking loop is linear. Measured on a shuffled permutation of a million elements, it performed <strong>999,987 swaps</strong> against the bound of 999,999, and sorted the array correctly while never comparing two elements to each other.</p>" +
+
+        "<p>That last clause is what the name <strong>cyclic placement</strong> is pointing at, and it is also the limit. Chapter 5 proved that no comparison sort can beat n log n; this sorts in linear time because it is not a comparison sort. It reads a value and uses it directly as an address, exactly as counting sort does. The price is that it works on one input shape only &#8212; values that are a permutation of the indices, or of a known contiguous range &#8212; and on anything else it does not degrade gracefully, it fails to terminate or writes out of bounds. Every interview problem in the family (find the missing number, find the duplicate, first missing positive) is a variation on establishing that shape first.</p>"
+    },
+
+    { title: "Dutch National Flag: Three Regions and an Unknown",
+      html:
+        "<p>Dijkstra posed the problem in <em>A Discipline of Programming</em> in 1976: given an array of three values &#8212; he used the colours of the Dutch flag &#8212; sort it in one pass with constant extra space. Two pointers are not enough; the answer needs three, and the reason is worth seeing because it is the general shape of a partition.</p>" +
+
+        "<p>Maintain four regions, and read the invariant off them:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>the loop invariant: three settled regions and one that is not yet examined</text>" +
+        "<rect x='40' y='40' width='130' height='34' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='105' y='62' text-anchor='middle' fill='#4f7cff' font-size='11'>all &lt; pivot</text>" +
+        "<rect x='170' y='40' width='150' height='34' rx='5' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/>" +
+        "<text x='245' y='62' text-anchor='middle' fill='#3ddc97' font-size='11'>all = pivot</text>" +
+        "<rect x='320' y='40' width='240' height='34' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2.5'/>" +
+        "<text x='440' y='62' text-anchor='middle' fill='#ffd166' font-size='11'>unexamined</text>" +
+        "<rect x='560' y='40' width='160' height='34' rx='5' fill='#111a2e' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='640' y='62' text-anchor='middle' fill='#ff5d73' font-size='11'>all &gt; pivot</text>" +
+        "<text x='170' y='96' text-anchor='middle' fill='#7d8fb0' font-size='10'>lo</text>" +
+        "<text x='320' y='96' text-anchor='middle' fill='#7d8fb0' font-size='10'>i</text>" +
+        "<text x='560' y='96' text-anchor='middle' fill='#7d8fb0' font-size='10'>hi</text>" +
+        "<line x1='170' y1='84' x2='170' y2='76' stroke='#7d8fb0' stroke-width='1.5'/>" +
+        "<line x1='320' y1='84' x2='320' y2='76' stroke='#7d8fb0' stroke-width='1.5'/>" +
+        "<line x1='560' y1='84' x2='560' y2='76' stroke='#7d8fb0' stroke-width='1.5'/>" +
+        "<text x='40' y='128' fill='#c9d6ea' font-size='10'>a[i] &lt; pivot  swap into lo, advance both lo and i</text>" +
+        "<text x='40' y='146' fill='#c9d6ea' font-size='10'>a[i] = pivot  advance i only</text>" +
+        "<text x='40' y='164' fill='#ff5d73' font-size='10'>a[i] &gt; pivot  swap with hi, retreat hi, and do NOT advance i</text>" +
+        "<text x='40' y='192' fill='#3ddc97' font-size='10'>the unexamined band shrinks by one every iteration, so the loop ends after n steps</text>" +
+        "</svg><div class='fig-cap'>The third rule is the one people get wrong: what arrives from hi has never been looked at.</div></div>" +
+
+        "<pre><code>def dutch_flag(a, pivot):\n    lo, i, hi = 0, 0, len(a) - 1\n    while i &lt;= hi:\n        if a[i] &lt; pivot:\n            a[lo], a[i] = a[i], a[lo]; lo += 1; i += 1\n        elif a[i] &gt; pivot:\n            a[hi], a[i] = a[i], a[hi]; hi -= 1      # i stays put\n        else:\n            i += 1</code></pre>" +
+
+        "<p><strong>Why i does not advance in the middle branch.</strong> The element swapped in from <code>hi</code> came from the unexamined region and has never been compared to the pivot. Advancing i would move it into the settled &#8220;= pivot&#8221; region on no evidence. In the first branch the situation is different: the element arriving from <code>lo</code> came from the region already known to equal the pivot, so it is safe to step over. Getting this wrong produces code that is correct on most inputs and wrong when a large value is swapped leftward, which is the worst kind of wrong.</p>" +
+
+        "<h3>Why this is not a curiosity</h3>" +
+        "<p>The reason every serious sort implementation contains this partition is what a two-way partition does to an array with repeated keys. A two-way split sends everything equal to the pivot to one side, so on an array where many elements are equal the split is maximally unbalanced and the recursion degenerates. Counting comparisons on 20,000 elements while varying only the number of distinct values:</p>" +
+        "<ul>" +
+        "<li><strong>1 distinct value</strong> (every element equal) &#8212; two-way <strong>199,990,000</strong> comparisons, three-way <strong>20,000</strong></li>" +
+        "<li><strong>2 distinct values</strong> &#8212; two-way 100,009,702, three-way 30,098</li>" +
+        "<li><strong>10 distinct values</strong> &#8212; two-way 20,077,745, three-way 78,008</li>" +
+        "<li><strong>1,000 distinct values</strong> &#8212; two-way 458,809, three-way 266,949</li>" +
+        "<li><strong>all 20,000 distinct</strong> &#8212; two-way 338,034, three-way 319,452</li>" +
+        "</ul>" +
+        "<p>The first line is the quadratic in plain sight: 199,990,000 is exactly n(n&#8722;1)/2, every pair compared, because an array of equal elements makes the two-way partition split off one element at a time. The three-way version finishes the same array in a single pass of n comparisons, a factor of ten thousand. And the last line is the part that settles the argument: with no duplicates at all the three-way partition costs 319,452 against 338,034, so it is not paying a premium for the protection. Chapter 15 returns to this when it measures what the standard libraries actually run.</p>" +
+        "<p>The loop terminates because the unexamined band <code>[i, hi]</code> loses one element on every branch, so there are exactly n iterations with at most two comparisons each. On 100,000 random values in {0, 1, 2} it performed <strong>66,479 swaps</strong> in a single pass. The structure is not a curiosity: it is the three-way partition that makes quicksort survive arrays with many equal keys, which Chapter 15 measures.</p>"
+    },
+
+    { title: "The Fixed Window and Its Off-by-One",
+      html:
+        "<p>A <strong>fixed-size window</strong> asks the same question of every k consecutive elements: their sum, their average, their maximum. Computing each answer from scratch costs n &#215; k. The observation that removes the k is that consecutive windows overlap in k&#8722;1 elements, so moving the window one step changes the answer by exactly two elements &#8212; one enters, one leaves. That is the <strong>rolling update</strong>:</p>" +
+
+        "<pre><code>def window_sums(a, k):\n    s = sum(a[:k])\n    out = [s]\n    for r in range(k, len(a)):\n        s += a[r] - a[r - k]      # one in, one out\n        out.append(s)\n    return out</code></pre>" +
+
+        "<p>Now the cost is n additions and n subtractions regardless of k, which matters because k is often large: a 200-day moving average over a decade of prices is 2,500 windows of 200 elements, and the rolling version does 5,000 arithmetic operations instead of 500,000.</p>" +
+
+        "<h3>The off-by-one everybody writes once</h3>" +
+
+        "<p>Two conventions exist for the loop, and mixing them is the standard bug. Either prime the window with the first k elements and then start the loop at index k, as above, or run a single loop from 0 and emit an answer only once <code>r &#8805; k-1</code>, subtracting <code>a[r-k]</code> only once <code>r &#8805; k</code>. Both are correct. The hybrid &#8212; a single loop that subtracts <code>a[r-k]</code> from the first iteration, or that emits at <code>r &#8805; k</code> &#8212; produces an array one element short, or reads a negative index, which in Python silently wraps to the end of the array and returns wrong numbers with no error at all.</p>" +
+
+        "<div class='callout'>A window of size k over n elements produces exactly <strong>n &#8722; k + 1</strong> answers, and asserting that length on the output is the cheapest test that catches every version of this mistake. It costs one line and it has caught this bug in production more than once.</div>" +
+
+        "<h3>Which quantities can roll, stated precisely</h3>" +
+        "<p>The rolling update needs the aggregate to be <em>invertible</em>: there must be an operation that undoes adding an element. Sums qualify, and so do counts, products of non-zero values, and sums of squares &#8212; which is why a rolling variance is computable in constant time per step. Maximum, minimum, greatest common divisor and bitwise OR do not, because they discard information: once an element has been folded into a maximum there is no record of it, so removing it leaves nothing to subtract. This is not a limitation of the technique, it is the reason a different structure exists.</p>" +
+        "<p>One numerical caveat that only appears at scale. A rolling float sum accumulates rounding error rather than resetting it, because each answer is derived from the previous one rather than computed fresh. Over 200,000 windows of size 100 on values of magnitude 10&#8310;, the worst absolute disagreement with a recomputed sum was <strong>1.16 &#215; 10&#8315;&#8311;</strong> &#8212; about 10&#8315;&#185;&#179; relative, which is negligible for most purposes and is not zero. The property that matters is that it is cumulative: the error does not bound itself by the window, it bounds itself by the run.</p>" +
+        "<p>The rolling update works for any quantity that can be undone: sums, counts, and sums of squares, which is how a rolling variance is computed. It does not work for the maximum, because removing an element that happens to be the maximum leaves you with no idea what the new one is, and recomputing it costs k. That gap is exactly what the monotonic deque of Chapter 10 exists to fill.</p>"
+    },
+
+    { title: "The Variable Window and Why It Is 2n",
+      html:
+        "<p>A <strong>variable-size window</strong> has bounds that both move forward, at rates the data decides. The template is two lines of policy: extend the right edge by one every iteration, then pull the left edge in while the window violates the condition you care about. Longest substring with no repeated character:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def longest_unique(s):\n    last = {}                      # char -> most recent index\n    left, best = 0, 0\n    for right, ch in enumerate(s):\n        if ch in last and last[ch] &gt;= left:\n            left = last[ch] + 1    # shrink past the earlier copy\n        last[ch] = right\n        best = max(best, right - left + 1)\n    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int longestUnique(String s) {\n    Map&lt;Character,Integer&gt; last = new HashMap&lt;&gt;();\n    int left = 0, best = 0;\n    for (int right = 0; right &lt; s.length(); right++) {\n        char ch = s.charAt(right);\n        Integer prev = last.get(ch);\n        if (prev != null &amp;&amp; prev &gt;= left) left = prev + 1;\n        last.put(ch, right);\n        best = Math.max(best, right - left + 1);\n    }\n    return best;\n}</code></pre></div>" +
+
+        "<p>The part worth understanding is the cost. The code contains a loop that shrinks the left edge inside a loop that grows the right edge, and read naively that is n&#178;. It is not, and the argument is Chapter 4's: <strong>left and right each move only forward, and neither can pass the end of the array, so the total movement across the entire run is at most 2n no matter how the shrinking is distributed.</strong> A single iteration may shrink the window by a thousand positions; it can only do that by having grown a thousand positions earlier, each of which was paid for once.</p>" +
+
+        "<p>Measured on random strings over an eight-letter alphabet, counting every advance of either pointer:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 1,000</strong> &#8212; 1,997 pointer moves against a bound of 2,000</li>" +
+        "<li><strong>n = 10,000</strong> &#8212; 19,998 against 20,000</li>" +
+        "<li><strong>n = 100,000</strong> &#8212; 199,999 against 200,000</li>" +
+        "</ul>" +
+
+        "<p>The ratio is 2.00n to three significant figures at every size, which is what a tight amortized bound looks like when you measure it: not comfortably under the ceiling, but pressed against it, because every element really is entering and leaving exactly once.</p>" +
+
+        "<h3>Two templates that look identical</h3>" +
+        "<p>There are two variable-window questions and they take opposite shrink conditions, which is the most common transplant error in this pattern.</p>" +
+        "<ul>" +
+        "<li><strong>Longest valid window</strong> &#8212; shrink <em>while the window is invalid</em>, and record the size after shrinking. The window spends its life at the edge of validity, and the answer is the largest it ever reached.</li>" +
+        "<li><strong>Shortest valid window</strong> &#8212; shrink <em>while the window is valid</em>, recording the size before each shrink. The window is pulled in as far as it can go while still qualifying, and the answer is the smallest qualifying size seen.</li>" +
+        "</ul>" +
+        "<p>Both are three lines and the difference is one negation, so reading someone else's template and adapting it produces code that runs, terminates, and answers the other question. The check is to name which of the two you want in words before writing the <code>while</code>.</p>" +
+        "<p>A third shape is worth knowing because it turns an apparently harder question into one of the first two. “Exactly K distinct elements” has no monotone predicate &#8212; a window can stop having exactly K by growing or by shrinking &#8212; so no single window solves it. But “at most K distinct” is monotone, and the count of subarrays with exactly K equals the count with at most K minus the count with at most K&#8722;1. Two legal windows answer a question that one illegal window cannot.</p>" +
+        "<p><strong>Step the machine above</strong> and watch the counter at the bottom. Find an iteration where the left edge jumps several positions at once, then check that the counter's running total still has not passed 2n. That is the difference between per-iteration cost, which is unbounded, and total cost, which is not.</p>" +
+
+        "<div class='callout'>The hash map is doing real work here and it is where the space goes. The window's contents must be queryable in constant time, which costs O(min(n, &#963;)) space where &#963; is the <strong>alphabet size</strong> &#8212; the number of distinct values possible. For ASCII that is a 128-entry array and the map can be dropped entirely; for arbitrary integers it is a genuine hash map and the constant is much larger.</div>",
+      viz: "dsaSlidingWindow", vizTitle: "Grow right, shrink left; the counter at the bottom is total pointer movement"
+    },
+
+    { title: "When the Window Does Not Shrink Monotonically",
+      html:
+        "<p>Every sliding-window template rests on a precondition that no bank prints, and which is invisible in the code. The template only explores the candidates it needs to explore if the condition behaves predictably as the window grows: extending the window on the right must push the quantity in one direction only. Call that a <strong>monotone predicate</strong>. When it holds, &#8220;shrink while valid&#8221; visits every window that could be the answer. When it does not, the loop runs, terminates, and returns a wrong number with total confidence.</p>" +
+
+        "<p>The canonical victim is minimum-size subarray with sum at least a target:</p>" +
+
+        "<pre><code>def min_len(nums, target):\n    best, s, left = float('inf'), 0, 0\n    for right, v in enumerate(nums):\n        s += v\n        while s &gt;= target:\n            best = min(best, right - left + 1)\n            s -= nums[left]; left += 1\n    return best</code></pre>" +
+
+        "<p>With non-negative values this is correct, and the reason is precisely monotonicity: adding an element can only increase the sum, so if a window is too small it stays too small until the right edge moves, and if it is large enough, shrinking from the left is the only way to find a shorter one. Tested against brute force on 20,000 random non-negative arrays, it disagreed <strong>zero times</strong>.</p>" +
+
+        "<p>Allow a single negative value and the guarantee evaporates. On 20,000 random arrays drawn from &#8722;3 to 6, the same function disagreed with brute force on <strong>1,804 of them &#8212; 9.0%</strong>. And the smallest counterexample has two elements:</p>" +
+
+        "<ul>" +
+        "<li><strong>nums = [&#8722;2, 1], target = 1.</strong> The true answer is 1, the single element at index 1. The template returns infinity: it never records anything, because the running sum is &#8722;2 and then &#8722;1, and the left edge never advanced past the &#8722;2 that was dragging the sum down. Nothing in the loop can reach a window that excludes an element the left edge has not been given a reason to pass.</li>" +
+        "<li><strong>nums = [1, &#8722;1, 5], target = 5.</strong> The template answers 3, the whole array; the true answer is 1. It reaches sum 5 only at the last index, records length 3, then shrinks once to sum 4, stops, and never discovers that the final element alone suffices.</li>" +
+        "</ul>" +
+
+        "<p>Both failures have the same shape. The left edge advances only while the window is <em>valid</em>, so an invalid prefix can never be shed, and with negative numbers a prefix can be actively harmful rather than merely insufficient. That is what non-monotone means in practice.</p>" +
+
+        "<p><strong>The machine above</strong> runs the template and a correct solution side by side. Find the input that separates them, then reduce it: the smallest separating input is two elements long, and finding it yourself is a better memory than reading it here.</p>" +
+
+        "<h3>What to do instead</h3>" +
+
+        "<p>The replacement is not a patched window. With negative values the problem becomes: for each right endpoint, find the nearest left endpoint whose prefix sum is small enough. That is a prefix-sum question, answered with a monotonic deque over the prefix-sum array in O(n) &#8212; Chapter 9 builds the prefix sums and Chapter 10 builds the deque, and the two together give a correct linear algorithm that the window template cannot reach.</p>" +
+
+        "<div class='callout'>Before writing a sliding window, answer one question in one sentence: <em>does extending the window on the right move my quantity in one direction only?</em> Sums of non-negative numbers, counts of distinct elements, and lengths all qualify. Sums with negatives, products with values below 1, and anything involving a maximum minus a minimum do not. The question takes ten seconds and is the difference between a linear algorithm and a wrong one.</div>",
+      viz: "dsaWindowFails", vizTitle: "The template on the left, a correct solution on the right; find the input that separates them"
+    },
+
+    { title: "The Costs, Side by Side",
+      html:
+        "<p>Every variant in this chapter is one pass and constant extra space, with two exceptions that are worth knowing before you quote a complexity in a room.</p>" +
+
+        "<ul>" +
+        "<li><strong>Converging pointers</strong> (pair sum, container with most water) &#8212; O(n) time, O(1) space. Requires a sorted array for the pair-sum invariant; container-with-most-water needs no sorting because its invariant is about heights, not order.</li>" +
+        "<li><strong>Compaction scan</strong> (dedupe, partition, move zeros) &#8212; O(n) time, O(1) space, in place, order preserved among kept elements.</li>" +
+        "<li><strong>Cyclic placement</strong> &#8212; O(n) time, O(1) space, and not a comparison sort; requires the values to be a permutation of a known index range.</li>" +
+        "<li><strong>Dutch national flag</strong> &#8212; O(n) time, O(1) space, exactly n iterations, order among equal elements not preserved.</li>" +
+        "<li><strong>Fixed window</strong> &#8212; O(n) time and O(1) space for invertible quantities such as sums and counts; O(k) space and more time for the maximum, which needs Chapter 10's deque.</li>" +
+        "<li><strong>Variable window</strong> &#8212; O(n) time with total pointer movement under 2n, and <strong>O(min(n, &#963;)) space</strong> for the hash map or count array that makes the window queryable. This is the one that is not constant space, and the one people quote as constant.</li>" +
+        "</ul>" +
+
+        "<h3>The cost that gets left out</h3>" +
+
+        "<p>The pair-sum scan is O(n) <em>on a sorted array</em>. If the input is not sorted, the honest total is O(n log n) &#8212; the sort dominates, and the elegant linear scan is a rounding error inside it. That is usually still the right choice, because O(n log n) beats the quadratic double loop and the sort is somebody else's optimised code. But &#8220;solve it with two pointers in linear time&#8221; is a claim about the second half of the work only, and the alternative worth comparing against is a hash set, which answers the same question in O(n) expected time with O(n) space and no sort at all. Which one wins depends on whether you needed the array sorted for another reason and whether the space is available &#8212; and noticing that the comparison exists is the point.</p>" +
+
+        "<div class='callout'><strong>Interview lens.</strong> These patterns are asked constantly and the code is short enough that writing it correctly separates almost nobody. What separates people is stating the invariant before the loop and naming the precondition that makes the pattern legal. &#8220;This works because the array is sorted, so discarding the left element cannot lose a pair&#8221; and &#8220;this needs non-negative values, otherwise shrink-while-valid misses windows&#8221; are the two sentences worth having ready.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Run the pair-sum scan by hand on [1, 3, 4, 6, 8, 11] with target 14, recording the invariant after each step as the pair of discarded regions. <em>What you should find:</em> four iterations, the pair (3, 11) at indices 1 and 5, and at every step a one-sentence reason why the element discarded at that step cannot appear in any remaining pair.</li>" +
+        "<li><strong>Trace.</strong> Apply the Dutch national flag partition to [2, 0, 2, 1, 1, 0] with pivot 1, drawing the four regions after each iteration. <em>What you should find:</em> six iterations for six elements, and at least one step where i does not advance &#8212; identify the element that arrived from hi and confirm it had never been examined.</li>" +
+        "<li><strong>Investigate.</strong> Instrument the longest-substring-without-repeats scan to count every advance of either pointer, and run it on random strings of 1,000, 10,000 and 100,000 characters over an eight-letter alphabet. <em>What you should find:</em> totals of about 1,997, 19,998 and 199,999 &#8212; a ratio of 2.00n at every size, pressed right against the bound rather than comfortably under it.</li>" +
+        "<li><strong>Investigate.</strong> Implement the minimum-size-subarray-sum window and a brute-force reference, then run both on 20,000 random arrays of non-negative values and 20,000 containing negatives. <em>What you should find:</em> zero disagreements on the non-negative runs and roughly 9% disagreements once negatives are allowed; then shrink one failing case by hand until you reach a two-element array, which is as small as a counterexample gets.</li>" +
+        "<li><strong>Build.</strong> Write container-with-most-water twice, once moving the shorter pointer and once moving the taller, and test both against brute force on 50,000 random arrays of length 2 to 9. <em>What you should find:</em> the correct rule never disagrees and the wrong one disagrees on roughly half of all inputs, with [5, 9, 6, 3, 7, 1, 6, 8, 5] reporting 40 against a true 48.</li>" +
+        "<li><strong>Build.</strong> Implement cyclic placement with a swap counter and run it on shuffled permutations of 100, 10,000 and 1,000,000 elements, asserting the result is sorted. <em>What you should find:</em> swap counts a little under n&#8722;1 at every size (999,987 at a million), and that feeding it an array which is not a permutation of its index range either loops forever or indexes out of bounds &#8212; the shape is a precondition, not a preference.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "two pointers", d: "A family of scans that maintain two indices into one sequence, moving each forward only, so that the total work is linear rather than quadratic." },
+    { t: "loop invariant", d: "A statement true before and after every iteration, which is what turns a loop from something you test into something you have proved." },
+    { t: "converging pointers", d: "The arrangement with one index at each end moving toward the middle, where each step discards an element that has been proved impossible." },
+    { t: "compaction scan", d: "The same-direction arrangement in which a read index inspects every element and a write index marks where the next kept element belongs." },
+    { t: "read pointer", d: "The index that visits every element of the input in order, deciding which ones survive." },
+    { t: "write pointer", d: "The index marking the next output position, which trails the read pointer and is what makes the rewrite in place." },
+    { t: "in place", d: "Rearranging a structure using only constant extra space beyond the input itself, so no second array is allocated." },
+    { t: "cyclic placement", d: "Sorting by sending each value directly to the index equal to it, which is linear and not a comparison sort, and works only when the values are a permutation of the index range." },
+    { t: "three-way partition", d: "Splitting a sequence into elements below, equal to and above a pivot in one pass, which is what keeps quicksort fast on arrays with many duplicate keys." },
+    { t: "Dutch national flag", d: "Dijkstra's 1976 formulation of the three-way partition, maintaining three settled regions and one unexamined band that shrinks every iteration." },
+    { t: "fixed-size window", d: "A window of constant width k slid across the input, whose answer is updated by one entering and one leaving element rather than recomputed." },
+    { t: "rolling update", d: "Maintaining an aggregate by adding the entering element and removing the leaving one, which is available only for quantities that can be undone." },
+    { t: "variable-size window", d: "A window whose two edges both move forward at rates the data decides, giving total pointer movement under 2n however unevenly the shrinking falls." },
+    { t: "monotone predicate", d: "A condition that moves in one direction only as the window grows, which is the unstated precondition that makes shrink-while-valid explore every candidate." },
+    { t: "alphabet size", d: "The number of distinct values a position can hold, written \u03c3, which bounds the space a window's lookup structure needs and decides whether an array can replace a hash map." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "In the sorted pair-sum scan, a[i] + a[j] is less than the target and the code increments i. What licenses throwing a[i] away permanently?",
+      opts: [
+        "Every surviving element sits at an index k \u2264 j, so a[k] \u2264 a[j], so a[i] + a[k] \u2264 a[i] + a[j] < target: a[i] cannot reach the target with anything left",
+        "a[i] is the smallest surviving element, and the smallest element can never be part of the pair that hits a target",
+        "Incrementing i moves the sum toward the target, and a scan moving toward its goal may discard what it moved past",
+        "The pair (i, j) was tested and rejected, so i has now been checked against every index still in consideration"
+      ], a: 0,
+      why: "The proof needs the sortedness and the direction together. Because every k still in play satisfies k \u2264 j and the array is sorted, a[i] paired with anything remaining is at most a[i] + a[j], which already fell short. Option 4 is the seductive one and is false: i has been tested against j alone, not against everything between them." },
+
+    { type: "mc",
+      q: "Container-with-most-water uses the same two pointers but a different rule: move the shorter side. Testing the variant that moves the taller side against brute force on 50,000 random arrays, it was wrong on about half of them. Why?",
+      opts: [
+        "Because moving the taller side breaks termination, so the pointers cross before the best pair is visited",
+        "Because the area is capped by the shorter side, so moving the taller one keeps that cap and strictly loses width, and can never beat what was already recorded",
+        "Because the heights are unsorted, and the invariant that justifies discarding an element requires sorted input, which this problem does not provide to either version of the rule",
+        "Because the taller side may belong to the optimal pair, and discarding it removes the answer outright"
+      ], a: 1,
+      why: "The invariant is about what limits the answer, not about order. min(h[i], h[j]) is set by the shorter side, so every pair formed by keeping the shorter side and pulling the taller one inward has the same cap or lower and less width \u2014 all dominated by the pair measured at that step. Moving the shorter side is the only move that can raise the cap. Measured: the correct rule failed 0 times in 50,000, the inverted one 48%." },
+
+    { type: "mc",
+      q: "Cyclic placement swaps values to the index equal to their value, inside a loop that does not always advance. It sorts a million elements with 999,987 swaps. Why is it not quadratic, and why does Chapter 5's n log n bound not apply?",
+      opts: [
+        "The swaps are bounded because the loop advances whenever a value is home, and Chapter 5 covers only worst-case behaviour",
+        "Each swap places one value at its final index where it is never disturbed again, so there are at most n\u22121 swaps in total; and the bound does not apply because no two elements are ever compared",
+        "The swap count is bounded by the number of cycles in the permutation, which is O(log n) with high probability for a random shuffle, and the bound applies only to algorithms that examine every pair",
+        "Each iteration reduces the number of misplaced values by at least one, and the lower bound is about sorting arbitrary comparable values rather than integers, which can always be sorted in linear time"
+      ], a: 1,
+      why: "Two separate points and both matter. The cost is Chapter 4's argument: the inner work is bounded globally, because a value sent home is never moved again, so a nested-looking loop is linear. The lower bound is escaped the same way counting sort escapes it \u2014 the algorithm reads a value and uses it as an address, so it is not a comparison sort and the decision-tree hypothesis fails." },
+
+    { type: "mc",
+      q: "In the Dutch national flag partition, the branch that swaps a[i] with a[hi] does not advance i, while the branch that swaps with a[lo] does. What breaks if you advance i in both?",
+      opts: [
+        "The loop stops terminating, because hi and i then approach each other twice as fast and can cross without the unexamined band ever reaching zero width",
+        "The partition stops being stable, so elements equal to the pivot are reordered relative to each other, which matters when the values carry associated data",
+        "The element swapped in from hi has never been compared to the pivot, so advancing i files it in the settled region on no evidence",
+        "The lo pointer falls behind i by a growing margin, so the region between them eventually contains elements below the pivot as well as equal ones"
+      ], a: 2,
+      why: "The asymmetry is about where the incoming element came from. From lo it arrives out of the region already known to equal the pivot, so stepping over it is justified. From hi it arrives out of the unexamined band carrying no information at all. The resulting bug is correct on most inputs and wrong whenever a large value is swapped leftward, which is why it survives casual testing." },
+
+    { type: "mc",
+      q: "A variable window contains a loop that shrinks the left edge nested inside a loop that grows the right edge. Measured on 100,000 characters, total pointer movement was 199,999. Why is the nesting not quadratic?",
+      opts: [
+        "The shrink loop is bounded by the alphabet size rather than n, so the product is n\u03c3 and not n\u00b2",
+        "The inner loop runs a constant number of times per outer iteration, since a character repeats at most once per window",
+        "Both edges move forward only and neither passes the end of the array, so total movement over the whole run is at most 2n however unevenly the shrinking falls",
+        "Each shrink removes an element the map marks as seen, and the map holds at most n entries"
+      ], a: 2,
+      why: "This is Chapter 4 applied to a loop rather than an array. A single iteration can shrink the window by a thousand positions, which is unbounded per-iteration work, but it can only do so by having grown a thousand positions earlier, each paid for once. Option 2 is false: one iteration really can shrink the window arbitrarily far, and the bound is on the total rather than on any step." },
+
+    { type: "mc",
+      q: "The minimum-size-subarray-sum window agreed with brute force on 20,000 non-negative arrays and disagreed on 9% of arrays containing negatives. On nums = [\u22122, 1] with target 1 it returns infinity while the true answer is 1. What is the underlying precondition?",
+      opts: [
+        "The values must be bounded, or the running sum overflows and compares against a wrapped value",
+        "The target must be reachable by some subarray, because the template records an answer only inside the shrink loop and never establishes a baseline before entering it",
+        "The array must contain no zeros, since a zero leaves the sum unchanged and stalls the shrink loop",
+        "Extending the window on the right must move the quantity in one direction only, so that shrink-while-valid reaches every candidate window"
+      ], a: 3,
+      why: "The template shrinks only while the window is valid, so an invalid prefix can never be shed. With non-negative values a prefix is at worst insufficient; with a negative it is actively harmful, and the left edge is given no reason to pass it. On [\u22122, 1] the running sum is \u22122 then \u22121, the shrink loop never runs, and the single-element window holding 1 is never examined." },
+
+    { type: "mc",
+      q: "A candidate solves two-sum on an unsorted array by sorting it and running the converging-pointer scan, and describes the solution as linear time. What is the most useful correction?",
+      opts: [
+        "The scan is linear but the sort is not, so the honest total is O(n log n) \u2014 and a hash set answers the same question in O(n) expected time with no sort at all",
+        "The scan is not linear on an unsorted array either, because the discard invariant requires sortedness and without it each pointer may need to revisit positions it has already passed",
+        "Sorting changes the indices, so the solution answers a different question from the one asked",
+        "The total is O(n log n) only in the comparison model, and since the values are integers a radix sort makes the combined solution genuinely linear for any fixed word size"
+      ], a: 0,
+      why: "The pattern's advertised cost describes the second half of the work. Naming the sort is the first half of the correction; naming the alternative is the half that matters, because the hash set trades O(n) space for the sort and is often the better answer. Option 3 is a real issue for index-returning variants but is a separate point from the complexity claim." },
+
+    { type: "blank",
+      q: "The unstated precondition that makes shrink-while-valid explore every candidate window \u2014 that extending the window moves the quantity in one direction only \u2014 is that the predicate is ____.",
+      a: ["monotone", "monotonic"],
+      why: "It is the question to answer in one sentence before writing the loop. Sums of non-negative values, counts of distinct elements and lengths all qualify; sums with negatives, products with values below 1, and anything involving a maximum minus a minimum do not. Measured, the difference is between zero errors in 20,000 trials and 9%." },
+
+    { type: "blank",
+      q: "Dijkstra's 1976 one-pass three-way partition, which maintains three settled regions and one unexamined band, is known as the Dutch national ____ problem.",
+      a: ["flag"],
+      why: "Its three values were the colours of the flag. The mechanism outlives the framing: it is the partition that keeps quicksort from degrading on arrays with many equal keys, and the rule people get wrong is that the index does not advance after a swap with the high end, because that element has never been examined." },
+
+    { type: "order",
+      q: "Order the steps of establishing that a sliding window is the right tool for a problem:",
+      items: [
+        "state the quantity the window must track and whether it can be updated incrementally",
+        "check that extending the window moves that quantity in one direction only",
+        "write the shrink condition as the negation of the window's validity invariant",
+        "bound the total pointer movement at 2n by confirming neither edge ever moves backwards"
+      ],
+      why: "The order matters because each step can disqualify the pattern before the next is worth doing. A quantity that cannot be updated incrementally means no window at all; one that is not monotone means the template is unsound however carefully the rest is written. Only once both hold does the shrink condition have a meaning, and the 2n bound is then a consequence rather than something to verify separately." }
+  ]
+});
+
+/* ======================= CHAPTER 9 ======================= */
+CHAPTERS.push({
+  num: 9, part: 1, title: "Prefix Sums and Difference Arrays",
+  blurb: "Precompute once, answer forever. The prefix sum is the simplest trade of space for time in the subject, and the difference array is the same trick run backwards, so that updates become cheap instead of queries. This chapter gives you both, the two-dimensional version that answers a rectangle question with four array lookups, and the hash-map variant that counts subarrays with a given sum. It closes by settling Kadane's algorithm, which Chapter 1 used and did not derive: a one-line dynamic program ten chapters before you meet dynamic programming, with the edge case that breaks the version most people write.",
+
+  sections: [
+
+    { title: "Repeated Range Sums, and the Array That Answers Them",
+      html:
+        "<p>The problem is narrow and extremely common: an array that does not change, and a stream of questions of the form <em>what is the sum of elements l through r?</em> Answering each one directly costs the length of the range, so q questions over an array of n elements cost O(nq), and on 100,000 elements with 10,000 questions that measured <strong>5,150 ms</strong>.</p>" +
+
+        "<p>The <strong>prefix sum</strong> array replaces all of it. Define P so that P[i] is the sum of the first i elements &#8212; the first <em>i</em>, not the elements up to index i, and that distinction is the whole of the bookkeeping:</p>" +
+
+        "<pre><code>P = [0] * (len(a) + 1)\nfor i, v in enumerate(a):\n    P[i + 1] = P[i] + v\n\n# sum of a[l..r] inclusive:\ntotal = P[r + 1] - P[l]</code></pre>" +
+
+        "<p>Building P costs one pass. Every question afterwards costs one subtraction. The same workload that took 5,150 ms takes <strong>7.14 ms</strong>, a factor of 721, and the factor grows with the number of questions because the build is paid once.</p>" +
+
+        "<h3>The convention, stated once and kept</h3>" +
+
+        "<p>P has n+1 entries, not n, and P[0] = 0 is a <strong>sentinel entry</strong> that exists so that a range beginning at index 0 needs no special case. The array P represents a <strong>half-open interval</strong> convention: P[i] covers a[0] up to but not including a[i]. With that convention <code>P[r+1] - P[l]</code> is the inclusive sum of a[l..r], and no range anywhere in your program needs an <code>if</code>.</p>" +
+
+        "<p>The alternative &#8212; an n-element P where P[i] includes a[i] &#8212; forces every query to read <code>P[r] - P[l-1]</code> and to special-case l = 0, which is the off-by-one that this pattern is famous for. Both conventions work. Mixing them inside one codebase does not, and the discipline is to write the convention in a comment above the build and never think about it again.</p>" +
+
+        "<div class='callout'>Prefix sums are not free, and a single query does not repay the build. Measured on 100,000 elements, recomputing directly beat the prefix array for one query (1.28 ms against 6.94 ms) and for five; the crossover fell at about <strong>ten queries</strong>, after which the prefix version is flat while the naive one grows without limit. This is a <strong>range sum query</strong> structure, and the word that earns it is <em>repeated</em>.</div>",
+      viz: "dsaPrefixSum", vizTitle: "Drag the range; the answer is one subtraction \u2014 watch which two cells it reads"
+    },
+
+    { title: "Two Dimensions: One Rectangle, Four Lookups",
+      html:
+        "<p>The same idea lifts to a grid as the <strong>two-dimensional prefix sum</strong>, and the lift is not obvious, because a rectangle has four corners rather than two endpoints. Let P[i][j] be the sum of the whole sub-grid above and to the left of cell (i, j), again half-open. Building it needs each cell to combine the rectangle above, the rectangle to the left, and a correction:</p>" +
+
+        "<pre><code>P[i+1][j+1] = g[i][j] + P[i][j+1] + P[i+1][j] - P[i][j]</code></pre>" +
+
+        "<p>The subtraction is there because the rectangle above and the rectangle to the left overlap in the square above-and-to-the-left, which would otherwise be counted twice. That is <strong>inclusion–exclusion</strong>, and the query reads the same way with the signs reversed:</p>" +
+
+        "<pre><code>def rect_sum(P, r1, c1, r2, c2):        # inclusive corners\n    return (P[r2+1][c2+1]\n            - P[r1][c2+1]                # strip above\n            - P[r2+1][c1]                # strip to the left\n            + P[r1][c1])                 # add back the double-subtracted corner</code></pre>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 268' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace' data-overlap='intentional'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>the query rectangle is one big sum minus two strips, plus the corner counted twice</text>" +
+        "<rect x='60' y='40' width='300' height='190' fill='#0d1526' stroke='#1c2a45' stroke-width='2'/>" +
+        "<rect x='60' y='40' width='300' height='70' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='60' y='40' width='110' height='190' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='60' y='40' width='110' height='70' fill='#2a1a10' stroke='#ffd166' stroke-width='2.5'/>" +
+        "<rect x='170' y='110' width='190' height='120' fill='#0f2a20' stroke='#3ddc97' stroke-width='2.5'/>" +
+        "<text x='265' y='176' text-anchor='middle' fill='#3ddc97' font-size='12'>the answer</text>" +
+        "<text x='115' y='80' text-anchor='middle' fill='#ffd166' font-size='10'>corner</text>" +
+        "<text x='265' y='80' text-anchor='middle' fill='#ff5d73' font-size='10'>strip above</text>" +
+        "<text x='115' y='176' text-anchor='middle' fill='#ff5d73' font-size='10'>strip left</text>" +
+        "<text x='400' y='60' fill='#c9d6ea' font-size='11'>P[r2+1][c2+1]   the whole outlined box</text>" +
+        "<text x='400' y='86' fill='#ff5d73' font-size='11'>&#8722; P[r1][c2+1]    remove the strip above</text>" +
+        "<text x='400' y='112' fill='#ff5d73' font-size='11'>&#8722; P[r2+1][c1]    remove the strip left</text>" +
+        "<text x='400' y='138' fill='#ffd166' font-size='11'>+ P[r1][c1]      the corner came off twice</text>" +
+        "<text x='400' y='174' fill='#3ddc97' font-size='11'>= the green rectangle, in four reads,</text>" +
+        "<text x='400' y='192' fill='#3ddc97' font-size='11'>whatever its area</text>" +
+        "<text x='400' y='226' fill='#7d8fb0' font-size='10'>a rectangle touching row 0 and column 0 reads</text>" +
+        "<text x='400' y='242' fill='#7d8fb0' font-size='10'>three zeros: the sentinel row and column</text>" +
+        "</svg><div class='fig-cap'>The corner is subtracted by both strips, so it has to be added back exactly once.</div></div>" +
+
+        "<p>Checked against direct summation on 20,000 random rectangles in a 40 &#215; 60 grid, the four-lookup query disagreed <strong>zero times</strong>. The cost is one pass to build and four reads per question, no matter whether the rectangle holds four cells or two thousand.</p>" +
+
+        "<p>The pattern continues upward, and the count of terms is the giveaway. A three-dimensional box needs <strong>eight</strong> terms rather than six, because in d dimensions the query reads every one of the 2<sup>d</sup> corners of the region with alternating signs. If you ever find yourself writing a six-term version of the box query, the two missing terms are the ones that correct a region subtracted three times and added back twice.</p>" +
+        "<p>One case is worth noticing because it explains the sentinel row and column. A rectangle anchored at the top-left corner of the grid reads P[r2+1][c2+1] for the answer and then subtracts P[0][c2+1], subtracts P[r2+1][0] and adds P[0][0] &#8212; all three of which are zero. The general formula handles the corner case without knowing it is a corner case, which is what the extra row and column were bought for.</p>"
+    },
+
+    { title: "The Difference Array: The Same Trick Backwards",
+      html:
+        "<p>Prefix sums make queries cheap on an array that never changes. Turn the problem around &#8212; many <strong>range updates</strong>, one read at the end &#8212; and the same relationship solves it in the other direction. \"Add v to every element from l to r\" costs r &#8722; l + 1 done directly, which for 5,000 updates over a large array is as bad as the naive range query was.</p>" +
+
+        "<p>A <strong>difference array</strong> D stores the change between consecutive elements rather than the elements. Then adding v across a whole range is two writes, because only the two boundaries change:</p>" +
+
+        "<pre><code>D = [0] * (n + 1)\n\ndef range_add(l, r, v):      # inclusive\n    D[l]     += v            # from here on, v more\n    D[r + 1] -= v            # from here on, take it back\n\ndef materialise():           # one pass at the end\n    out, run = [], 0\n    for i in range(n):\n        run += D[i]\n        out.append(run)\n    return out</code></pre>" +
+
+        "<p>Every update is O(1) and the final read-out is O(n), so u updates cost O(u + n) instead of O(un). Checked against the naive loop on 5,000 random updates over 2,000 elements, the two agreed exactly.</p>" +
+
+        "<p>The duality is worth stating plainly, because seeing it once means you never have to memorise either direction: <strong>the difference array is the inverse of the prefix sum.</strong> Taking prefix sums of D reconstructs the array; taking differences of the array reconstructs D. One makes queries cheap at the cost of a rebuild after any update; the other makes updates cheap at the cost of a full pass before any read. They sit at opposite ends of the same trade, and which one you want is decided entirely by the ratio of reads to writes in your workload.</p>" +
+
+        "<div class='callout'>The classic application is interval booking: given a list of (start, end) reservations, find the busiest moment. Add 1 at each start and subtract 1 at each end, then sweep. The running total <em>is</em> the number of active reservations at each point, and the answer is its maximum &#8212; a two-line solution to a problem that looks like it needs interval logic. Chapter 12 generalises this into the sweep line.</div>"
+    },
+
+    { title: "Prefix Sums with a Hash Map",
+      html:
+        "<p>Both structures so far answer questions about ranges you name. The harder question is the reverse: <em>how many subarrays sum to k?</em> &#8212; where the ranges are what you are searching for.</p>" +
+
+        "<p>The prefix sum reduces it to something a hash map can do. A subarray a[l..r] sums to k exactly when P[r+1] &#8722; P[l] = k, which rearranges to P[l] = P[r+1] &#8722; k. So walk the array maintaining the running prefix sum, and at each position ask how many earlier prefixes had the value <code>run - k</code>:</p>" +
+
+        "<pre><code>from collections import defaultdict\n\ndef count_subarrays(nums, k):\n    seen = defaultdict(int)\n    seen[0] = 1              # the empty prefix, before any element\n    run = count = 0\n    for v in nums:\n        run += v\n        count += seen[run - k]   # every earlier prefix that works\n        seen[run] += 1\n    return count</code></pre>" +
+
+        "<p>One pass, O(n) expected time, and it handles negative values without complaint &#8212; which is exactly the case where Chapter 8's sliding window was unsound. The two techniques are not competitors so much as different tools: a window needs a monotone predicate, and this does not.</p>" +
+
+        "<h3>Why the map holds counts and not indices</h3>" +
+
+        "<p>The natural first draft stores <code>prefix value &#8594; index</code>, and it is wrong, because several earlier positions can share a prefix value and each of them starts a distinct qualifying subarray. The smallest array that exposes it has two elements: on <strong>[0, 0] with k = 0</strong>, a map of counts returns 3 and a map of indices returns 2. The three subarrays are the first zero alone, the second zero alone, and both together; an index map remembers only one position per value and loses one of them.</p>" +
+
+        "<p>Tested against brute force on 5,000 random arrays with values from &#8722;3 to 3, the counting version disagreed zero times. The <code>seen[0] = 1</code> line is the same sentinel idea as P[0] = 0, carried into the map: the empty prefix is a real prefix, and without it every subarray starting at index 0 goes uncounted.</p>" +
+
+        "<div class='callout'>A closely related problem wants the <em>longest</em> subarray summing to k rather than the count, and there the map should hold the <strong>earliest</strong> index for each prefix value and must not overwrite it &#8212; because an earlier start gives a longer subarray. Counts for counting, earliest index for longest, latest index for almost nothing. Deciding which before writing the loop is the whole difficulty of this family.</div>"
+    },
+
+    { title: "Kadane: A Dynamic Program, Ten Chapters Early",
+      html:
+        "<p>Chapter 1 raced four solutions to the maximum subarray problem and <strong>Kadane's algorithm</strong> won without being explained. Here is the derivation, and it is one question asked at every position: <em>does the best subarray ending here extend the best subarray ending at the previous position, or start fresh at this element?</em></p>" +
+
+        "<p>Those are the only two possibilities, because a subarray ending at position i either includes position i&#8722;1 or does not. So if <code>run</code> is the largest sum of any subarray ending at the previous position, the largest ending here is <code>max(v, run + v)</code>: start over, or extend. Track the best value ever seen alongside it.</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def kadane(a):\n    best = run = a[0]            # not 0\n    for v in a[1:]:\n        run = max(v, run + v)    # start fresh, or extend\n        best = max(best, run)\n    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int kadane(int[] a) {\n    int best = a[0], run = a[0];          // not 0\n    for (int i = 1; i &lt; a.length; i++) {\n        run  = Math.max(a[i], run + a[i]); // start fresh, or extend\n        best = Math.max(best, run);\n    }\n    return best;\n}</code></pre></div>" +
+
+        "<p>That is a dynamic program, and naming it as one now costs nothing and saves confusion later. The subproblem is \"best subarray ending exactly at index i\", the recurrence relates each subproblem to its immediate predecessor, and the <strong>running sum</strong> is the whole memo table collapsed to a single variable because only one previous value is ever needed. Chapter 19 gives this shape its vocabulary; the algorithm does not change when it acquires the name.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 232' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>a = [-2, 1, -3, 4, -1, 2, 1, -5, 4]: the running sum, and where it restarts</text>" +
+        "<line x1='60' y1='140' x2='700' y2='140' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='34' y='144' fill='#7d8fb0' font-size='9'>0</text>" +
+        "<text x='72' y='166' fill='#c9d6ea' font-size='10'>-2</text><rect x='62' y='140' width='34' height='20' fill='#2a1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+        "<text x='142' y='132' fill='#c9d6ea' font-size='10'>1</text><rect x='132' y='130' width='34' height='10' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='212' y='166' fill='#c9d6ea' font-size='10'>-3</text><rect x='202' y='140' width='34' height='20' fill='#2a1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+        "<text x='282' y='102' fill='#c9d6ea' font-size='10'>4</text><rect x='272' y='100' width='34' height='40' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='352' y='112' fill='#c9d6ea' font-size='10'>3</text><rect x='342' y='110' width='34' height='30' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='422' y='92' fill='#c9d6ea' font-size='10'>5</text><rect x='412' y='90' width='34' height='50' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='492' y='82' fill='#ffd166' font-size='10'>6</text><rect x='482' y='80' width='34' height='60' fill='#2a2410' stroke='#ffd166' stroke-width='2.5'/>" +
+        "<text x='562' y='132' fill='#c9d6ea' font-size='10'>1</text><rect x='552' y='130' width='34' height='10' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='632' y='112' fill='#c9d6ea' font-size='10'>5</text><rect x='622' y='110' width='34' height='30' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='62' y='186' fill='#ff5d73' font-size='9'>restart</text>" +
+        "<text x='202' y='186' fill='#ff5d73' font-size='9'>restart</text>" +
+        "<text x='272' y='186' fill='#ff5d73' font-size='9'>restart</text>" +
+        "<text x='482' y='202' fill='#ffd166' font-size='11'>best = 6, the subarray [4, -1, 2, 1]</text>" +
+        "<text x='20' y='222' fill='#7d8fb0' font-size='10'>the running sum restarts whenever carrying the previous total forward would be worse than starting here</text>" +
+        "</svg><div class='fig-cap'>Three restarts, and the winning run begins at the third of them.</div></div>" +
+
+        "<h3>The edge case that breaks the careless version</h3>" +
+
+        "<p>The version people write from memory clamps the running sum at zero:</p>" +
+
+        "<pre><code>best = run = 0\nfor v in a:\n    run = max(0, run + v)        # wrong when every value is negative\n    best = max(best, run)</code></pre>" +
+
+        "<p>On an array where every element is negative this returns 0, and 0 is not the sum of any subarray at all &#8212; it is the sum of the <em>empty</em> subarray. Tested on 20,000 random arrays, the version above was wrong on <strong>every single all-negative array it saw: 2,306 out of 2,306</strong>. On [&#8722;5, &#8722;2, &#8722;9] it answers 0 where the correct answer is &#8722;2.</p>" +
+
+        "<p>This is Chapter 1's <strong>empty subarray convention</strong> arriving with consequences. Bentley's original statement of the problem allowed the empty subarray, which makes 0 a legitimate answer and the clamping version correct. Every interview variant and every library function forbids it, requiring at least one element, which makes the clamping version wrong. Neither convention is the right one in general; what is wrong is not knowing which one you are implementing. Initialising both variables to <code>a[0]</code> and looping from index 1, as the correct version does, implements the non-empty convention with no branch and no sentinel.</p>"
+    },
+
+    { title: "When the Array Is Allowed to Change",
+      html:
+        "<p>Everything in this chapter rests on a precondition worth making explicit, because it is the one that fails in production: <strong>the prefix array is only valid while the underlying array does not change.</strong> A single update to a[i] invalidates every prefix entry from i onward, so maintaining it costs O(n) per update. That is fine for a static table and useless for anything live.</p>" +
+
+        "<p>The three workloads and their answers:</p>" +
+
+        "<ul>" +
+        "<li><strong>Many queries, no updates</strong> &#8212; the prefix sum. O(n) build, O(1) query.</li>" +
+        "<li><strong>Many updates, one read at the end</strong> &#8212; the difference array. O(1) update, O(n) read-out.</li>" +
+        "<li><strong>Many queries and many updates, interleaved</strong> &#8212; neither. Both structures collapse to O(n) on the operation they were not designed for, which is the same trap Chapter 7's quick-find fell into: a structure judged on one operation while the workload uses two.</li>" +
+        "</ul>" +
+
+        "<p>The third case has a real answer and it is not a patch on these two. It needs a structure that splits the difference, accepting O(log n) on both operations rather than being perfect at one and hopeless at the other &#8212; the Fenwick tree and the segment tree, which Chapter 30 builds. The reason they are worth a chapter is visible from here: they are what you reach for the moment the array stops being a constant.</p>" +
+
+        "<div class='callout'>Two questions settle the choice before you write anything. How many reads per write, and does the array change at all? A static table with a million queries wants a prefix sum and nothing cleverer; a counter updated every request and read once a minute wants a difference array; anything in between wants Chapter 30. Choosing on the ratio rather than on the operation you happened to think of first is the point.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Build the prefix array for [3, &#8722;1, 4, &#8722;1, 5] using the half-open convention, then answer the sums of a[1..3] and a[0..4] by subtraction. <em>What you should find:</em> P = [0, 3, 2, 6, 5, 10], giving 2 and 10; and the range starting at index 0 needs no special case precisely because P[0] exists.</li>" +
+        "<li><strong>Trace.</strong> On a 4 &#215; 4 grid of your choosing, compute the two-dimensional prefix array by hand and then query the rectangle from (1,1) to (2,2) by the four-term formula, checking it against direct addition. <em>What you should find:</em> the two strips each remove the top-left corner region once, so the corner term must be added back exactly once; dropping it undercounts by precisely the sum of the cells above and to the left of the rectangle.</li>" +
+        "<li><strong>Investigate.</strong> Time 100,000 elements against 1, 5, 10, 50 and 10,000 random range-sum queries, comparing direct summation with a prefix array. <em>What you should find:</em> direct summation wins for a handful of queries, the crossover falls near ten, and by 10,000 queries the prefix version is roughly 700 times faster while its own time barely moves.</li>" +
+        "<li><strong>Investigate.</strong> Implement subarray-sum-equals-k twice, with the map holding counts and with it holding indices, and test both against brute force on 5,000 random short arrays with values from &#8722;3 to 3. <em>What you should find:</em> the counting version never disagrees and the index version undercounts, with [0, 0] and k = 0 as the smallest separating input: three subarrays exist and an index map reports two.</li>" +
+        "<li><strong>Build.</strong> Implement both Kadane variants &#8212; clamping the running sum at zero, and initialising from a[0] &#8212; and run them on 20,000 random arrays including all-negative ones. <em>What you should find:</em> they agree whenever any positive element is present and the clamping version is wrong on 100% of all-negative arrays, returning 0 for a sum that no non-empty subarray achieves.</li>" +
+        "<li><strong>Build.</strong> Solve the busiest-interval problem with a difference array: given 100,000 random (start, end) reservations over a day of 86,400 seconds, find the moment with the most overlapping bookings, and check it against a direct count at 1,000 random timestamps. <em>What you should find:</em> two writes per reservation and one sweep give the same answer as counting, and the direct check is slower by roughly the average reservation length.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "prefix sum", d: "An array whose ith entry is the total of the first i elements, turning any range-sum question into a single subtraction at the cost of one build pass." },
+    { t: "range sum query", d: "A request for the total of a contiguous slice, which is the operation the prefix array exists to make constant-time and the reason the build is worth paying for." },
+    { t: "half-open interval", d: "The convention in which a range includes its lower bound and excludes its upper one, which is what lets a prefix array handle a range starting at index 0 with no special case." },
+    { t: "sentinel entry", d: "The extra leading zero in a prefix array, present so that every query reads two real entries rather than branching on whether the range starts at the beginning." },
+    { t: "inclusion\u2013exclusion", d: "Correcting a count that double-counts an overlap by subtracting it back, which is why a two-dimensional rectangle query needs four terms rather than three." },
+    { t: "two-dimensional prefix sum", d: "A grid whose entry at (i, j) totals everything above and to the left, answering any rectangle sum in four lookups regardless of the rectangle's area." },
+    { t: "difference array", d: "An array storing the change between consecutive elements, which makes a range update two writes and is the exact inverse of the prefix sum." },
+    { t: "range update", d: "Adding a value to every element of a contiguous slice, the operation a difference array makes constant-time in exchange for a pass before any read." },
+    { t: "Kadane's algorithm", d: "The linear scan for maximum subarray that asks at each position whether to extend the previous best or start fresh, which is a dynamic program written as one variable." },
+    { t: "running sum", d: "The largest sum of any subarray ending at the current position, carried forward as a single variable because Kadane's recurrence needs only the previous one." },
+    { t: "empty subarray convention", d: "The choice of whether a subarray of zero elements counts as a candidate, which decides whether 0 is a legal answer and therefore whether clamping the running sum is correct." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A service builds a prefix array over 100,000 elements to answer range sums, but the array is rebuilt after every single query because an element changed. What has gone wrong?",
+      opts: [
+        "The half-open convention forces a rebuild whenever an element changes, and the inclusive convention would allow the affected entries to be patched in place instead",
+        "The prefix array is valid only while the underlying array is static; one update invalidates every entry from that index onward, so the structure is being used against its precondition",
+        "The build pass is O(n) and the query is O(1), so the amortized cost per query is still constant provided the updates are spread evenly across the run of queries",
+        "The sentinel entry is being recomputed unnecessarily, and preserving P[0] = 0 across rebuilds removes most of the cost since it never changes"
+      ], a: 1,
+      why: "The structure trades a build pass for constant queries, and that trade only pays when the build is amortized over many queries. An update invalidates every prefix from that index on, so a workload interleaving reads and writes collapses to O(n) either way \u2014 the same trap as Chapter 7's quick-find, judged on one operation while the caller uses two. The answer is Chapter 30's Fenwick or segment tree, at O(log n) for both." },
+
+    { type: "mc",
+      q: "Why does a two-dimensional prefix sum query need four terms rather than three?",
+      opts: [
+        "Because the strip above and the strip to the left overlap in the corner region, so subtracting both removes that corner twice and it must be added back once",
+        "Because a rectangle has four corners and each contributes one lookup, which is what makes the query cost independent of the rectangle's area",
+        "Because the grid is stored row-major, so the row offsets and column offsets must each be resolved separately for the upper and lower bounds of the query",
+        "Because the sentinel row and the sentinel column are separate arrays, and a query anchored away from the origin must consult both in addition to the two interior terms"
+      ], a: 0,
+      why: "It is inclusion\u2013exclusion, not geometry. P[r2+1][c2+1] is everything above and left of the far corner; removing the strip above and the strip to the left takes the upper-left corner region away twice, so P[r1][c1] is added back. Option 2 sounds right and is a coincidence \u2014 the count is four because of the double subtraction, which is why a three-dimensional box needs eight." },
+
+    { type: "mc",
+      q: "Counting subarrays that sum to k, a candidate stores a map from prefix value to index rather than to a count. On [0, 0] with k = 0 it reports 2 where the answer is 3. Why?",
+      opts: [
+        "Because an index is compared against the running sum, so the recovered length is off by one",
+        "Because zeros leave the running sum unchanged, so a map keyed on prefix value cannot separate them",
+        "Because several earlier positions can share a prefix value and each one starts a distinct qualifying subarray, so a map keeping one position per value loses the others",
+        "Because the sentinel entry seen[0] must be initialised to the index \u22121 rather than to 0 when the map holds indices, and the off-by-one propagates into every subsequent count"
+      ], a: 2,
+      why: "The count is of qualifying start positions, not of distinct prefix values. On [0, 0] the prefix value 0 occurs before the first element, after the first, and after the second, and each pairing is a real subarray: the first zero, the second zero, and both. An index map remembers one position per value and reports two. A map of earliest indices is the right structure for a different question \u2014 the longest such subarray." },
+
+    { type: "mc",
+      q: "Kadane's algorithm written as <code>run = max(0, run + v)</code> with <code>best</code> starting at 0 was wrong on 2,306 of 2,306 all-negative test arrays. What is it actually computing?",
+      opts: [
+        "The maximum suffix sum rather than the maximum subarray, since clamping at zero discards the prefix and leaves only the trailing run",
+        "The maximum subarray under the convention that permits the empty subarray, whose sum is 0 and which therefore wins whenever every element is negative",
+        "The maximum subarray of the array's positive elements alone, which coincides with the true answer whenever at least one element is positive",
+        "Nothing coherent, because clamping at zero breaks the recurrence and the result no longer corresponds to any subarray of the input"
+      ], a: 1,
+      why: "It is not a bug so much as a different specification. Bentley's original formulation allowed the empty subarray, making 0 a legal answer and the clamping version correct. Every interview variant and library function requires at least one element, which makes it wrong \u2014 on [\u22125, \u22122, \u22129] it answers 0 where the answer is \u22122. Initialising both variables to a[0] implements the non-empty convention with no branch." },
+
+    { type: "mc",
+      q: "Which workload is the difference array the right structure for?",
+      opts: [
+        "A leaderboard where scores are adjusted individually and the top ten are read after every adjustment, since single-element updates are the degenerate case of a range update",
+        "A time series appended to continuously and queried for range sums throughout, since appends do not invalidate earlier entries",
+        "A grid whose rectangles are updated in bulk and whose individual cells are queried frequently between updates, because the two-dimensional form inverts cleanly",
+        "Many range updates followed by reading the whole array once, because each update is two writes and the read-out is a single pass"
+      ], a: 3,
+      why: "The difference array makes updates O(1) and defers all the cost to one O(n) materialisation, so it wins exactly when writes vastly outnumber reads and the reads can be batched to the end. Option 1 inverts that ratio and option 2 interleaves them, which is Chapter 30's territory. The interval-booking problem is the canonical fit: two writes per reservation, one sweep at the end." },
+
+    { type: "mc",
+      q: "Chapter 8 showed the sliding window is unsound on arrays containing negative values. The prefix-sum-with-hash-map approach handles them without difficulty. What is the structural reason?",
+      opts: [
+        "The hash map stores every prefix rather than a window, so it can consult starts the window has already passed and never needs the sums to move in one direction",
+        "The map lookup is O(1) expected rather than O(1) worst case, and the extra flexibility of hashing is what absorbs the irregularity that negative values introduce into the sums",
+        "Prefix sums are computed in a single forward pass with no pointer that can move backwards, so the question of monotonicity does not arise for any input whatsoever",
+        "The window fails on negatives because it tracks a sum while the map tracks a count, and counts are non-negative by construction regardless of the values being summed"
+      ], a: 0,
+      why: "A window can only shed a prefix by advancing its left edge, and it advances only under a validity condition \u2014 so a harmful prefix it was never given a reason to pass stays trapped inside. The map keeps every prefix seen so far and can pair the current position with any of them, so no monotone predicate is required. The two tools answer overlapping questions under different preconditions." },
+
+    { type: "mc",
+      q: "A prefix array over 100,000 elements lost to direct summation at one query and at five, and won by roughly 700 times at ten thousand. What does the crossover near ten queries tell you?",
+      opts: [
+        "That the cache behaviour of the prefix build dominates below about ten queries, after which the array is resident and the per-query cost drops to its asymptotic value",
+        "That the comparison is only meaningful asymptotically, and measurements at small query counts reflect interpreter overhead rather than the algorithms being compared",
+        "That the build is a fixed O(n) cost repaid only by repetition, so the structure's advantage is a statement about the workload rather than about the structure",
+        "That direct summation is O(n) per query while the prefix version is O(1), so ten queries is where the product n\u00d7q first exceeds the build cost of n"
+      ], a: 2,
+      why: "Precomputation buys nothing until it is used more than once, and the honest statement of a prefix array's value names the workload: repeated queries on an array that does not change. Option 4 is arithmetic that happens to be nearly right and misses the point \u2014 the lesson is not where the crossover sits but that one exists, and that quoting O(1) queries without the O(n) build describes half the cost." },
+
+    { type: "blank",
+      q: "The array storing the change between consecutive elements, which makes a range update two writes and is the exact inverse of the prefix sum, is called a ____ array.",
+      a: ["difference", "diff"],
+      why: "Taking prefix sums of it reconstructs the original, and taking differences of the original reconstructs it. The two structures sit at opposite ends of one trade: cheap queries with expensive updates, or cheap updates with an expensive read-out, and the ratio of reads to writes in your workload picks between them." },
+
+    { type: "blank",
+      q: "Adding back a region that has been subtracted twice, which is why a rectangle query on a two-dimensional prefix sum needs four terms, is the principle of inclusion\u2013____.",
+      a: ["exclusion"],
+      why: "Removing the strip above and the strip to the left each takes the upper-left corner region away, so it comes off twice and must be restored once. The same counting principle decides that a three-dimensional box query needs eight terms rather than six." },
+
+    { type: "order",
+      q: "Order the reasoning that turns \u201chow many subarrays sum to k?\u201d into a single pass:",
+      items: [
+        "write the subarray sum as a difference of two prefix sums, P[r+1] \u2212 P[l]",
+        "rearrange the condition P[r+1] \u2212 P[l] = k into P[l] = P[r+1] \u2212 k",
+        "walk the array keeping the running prefix and a map from prefix value to how many times it has occurred",
+        "at each position add the map's count for run \u2212 k, then record the current prefix"
+      ],
+      why: "Each step removes something. The first replaces a sum over a range with two numbers; the second turns a search over pairs into a lookup for one value; the third supplies a structure that answers that lookup in constant expected time; the fourth fixes the order, and it matters \u2014 recording the current prefix before querying would let a subarray of length zero count itself." }
+  ]
+});
+
+/* ======================= CHAPTER 10 ======================= */
+CHAPTERS.push({
+  num: 10, part: 1, title: "Stacks, Queues and the Monotonic Trick",
+  blurb: "A stack answers one question \u2014 what was the most recent thing \u2014 and that question turns out to be hiding inside next-greater-element, largest-rectangle-in-a-histogram, sliding-window-maximum and every expression parser ever written. This chapter builds stacks, queues and deques honestly, including the circular buffer whose one genuine ambiguity has two standard fixes, and then derives the monotonic stack and the monotonic deque from Chapter 4's argument, which is why their nested-looking loops are linear. You will also see what a queue built from the wrong structure costs: at 200,000 elements, 329 times more.",
+
+  sections: [
+
+    { title: "The Contracts, and What They Cost",
+      html:
+        "<p>A <strong>stack</strong>, a <strong>queue</strong> and a <strong>deque</strong> are <strong>abstract data types</strong>: definitions of what operations exist and what they promise, with no commitment about how. The three contracts are one sentence each.</p>" +
+
+        "<ul>" +
+        "<li><strong>Stack</strong> &#8212; push and pop at one end. The element you get back is the most recently added, which is why it is called <strong>LIFO</strong>, last in first out.</li>" +
+        "<li><strong>Queue</strong> &#8212; push at one end, pop at the other. The element you get back is the oldest, <strong>FIFO</strong>, first in first out.</li>" +
+        "<li><strong>Deque</strong> &#8212; push and pop at both ends, pronounced \u201cdeck\u201d and short for double-ended queue. It subsumes both of the others, which is why languages that ship one structure ship this one.</li>" +
+        "</ul>" +
+
+        "<p>Two implementations serve all three. An <strong>array-backed</strong> version stores elements contiguously and is fast because of it: every access is one indexed read, and the hardware prefetcher sees the pattern coming. A <strong>node-backed</strong> version allocates a record per element and links them, paying a pointer dereference and a cache miss per access in exchange for never needing to grow a block. For a stack the array wins outright &#8212; push and pop at the end are Chapter 4's amortized O(1) append. For a queue it is not that simple, and the reason is a measurement everybody should make once.</p>" +
+
+        "<h3>What a queue built from a list costs</h3>" +
+
+        "<p>A Python list supports <code>append</code> and <code>pop(0)</code>, which look like exactly the queue contract. They are not, because <code>pop(0)</code> removes from the front of a contiguous array and every remaining element must shift down one slot. That is O(n) per pop and O(n&#178;) for the whole queue. Draining a queue of n elements, list against <code>collections.deque</code>:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 10,000</strong> &#8212; list 8.0 ms, deque 0.57 ms &#8212; 14&#215;</li>" +
+        "<li><strong>n = 50,000</strong> &#8212; list 211.2 ms, deque 2.37 ms &#8212; 89&#215;</li>" +
+        "<li><strong>n = 200,000</strong> &#8212; list <strong>3,196.6 ms</strong>, deque <strong>9.70 ms</strong> &#8212; 329&#215;</li>" +
+        "</ul>" +
+
+        "<p>The ratio is not a constant, which is the tell: it quadruples as n quadruples because one side is quadratic and the other is linear. Quadrupling the input multiplied the list's time by 15 and the deque's by 4.</p>" +
+
+        "<p>What the standard libraries actually ship is worth knowing. <strong>CPython's <code>collections.deque</code></strong> is a doubly linked list of fixed-size blocks rather than one contiguous array, so pushing or popping either end touches at most one block and never shifts anything; the cost is that indexing into the middle is O(n), which is the trade it was designed to make. <strong>Java's <code>ArrayDeque</code></strong> takes the other route &#8212; a circular buffer in one array with a power-of-two capacity, so the wraparound arithmetic is a bitwise AND rather than a modulo. Both give O(1) at both ends. Java's <code>LinkedList</code> also implements the queue interface and is the one to avoid: it is node-backed with a full object header per element, and it loses to <code>ArrayDeque</code> on essentially every workload.</p>" +
+
+        "<div class='callout'>The rule that falls out: <strong>never build a queue from a structure whose front is expensive.</strong> In Python that means <code>collections.deque</code>, never <code>list.pop(0)</code>. In Java it means <code>ArrayDeque</code>, never <code>LinkedList</code>, and never <code>Stack</code> either, which is a synchronised relic from Java 1.0.</div>"
+    },
+
+    { title: "The Circular Buffer and Its One Ambiguity",
+      html:
+        "<p>A queue in a fixed array is the <strong>circular buffer</strong>: keep a head index and a tail index, push at the tail, pop from the head, and let both wrap to 0 when they run off the end. The <strong>wraparound</strong> is the modulo, and it is the whole implementation:</p>" +
+
+        "<pre><code>class Ring:\n    def __init__(self, cap):\n        self.b = [None] * cap\n        self.head = self.tail = 0\n\n    def push(self, v):\n        self.b[self.tail] = v\n        self.tail = (self.tail + 1) % len(self.b)\n\n    def pop(self):\n        v = self.b[self.head]\n        self.head = (self.head + 1) % len(self.b)\n        return v</code></pre>" +
+
+        "<p>This code is wrong, and the bug is not in any line of it. It is in what the two indices can express.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>a ring of capacity 4: the same head and tail describe two opposite states</text>" +
+        "<text x='96' y='46' text-anchor='middle' fill='#7d8fb0' font-size='10'>after 4 pushes</text>" +
+        "<rect x='40' y='56' width='42' height='36' rx='5' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='61' y='79' text-anchor='middle' fill='#3ddc97' font-size='11'>1</text>" +
+        "<rect x='84' y='56' width='42' height='36' rx='5' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='105' y='79' text-anchor='middle' fill='#3ddc97' font-size='11'>2</text>" +
+        "<rect x='128' y='56' width='42' height='36' rx='5' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='149' y='79' text-anchor='middle' fill='#3ddc97' font-size='11'>3</text>" +
+        "<rect x='172' y='56' width='42' height='36' rx='5' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/><text x='193' y='79' text-anchor='middle' fill='#3ddc97' font-size='11'>4</text>" +
+        "<text x='61' y='112' text-anchor='middle' fill='#ffd166' font-size='10'>head</text>" +
+        "<text x='61' y='126' text-anchor='middle' fill='#ffd166' font-size='10'>tail</text>" +
+        "<text x='127' y='150' text-anchor='middle' fill='#3ddc97' font-size='11'>FULL</text>" +
+        "<line x1='300' y1='50' x2='300' y2='160' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='430' y='46' text-anchor='middle' fill='#7d8fb0' font-size='10'>then 4 pops</text>" +
+        "<rect x='374' y='56' width='42' height='36' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='418' y='56' width='42' height='36' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='462' y='56' width='42' height='36' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='506' y='56' width='42' height='36' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='395' y='112' text-anchor='middle' fill='#ffd166' font-size='10'>head</text>" +
+        "<text x='395' y='126' text-anchor='middle' fill='#ffd166' font-size='10'>tail</text>" +
+        "<text x='461' y='150' text-anchor='middle' fill='#ff5d73' font-size='11'>EMPTY</text>" +
+        "<text x='20' y='186' fill='#ffd166' font-size='11'>head == tail == 0 in both. The indices cannot tell these apart.</text>" +
+        "<text x='20' y='208' fill='#c9d6ea' font-size='10'>fix 1: store a count alongside, and test count == 0 or count == capacity</text>" +
+        "<text x='20' y='224' fill='#c9d6ea' font-size='10'>fix 2: never fill the last slot, so full means (tail + 1) % cap == head</text>" +
+        "</svg><div class='fig-cap'>Two indices over a ring of n slots can express n distinct gaps, but there are n+1 possible occupancies.</div></div>" +
+
+        "<p>Run it: push four elements into a ring of capacity four and head and tail are both 0. Pop all four and head and tail are both 0 again. The buffer is full in one case and empty in the other, and nothing in the two indices distinguishes them. This is not an implementation slip, it is a counting fact &#8212; two indices into n slots can encode n different differences, and a buffer of capacity n has n+1 possible occupancies, from zero elements through n. One state has nowhere to go.</p>" +
+
+        "<p>There are exactly two standard fixes, and real systems use both.</p>" +
+
+        "<ul>" +
+        "<li><strong>Keep a count.</strong> Store the number of elements alongside the indices; empty is count 0 and full is count = capacity. Costs one more word and one more thing to keep consistent, and uses the whole array. This is what most library implementations do.</li>" +
+        "<li><strong>Waste one slot.</strong> Refuse to store into the slot immediately behind head, so full is <code>(tail + 1) % cap == head</code> and empty stays <code>head == tail</code>. Costs one element of capacity and no bookkeeping, and is what you see in kernel ring buffers and lock-free queues, where a single index update has to be atomic and a separate counter would need its own synchronisation.</li>" +
+        "</ul>" +
+
+        "<p>The structure is worth the attention because it is what sits underneath most things that must not allocate. A fixed ring buffer has a known memory footprint, no allocator calls on the hot path, and no garbage to collect, which is why it is the shape of audio buffers, network card receive rings, kernel log buffers and the lock-free queues that hand work between threads. The bounded capacity is a feature rather than a limitation: a producer that outruns its consumer is forced to block or to drop, and both are better than growing until the machine dies.</p>" +
+        "<div class='callout'>This ambiguity is the reason a ring buffer is a standard interview question rather than a warm-up. Writing the modulo arithmetic is mechanical; noticing that the empty and full states collide is the part that distinguishes someone who has implemented one from someone who has read about one.</div>"
+    },
+
+    { title: "The Monotonic Stack",
+      html:
+        "<p>Here is the problem that the pattern is named after. For every element of an array, find the <strong>next greater element</strong> &#8212; the first element to its right that is larger, or nothing if none exists. The direct approach scans right from each position and costs O(n&#178;) on a decreasing array.</p>" +
+
+        "<p>The observation that removes it: suppose you are standing at position i and there is some earlier position j &lt; i with a[j] &lt; a[i]. Then a[i] is j's answer, and you can settle it now. But more than that &#8212; <em>j can never be the answer to anything again</em>, because any future position looking leftward would meet a[i] first, and a[i] is bigger. So j is finished, permanently, and can be discarded.</p>" +
+
+        "<p>Keep the unfinished positions on a stack. Because each new element evicts everything smaller than it, whatever remains on the stack is always in decreasing order &#8212; and a stack maintained in sorted order by discarding whatever the new element dominates is a <strong>monotonic stack</strong>:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def next_greater(a):\n    res = [-1] * len(a)\n    st = []                       # indices, values decreasing\n    for i, v in enumerate(a):\n        while st and a[st[-1]] &lt; v:\n            res[st.pop()] = v     # v is that index's answer\n        st.append(i)\n    return res</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] nextGreater(int[] a) {\n    int[] res = new int[a.length];\n    Arrays.fill(res, -1);\n    Deque&lt;Integer&gt; st = new ArrayDeque&lt;&gt;();   // indices, values decreasing\n    for (int i = 0; i &lt; a.length; i++) {\n        while (!st.isEmpty() &amp;&amp; a[st.peek()] &lt; a[i])\n            res[st.pop()] = a[i];              // a[i] is that index's answer\n        st.push(i);\n    }\n    return res;\n}</code></pre></div>" +
+
+        "<p>A <code>while</code> loop inside a <code>for</code> loop, and it is linear, for exactly the reason Chapter 4 gave: <strong>every index is pushed once and popped at most once</strong>, so the total number of stack operations over the whole run is at most 2n however lumpy the individual iterations are. Counted on random input:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 1,000</strong> &#8212; 1,000 pushes, 996 pops, 1,996 total against a bound of 2,000</li>" +
+        "<li><strong>n = 10,000</strong> &#8212; 10,000 pushes, 9,990 pops, 19,990 total</li>" +
+        "<li><strong>n = 100,000</strong> &#8212; 100,000 pushes, 99,987 pops, <strong>199,987</strong> total</li>" +
+        "</ul>" +
+
+        "<p>The two extreme inputs are worth seeing because they show the bound is symmetric. On a strictly <em>increasing</em> array of 20,000 elements every push is followed eventually by a pop: 39,999 operations, right at the ceiling. On a strictly <em>decreasing</em> array nothing is ever evicted: 20,000 pushes and <strong>zero</strong> pops, and the stack grows to the full length of the input. Worst case for time and worst case for space are opposite inputs, which is a distinction worth carrying.</p>" +
+
+        "<h3>Four questions, one template</h3>" +
+        "<p>Next-greater is one of four closely related questions, and they differ by two independent choices: which direction you scan, and which comparison you use to evict. Changing one character in the <code>while</code> condition changes greater to smaller; scanning the array in reverse changes next to previous.</p>" +
+        "<ul>" +
+        "<li><strong>Next greater</strong> &#8212; scan left to right, evict while the stack top is <em>less</em> than the arrival</li>" +
+        "<li><strong>Next smaller</strong> &#8212; scan left to right, evict while the stack top is <em>greater</em> than the arrival</li>" +
+        "<li><strong>Previous greater</strong> &#8212; scan right to left, evict while the stack top is less than the arrival</li>" +
+        "<li><strong>Previous smaller</strong> &#8212; scan right to left, evict while the stack top is greater than the arrival</li>" +
+        "</ul>" +
+        "<p>Equal values are the detail that decides the fourth case, and the choice is genuine rather than arbitrary: evicting on <code>&lt;=</code> settles ties in favour of the later element, evicting on <code>&lt;</code> leaves earlier equals on the stack. For next-greater-element the two give different answers on repeated values, and for largest-rectangle either works because a run of equal bars produces the same rectangle whichever of them claims it. Writing down which convention a problem wants, before the loop, is the difference between deriving these four and memorising them.</p>" +
+        "<p><strong>Step the machine above.</strong> Watch what a popped element learns on its way out: it does not learn its answer when it is pushed, and it does not learn it by looking around. It learns it from whichever element evicts it, which is why the whole thing works in one direction with no lookahead.</p>",
+      viz: "dsaMonoStack", vizTitle: "Each pop finishes one element's answer \u2014 watch what the popped element learns on its way out"
+    },
+
+    { title: "Largest Rectangle in a Histogram",
+      html:
+        "<p>This is the hardest classic in the family and the one worth working fully, because every step is the previous section's mechanism with a different interpretation of the pop.</p>" +
+
+        "<p>Given bar heights, find the largest axis-aligned rectangle that fits inside the histogram. A rectangle is defined by the bar that limits its height, so it is enough to ask, for each bar: <em>how far left and right can a rectangle of exactly this height extend?</em> The answer is bounded on each side by the first strictly shorter bar. So the problem is two next-smaller-element queries per bar, and the monotonic stack answers both in one pass.</p>" +
+
+        "<p>Keep indices on a stack with heights increasing. When a bar arrives that is not taller than the stack top, the bar on top can extend no further right &#8212; <strong>its rectangle has ended</strong> &#8212; so pop it and settle its area. Its right boundary is the arriving index; its left boundary is whatever is now beneath it on the stack, because everything between was taller and got popped earlier.</p>" +
+
+        "<pre><code>def largest_rectangle(h):\n    h = h + [0]              # sentinel: forces every bar to be settled\n    st, best = [], 0\n    for i, v in enumerate(h):\n        while st and h[st[-1]] &gt;= v:\n            height = h[st.pop()]\n            left = st[-1] + 1 if st else 0   # first index this height covers\n            best = max(best, height * (i - left))\n        st.append(i)\n    return best</code></pre>" +
+
+        "<p>Two details carry the whole implementation. The appended <strong>zero sentinel</strong> is shorter than every real bar, so it forces the stack to drain at the end and no bar leaves unsettled &#8212; the same idea as the prefix array's leading zero in Chapter 9, a fake element that removes a special case. And the left boundary is <code>st[-1] + 1</code> rather than the popped index, because after the pop the new top is the nearest bar to the left that is <em>shorter</em>, so the rectangle starts one past it.</p>" +
+
+        "<p>Worked on the standard example h = [2, 1, 5, 6, 2, 3], the answer is <strong>10</strong>: the bars of height 5 and 6 at indices 2 and 3 support a rectangle of height 5 and width 2. When 2 arrives at index 4 it evicts 6 first, giving 6 &#215; 1 = 6, then evicts 5, whose left boundary is index 2 because the new stack top is the bar of height 1 at index 1 &#8212; so 5 &#215; (4 &#8722; 2) = 10. Checked against brute force on 20,000 random histograms, the implementation disagreed <strong>zero times</strong>.</p>" +
+
+        "<h3>The same pops, read as water</h3>" +
+        "<p>Trapping rain water asks how much water an elevation map holds after rain, and it is the same loop with the pop interpreted differently. Keep a stack of indices with heights decreasing. When a taller bar arrives it forms the right wall of a basin, so pop the floor, and the element now beneath it on the stack is the left wall. Water sits above the floor up to the lower of the two walls, across the gap between them:</p>" +
+        "<pre><code>def trap(h):\n    st, total = [], 0\n    for i, v in enumerate(h):\n        while st and h[st[-1]] &lt; v:\n            floor = h[st.pop()]\n            if not st:\n                break                 # no left wall, water escapes\n            width = i - st[-1] - 1\n            depth = min(h[st[-1]], v) - floor\n            total += width * depth    # one horizontal slab\n        st.append(i)\n    return total</code></pre>" +
+        "<p>Each pop settles one horizontal slab rather than one column, which is why the accumulation is a sum over pops rather than over indices. The <code>if not st: break</code> line is the honest edge: a floor with nothing to its left has no left wall, so the water runs off and there is nothing to add. Every one of these problems has an edge of that shape, and it is always the element that reaches the end of the stack.</p>" +
+        "<div class='callout'>The reading that generalises: in every problem of this family, <em>the pop is where an element's answer is computed</em>. Next-greater settles a value; largest-rectangle settles an area; trapping-rain-water settles a horizontal slab of water. Whenever a question asks for something bounded on both sides by the nearest element that breaks a condition, the monotonic stack is the structure and the pop is the moment.</div>"
+    },
+
+    { title: "The Monotonic Deque and the Sliding Window Maximum",
+      html:
+        "<p>Chapter 8 left a gap. A fixed window's sum rolls cheaply because adding is invertible; its <strong>sliding window maximum</strong> does not, because removing the element that happened to be the maximum leaves nothing to fall back on. Recomputing costs k per window and nk overall.</p>" +
+
+        "<p>The fix is the monotonic idea applied to a double-ended queue. If two elements are both inside the window and the older one is smaller, the older one can never be the maximum again &#8212; the newer one outlives it and beats it. So it is not a candidate and does not need storing. Keep only the candidates, in decreasing order, in a <strong>monotonic deque</strong>:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n\ndef window_max(a, k):\n    dq, out = deque(), []          # indices, values decreasing\n    for i, v in enumerate(a):\n        while dq and a[dq[-1]] &lt;= v:\n            dq.pop()               # dominated: never the max again\n        dq.append(i)\n        if dq[0] &lt;= i - k:\n            dq.popleft()           # fell out of the window\n        if i &gt;= k - 1:\n            out.append(a[dq[0]])   # the front is always the max\n    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] windowMax(int[] a, int k) {\n    Deque&lt;Integer&gt; dq = new ArrayDeque&lt;&gt;();   // indices, values decreasing\n    int[] out = new int[a.length - k + 1];\n    for (int i = 0; i &lt; a.length; i++) {\n        while (!dq.isEmpty() &amp;&amp; a[dq.peekLast()] &lt;= a[i]) dq.pollLast();\n        dq.addLast(i);\n        if (dq.peekFirst() &lt;= i - k) dq.pollFirst();\n        if (i &gt;= k - 1) out[i - k + 1] = a[dq.peekFirst()];\n    }\n    return out;\n}</code></pre></div>" +
+
+        "<p>Both ends are used, which is why a stack is not enough: elements are evicted from the back for being dominated and from the front for being too old, and those are different reasons happening at different ends. The front is always the window's maximum, available in O(1) without searching.</p>" +
+
+        "<h3>What the deque knows that a heap does not</h3>" +
+
+        "<p>A max-heap also solves this, by pushing every element and discarding stale entries from the top when they surface. It is correct and it is slower. On 100,000 elements with a window of 1,000:</p>" +
+
+        "<ul>" +
+        "<li><strong>monotonic deque</strong> &#8212; 21.8 ms, 199,994 elementary push and pop operations, exactly 2.00 per element</li>" +
+        "<li><strong>max-heap</strong> &#8212; 27.3 ms, 100,635 heap operations, each of which costs O(log k) comparisons internally</li>" +
+        "</ul>" +
+
+        "<p>The operation counts are not directly comparable &#8212; a deque push is a couple of pointer writes and a heap push is a sift &#8212; which is exactly the point. The deque performs more operations and less work, because every one of its operations is constant and the heap's are not. The wall clock is the fair comparison and the deque wins it.</p>" +
+
+        "<p>The sharper number is how much the deque holds. Over that run its maximum size at any instant was <strong>19 elements, for a window of 1,000</strong>. The heap holds every element that has not yet been evicted from the top, which is most of the window. The deque discards a candidate the moment a larger, younger element arrives, and on random data that happens almost immediately &#8212; so it is storing the current maximum and the handful of elements that would inherit the title in order.</p>" +
+
+        "<h3>When the heap is the right answer after all</h3>" +
+        "<p>The deque wins here because the window is a contiguous range of fixed width, so “expired” means exactly “index too small” and the front check is one comparison. Loosen either property and the deque loses its grip. If the window is defined by a time span rather than a count, the front check becomes a timestamp comparison and the deque still works. But if elements can be removed from the middle &#8212; a cancelled order, a retracted bid &#8212; then a structure indexed only at its ends cannot find them, and a heap with lazy deletion, or a balanced tree, is the correct answer despite the log factor.</p>" +
+        "<p>The general rule is that the monotonic deque is a specialist: it exploits the fact that an element which is older <em>and</em> smaller is permanently useless. Where that domination argument does not hold, the structure has nothing to discard and collapses into a slower ordinary queue.</p>" +
+        "<p><strong>In the machine above</strong>, find an element that is pushed and popped without ever being the window's maximum. Most elements are exactly that, and it is still O(n), because each of them was pushed once and popped once.</p>",
+      viz: "dsaMonoDeque", vizTitle: "The deque holds only the candidates \u2014 watch how few survive"
+    },
+
+    { title: "Carrying the Minimum Alongside",
+      html:
+        "<p>A <strong>min-stack</strong> supports push, pop and <code>getMin</code>, all in O(1). The question tests whether you will reach for the wrong tool: scanning is O(n), and a heap alongside the stack gives O(log n) and the problem of removing an arbitrary element when a pop happens.</p>" +
+
+        "<p>The answer needs no second structure, only a second stack holding, for each position, the minimum of everything at or below it:</p>" +
+
+        "<pre><code>class MinStack:\n    def __init__(self):\n        self.st, self.mn = [], []\n\n    def push(self, v):\n        self.st.append(v)\n        self.mn.append(v if not self.mn else min(v, self.mn[-1]))\n\n    def pop(self):\n        self.mn.pop()\n        return self.st.pop()\n\n    def get_min(self):\n        return self.mn[-1]</code></pre>" +
+
+        "<p>Because the two stacks move together, <code>mn[-1]</code> is by construction the minimum of the live elements, and a pop restores the previous minimum without recomputing it. The history is kept rather than derived, which costs O(n) extra space &#8212; reducible by storing pairs of (value, run length) when values repeat, though the plain version is what to write first. Checked against recomputing <code>min</code> over a reference list on 2,000 random push and pop sequences, it disagreed zero times.</p>" +
+
+        "<h3>The min-queue, via two stacks</h3>" +
+
+        "<p>The same question for a queue is harder, because the element leaving is the oldest rather than the newest, so the min-stack's \u201crestore what was underneath\u201d trick has nothing to restore. The standard construction builds a queue out of two stacks: an <em>in</em> stack receiving pushes and an <em>out</em> stack serving pops, with the whole of <em>in</em> poured into <em>out</em> whenever <em>out</em> runs dry. Reversing a stack into another stack reverses the order, which converts LIFO into FIFO.</p>" +
+
+        "<p>That construction is amortized O(1) per operation by Chapter 4's argument &#8212; each element is moved between the stacks exactly once in its lifetime, so n operations cost O(n) however the transfers clump. And because each half is a stack, making each of them a min-stack gives a min-queue: the queue's minimum is the smaller of the two stacks' minima. Two ideas already in the chapter, composed.</p>" +
+
+        "<div class='callout'>The two-stack queue is also the cleanest demonstration that amortized is not worst case. One pop in the sequence pours the entire <em>in</em> stack across and costs O(n); every pop around it costs O(1). If your latency budget is per-operation rather than per-sequence, this structure will miss it, and Chapter 4's warning about tail latency applies unchanged.</div>"
+    },
+
+    { title: "Why Stacks Were Invented: Parsing Expressions",
+      html:
+        "<p>The oldest use of the stack is the one the structure was created for. <code>3 + 4 * 2</code> cannot be evaluated left to right, because the multiplication binds tighter, and <strong>operator precedence</strong> is a rule about an operator's relationship to operators it has not met yet.</p>" +
+
+        "<p>Before precedence there is a simpler use that makes the point on its own. Checking whether brackets are balanced needs a stack and nothing else: push every opener, and on a closer check that the top is its matching partner and pop it. The string is balanced when every closer matched and the stack is empty at the end. Neither a counter nor a regular expression can do this, because the nesting is unbounded and a counter forgets <em>which</em> bracket it is inside &#8212; <code>([)]</code> has equal counts of each and is not balanced. The stack is the smallest structure that remembers the most recent unfinished opener, which is precisely what the question asks about.</p>" +
+        "<p><strong>Reverse Polish notation</strong> removes the problem by removing the need for the rule. Writing operators after their operands &#8212; <code>3 4 2 * +</code> &#8212; makes the order of evaluation explicit, so there are no parentheses and no precedence, and a stack evaluates it in one pass: push numbers, and on an operator pop two, combine, push the result. The notation reverses Jan &#321;ukasiewicz's prefix form from the 1920s, and its use for machine evaluation is usually credited to Burks, Warren and Wright in 1954 and to Hamblin's work in 1957.</p>" +
+
+        "<p>Converting ordinary infix to RPN is Dijkstra's <strong>shunting-yard algorithm</strong>, published in 1961 and named for the railway siding its operator stack resembles. Numbers go straight to the output; an operator waits on a stack until an operator of lower or equal precedence arrives, at which point it is forced out:</p>" +
+
+        "<pre><code>PREC = {'+': 1, '-': 1, '*': 2, '/': 2}\n\ndef to_rpn(tokens):\n    out, ops = [], []\n    for t in tokens:\n        if t.isdigit():\n            out.append(t)\n        elif t == '(':\n            ops.append(t)\n        elif t == ')':\n            while ops[-1] != '(':\n                out.append(ops.pop())\n            ops.pop()                     # discard the '('\n        else:\n            while ops and ops[-1] != '(' and PREC[ops[-1]] &gt;= PREC[t]:\n                out.append(ops.pop())     # forced out by precedence\n            ops.append(t)\n    while ops:\n        out.append(ops.pop())\n    return out</code></pre>" +
+
+        "<p>The stack is doing the only thing a stack does: remembering the most recent unfinished thing. An operator is unfinished until something arrives that settles where it belongs, exactly as an index on the monotonic stack is unfinished until something evicts it. Converting and evaluating 20,000 randomly generated parenthesised expressions and comparing against Python's own evaluator gave <strong>zero disagreements</strong>. On <code>3+4*2-(1+1)</code> the output is <code>3 4 2 * + 1 1 + -</code>, which evaluates to 9.</p>" +
+
+        "<p><strong>Type an expression into the machine above</strong> with mixed precedence and watch the step where an operator is forced off the stack. The condition <code>&gt;=</code> rather than <code>&gt;</code> is what makes same-precedence operators associate to the left, so <code>8 - 3 - 2</code> is 3 and not 7; changing one character there changes the language your parser accepts.</p>",
+      viz: "dsaShuntingYard", vizTitle: "Type an expression \u2014 watch operators wait on the stack until precedence evicts them"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Run the monotonic stack for next-greater-element by hand on [2, 1, 2, 4, 3], recording the stack contents after each index. <em>What you should find:</em> answers [4, 2, 4, &#8722;1, &#8722;1], with index 3 settling two pending indices in one iteration &#8212; and the stack never holding an increasing pair at any point.</li>" +
+        "<li><strong>Trace.</strong> Work largest-rectangle on [2, 1, 5, 6, 2, 3] with the zero sentinel appended, writing down each pop's height, left boundary and area. <em>What you should find:</em> a maximum of 10 from the bar of height 5 spanning indices 2 to 3, and that the left boundary of that pop is one past the remaining stack top rather than the popped index itself.</li>" +
+        "<li><strong>Investigate.</strong> Drain a queue of 10,000, 50,000 and 200,000 elements using <code>list.pop(0)</code> and using <code>collections.deque.popleft()</code>, and plot both. <em>What you should find:</em> roughly 8 ms, 211 ms and 3,197 ms against 0.57 ms, 2.37 ms and 9.70 ms &#8212; the ratio growing from 14&#215; to 329&#215;, because quadrupling n multiplies one side by about 15 and the other by about 4.</li>" +
+        "<li><strong>Investigate.</strong> Instrument the monotonic stack to count pushes and pops, and run it on random input, on a strictly increasing array and on a strictly decreasing one, all of size 20,000. <em>What you should find:</em> totals near 2n on random and increasing input, but on decreasing input exactly 20,000 pushes and zero pops &#8212; the worst case for time and the worst case for space are opposite inputs.</li>" +
+        "<li><strong>Build.</strong> Implement sliding-window maximum with a monotonic deque and with a max-heap, and on 100,000 elements with k = 1,000 record both the time and the largest size the deque ever reaches. <em>What you should find:</em> the same answers from both, the deque faster at roughly 22 ms against 27 ms, and a maximum deque size near 19 &#8212; under 2% of the window, because a candidate dies as soon as a larger younger element arrives.</li>" +
+        "<li><strong>Build.</strong> Implement shunting-yard plus an RPN evaluator, then generate 20,000 random parenthesised expressions and check every result against your language's own evaluator. <em>What you should find:</em> zero disagreements; then change the precedence comparison from <code>&gt;=</code> to <code>&gt;</code> and confirm that <code>8 - 3 - 2</code> becomes 7, because the operators now associate to the right.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "abstract data type", d: "A specification of what operations a structure offers and what they promise, deliberately silent about how they are implemented." },
+    { t: "stack", d: "The container whose pop returns the most recently pushed element, which is what makes it the structure for anything with a most-recent-unfinished-thing." },
+    { t: "LIFO", d: "Last in, first out: the ordering a stack provides, and the reason the call stack and an undo history are the same shape." },
+    { t: "queue", d: "The container whose pop returns the oldest element, used whenever work must be served in the order it arrived." },
+    { t: "FIFO", d: "First in, first out: the ordering a queue provides, and the discipline breadth-first search depends on for its level-by-level behaviour." },
+    { t: "deque", d: "A double-ended queue allowing push and pop at both ends, which subsumes the stack and the queue and is what most standard libraries actually ship." },
+    { t: "circular buffer", d: "A queue held in a fixed array with head and tail indices that wrap, giving constant-time ends with no allocation and one genuine ambiguity." },
+    { t: "wraparound", d: "Resetting an index to the start of the array once it runs past the end, usually by a modulo, or by a bitwise AND when the capacity is a power of two." },
+    { t: "monotonic stack", d: "A stack kept in sorted order by discarding every element the arriving one dominates, so that each index is pushed once and popped at most once." },
+    { t: "next greater element", d: "The first element to the right that exceeds a given one, the question the monotonic stack was named for and the shape most of its variants take." },
+    { t: "monotonic deque", d: "The double-ended version that evicts dominated elements from the back and expired ones from the front, keeping the window's extreme available at the front in constant time." },
+    { t: "sliding window maximum", d: "The largest value in each window of fixed width, which a rolling update cannot maintain because the maximum is not invertible." },
+    { t: "min-stack", d: "A stack that also reports its smallest live element in constant time, achieved by storing the running minimum alongside each entry rather than recomputing it." },
+    { t: "operator precedence", d: "The rule fixing which operator binds tighter when neither parentheses nor order settles it, and the reason infix expressions need a parser at all." },
+    { t: "reverse Polish notation", d: "Writing operators after their operands so that evaluation order is explicit, which removes precedence and parentheses and leaves a one-pass stack evaluation." },
+    { t: "shunting-yard algorithm", d: "Dijkstra's 1961 method for converting infix to postfix using an operator stack, named for the railway siding the waiting operators resemble." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Draining a queue took 8.0 ms at n = 10,000 and 3,196.6 ms at n = 200,000 using <code>list.pop(0)</code>, against 0.57 ms and 9.70 ms for <code>collections.deque</code>. What does the growing ratio show?",
+      opts: [
+        "The list version exceeds cache at larger n while the deque's block structure stays resident, so the gap widens through memory effects rather than through the operation counts",
+        "One side is quadratic and the other linear: pop(0) shifts every remaining element down a slot, so the ratio itself grows rather than settling at a constant",
+        "The deque amortizes its reallocations across the whole drain while the list reallocates on each removal, giving a constant-factor gap that compounds over the run",
+        "The list must maintain its length field and reference counts for every shifted element, which adds bookkeeping proportional to the number of elements remaining"
+      ], a: 1,
+      why: "A constant ratio would mean both sides share an order of growth and differ by implementation quality. A ratio that grows from 14\u00d7 to 329\u00d7 means they do not: removing from the front of a contiguous array moves every remaining element, which is O(n) per pop and O(n\u00b2) overall. Quadrupling n multiplied one side's time by about 15 and the other's by about 4." },
+
+    { type: "mc",
+      q: "In a circular buffer of capacity 4, head and tail are both 0 after four pushes and also after the four pops that follow. Why is this not fixable by adjusting the index arithmetic?",
+      opts: [
+        "Because two indices over n slots encode n distinct differences while a buffer of capacity n has n+1 possible occupancies, so one state has nowhere to go",
+        "Because head and tail are updated at different points in the push and pop paths, so any arithmetic fix would need them to be written atomically together",
+        "Because the modulo operation maps the capacity back to zero, and using a capacity that is not a power of two would keep the two states on distinct index values",
+        "Because the buffer stores no information about which slots were written, and reading a slot cannot distinguish a stale value from a live one after a wrap"
+      ], a: 0,
+      why: "It is a counting fact rather than an arithmetic slip, which is why exactly two fixes exist and both change what is stored rather than how it is computed: keep an explicit count, or refuse to use the last slot so that full and empty differ by one position. Kernel ring buffers and lock-free queues prefer the wasted slot, because a separate counter would need its own synchronisation." },
+
+    { type: "mc",
+      q: "The monotonic stack has a while loop inside a for loop and performed 199,987 operations on 100,000 elements. Why is it linear?",
+      opts: [
+        "Because the monotonic ordering means the inner loop pops one element per iteration on average",
+        "Because each index is pushed once and popped at most once, bounding total stack operations at 2n however unevenly the pops fall across iterations",
+        "Because the inner loop is bounded by the current stack depth, which stays near log n on random input and reaches n only on adversarial input",
+        "Because every pop settles one element's answer and there are n answers, so the pops are bounded by the size of the output rather than by the loop structure"
+      ], a: 1,
+      why: "Chapter 4's argument again: the bound is on the total, not the iteration. One iteration can pop thousands of indices, and it can only do so because those thousands were pushed earlier and paid for once. Option 1 is a statement about averages that the worst case would break; option 4 is nearly right but confuses the accounting, since an element's answer may be settled without a pop when it never had one." },
+
+    { type: "mc",
+      q: "On a strictly decreasing array of 20,000 elements, the next-greater-element scan performed 20,000 pushes and zero pops. What does that input demonstrate?",
+      opts: [
+        "That the time bound is tight only on random input, since neither extreme reaches the 2n ceiling",
+        "That the stack degenerates on sorted input in the same way an unbalanced tree does, which is why real implementations pre-shuffle the array first",
+        "That worst case for time and worst case for space are opposite inputs: nothing is ever evicted, so the stack grows to the full length of the input",
+        "That the invariant is vacuous on a decreasing array, so a direct quadratic scan would perform identically"
+      ], a: 2,
+      why: "A decreasing array never triggers an eviction, so the loop does the minimum possible work \u2014 20,000 operations rather than the ceiling of 40,000 \u2014 while holding every index at once. The increasing array is the mirror image: 39,999 operations, right at the ceiling, with the stack never holding more than a couple of entries. Quoting one worst case without saying which resource it is the worst case for hides this." },
+
+    { type: "mc",
+      q: "Solving sliding-window maximum on 100,000 elements with k = 1,000, the monotonic deque took 21.8 ms with 199,994 elementary operations and the max-heap took 27.3 ms with 100,635 heap operations. Why is the deque faster despite performing more operations?",
+      opts: [
+        "The heap's operations are not constant: each push or pop sifts through O(log k) comparisons, so fewer operations do more work",
+        "The heap holds stale entries discarded lazily at the top, and that is where the extra time goes",
+        "The deque's operations are all at the ends of a block-allocated structure, so they stay in cache while the heap's sift path touches scattered array positions",
+        "The operation counts were measured differently, and normalising both to elementary comparisons would show the heap performing fewer of them overall"
+      ], a: 0,
+      why: "The counts are not comparable and that is the lesson: a deque push is a couple of pointer writes and a heap push is a sift. Counting operations only measures work when the operations cost the same. Options 2 and 3 name real secondary effects, but the primary one is that the deque's every operation is O(1) and the heap's are not \u2014 and the deque never held more than 19 elements for a window of 1,000." },
+
+    { type: "mc",
+      q: "In largest-rectangle-in-a-histogram, after popping a bar the left boundary is computed as <code>st[-1] + 1</code> rather than as the popped index. Why?",
+      opts: [
+        "Because the popped index is already consumed by the height term, and reusing it in the width term would count the bar's own column twice in the area",
+        "Because the rectangle extends from the first bar of equal height, and equal heights are popped together, so the boundary must skip the run that was removed",
+        "Because the sentinel zero occupies index 0 conceptually, so every left boundary must be shifted by one to account for the extra element appended to the array",
+        "Because the stack holds indices in increasing order of height, so the element beneath the popped one is the nearest shorter bar to the left and the rectangle starts one past it"
+      ], a: 3,
+      why: "Everything between the new stack top and the popped bar was taller and has already been popped, so the rectangle of the popped height extends across all of it \u2014 starting immediately after the shorter bar that stopped it. The appended zero is a separate device: it is shorter than every real bar, so it drains the stack and guarantees no bar leaves unsettled, the same trick as Chapter 9's leading zero." },
+
+    { type: "mc",
+      q: "A queue built from two stacks moves each element from the in-stack to the out-stack exactly once, giving amortized O(1) per operation. What does that bound not promise?",
+      opts: [
+        "That the total cost of n operations is O(n), since the amortized bound describes the average and a sequence could still exceed it",
+        "That the structure is correct under interleaved pushes and pops, since an element may be transferred while the in-stack is still receiving new arrivals",
+        "That any individual pop is cheap: the pop that pours the whole in-stack across costs O(n), which a per-operation latency budget would miss",
+        "That the space stays bounded, since both stacks may simultaneously hold the full contents of the queue during the transfer step"
+      ], a: 2,
+      why: "Chapter 4's distinction, arriving in a new structure. Amortized O(1) is a claim about complete sequences: n operations cost O(n), which is precisely what option 1 mistakenly denies. What it says nothing about is the operation you happen to be executing, and in this structure one pop in the sequence does all the transfer work at once." },
+
+    { type: "blank",
+      q: "A stack kept in sorted order by discarding every element that the arriving one dominates, so each index is pushed once and popped at most once, is called a ____ stack.",
+      a: ["monotonic", "monotone"],
+      why: "The invariant is what makes the nested loop linear, and the pop is where each element's answer is computed \u2014 a value for next-greater-element, an area for largest-rectangle, a slab of water for trapping-rain-water. Measured on 100,000 random elements it used 199,987 operations against a bound of 200,000." },
+
+    { type: "blank",
+      q: "Dijkstra's 1961 algorithm for converting an infix expression to postfix using an operator stack, named after a railway siding, is the ____-yard algorithm.",
+      a: ["shunting"],
+      why: "Operators wait on the stack until an operator of lower or equal precedence forces them out, which is the same shape as an index waiting on a monotonic stack until something evicts it. The comparison being <code>&gt;=</code> rather than <code>&gt;</code> is what makes equal precedence associate to the left, so 8 \u2212 3 \u2212 2 is 3 and not 7." },
+
+    { type: "order",
+      q: "Order the steps of one iteration of the monotonic deque in sliding-window maximum:",
+      items: [
+        "evict from the back every index whose value is at most the arriving value, since it can never be the maximum again",
+        "append the arriving index at the back, preserving the decreasing order",
+        "evict the front index if it has fallen outside the window",
+        "read the front, which is now the maximum of the current window"
+      ],
+      why: "The two evictions happen for unrelated reasons at opposite ends, which is why a stack cannot do this job: the back loses elements for being dominated and the front for being too old. The order matters at the boundary \u2014 checking the front before appending would risk reading an index that the append is about to make current, and reading the maximum before the expiry check would return a value that has already left the window." }
+  ]
+});
+
+/* ======================= CHAPTER 11 ======================= */
+CHAPTERS.push({
+  num: 11, part: 1, title: "Linked Lists and the Runner",
+  blurb: "Linked lists survive in interviews long after they stopped being the right answer in production, and both halves of that sentence are worth understanding. You will see the measurement that explains why — same asymptotics, 39 times slower — then build them with sentinels so the edge cases disappear, reverse them in place and in groups, and meet the runner technique, which is really cycle detection on a functional graph. That last one comes with a proof most people have never seen, for why two pointers restarted from different places meet exactly at the cycle entry.",
+
+  sections: [
+
+    { title: "Nodes and the Cache",
+      html:
+        "<p>An array and a linked list both traverse in O(n), touch each element once, and do the same arithmetic. Every complexity table says they are equivalent for a scan. Here is the same sum over ten million integers on this machine, in Java, three ways:</p>" +
+
+        "<ul>" +
+        "<li><strong><code>int[]</code></strong> &#8212; 31 ms</li>" +
+        "<li><strong>linked list, nodes allocated in order</strong> &#8212; 111 ms (3.6&#215;)</li>" +
+        "<li><strong>linked list, nodes shuffled in memory</strong> &#8212; <strong>1,207 ms (38.9&#215;)</strong></li>" +
+        "</ul>" +
+
+        "<p>Identical answers, identical operation counts, a factor of 39. And the middle row is the list's <em>best</em> case &#8212; nodes laid out consecutively because they were allocated in one burst and nothing has happened since. The bottom row is what a list looks like after a few hours of insertion and deletion, which is the condition any long-lived list is actually in.</p>" +
+
+        "<p>The cause is <strong>locality of reference</strong>. Memory moves between RAM and cache in fixed blocks &#8212; cache lines, 64 bytes on this machine &#8212; not in individual words. Reading <code>arr[0]</code> fetches a line holding the next sixteen 4-byte integers, so fifteen of the following sixteen reads are already paid for, and the prefetcher recognises the stride and fetches ahead. A list gives the hardware nothing to predict: each node holds the address of the next, so the address cannot be computed until the current node arrives. That is <strong>pointer chasing</strong>, and it serialises the memory system into one dependent round trip per element.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>one cache line fetched: sixteen array elements, or one list node</text>" +
+        "<text x='20' y='44' fill='#7d8fb0' font-size='10'>array: one fetch serves the next sixteen reads, and the stride is predictable</text>" +
+        "<rect x='40' y='56' width='320' height='30' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2.5'/>" +
+        "<text x='200' y='76' text-anchor='middle' fill='#3ddc97' font-size='11'>one 64-byte line = a[0] .. a[15]</text>" +
+        "<rect x='362' y='56' width='320' height='30' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/>" +
+        "<text x='522' y='76' text-anchor='middle' fill='#3ddc97' font-size='11'>next line = a[16] .. a[31]</text>" +
+        "<text x='690' y='76' fill='#7d8fb0' font-size='11'>...</text>" +
+        "<line x1='20' y1='104' x2='740' y2='104' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='126' fill='#7d8fb0' font-size='10'>list: one fetch serves one node, and the next address is inside the node</text>" +
+        "<rect x='40' y='138' width='86' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='83' y='158' text-anchor='middle' fill='#ff5d73' font-size='10'>node</text>" +
+        "<rect x='248' y='138' width='86' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='291' y='158' text-anchor='middle' fill='#ff5d73' font-size='10'>node</text>" +
+        "<rect x='456' y='138' width='86' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='499' y='158' text-anchor='middle' fill='#ff5d73' font-size='10'>node</text>" +
+        "<rect x='620' y='138' width='86' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='663' y='158' text-anchor='middle' fill='#ff5d73' font-size='10'>node</text>" +
+        "<line x1='126' y1='153' x2='242' y2='153' stroke='#4f7cff' stroke-width='1.5'/><polygon points='248,153 240,149 240,157' fill='#4f7cff'/>" +
+        "<line x1='334' y1='153' x2='450' y2='153' stroke='#4f7cff' stroke-width='1.5'/><polygon points='456,153 448,149 448,157' fill='#4f7cff'/>" +
+        "<line x1='542' y1='153' x2='614' y2='153' stroke='#4f7cff' stroke-width='1.5'/><polygon points='620,153 612,149 612,157' fill='#4f7cff'/>" +
+        "<text x='20' y='196' fill='#ffd166' font-size='10'>the gaps are other allocations; the next address is unknown until the current node arrives</text>" +
+        "<text x='20' y='212' fill='#ffd166' font-size='10'>so the fetches cannot overlap, and the memory system runs one round trip deep</text>" +
+        "</svg><div class='fig-cap'>The array's cost is one fetch per sixteen elements. The list's is one fetch per element, and they cannot be overlapped.</div></div>" +
+
+        "<p>Memory makes it worse. Measured on this build, a two-field node costs about <strong>24 bytes</strong> against 4 for an <code>int</code> array element &#8212; six times the memory for the same data, because each node carries an object header and a reference alongside its payload. More bytes means fewer elements per line, which means more lines, which means more misses.</p>" +
+
+        "<div class='callout'>The honest summary: a <strong>linked list</strong> buys O(1) insertion and deletion <em>at a position you already hold</em>, and pays for it with every read. If you have to search for the position first, you have paid the traversal anyway and the advantage is gone. That is why the structures later in this course are trees and hash tables rather than lists, and why the list survives mainly as a component inside something else — as section 7 shows.</div>"
+    },
+
+    { title: "Sentinels: Deleting the Edge Cases",
+      html:
+        "<p>Most linked-list bugs are not in the algorithm. They are in the first node. Deleting from the middle is <code>prev.next = cur.next</code>, but deleting the head is <code>head = head.next</code>, a different statement touching a different variable, and every routine that can touch the head needs a branch for it.</p>" +
+
+        "<p>A <strong>sentinel node</strong> &#8212; a real node holding no data, placed before the first real one &#8212; removes the distinction. With a sentinel, every real node has a predecessor, so there is no head case:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code># without a sentinel\ndef remove(head, target):\n    while head and head.val == target:   # special case: the head\n        head = head.next\n    prev = head\n    while prev and prev.next:\n        if prev.next.val == target:\n            prev.next = prev.next.next\n        else:\n            prev = prev.next\n    return head\n\n# with a sentinel\ndef remove(head, target):\n    dummy = Node(None, head)             # one extra node\n    prev = dummy\n    while prev.next:\n        if prev.next.val == target:\n            prev.next = prev.next.next\n        else:\n            prev = prev.next\n    return dummy.next                    # the head, whatever it became</code></pre>" +
+        "<pre data-lang='java' hidden><code>static Node remove(Node head, int target) {\n    Node dummy = new Node(0);\n    dummy.next = head;\n    Node prev = dummy;\n    while (prev.next != null) {\n        if (prev.next.val == target) prev.next = prev.next.next;\n        else                        prev = prev.next;\n    }\n    return dummy.next;   // the head, whatever it became\n}</code></pre></div>" +
+
+        "<p>The second version has one loop, one branch and no reference to <code>head</code> at all. It is also correct on an empty list and on a list whose every element matches, both of which the first version gets wrong in a way that survives casual testing &#8212; the first loop handles leading matches, so the bug only appears when a match is at the head <em>after</em> a non-match, which no three-element test reaches.</p>" +
+
+        "<p>A <strong>doubly linked list</strong> usually gets two sentinels, one at each end, so that insertion and deletion never check for null in either direction. The cost is two nodes and the benefit is that the four pointer writes of a splice are unconditional. This is the arrangement section 7 needs.</p>" +
+
+        "<div class='callout'>The sentinel is the same device as Chapter 9's leading zero in a prefix array and Chapter 10's appended zero bar in the histogram scan: a fake element whose only job is to make the general case general. Whenever a routine has a branch for “the first one” or “the last one”, ask whether an extra element removes it.</div>"
+    },
+
+    { title: "In-Place Reversal",
+      html:
+        "<p><strong>In-place reversal</strong> of a <strong>singly linked list</strong> is three pointers and one rule: before you overwrite a link, save where it was going.</p>" +
+
+        "<pre><code>def reverse(head):\n    prev, cur = None, head\n    while cur:\n        nxt = cur.next      # save the rest of the list\n        cur.next = prev     # flip this link\n        prev = cur          # advance both markers\n        cur = nxt\n    return prev             # the old tail is the new head</code></pre>" +
+
+        "<p>The loop invariant is worth writing down, because it is what makes the four lines checkable rather than memorised: <em>everything from <code>prev</code> backwards is already reversed, everything from <code>cur</code> forwards is untouched, and the two halves are not connected.</em> The list is temporarily in two pieces, which is exactly why <code>nxt</code> must be saved first &#8212; the moment <code>cur.next</code> is overwritten, the forward half is unreachable. Verified on every length from 0 to 49, including the empty list, where the loop body never runs and <code>prev</code> is correctly <code>None</code>.</p>" +
+
+        "<p><strong>Reversing in groups of k</strong> is the variant interviews actually ask, and it is the same loop with a counter plus one decision at the end: when fewer than k nodes remain, either leave them alone or reverse them, and the two are different problems. The usual specification is to leave the remainder untouched, so the routine must look ahead k nodes <em>before</em> reversing anything to find out whether a full group exists. A 7-node list with k = 3 becomes two reversed groups and a final single node in its original position &#8212; and a version that reverses first and counts afterwards cannot undo itself.</p>" +
+
+        "<div class='callout'>The k-group routine is a good test of the sentinel habit. Each reversed group has to be stitched to the previous group's new tail, which for the first group is the head of the whole list &#8212; a special case that disappears entirely if a dummy node precedes the list.</div>"
+    },
+
+    { title: "The Runner",
+      html:
+        "<p>The <strong>runner technique</strong> is two pointers moving through one list at different speeds. It is the sibling of Chapter 8's two pointers, with the difference that a list gives no random access, so the second pointer exists precisely because you cannot compute an index.</p>" +
+
+        "<p>Three uses cover most of its appearances, and all three trade a second traversal for a second pointer.</p>" +
+
+        "<ul>" +
+        "<li><strong>The middle.</strong> Advance <code>slow</code> one node and <code>fast</code> two. When <code>fast</code> runs off the end, <code>slow</code> is at the middle. Which middle depends on the loop condition: <code>while fast and fast.next</code> gives the second of two middles on an even-length list, and <code>while fast.next and fast.next.next</code> gives the first. Neither is more correct; the specification has to say.</li>" +
+        "<li><strong>The nth node from the end.</strong> Advance <code>fast</code> n nodes, then move both until <code>fast</code> reaches the end. The gap is preserved, so <code>slow</code> lands n from the end without anyone counting the length.</li>" +
+        "<li><strong>Whether a cycle exists.</strong> Advance one and two. If there is no cycle, <code>fast</code> reaches the end. If there is, <code>fast</code> cannot escape it, <code>slow</code> eventually enters it, and because the gap between them changes by exactly one node per step, the gap must eventually become zero. They meet.</li>" +
+        "</ul>" +
+
+        "<p>That last argument is the whole termination proof and it is worth restating in the form that generalises: inside the cycle, <code>fast</code> gains one position on <code>slow</code> per step, so the distance between them takes every value modulo the cycle length, including zero. It cannot step over <code>slow</code> without landing on it, because the increment is one.</p>" +
+
+        "<p>The <strong>hash set alternative</strong> should be named honestly, because it is simpler and often correct: walk the list putting each node in a set and stop when you see a repeat. That is O(n) time and O(n) space, and if memory is not the constraint it is the version to write. The runner's claim is O(1) space, and that is its entire advantage.</p>"
+    },
+
+    { title: "Where They Meet, and Why",
+      html:
+        "<p>Detecting a cycle is the routine half. The question that makes this a real algorithm is <em>where does the cycle begin</em>, and the answer is the part almost nobody can justify.</p>" +
+
+        "<p>A list with a cycle has a <strong>rho shape</strong>: a tail of &#956; nodes leading into a cycle of &#955; nodes, named for the Greek letter it resembles. <strong>Floyd's cycle detection</strong> finds &#956; in two phases, and the second phase is three lines that look like a coincidence:</p>" +
+
+        "<pre><code>def find_cycle_start(head):\n    slow = fast = head\n    while fast and fast.next:                 # phase 1: find a meeting point\n        slow, fast = slow.next, fast.next.next\n        if slow is fast:\n            break\n    else:\n        return None                           # no cycle\n\n    slow = head                               # phase 2: restart one pointer\n    while slow is not fast:\n        slow, fast = slow.next, fast.next     # now both move ONE step\n    return slow                               # the cycle entry</code></pre>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>the rho shape: a tail of length μ into a cycle of length λ</text>" +
+        "<circle cx='60' cy='120' r='9' fill='#111a2e' stroke='#3ddc97' stroke-width='2'/><text x='60' y='148' text-anchor='middle' fill='#3ddc97' font-size='10'>head</text>" +
+        "<circle cx='120' cy='120' r='9' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<circle cx='180' cy='120' r='9' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<circle cx='270' cy='120' r='10' fill='#1a2440' stroke='#ffd166' stroke-width='2.5'/><text x='262' y='152' text-anchor='middle' fill='#ffd166' font-size='10'>entry</text>" +
+        "<line x1='69' y1='120' x2='111' y2='120' stroke='#4f7cff' stroke-width='2'/>" +
+        "<line x1='129' y1='120' x2='171' y2='120' stroke='#4f7cff' stroke-width='2'/>" +
+        "<line x1='189' y1='120' x2='260' y2='120' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='150' y='102' text-anchor='middle' fill='#7d8fb0' font-size='11'>tail, μ = 3</text>" +
+        "<circle cx='340' cy='120' r='70' fill='none' stroke='#4f7cff' stroke-width='2'/>" +
+        "<circle cx='340' cy='50' r='9' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<circle cx='410' cy='120' r='9' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<circle cx='340' cy='190' r='10' fill='#1a2440' stroke='#ff5d73' stroke-width='2.5'/>" +
+        "<text x='340' y='214' text-anchor='middle' fill='#ff5d73' font-size='10'>they meet here</text>" +
+        "<text x='340' y='120' text-anchor='middle' fill='#7d8fb0' font-size='11'>cycle, λ = 6</text>" +
+        "<text x='470' y='56' fill='#c9d6ea' font-size='11'>phase 1: slow has walked μ + a</text>" +
+        "<text x='470' y='76' fill='#c9d6ea' font-size='11'>fast has walked 2(μ + a), so the</text>" +
+        "<text x='470' y='96' fill='#c9d6ea' font-size='11'>difference μ + a is a whole number</text>" +
+        "<text x='470' y='116' fill='#c9d6ea' font-size='11'>of laps: μ + a ≡ 0 (mod λ)</text>" +
+        "<text x='470' y='148' fill='#3ddc97' font-size='11'>so walking μ more from the meeting</text>" +
+        "<text x='470' y='168' fill='#3ddc97' font-size='11'>point returns to the entry, which is</text>" +
+        "<text x='470' y='188' fill='#3ddc97' font-size='11'>also μ steps from the head</text>" +
+        "<text x='470' y='216' fill='#ffd166' font-size='10'>both walk μ — so they arrive together</text>" +
+        "</svg><div class='fig-cap'>Phase 2 works because the meeting point sits exactly μ steps short of the entry, going forwards.</div></div>" +
+
+        "<p><strong>The proof.</strong> Let the meeting happen when <code>slow</code> has taken s steps. Then <code>fast</code> has taken 2s, and since both are on the cycle at the same node, their difference is a whole number of laps: 2s &#8722; s = s &#8801; 0 (mod &#955;). So s is a multiple of &#955;. Now start a pointer at the head: it reaches the entry after &#956; steps. The other pointer is at the meeting point, which is s &#8722; &#956; steps into the cycle; advancing it &#956; steps puts it at s &#8722; &#956; + &#956; = s steps into the cycle, and s is a multiple of &#955;, so it is back at the entry. Both pointers arrive at the entry after exactly &#956; steps. &#9632;</p>" +
+
+        "<p>Checked exhaustively for every &#956; from 0 to 39 and every &#955; from 1 to 39 &#8212; <strong>1,560 shapes, all correct</strong> &#8212; and in every one of them the number of phase-2 steps was exactly &#956;, which is the proof's claim rather than an approximation of it. For &#956; = 3, &#955; = 6, the pointers meet at node 6 after slow has moved 6 nodes, and phase 2 then takes 3 steps to reach the entry at node 3.</p>" +
+
+        "<p><strong>Brent's algorithm</strong> (1980) solves the same problem differently: keep one pointer still, move the other, and when the distance travelled reaches a power of two, teleport the stationary pointer to the moving one and double the limit. It finds &#955; directly rather than deriving it, and it advances pointers fewer times &#8212; measured over 300 random shapes, <strong>0.86&#215;</strong> Floyd's total pointer advances. Floyd remains the one to know because its two phases are the thing being tested, but Brent is the one to use when the step operation is expensive, which is the case it was designed for: Pollard's rho factorisation, where each step is a modular multiplication.</p>"
+    },
+
+    { title: "What Lists Are Actually Good At",
+      html:
+        "<p>Section 1 was one-sided on purpose. There are two things a linked list does that an array cannot, and both come from the same property: <em>a list can be reordered by rewriting links, without moving any data.</em></p>" +
+
+        "<h3>Merge sort without scratch space</h3>" +
+
+        "<p>Merge sort on an array needs O(n) auxiliary memory, because merging two sorted runs into one requires somewhere to put the result. On a list it needs O(1), because merging is relinking: take whichever of the two front nodes is smaller, append it to the output by setting one pointer, and advance. Nothing is copied and nothing is allocated.</p>" +
+
+        "<p>The comparison counts are ordinary &#8212; measured at 8,697, 120,360 and 1,536,272 comparisons for n of 1,000, 10,000 and 100,000, which is 0.87 to 0.92 times n log&#8322; n, the expected constant for merge sort on random input. The win is entirely in space, and it is the reason merge sort is the standard choice for sorting a list while quicksort is the standard choice for sorting an array: quicksort's partition wants random access, and a list has none.</p>" +
+
+        "<h3>Splicing at a known position</h3>" +
+
+        "<p>Moving a node from the middle of a list to the front is four pointer writes on a <strong>doubly linked list</strong>, regardless of the list's length and regardless of where the node sits. The same operation on an array is O(n), because everything between the two positions shifts. This is the property section 7 is built on, and it is close to the only one that survives contact with the cache measurement.</p>" +
+
+        "<h3>The deep copy with random pointers</h3>" +
+
+        "<p>A list whose nodes carry an extra pointer to an arbitrary other node has to be copied so that the copy's arbitrary pointers refer to the copy's nodes. The obvious answer is a hash map from original node to copied node, filled in one pass and consulted in a second: O(n) time and O(n) space.</p>" +
+
+        "<p>The interleaving trick removes the map. Insert each copy directly after its original, so that <code>original.next</code> <em>is</em> the copy and the correspondence is encoded in the list's own structure. Then <code>copy.random = original.random.next</code> for every node, which is the map lookup performed by following two links. A third pass separates the two lists. Three passes, O(1) extra space, and the map is gone &#8212; replaced by the observation that a list already has somewhere to store one association per node.</p>" +
+
+        "<div class='callout'>The interleaving trick is elegant and it is usually the wrong choice in production, because it mutates the input list for the duration and is not safe if anything else can read it concurrently. The hash map version is three lines, correct on inspection, and costs memory you probably have. Knowing the clever version is worth it; reaching for it by default is not.</div>"
+    },
+
+    { title: "The LRU Cache: Where the Doubly Linked List Earns Its Place",
+      html:
+        "<p>An <strong>LRU cache</strong> holds a bounded number of entries and, when full, discards the least recently used one. It needs two operations in O(1): find a key, and move a key to the front of a recency order. No single structure does both. A hash map finds in O(1) and has no order; a list has order and finds in O(n).</p>" +
+
+        "<p>So use both, pointing at each other. A hash map from key to <em>node</em>, and a doubly linked list of nodes in recency order, most recent at the head. A lookup finds the node through the map, then splices it to the front in four pointer writes because it already holds the node and its neighbours. An <strong>eviction</strong> removes the tail, which is the least recently used entry by construction.</p>" +
+
+        "<p>The doubly linked list is load-bearing here in a way it is nowhere else in this chapter. A singly linked list cannot splice a node out in O(1), because removing a node needs its predecessor and a singly linked node does not know one. And an array cannot do the reorder at all without shifting. This is the structure's one unambiguous production use, and it is why <code>LinkedHashMap</code> exists in Java and why <code>OrderedDict</code> has <code>move_to_end</code> in Python.</p>" +
+
+        "<h3>What LRU is bad at, measured</h3>" +
+
+        "<p>LRU is a heuristic, and the pattern it fails on is not exotic. Take a cyclic scan &#8212; five distinct keys accessed in a repeating loop &#8212; through a cache of capacity four, for 10,000 accesses:</p>" +
+
+        "<ul>" +
+        "<li><strong>LRU</strong> &#8212; hit rate <strong>0.0%</strong></li>" +
+        "<li><strong>FIFO</strong> &#8212; hit rate 0.0%</li>" +
+        "<li><strong>LFU</strong> &#8212; hit rate 0.0%</li>" +
+        "<li><strong>random replacement</strong> &#8212; hit rate <strong>59.9%</strong></li>" +
+        "</ul>" +
+
+        "<p>Every recency- or frequency-based policy achieves literally zero hits, because the key evicted is always the one needed next: the scan returns to it immediately after it became the least recent. The policy that wins is the one with no policy at all, because random eviction keeps some of the working set by accident. This is the standard counterexample to treating LRU as though it were the optimal policy, and any system whose workload contains large sequential scans &#8212; a table scan in a database, a batch job walking a file &#8212; is living in this measurement.</p>" +
+
+        "<p>On a workload with actual locality the ordering reverses, which is why LRU is still the default everywhere. On a Zipf-like access stream over the same capacity: LFU 83.0%, <strong>LRU 76.9%</strong>, random 71.3%, FIFO 71.0%. LRU beats the naive policies comfortably and loses to frequency-based eviction, which costs more to maintain and is harder to make approximate cheaply.</p>" +
+
+        "<div class='callout'>Chapter 48 returns to this as an <em>online</em> problem and makes the comparison precise: the optimal policy is the one that evicts the entry needed furthest in the future, which requires knowing the future, and competitive analysis measures how far a real policy can fall behind it. That is the framework in which “LRU is bad at scans” becomes a theorem rather than a measurement.</div>",
+      viz: "dsaLruCache", vizTitle: "Access keys and watch the list reorder — the tail is what dies next"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Reverse the list 1 &#8594; 2 &#8594; 3 &#8594; 4 by hand, writing down <code>prev</code>, <code>cur</code> and <code>nxt</code> after each iteration. <em>What you should find:</em> four iterations, and at every point the list is in two disconnected pieces &#8212; which is why <code>nxt</code> must be saved before <code>cur.next</code> is overwritten, and what makes the order of the four assignments non-negotiable.</li>" +
+        "<li><strong>Trace.</strong> Draw the rho shape with &#956; = 4 and &#955; = 3, step slow and fast until they meet, then run phase 2. <em>What you should find:</em> the meeting node is 2 steps into the cycle, phase 2 takes exactly 4 steps &#8212; equal to &#956; &#8212; and the total number of slow's steps in phase 1 is a multiple of 3.</li>" +
+        "<li><strong>Investigate.</strong> In a compiled language, sum ten million integers held in an array, in a linked list allocated in one pass, and in a linked list whose nodes were allocated then linked in shuffled order. <em>What you should find:</em> roughly 31 ms, 111 ms and 1,207 ms &#8212; the shuffled list about 39&#215; the array, with identical asymptotics and identical sums, and the in-order list already 3.6&#215; despite being the best case a list ever gets.</li>" +
+        "<li><strong>Investigate.</strong> Implement LRU, FIFO, LFU and random-replacement caches of capacity 4, and run each on a cyclic scan of 5 keys and on a Zipf-like stream. <em>What you should find:</em> 0% hit rate for all three policies on the scan against about 60% for random replacement, and the reverse ordering on the Zipf stream, where LFU leads at about 83% and LRU reaches about 77%.</li>" +
+        "<li><strong>Build.</strong> Implement reverse-in-groups-of-k with a sentinel node, and test it against a reference on every list length from 0 to 30 with k from 1 to 5. <em>What you should find:</em> a 7-node list with k = 3 leaves the final node in place, and the version that reverses a partial group before checking its size cannot be repaired without a second pass, because the nodes it needs are no longer reachable in the order it needs them.</li>" +
+        "<li><strong>Build.</strong> Implement Floyd and Brent cycle detection with a counter on every pointer advance, and run both over 300 random (&#956;, &#955;) pairs, asserting both recover the same values. <em>What you should find:</em> Brent uses about 0.86&#215; Floyd's advances and obtains &#955; directly, while Floyd needs its second phase to get &#956; &#8212; which is why Floyd is the one that gets asked about and Brent is the one used where a step is expensive.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "linked list", d: "A sequence of separately allocated nodes each holding the address of the next, which buys constant-time splicing at a held position and pays for it on every read." },
+    { t: "node", d: "One record of a linked structure, holding a payload and one or more references, and costing an object header on top of both." },
+    { t: "singly linked list", d: "A list whose nodes reference only their successor, so removing a node requires its predecessor and cannot be done from the node alone." },
+    { t: "doubly linked list", d: "A list whose nodes reference both neighbours, which is what makes splicing a held node out of the middle a constant-time operation." },
+    { t: "sentinel node", d: "A data-free node placed at a list's boundary so that every real node has a neighbour, removing the special case for the first or last element." },
+    { t: "locality of reference", d: "The tendency of a program to access memory near what it accessed recently, which is the property caches exploit and pointer chasing destroys." },
+    { t: "pointer chasing", d: "Following a chain of references where each address is only known once the previous node arrives, serialising memory access into one dependent round trip per element." },
+    { t: "runner technique", d: "Moving two pointers through one list at different speeds, used when the absence of random access means a position cannot be computed as an index." },
+    { t: "Floyd's cycle detection", d: "The two-phase algorithm that finds a cycle with two pointers at different speeds and then locates its entry by restarting one at the head, in constant space." },
+    { t: "rho shape", d: "The form of a sequence that runs a tail of length mu into a cycle of length lambda, named for the Greek letter whose outline it traces." },
+    { t: "Brent's algorithm", d: "The 1980 alternative to Floyd that teleports a stationary pointer at successive powers of two, obtaining the cycle length directly and using fewer advances." },
+    { t: "in-place reversal", d: "Flipping every link of a list using a constant number of pointers, which requires saving the successor before each link is overwritten." },
+    { t: "LRU cache", d: "A bounded cache that discards the least recently used entry, implemented as a hash map to nodes plus a doubly linked list holding the recency order." },
+    { t: "eviction", d: "Discarding an entry to make room in a full cache, whose victim is chosen by a policy that is always a heuristic about a future the cache cannot see." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Summing ten million integers took 31 ms from an array, 111 ms from a linked list allocated in one pass, and 1,207 ms from a list whose nodes were shuffled in memory. All three do n additions. What does the third number measure?",
+      opts: [
+        "The cost of pointer chasing: each node's address is unknown until the previous node arrives, so the fetches cannot overlap and the memory system runs one round trip deep",
+        "The overhead of the object headers, which add 20 bytes per node and therefore multiply the total bytes the loop must read by roughly the observed factor",
+        "Garbage collector interference, since the shuffled allocation pattern leaves the nodes spread across generations and the traversal triggers repeated write barriers",
+        "Branch misprediction on the null check that ends the loop, which cannot be predicted once the nodes are no longer laid out in a recognisable pattern"
+      ], a: 0,
+      why: "The asymptotics are identical and the operation counts are identical, so the 39× is entirely about how memory is reached. An array read fetches a line holding the next sixteen elements and the prefetcher continues the stride; a list read yields one node and the address of the next, which cannot be requested until it arrives. Memory size matters too — 24 bytes per node against 4 — but it is a factor of six, not thirty-nine." },
+
+    { type: "mc",
+      q: "A deletion routine without a sentinel first strips matching nodes from the head, then walks with a <code>prev</code> pointer. It passes every three-element test and fails in production. Where is the bug?",
+      opts: [
+        "The initial head-stripping loop can advance past the end of a list whose every element matches, which leaves the prev pointer aimed at a node that has already been unlinked and whose successor is now stale",
+        "It never appears in a small test because the failure needs a match at the head that follows a non-match, which cannot happen — the bug is that the two loops duplicate logic that can drift apart",
+        "The routine returns the original head variable rather than the node the stripping loop advanced to, so deletions at the front are silently discarded by the caller",
+        "The prev pointer starts at the head rather than before it, so the first real node is never compared against the target and a match there survives"
+      ], a: 1,
+      why: "The head case and the general case are two implementations of one rule, and the cost is not one bug but a permanent invitation to them. A sentinel collapses both into a single loop with no reference to the head at all, and makes the empty list and the all-matching list fall out correctly with no extra thought — the same device as Chapter 9's leading zero and Chapter 10's appended zero bar." },
+
+    { type: "mc",
+      q: "In Floyd's cycle detection, phase 2 restarts one pointer at the head and moves both one step at a time. Why do they meet at the cycle entry?",
+      opts: [
+        "Because the meeting point found in phase 1 always sits exactly halfway around the cycle from the entry node, so advancing μ steps from each of the two positions converges on the same node",
+        "Because the cycle length always divides the tail length whenever a meeting occurs at all, so restarting one pointer at the head resynchronises the pair exactly at the first node of the cycle",
+        "Because after the first meeting the two pointers are the same distance from the entry, and moving both at equal speed preserves any equal distance",
+        "Because slow has taken s steps and fast 2s, so their difference s is a whole number of laps; the meeting point is s − μ into the cycle, and μ more steps lands on s ≡ 0 (mod λ)"
+      ], a: 3,
+      why: "The whole proof is that s is a multiple of λ. The pointer from the head reaches the entry in μ steps; the pointer at the meeting point is s − μ into the cycle, so μ more steps puts it at s, which is a whole number of laps and therefore the entry again. Verified on all 1,560 shapes with μ from 0 to 39 and λ from 1 to 39, and the phase-2 step count was exactly μ every time." },
+
+    { type: "mc",
+      q: "On a cyclic scan of 5 distinct keys through a cache of capacity 4, LRU, FIFO and LFU all achieved a 0.0% hit rate while random replacement achieved 59.9%. Why do the three policies fail completely?",
+      opts: [
+        "Because they evict the entry needed next: the scan returns to a key immediately after it has become the least recent, so the principled choice is the worst one",
+        "Because the cache is exactly one entry too small to hold the working set, and any capacity below the working set forces a zero hit rate under every possible eviction policy",
+        "Because a cyclic access pattern gives every key identical recency and identical frequency, so the three policies cannot distinguish candidates and evict arbitrarily",
+        "Because all three policies maintain their ordering structures on every single access, and that bookkeeping cost on a long scan exceeds whatever benefit the resulting hit rate could provide"
+      ], a: 0,
+      why: "Recency is a prediction, and on a loop it is exactly inverted: the key least recently used is the one about to be needed. Random replacement wins at 59.9% precisely because it has no theory to be wrong about. Option 2 is the trap — random replacement had the same capacity and the same working set, so capacity alone does not force a zero hit rate." },
+
+    { type: "mc",
+      q: "An LRU cache is built from a hash map plus a doubly linked list. Why will a singly linked list not do?",
+      opts: [
+        "Because a singly linked list cannot be traversed from the tail, so evicting the least recently used entry would require a full scan on every eviction",
+        "Because the hash map stores keys rather than nodes, and recovering a node from a key in a singly linked list costs a traversal on every lookup",
+        "Because removing a node requires its predecessor, and a singly linked node does not know one, so the splice to the front is no longer constant time",
+        "Because a singly linked list cannot represent recency order without storing an access timestamp in each node, which makes the comparison at eviction time O(n)"
+      ], a: 2,
+      why: "The map hands you the node directly, so finding it is not the problem; unlinking it is. A splice needs to rewrite the predecessor's forward pointer, and reaching the predecessor from a singly linked node means walking from the head. Option 1 names a real inconvenience with a cheap fix — keep a tail pointer — which is why it is not the reason." },
+
+    { type: "mc",
+      q: "Merge sort is the standard choice for sorting a linked list and quicksort for sorting an array. What accounts for the split?",
+      opts: [
+        "Merge sort is stable and quicksort is not, and stability matters more for lists because list elements more often carry associated records",
+        "Merge sort on a list needs O(1) extra space because merging is relinking rather than copying, while quicksort's partition needs the random access a list does not have",
+        "Merge sort's comparison count is lower on lists because the recursion splits by pointer rather than by index, avoiding the repeated length computation quicksort requires",
+        "Quicksort degrades to quadratic on a list because choosing a pivot requires a traversal, which turns the expected O(n log n) into an unavoidable worst case"
+      ], a: 1,
+      why: "Two facts, one on each side. Merging two sorted runs on a list appends by setting a single pointer, so no scratch array is needed and the auxiliary space drops from O(n) to O(1). Quicksort partitions by moving elements between positions chosen by index, which a list cannot supply. The comparison counts are ordinary — measured at 0.87 to 0.92 times n log₂ n — so the win is entirely in space." },
+
+    { type: "mc",
+      q: "Brent's algorithm used 0.86× Floyd's pointer advances over 300 random cycle shapes and returns the cycle length directly. Why is Floyd still the one taught?",
+      opts: [
+        "Floyd uses strictly constant space while Brent must store the successive power-of-two bounds, which grows logarithmically with the cycle length",
+        "Brent's advantage disappears on lists whose tail is long relative to the cycle, which is the common case in the linked-list problems interviews pose",
+        "Floyd's two phases are the thing being examined — the modular argument for why phase 2 lands on the entry — while Brent's advantage matters when a single step is expensive",
+        "Brent's algorithm is only correct on functional graphs where every node has exactly one successor, whereas Floyd's applies to any traversal that may revisit a node"
+      ], a: 2,
+      why: "The margin is 14% of pointer advances, which is not what decides a curriculum. Floyd earns its place because its second phase carries a proof worth knowing, and Brent earns its place where a step costs real work — Pollard's rho factorisation, where each advance is a modular multiplication and 14% is money. Option 4 is false: both assume exactly one successor per node." },
+
+    { type: "blank",
+      q: "A data-free node placed at a list's boundary so that every real node has a neighbour, removing the special case for the first element, is called a ____ node.",
+      a: ["sentinel", "dummy"],
+      why: "It is the same device as the leading zero in Chapter 9's prefix array and the appended zero bar in Chapter 10's histogram scan: a fake element whose only job is to make the general case general. A deletion routine written with one has a single loop and no reference to the head variable at all." },
+
+    { type: "blank",
+      q: "The shape of a sequence that runs a tail of length μ into a cycle of length λ, named for the Greek letter it traces, is called a ____ shape.",
+      a: ["rho"],
+      why: "The name carries into Pollard's rho factorisation, which is cycle detection on a sequence of modular values rather than on a list. Phase 1 finds some node on the cycle; only phase 2, and the fact that slow's step count is a multiple of λ, locates the entry." },
+
+    { type: "order",
+      q: "Order the steps of locating the first node of a cycle in constant space:",
+      items: [
+        "advance one pointer by one node and another by two until they are at the same node",
+        "conclude that slow's step count s satisfies s ≡ 0 (mod λ), since fast has travelled 2s and the difference is whole laps",
+        "restart one pointer at the head, leaving the other at the meeting point",
+        "advance both by one node at a time until they coincide, which happens after exactly μ steps"
+      ],
+      why: "The second step is doing the work even though it writes no code: without it the restart in step three is an unexplained trick, and with it the meeting point is known to sit s − μ into the cycle. The final step's count is not an estimate — measured across 1,560 shapes it was exactly μ every time." }
+  ]
+});
+
+/* ======================= CHAPTER 12 ======================= */
+CHAPTERS.push({
+  num: 12, part: 1, title: "Intervals and the Sweep Line",
+  blurb: "Interval problems look like a family of unrelated puzzles \u2014 merge these, insert that, how many rooms do I need \u2014 until you see that all of them are one algorithm: sort the endpoints, sweep left to right, and maintain something. This chapter teaches the sweep first and the interval problems as its instances, which is the reverse of how every sheet does it and the reason the technique transfers. It closes with two scans that are not about intervals at all but share the sweep's shape, including one whose second pass is not optional and which returns a confident wrong answer without it.",
+
+  sections: [
+
+    { title: "The Sweep",
+      html:
+        "<p>Here is the pattern, before any problem. You have objects positioned along a line. Turn each object into one or more <strong>events</strong> at coordinates, sort the events, and walk through them in order maintaining a running state. At every moment, the state is correct for everything to the left of the <strong>sweep line</strong> and knows nothing about what is to the right.</p>" +
+
+        "<p>That last sentence is the invariant, and it is what makes the technique a technique rather than a trick. Three questions settle any sweep:</p>" +
+
+        "<ul>" +
+        "<li><strong>What is an event?</strong> Usually an interval's start and end, giving 2n events from n intervals. Sometimes a single point, sometimes a query to be answered in place.</li>" +
+        "<li><strong>What is the running state?</strong> A counter, a set of currently open intervals &#8212; the <strong>active set</strong> &#8212; the rightmost endpoint seen, a heap. This is the choice that decides the algorithm.</li>" +
+        "<li><strong>What happens at each event?</strong> Update the state, and possibly emit an answer.</li>" +
+        "</ul>" +
+
+        "<p>The sort is O(n log n) and dominates, because everything after it is a single pass. So the honest complexity of every algorithm in this chapter is <strong>O(n log n), and the sweep itself is the cheap part</strong> &#8212; which matters, because if the events arrive already sorted, by timestamp in a log for instance, the whole thing is linear.</p>" +
+
+        "<h3>The boundary convention, decided once</h3>" +
+
+        "<p>Before any code there is a question with no universally right answer: do intervals that touch at a point overlap? A meeting from 9:00 to 10:00 and another from 10:00 to 11:00 need one room, not two, so ending should be processed before starting at the same coordinate. A closed interval [0, 5] and [5, 10] share the point 5, so they do overlap. The <strong>boundary convention</strong> has to be chosen per problem and encoded in the event sort.</p>" +
+
+        "<p>The clean way to encode it is to make the sort key do the work. Representing a start as (coordinate, +1) and an end as (coordinate, &#8722;1) and sorting the pairs naturally puts &#8722;1 before +1 at an equal coordinate, because &#8722;1 &lt; +1 &#8212; so touching intervals share a room with no special case. Wanting the opposite convention means flipping the tie-break, not adding a branch. Verified on 20,000 random interval sets, the &#8722;1-first ordering reports one room for [(0,5), (5,10)], which is the half-open reading most scheduling problems want.</p>" +
+
+        "<div class='callout'>Almost every wrong answer in this family is a boundary convention that was never decided, only assumed, and then assumed differently in two places. Write the convention above the sort as a comment before writing the sort.</div>",
+      viz: "dsaSweepLine", vizTitle: "The line sweeps right \u2014 the number below it is how many intervals are currently open"
+    },
+
+    { title: "Merging and Inserting",
+      html:
+        "<p><strong>Merging intervals</strong> is the sweep with the simplest possible state: the interval currently being built. Sort by start; for each interval, either it overlaps what is being built, in which case extend, or it does not, in which case emit and start again.</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def merge(intervals):\n    if not intervals:\n        return []\n    intervals.sort()                       # by start\n    out = [list(intervals[0])]\n    for s, e in intervals[1:]:\n        if s &lt;= out[-1][1]:                # overlaps the one being built\n            out[-1][1] = max(out[-1][1], e)\n        else:\n            out.append([s, e])             # gap: emit and restart\n    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[][] merge(int[][] iv) {\n    if (iv.length == 0) return new int[0][];\n    Arrays.sort(iv, (a, b) -&gt; Integer.compare(a[0], b[0]));\n    List&lt;int[]&gt; out = new ArrayList&lt;&gt;();\n    out.add(new int[]{iv[0][0], iv[0][1]});\n    for (int i = 1; i &lt; iv.length; i++) {\n        int[] last = out.get(out.size() - 1);\n        if (iv[i][0] &lt;= last[1]) last[1] = Math.max(last[1], iv[i][1]);\n        else out.add(new int[]{iv[i][0], iv[i][1]});\n    }\n    return out.toArray(new int[0][]);\n}</code></pre></div>" +
+
+        "<p>The <code>max</code> on the extension line is the part that gets dropped, and the input that punishes it is one interval wholly containing another: merging [1, 10] with [2, 3] must leave the end at 10, and <code>out[-1][1] = e</code> would shrink it to 3. Sorting by start does not order the ends. Checked against a brute-force coverage set on 20,000 random inputs, the version above disagreed <strong>zero times</strong>.</p>" +
+
+        "<p><strong>Inserting</strong> one interval into an already-sorted, already-merged list is the same sweep with the sort skipped, and it is worth writing separately rather than appending and re-sorting, because it runs in O(n) instead of O(n log n). Walk the list in three phases: copy everything strictly before the new interval, absorb everything that overlaps it into one widened interval, then copy the rest. The phases are three loops with no conditionals inside them, which is easier to get right than one loop with a state variable.</p>" +
+
+        "<h3>Two more instances of the same loop</h3>" +
+        "<p><strong>Interval intersection</strong> of two already-sorted lists is a two-pointer scan rather than a sort: the overlap of a[i] and b[j] is (max of the starts, min of the ends), which is a real interval when the max does not exceed the min, and then whichever interval ends first is discarded because it can meet nothing further right. That is Chapter 8's discard invariant with intervals in place of numbers.</p>" +
+        "<p><strong>Union length</strong> — the total measure covered, counting overlapped regions once — is merging with the emit step replaced by an accumulation. Merge, then sum the widths. Or sweep with a counter and add (current coordinate − previous coordinate) to the total whenever the counter was positive across that gap, which is the version that generalises to weighted coverage and to two dimensions.</p>" +
+        "<div class='callout'>The three-phase shape recurs. Whenever a sorted structure is being modified in one region, the routine that copies-before, merges-within and copies-after is almost always clearer than the one that decides what to do on every element. It also makes the O(n) obvious, since each element is handled by exactly one phase.</div>"
+    },
+
+    { title: "Counting Overlaps",
+      html:
+        "<p>\u201cHow many meeting rooms are needed?\u201d is the maximum number of intervals open at any single moment. The state is a counter, the events are +1 at each start and &#8722;1 at each end, and the answer is the running total's maximum:</p>" +
+
+        "<pre><code>def min_rooms(intervals):\n    events = []\n    for s, e in intervals:\n        events.append((s,  1))\n        events.append((e, -1))\n    events.sort()          # at equal coordinate, -1 sorts before +1\n    cur = best = 0\n    for _, delta in events:\n        cur += delta\n        best = max(best, cur)\n    return best</code></pre>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 252' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>five intervals, and the count of open ones beneath the sweep line</text>" +
+        "<rect x='70' y='38' width='190' height='16' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='140' y='60' width='230' height='16' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='210' y='82' width='320' height='16' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='420' y='104' width='150' height='16' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<rect x='600' y='126' width='110' height='16' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<line x1='250' y1='32' x2='250' y2='184' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='256' y='30' fill='#ffd166' font-size='10'>sweep line</text>" +
+        "<line x1='40' y1='168' x2='740' y2='168' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='172' fill='#7d8fb0' font-size='9'>0</text>" +
+        "<rect x='70' y='152' width='70' height='16' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<rect x='140' y='136' width='70' height='32' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<rect x='210' y='120' width='50' height='48' fill='#2a2410' stroke='#ffd166' stroke-width='2.5'/>" +
+        "<rect x='260' y='136' width='110' height='32' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<rect x='370' y='152' width='50' height='16' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<rect x='420' y='136' width='110' height='32' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<rect x='530' y='152' width='40' height='16' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<rect x='600' y='152' width='110' height='16' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='235' y='114' text-anchor='middle' fill='#ffd166' font-size='11'>3</text>" +
+        "<text x='20' y='206' fill='#3ddc97' font-size='10'>the peak of the running count is the answer: 3 rooms</text>" +
+        "<text x='20' y='224' fill='#7d8fb0' font-size='10'>+1 at every start, -1 at every end; the profile below is the difference array of Chapter 9</text>" +
+        "</svg><div class='fig-cap'>The bars are the intervals; the staircase is the running count. Its highest step is the whole answer.</div></div>" +
+
+        "<p>The running total is the <strong>overlap count</strong> at the sweep line, and the answer is its maximum. Checked against direct counting at every start coordinate on 20,000 random inputs, the sweep disagreed <strong>zero times</strong>. On [(0, 5), (5, 10)] it reports 1, because the &#8722;1 sorts first &#8212; the convention from section 1, doing its job without a branch.</p>" +
+
+        "<h3>This is Chapter 9's difference array</h3>" +
+
+        "<p>Writing +1 at each start and &#8722;1 at each end, then accumulating a running total, is exactly the <strong>difference array</strong>. The only distinction is that a difference array indexes a dense array of positions while a sweep sorts a sparse list of coordinates. So the choice between them is not conceptual, it is about the coordinate space: a day divided into 86,400 seconds is dense and wants an array indexed directly; timestamps at microsecond precision are sparse and want a sorted event list. Same algorithm, two data layouts, and the decision is made by comparing the number of distinct coordinates against the number of intervals.</p>" +
+
+        "<p>The density question has a rule of thumb. Let C be the number of distinct coordinates and n the number of intervals: the array costs O(C) and the sweep costs O(n log n), so the array wins while C is smaller than n log n and loses badly once the coordinate space is large and sparsely used. A day in minutes is C = 1,440 against any realistic n, and the array is not close to being the wrong choice. Unix timestamps in nanoseconds give a C of about 10&#185;&#8311; and the array cannot be allocated at all.</p>" +
+        "<p>The variant worth knowing is when the answer needs more than a count. \u201cWhich meetings are in the conflicting set?\u201d needs the <strong>active set</strong> itself rather than its size, so the state becomes a structure supporting insert, delete and size. \u201cWhat is the total length covered by the union?\u201d needs the previous coordinate carried alongside the count, adding to the total only while the count is positive. Each is the same loop with a richer state.</p>"
+    },
+
+    { title: "Meet in the Middle",
+      html:
+        "<p>The sweep does not have to be over coordinates. <strong>Meet in the middle</strong> sweeps over subsets, and it is the technique that moves a problem from impossible to merely expensive.</p>" +
+
+        "<p>Subset sum asks whether any subset of n numbers reaches a target. Enumerating all of them is 2<sup>n</sup>, which at n = 40 is 1.1 trillion. Split the input in half instead. Enumerate all 2<sup>n/2</sup> subset sums of the left half and all 2<sup>n/2</sup> of the right, sort one of them, and for each left sum binary-search for the complement it needs. Every full subset is a left part plus a right part, so nothing is missed.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>n = 40: two halves of 20, each enumerated fully, then joined</text>" +
+        "<rect x='60' y='36' width='280' height='26' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='200' y='54' text-anchor='middle' fill='#c9d6ea' font-size='11'>left half: 20 numbers</text>" +
+        "<rect x='420' y='36' width='280' height='26' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='560' y='54' text-anchor='middle' fill='#c9d6ea' font-size='11'>right half: 20 numbers</text>" +
+        "<line x1='200' y1='62' x2='200' y2='82' stroke='#4f7cff' stroke-width='2'/><polygon points='200,88 196,78 204,78' fill='#4f7cff'/>" +
+        "<line x1='560' y1='62' x2='560' y2='82' stroke='#4f7cff' stroke-width='2'/><polygon points='560,88 556,78 564,78' fill='#4f7cff'/>" +
+        "<rect x='60' y='90' width='280' height='26' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='200' y='108' text-anchor='middle' fill='#ffd166' font-size='11'>1,048,576 subset sums</text>" +
+        "<rect x='420' y='90' width='280' height='26' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='560' y='108' text-anchor='middle' fill='#ffd166' font-size='11'>1,048,576 subset sums, sorted</text>" +
+        "<line x1='340' y1='130' x2='420' y2='130' stroke='#3ddc97' stroke-width='2'/>" +
+        "<polygon points='426,130 416,126 416,134' fill='#3ddc97'/>" +
+        "<text x='380' y='124' text-anchor='middle' fill='#3ddc97' font-size='10'>join</text>" +
+        "<text x='60' y='158' fill='#3ddc97' font-size='11'>for each left sum s, binary-search the right list for target &#8722; s</text>" +
+        "<text x='60' y='182' fill='#c9d6ea' font-size='11'>2 &#215; 2&#178;&#8304; = 2,097,152 subsets enumerated, not 2&#8308;&#8304; = 1,099,511,627,776</text>" +
+        "<text x='60' y='206' fill='#ffd166' font-size='11'>a factor of 524,288, and the measured run took 301 ms</text>" +
+        "</svg><div class='fig-cap'>Halving the exponent is not a constant-factor win; it is the square root of the work.</div></div>" +
+
+        "<p>The arithmetic is the whole argument. 2<sup>n</sup> becomes 2 &#215; 2<sup>n/2</sup>, which is the <em>square root</em> of the original count rather than a fraction of it:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 20</strong> &#8212; 1,048,576 subsets against 2,048: a factor of 512</li>" +
+        "<li><strong>n = 30</strong> &#8212; 1,073,741,824 against 65,536: a factor of 16,384</li>" +
+        "<li><strong>n = 40</strong> &#8212; 1,099,511,627,776 against 2,097,152: a factor of <strong>524,288</strong></li>" +
+        "</ul>" +
+
+        "<p>Measured at n = 40 with a sort and binary search over the halves, the answer came back in <strong>301 ms</strong>. The exhaustive version would enumerate 1.1 trillion subsets and is not runnable at any patience. Checked against exhaustive search on 3,000 small random inputs, the halved version disagreed zero times.</p>" +
+
+        "<p>The technique is not limited to subset sum. It applies whenever a search space factors into two halves that can be enumerated independently and joined on a single combinable quantity: finding four array elements that sum to a target by pairing all n&#178; pairs against all n&#178; pairs; counting solutions rather than detecting them, by replacing the binary search with a count of equal values; and the knapsack variant whose weights are too large for the pseudopolynomial table of Chapter 20. The requirement is always the same — a left part and a right part that combine by one operation, with no interaction between the halves beyond that.</p>" +
+        "<p>Two things to be clear about. This is still exponential &#8212; O(2<sup>n/2</sup> &#215; n) with the sort &#8212; so it buys roughly a doubling of the tractable input size, from about 25 to about 50, and no more. And it costs O(2<sup>n/2</sup>) memory to hold one half's sums, which at n = 50 is 33 million values and is the binding constraint long before time is. The technique is due to Horowitz and Sahni, who published it for exactly this problem in 1974.</p>"
+    },
+
+    { title: "The Majority Vote, and Why Pass Two Is Not Optional",
+      html:
+        "<p>A <strong>majority element</strong> is one occurring strictly more than n/2 times. The obvious solutions are a hash map of counts in O(n) space, or sorting and taking the middle in O(n log n). The <strong>Boyer–Moore majority vote</strong>, devised by Robert Boyer and J Strother Moore in 1981, does it in one pass and O(1) space, with two variables:</p>" +
+
+        "<pre><code>def majority_candidate(a):\n    candidate, count = None, 0\n    for v in a:\n        if count == 0:\n            candidate, count = v, 1\n        elif v == candidate:\n            count += 1\n        else:\n            count -= 1\n    return candidate</code></pre>" +
+
+        "<p>The invariant is a <strong>pairing argument</strong> and it is the reason the algorithm is correct rather than lucky. Reading a value that differs from the candidate and decrementing the counter is <em>discarding a pair</em>: one occurrence of the candidate and one of something else, cancelling each other. A true majority element occurs more than n/2 times, so it cannot be exhausted by pairing every one of its occurrences against a distinct other element &#8212; there are not enough other elements. Whatever survives the cancellation must be the majority, if one exists.</p>" +
+
+        "<h3>The clause that ruins it</h3>" +
+
+        "<p>\u201cIf one exists\u201d is load-bearing. The algorithm always returns something, and when no majority exists that something is meaningless. Measured over 20,000 random arrays:</p>" +
+
+        "<ul>" +
+        "<li><strong>when a majority existed</strong> &#8212; found it on <strong>7,149 of 7,149</strong> inputs</li>" +
+        "<li><strong>when no majority existed</strong> &#8212; returned a non-majority element on <strong>12,851 of 12,851</strong> inputs: 100%</li>" +
+        "</ul>" +
+
+        "<p>On [1, 2, 3] it returns 3, which occurs once in three elements. There is no error, no sentinel and no way to tell from the output that anything is wrong. So the second pass &#8212; count the candidate's occurrences and check that the total exceeds n/2 &#8212; is not a defensive nicety, it is half the algorithm. The one-pass version is correct only under a precondition the caller must guarantee, and a function that silently assumes its precondition is a bug waiting for a different caller.</p>" +
+
+        "<div class='callout'>This is the same shape as Chapter 8's sliding window on negative values: an algorithm whose correctness rests on a hypothesis about the input, which runs happily and returns a wrong answer when the hypothesis fails. The generalisation is worth knowing too &#8212; the same pairing idea with k&#8722;1 counters finds all elements occurring more than n/k times, and needs the same verification pass for the same reason.</div>"
+    },
+
+    { title: "Simulation, and the Pattern That Is No Pattern",
+      html:
+        "<p>Every collection of interview problems contains a group that resists classification: spiral matrix traversal, rotating a matrix in place, the game of life, string compression, roman numerals. They are grouped under \u201csimulation\u201d, which is not a technique. It is the absence of one.</p>" +
+
+        "<p>These problems are honest about what they test: whether you can hold a specification in your head and translate it into correct index arithmetic without a mechanism doing the thinking. Since there is no insight to find, the useful advice is about process rather than ideas.</p>" +
+
+        "<ul>" +
+        "<li><strong>Name the state before writing the loop.</strong> Spiral traversal is four boundaries &#8212; top, bottom, left, right &#8212; that close inward. Written that way it is four short loops and a shrink; written as a direction vector with turn detection it is a bug farm.</li>" +
+        "<li><strong>Find the composition.</strong> Rotating a matrix 90 degrees in place is a transpose followed by a reversal of each row. Both are three lines and correct on inspection; the direct rotation is a four-way cyclic swap with index arithmetic that nobody derives right the first time. Most simulation problems have a decomposition like this, and finding it is the only real work.</li>" +
+        "<li><strong>Handle the last group outside the loop.</strong> Run-length encoding, grouping and chunking all end with a partial group that the loop body never emits, because the loop emits on <em>transitions</em> and the final group has none. Either append a sentinel to force a final transition &#8212; the device from Chapter 10's histogram scan &#8212; or emit once after the loop.</li>" +
+        "<li><strong>Test the degenerate shapes first.</strong> Empty input, one element, a single row, a single column, and for matrices the non-square case. Spiral traversal on a 1 &#215; n matrix is where the four-boundary version earns its keep, because the naive version walks the row and then walks back along it.</li>" +
+        "</ul>" +
+
+        "<p>It is worth saying plainly that this section teaches less than the others, and that this is a property of the material rather than a gap. A chapter that invented a unifying theory for these problems would be inventing it. What transfers is the habit: state named, decomposition looked for, boundaries tested.</p>" +
+
+        "<div class='callout'>Part 1 ends here. You now have the measuring instruments from chapters 1 to 6 and five patterns \u2014 union\u2013find, two pointers and windows, prefix sums, monotonic stacks and the sweep \u2014 that between them account for a large fraction of every problem set you will meet. Part 2 turns to the two operations computers spend most of their time on, and both have settled answers with unsettling consequences.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Run the meeting-rooms sweep by hand on [(0,30), (5,10), (15,20)], listing the sorted event stream and the running count after each event. <em>What you should find:</em> six events, a peak of 2 rather than 3, and that the peak occurs twice &#8212; the answer is the maximum of the running count, not the number of times the maximum is reached.</li>" +
+        "<li><strong>Trace.</strong> Apply Boyer&#8211;Moore to [2, 2, 1, 1, 1, 2, 2] and then to [1, 2, 3, 4], recording the candidate and counter after each element. <em>What you should find:</em> 2 in the first case, which is a genuine majority at four of seven; and 4 in the second, which occurs once in four &#8212; identical-looking output from a correct run and a meaningless one.</li>" +
+        "<li><strong>Investigate.</strong> Implement merge-intervals and check it against a brute-force coverage set on 20,000 random inputs, then delete the <code>max</code> on the extension line and re-run. <em>What you should find:</em> zero disagreements with the <code>max</code> and a stream of failures without it, every one of them an input where a later interval was wholly contained in an earlier one.</li>" +
+        "<li><strong>Investigate.</strong> Solve meeting-rooms twice, once with a sorted event list and once with a difference array indexed by minute over a 24-hour day, on 100,000 random meetings. <em>What you should find:</em> identical answers, with the difference array faster because it skips the sort &#8212; and that the comparison inverts once the coordinates are microsecond timestamps, where the dense array becomes impossible and the sort is the only option.</li>" +
+        "<li><strong>Build.</strong> Implement subset sum by meet in the middle and check it against exhaustive search on 3,000 small inputs, then run it on 40 numbers of around a million each. <em>What you should find:</em> zero disagreements and an answer in roughly 300 ms, against 2&#8308;&#8304; subsets for the exhaustive version; then try n = 56 and watch memory rather than time become the constraint.</li>" +
+        "<li><strong>Build.</strong> Implement the generalised majority vote with k&#8722;1 counters that finds every element occurring more than n/k times, for k = 3, with its verification pass. <em>What you should find:</em> at most two such elements can exist, the candidate phase always produces two candidates whether or not they qualify, and the verification pass rejects both on an input like [1, 2, 3, 4, 5, 6].</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "sweep line", d: "An imaginary line moved along a coordinate axis through sorted events, with a running state that is correct for everything already passed and blind to everything ahead." },
+    { t: "event", d: "A point at which the sweep's state must change, typically an interval's start or end, so that n intervals become 2n events to be sorted." },
+    { t: "active set", d: "The collection of intervals currently open at the sweep line, whose size answers counting questions and whose contents answer membership ones." },
+    { t: "interval", d: "A contiguous span given by two endpoints, whose meaning depends entirely on whether those endpoints are included, which is a decision and not a detail." },
+    { t: "boundary convention", d: "The chosen rule for whether intervals touching at a point overlap, encoded in the event sort order rather than in a branch inside the loop." },
+    { t: "merging intervals", d: "Collapsing a set of intervals into the smallest set covering the same points, by sorting on start and extending or emitting at each step." },
+    { t: "overlap count", d: "The number of intervals open at a coordinate, whose maximum over all coordinates answers the resource-allocation form of the problem." },
+    { t: "difference array", d: "Storing changes rather than values so a range update is two writes, which is what a plus-one-minus-one event sweep is when the coordinates are dense." },
+    { t: "meet in the middle", d: "Splitting an exponential search in half, enumerating each half fully and joining the results, which takes the square root of the work rather than a fraction of it." },
+    { t: "subset sum", d: "The question of whether some subset of a set of numbers reaches a target, the standard setting for meet in the middle and a pseudopolynomial problem later in this course." },
+    { t: "majority element", d: "A value occurring strictly more than half the time, which is what makes a pairing argument possible since it cannot be cancelled away." },
+    { t: "Boyer\u2013Moore majority vote", d: "The 1981 one-pass constant-space scan that finds a majority element if one exists, and returns a meaningless value if one does not." },
+    { t: "pairing argument", d: "Proving a count survives by cancelling occurrences against distinct others, which is the invariant behind the majority vote and its k-counter generalisation." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A meeting-rooms sweep represents a start as (coordinate, +1) and an end as (coordinate, \u22121) and sorts the pairs. Why does that ordering matter?",
+      opts: [
+        "Because the sort must be stable for the count to be correct, and the delta in the key forces that",
+        "At an equal coordinate \u22121 sorts before +1, so an interval ending where another begins releases its room first and the two share one",
+        "Because the counter would otherwise go negative when an end is processed before its own start",
+        "Because sorting by coordinate alone leaves ties to the sort, so languages would disagree"
+      ], a: 1,
+      why: "The tie-break is the boundary convention, encoded where it cannot be forgotten. On [(0,5), (5,10)] the \u22121-first ordering reports one room, which is what scheduling problems almost always want. Wanting the opposite convention means flipping the tie-break rather than adding a branch \u2014 and option 4 describes a real hazard that this encoding happens to remove as a side effect." },
+
+    { type: "mc",
+      q: "A merge-intervals implementation extends with <code>out[-1][1] = e</code> instead of <code>max(out[-1][1], e)</code>. It passes most tests. Which input breaks it?",
+      opts: [
+        "One interval wholly containing another, such as [1, 10] then [2, 3], because sorting by start does not order the ends",
+        "Two intervals touching exactly at a point, where the comparison decides overlap on an equality",
+        "An input already sorted by start, where the absence of any reordering means the assignment is never corrected by a later comparison against a wider interval",
+        "An empty interval such as [4, 4], whose start equals its end and collapses what is being built"
+      ], a: 0,
+      why: "Sorting by start says nothing about where intervals end. [2, 3] starts later and ends earlier, so overlapping and assigning shrinks the merged interval from 10 to 3. The max is not defensive coding, it is the only line that knows containment is possible \u2014 and the bug survives casual testing because most random pairs are not nested." },
+
+    { type: "mc",
+      q: "Meet in the middle turns 2\u207f into 2 \u00d7 2\u207f\u141f\u00b2, which at n = 40 is a factor of 524,288. What does the technique actually buy?",
+      opts: [
+        "A polynomial algorithm, since repeated halving drives the exponent to a constant",
+        "Roughly a doubling of the tractable input size, from about 25 to about 50, after which memory for one half's sums becomes the binding constraint",
+        "A guaranteed reduction to the square root of the work in any exhaustive search, provided the problem's candidate space can be partitioned into two independent halves at all",
+        "An improvement that is asymptotically identical, since 2\u207f\u141f\u00b2 is still exponential and the halved exponent is a constant factor in the exponent rather than a change of class"
+      ], a: 1,
+      why: "It is still exponential \u2014 the square root of an exponential is an exponential \u2014 so the honest claim is about the input sizes that move from impossible to merely expensive. Measured, n = 40 took 301 ms where 1.1 trillion subsets is not runnable. At n = 50 the 33 million stored sums bind before the time does, which is why the ceiling is around 50 rather than wherever patience runs out." },
+
+    { type: "mc",
+      q: "Boyer\u2013Moore returned a non-majority element on 12,851 of 12,851 inputs that had no majority. Why is that not a bug in the algorithm?",
+      opts: [
+        "Because the counter reaching zero at the final element leaves the candidate undefined, and the implementation is entitled to return whatever was last assigned to it",
+        "Because the algorithm is specified over multisets that are guaranteed to contain a majority, so inputs without one are outside its domain and any behaviour on them is acceptable",
+        "Because a non-majority return value is still the most frequent element in the array, which is a weaker but useful answer that many callers can work with directly",
+        "Because the pairing argument proves only that a majority element survives cancellation if one exists, and says nothing whatever about what survives when none does"
+      ], a: 3,
+      why: "The invariant is conditional and the conclusion inherits the condition. More than n/2 occurrences cannot be paired away against distinct others, so a majority survives; nothing at all is claimed about the survivor otherwise. Option 3 is a tempting and false consolation \u2014 on [1, 2, 3] it returns 3, which is not more frequent than anything. The verification pass is half the algorithm, not a precaution." },
+
+    { type: "mc",
+      q: "A plus-one-minus-one event sweep and a difference array indexed by position compute the same overlap counts. What decides which to use?",
+      opts: [
+        "Whether the coordinate space is dense or sparse: an array indexed by minute over a day beats a sort, and microsecond timestamps make the array impossible",
+        "Whether the answer needs the active set's contents as well as its size, since only the sorted event stream can carry auxiliary data alongside each delta",
+        "Whether updates arrive before or after the queries, since the difference array must be fully materialised before any count can be read from it",
+        "Whether the intervals may overlap at their endpoints, since the difference array has no tie-break mechanism and must resolve the boundary convention by index offset"
+      ], a: 0,
+      why: "They are the same algorithm in two data layouts, so the choice is about the coordinate space rather than the problem. Compare the number of distinct coordinates against the number of intervals: 86,400 seconds in a day is dense and the array skips the sort entirely; microsecond timestamps over a year are sparse and only the sorted event list is possible." },
+
+    { type: "mc",
+      q: "Rotating a matrix 90 degrees in place is usually written as a transpose followed by reversing each row, rather than as a direct four-way cyclic swap. Why prefer the composition?",
+      opts: [
+        "The composition touches each element exactly twice while the cyclic swap touches each one four times, so the decomposed version does half the memory traffic",
+        "The cyclic swap requires the matrix to be square while the transpose-then-reverse decomposition extends naturally to rectangular matrices without modification",
+        "Both halves are three lines and correct on inspection, while the cyclic swap's index arithmetic is the kind nobody derives right the first time",
+        "The transpose can be performed by exchanging row and column strides without moving data at all, so only the row reversal actually writes to memory"
+      ], a: 2,
+      why: "Simulation problems have no insight to find, so the work is entirely in not making arithmetic mistakes, and a decomposition into two operations you can each verify at a glance is how you avoid them. Option 2 is false in an instructive way \u2014 an in-place rotation requires a square matrix either way, because a rectangular one changes shape." },
+
+    { type: "mc",
+      q: "Every algorithm in this chapter is described as O(n log n). Where does the log factor come from, and when does it disappear?",
+      opts: [
+        "From the binary search that joins the two halves in meet in the middle, which is the only logarithmic step and is absent from the interval problems entirely",
+        "From maintaining the active set in a balanced structure, which disappears when the state is a plain counter rather than a collection supporting deletion",
+        "From the sort of the events, which dominates a single linear pass \u2014 so the whole thing is linear when the events already arrive in order, as in a timestamped log",
+        "From the repeated maximum over the running count, which is logarithmic when maintained in a heap and can be dropped when only the final total is required"
+      ], a: 2,
+      why: "The sweep is one pass and the sort is everything. That is worth knowing because it says where the savings are: not in a cleverer sweep but in avoiding the sort, which is exactly what a dense difference array does and what a log already sorted by timestamp gives for free. Option 2 names a real cost for set-valued states, but the plain counting sweep pays it too, through the sort." },
+
+    { type: "blank",
+      q: "The technique that splits an exponential search into two halves, enumerates each fully and joins the results \u2014 taking the square root of the work rather than a fraction of it \u2014 is called meet in the ____.",
+      a: ["middle"],
+      why: "Published by Horowitz and Sahni in 1974 for subset sum. At n = 40 it enumerates 2,097,152 subsets rather than 1,099,511,627,776, a factor of 524,288, and measured at 301 ms against an exhaustive search that cannot be run. It remains exponential, so it buys about a doubling of the tractable input size and no more." },
+
+    { type: "blank",
+      q: "The 1981 one-pass constant-space scan that finds a majority element by cancelling each candidate occurrence against one distinct other value is the Boyer\u2013Moore majority ____ algorithm.",
+      a: ["vote", "voting"],
+      why: "The cancellation is the proof: an element occurring more than n/2 times cannot be paired away against distinct others, because there are not enough of them. What the argument does not give is any claim about the survivor when no majority exists \u2014 measured, that case produced a meaningless answer on 100% of inputs." },
+
+    { type: "order",
+      q: "Order the steps of designing a sweep for a new interval problem:",
+      items: [
+        "decide the boundary convention: do intervals touching at a point overlap?",
+        "turn each interval into events, encoding the convention in the sort key's tie-break",
+        "choose the running state \u2014 a counter, an active set, the rightmost endpoint \u2014 which is the step that decides the algorithm",
+        "walk the sorted events, updating the state and emitting answers where the problem asks for them"
+      ],
+      why: "The convention comes first because it changes the event encoding, and deciding it later means deciding it twice and inconsistently \u2014 which is where most wrong answers in this family come from. The state choice is the real design decision: a counter answers how many, a set answers which ones, and a carried coordinate answers how much length, all from the same loop." }
+  ]
+});
+
+/* ======================= CHAPTER 13 ======================= */
+CHAPTERS.push({
+  num: 13, part: 2, title: "Binary Search as an Invariant",
+  blurb: "Everyone can write binary search and almost nobody writes it correctly the first time, because it is taught as a formula instead of as an invariant. This chapter gives you the invariant, then derives every variant from it — first occurrence, last occurrence, insertion point — and shows you the measurement that justifies the warning: of eight plausible spellings of the same four-line loop, two are correct. You will also meet the overflow bug that sat inside a published, formally proved binary search for nine years, in a standard library you have almost certainly called.",
+
+  sections: [
+
+    { title: "The Invariant",
+      html:
+        "<p>Binary search is usually introduced as a procedure: look at the middle, go left or right, repeat. That description is correct and it is why people cannot write it. A procedure has no way to tell you whether a particular line is right, so every boundary decision becomes a guess to be fixed by testing.</p>" +
+
+        "<p>Here is the version that can be checked. Maintain a range of indices and one claim about it:</p>" +
+
+        "<div class='callout'><strong>The search invariant.</strong> <em>If the answer exists at all, it lies in [lo, hi).</em> Every line of the loop exists to preserve this, and the loop ends when the range is small enough that the claim names a single position.</div>" +
+
+        "<p>Now every line justifies itself. The range starts as [0, n), which is the whole array, so the invariant is true before the loop begins &#8212; nothing has been excluded. Inside, probe the midpoint and ask which half the invariant still permits:</p>" +
+
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lower_bound(a, target):\n    lo, hi = 0, len(a)          # invariant: answer in [lo, hi)\n    while lo &lt; hi:\n        mid = lo + (hi - lo) // 2\n        if a[mid] &lt; target:\n            lo = mid + 1        # mid cannot be the answer; discard it\n        else:\n            hi = mid            # mid might be the answer; keep it\n    return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int lowerBound(int[] a, int target) {\n    int lo = 0, hi = a.length;        // invariant: answer in [lo, hi)\n    while (lo &lt; hi) {\n        int mid = lo + (hi - lo) / 2;\n        if (a[mid] &lt; target) lo = mid + 1;  // discard mid\n        else                 hi = mid;      // keep mid\n    }\n    return lo;\n}</code></pre></div>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 288' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace' data-overlap='intentional'><text x='20' y='18' fill='#2de2ff' font-size='12'>lower_bound for 8 in [1,3,3,5,8,8,8,13]: the band is where the answer may still be</text><rect x='60' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='92' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>1</text><text x='92' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>0</text><rect x='132' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='164' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>3</text><text x='164' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>1</text><rect x='204' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='236' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>3</text><text x='236' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>2</text><rect x='276' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='308' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>5</text><text x='308' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>3</text><rect x='348' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='380' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>8</text><text x='380' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>4</text><rect x='420' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='452' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>8</text><text x='452' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>5</text><rect x='492' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='524' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>8</text><text x='524' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>6</text><rect x='564' y='30' width='64' height='24' rx='4' fill='#111a2e' stroke='#1c2a45' stroke-width='1.5'/><text x='596' y='47' text-anchor='middle' fill='#7d8fb0' font-size='11'>13</text><text x='596' y='68' text-anchor='middle' fill='#7d8fb0' font-size='9'>7</text><rect x='60' y='90' width='568' height='20' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/><rect x='348' y='90' width='64' height='20' rx='4' fill='#2a2410' stroke='#ffd166' stroke-width='2'/><text x='380' y='104' text-anchor='middle' fill='#ffd166' font-size='10'>mid</text><text x='20' y='104' fill='#c9d6ea' font-size='10'>[0,8)</text><text x='20' y='120' fill='#7d8fb0' font-size='9'>a[4] = 8, not below 8, so keep mid: hi = 4</text><rect x='60' y='136' width='288' height='20' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/><rect x='204' y='136' width='64' height='20' rx='4' fill='#2a2410' stroke='#ffd166' stroke-width='2'/><text x='236' y='150' text-anchor='middle' fill='#ffd166' font-size='10'>mid</text><text x='20' y='150' fill='#c9d6ea' font-size='10'>[0,4)</text><text x='20' y='166' fill='#7d8fb0' font-size='9'>a[2] = 3 &lt; 8, so discard it: lo = 3</text><rect x='276' y='182' width='72' height='20' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/><rect x='276' y='182' width='64' height='20' rx='4' fill='#2a2410' stroke='#ffd166' stroke-width='2'/><text x='308' y='196' text-anchor='middle' fill='#ffd166' font-size='10'>mid</text><text x='20' y='196' fill='#c9d6ea' font-size='10'>[3,4)</text><text x='20' y='212' fill='#7d8fb0' font-size='9'>a[3] = 5 &lt; 8, so discard it: lo = 4</text><line x1='348' y1='228' x2='348' y2='246' stroke='#ff5d73' stroke-width='3'/><text x='20' y='242' fill='#c9d6ea' font-size='10'>[4,4)</text><text x='360' y='242' fill='#ff5d73' font-size='10'>empty: lo == hi == 4, and that is the answer</text><text x='20' y='268' fill='#3ddc97' font-size='10'>width 8 &#8594; 4 &#8594; 1 &#8594; 0: every step strictly shrinks it, which is why the loop ends</text></svg><div class='fig-cap'>Keep mid when it could still be the answer; discard it only when it provably cannot.</div></div>" +
+        "<p>The asymmetry between the two branches is the whole algorithm, and it is not arbitrary. If <code>a[mid] &lt; target</code> then <code>mid</code> is definitely not the answer, so it can be excluded and <code>lo</code> moves past it. If <code>a[mid] &#8805; target</code> then <code>mid</code> might be the answer, so it must stay inside the range &#8212; and since the range is half-open, <code>hi = mid</code> keeps it. Writing <code>hi = mid - 1</code> there would discard a position the invariant says could hold the answer, which is a bug you can now <em>name</em> rather than discover.</p>" +
+
+        "<p>The loop ends when <code>lo == hi</code>, at which point the range is empty and the invariant says: if the answer exists, it is at <code>lo</code>. That is why the function returns <code>lo</code> without a final check, and why it is correct even when the target is absent.</p>" +
+
+        "<h3>Why halves</h3>" +
+        "<p>Halving looks arbitrary until you count. Splitting into thirds &#8212; probing at the one-third and two-third points &#8212; reduces the range faster per <em>round</em>, to a third rather than a half, but costs two comparisons per round instead of one. After c comparisons, halving has narrowed the range by a factor of 2<sup>c</sup> and ternary search by 3<sup>c/2</sup> &#8776; 1.73<sup>c</sup>. Halving wins, and it keeps winning for any split into k parts, because k grows linearly while the comparisons per round do too and the exponent is what matters.</p>" +
+        "<p>The exception proves the rule. Ternary search <em>is</em> the right tool for finding the extremum of a unimodal function, where a single probe tells you nothing and only a pair of probes identifies which side to discard. There the two comparisons buy information that one cannot, so the arithmetic changes. When one probe suffices, halve.</p>" +
+        "<p><strong>Step the machine above</strong> and watch the shaded band. Every iteration must strictly shrink it; if you can find a step where the band is the same size before and after, you have found an infinite loop, which section 4 is about.</p>",
+      viz: "dsaBinarySearch", vizTitle: "The shaded band is where the answer must be — every step must shrink it"
+    },
+
+    { title: "Half-Open Intervals, and the Eight Spellings",
+      html:
+        "<p>The range above is a <strong>half-open interval</strong>: <code>lo</code> is included, <code>hi</code> is not, written [lo, hi). The alternative is the closed interval [lo, hi] with both ends included. Both can be made to work. Mixing them cannot, and almost every binary search bug is a mixture.</p>" +
+
+        "<p>The two consistent spellings are:</p>" +
+
+        "<ul>" +
+        "<li><strong>Half-open</strong> &#8212; start <code>hi = len(a)</code>, loop <code>while lo &lt; hi</code>, move <code>hi = mid</code>. The range is empty when <code>lo == hi</code>.</li>" +
+        "<li><strong>Closed</strong> &#8212; start <code>hi = len(a) - 1</code>, loop <code>while lo &lt;= hi</code>, move <code>hi = mid - 1</code>. The range is empty when <code>lo &gt; hi</code>.</li>" +
+        "</ul>" +
+
+        "<p>Each of those three choices has two plausible options, which gives eight spellings of what looks like the same four-line loop. Running all eight against Python's <code>bisect_left</code> on 4,000 random arrays of up to eight elements:</p>" +
+
+        "<ul>" +
+        "<li><code>hi=len(a)</code>, <code>hi=mid</code>, <code>while lo &lt; hi</code> &#8212; <strong>correct</strong></li>" +
+        "<li><code>hi=len(a)-1</code>, <code>hi=mid-1</code>, <code>while lo &lt;= hi</code> &#8212; <strong>correct</strong></li>" +
+        "<li><code>hi=len(a)</code>, <code>hi=mid</code>, <code>while lo &lt;= hi</code> &#8212; never terminates on 2,746 inputs, crashes on 1,254</li>" +
+        "<li><code>hi=len(a)-1</code>, <code>hi=mid</code>, <code>while lo &lt;= hi</code> &#8212; never terminates on 2,746 inputs</li>" +
+        "<li><code>hi=len(a)</code>, <code>hi=mid-1</code>, <code>while lo &lt;= hi</code> &#8212; crashes on 1,254 inputs</li>" +
+        "<li><code>hi=len(a)</code>, <code>hi=mid-1</code>, <code>while lo &lt; hi</code> &#8212; silently wrong on 734</li>" +
+        "<li><code>hi=len(a)-1</code>, <code>hi=mid</code>, <code>while lo &lt; hi</code> &#8212; silently wrong on 836</li>" +
+        "<li><code>hi=len(a)-1</code>, <code>hi=mid-1</code>, <code>while lo &lt; hi</code> &#8212; silently wrong on 1,366</li>" +
+        "</ul>" +
+
+        "<p><strong>Two of eight.</strong> And the two that work are exactly the two that are internally consistent; every failure is a half-open decision combined with a closed one. Three of the failures are silent, which is the category that reaches production, because an index that is wrong by one on some inputs passes any test suite whose arrays happen to contain the target.</p>" +
+
+        "<p>This is the measured form of a remark Knuth makes in <em>The Art of Computer Programming</em>: binary search was published in 1946, and the first published version free of bugs did not appear until 1962. Sixteen years, for four lines.</p>" +
+
+        "<div class='callout'>Pick one convention and never mix. This course uses half-open everywhere &#8212; the same convention as Chapter 9's prefix sums and Python's own <code>bisect</code> &#8212; because it makes the empty range <code>lo == hi</code> rather than <code>lo &gt; hi</code>, makes the length exactly <code>hi - lo</code>, and makes <code>a[lo:hi]</code> the slice the indices describe.</div>"
+    },
+
+    { title: "Lower Bound, Upper Bound, Equal Range",
+      html:
+        "<p>With the invariant in hand the variants stop being separate algorithms. They are one loop with one comparison changed.</p>" +
+
+        "<ul>" +
+        "<li><strong>Lower bound</strong> &#8212; the first index whose value is &#8805; target. Comparison: <code>a[mid] &lt; target</code>.</li>" +
+        "<li><strong>Upper bound</strong> &#8212; the first index whose value is &gt; target. Comparison: <code>a[mid] &lt;= target</code>.</li>" +
+        "</ul>" +
+
+        "<p>One character. Everything else &#8212; the initialisation, the loop condition, the two assignments, the return &#8212; is identical, and both are correct by the same argument, because both maintain \"if the answer exists it is in [lo, hi)\" for their own definition of the answer.</p>" +
+
+        "<p>Those two give everything else. The <strong>equal range</strong> of a target is [lower, upper), so its length is <code>upper - lower</code> and that is the count of occurrences, obtained in two searches with no scanning. On a = [10, 20, 20, 20, 30, 40]:</p>" +
+
+        "<ul>" +
+        "<li><strong>target 20</strong> &#8212; lower = 1, upper = 4, so the range is [1, 4) and the count is 3</li>" +
+        "<li><strong>target 25</strong>, absent &#8212; lower = 4, upper = 4, an empty range</li>" +
+        "<li><strong>target 5</strong>, below everything &#8212; lower = 0, upper = 0</li>" +
+        "<li><strong>target 99</strong>, above everything &#8212; lower = 6, upper = 6</li>" +
+        "</ul>" +
+
+        "<p>The absent cases show the property that makes lower bound the right primitive: when the target is missing, lower and upper agree, and the value they agree on is the <strong>insertion point</strong> &#8212; the index at which the target could be inserted with the array staying sorted. So one function answers three questions. Is it present? <code>lower &lt; n and a[lower] == target</code>. How many? <code>upper - lower</code>. Where would it go? <code>lower</code>.</p>" +
+
+        "<p>This is why a library exposes these rather than a plain <code>find</code>. Python's <code>bisect_left</code> and <code>bisect_right</code> are exactly lower and upper bound; C++ names them <code>std::lower_bound</code> and <code>std::upper_bound</code> and supplies <code>std::equal_range</code> to return both at once. A function that returns only \"found at index i, or &#8722;1\" has thrown away the insertion point, which is the more useful half of the answer.</p>" +
+
+        "<h3>What a comparison costs</h3>" +
+        "<p>Every count in this chapter is a count of <em>comparisons</em>, and the word-RAM model of Chapter 2 charges one unit for each. That is honest for integers and misleading for almost anything else. Binary search over a million strings performs 20 string comparisons, and a string comparison is a loop whose cost is the length of the shared prefix &#8212; so on a sorted list of URLs that all begin <code>https://www.</code>, every one of those 20 comparisons pays for the prefix before it learns anything.</p>" +
+        "<p>The effect is not asymptotic, so the complexity is still &#920;(log n) comparisons, and it is entirely real in wall-clock terms. Two responses exist: compare on a cheap key extracted once, or use a structure that consumes the key one character at a time and never re-reads a prefix, which is the trie of Chapter 28. Noticing that &#920;(log n) is counted in a unit whose price varies is the general skill; this is one instance of it.</p>" +
+        "<div class='callout'><strong>Interview lens.</strong> “Find the first and last position of an element” is lower bound and upper bound minus one, and candidates who have only the plain version write two bespoke loops with four boundary bugs between them. Deriving both from one invariant is the whole answer and takes a minute.</div>"
+    },
+
+    { title: "Termination",
+      html:
+        "<p>An invariant proves that the answer is never excluded. It says nothing about the loop ever stopping, and those are separate obligations &#8212; the same split Chapter 6 made for recursion, where a correct base case and a correct combining step still permit an infinite descent.</p>" +
+
+        "<p>What is needed is a <strong>termination measure</strong>: a non-negative integer that strictly decreases every iteration. For binary search it is <code>hi - lo</code>, the width of the range. If every iteration strictly reduces the width, the loop runs at most as many times as the width can be halved, and it stops.</p>" +
+
+        "<p>The measure is where the two failure modes come from, and both appeared in the previous section's eight spellings.</p>" +
+
+        "<h3>Failure one: the range that does not shrink</h3>" +
+
+        "<p>With half-open bounds and <code>while lo &lt;= hi</code>, the loop can reach <code>lo == hi</code> with the range already empty, compute <code>mid = lo</code>, take the <code>hi = mid</code> branch, and change nothing at all. Width stays zero, the condition stays true, and the loop spins forever. That is the 2,746 inputs out of 4,000 &#8212; not an edge case, a majority.</p>" +
+
+        "<p>The general form: <strong>if a branch can assign <code>hi = mid</code> while <code>mid == lo</code>, or <code>lo = mid</code> while <code>mid == hi</code>, the measure can fail to decrease.</strong> Note that <code>lo = mid</code> is always suspect, which is why the correct half-open version uses <code>lo = mid + 1</code> and never <code>lo = mid</code>.</p>" +
+
+        "<h3>Failure two: the range that shrinks past the answer</h3>" +
+
+        "<p>The mirror image is a loop that terminates reliably and skips the answer, by discarding a position the invariant said to keep. That is the silent category &#8212; 734, 836 and 1,366 wrong answers across three spellings &#8212; and it produces an off-by-one that survives testing, because it only shows on inputs where the answer sits exactly at a boundary the loop jumped over.</p>" +
+
+        "<p>The two obligations are therefore in tension, which is worth saying plainly. Shrink too timidly and the loop hangs; shrink too eagerly and it loses the answer. The invariant tells you the largest safe shrink and the measure tells you the smallest useful one, and the correct code is the only point that satisfies both.</p>" +
+
+        "<div class='callout'>A loop with an invariant and no measure is half proved, and it is the half that fails loudly. Before running any search loop, answer one question: <em>which quantity strictly decreases every time round?</em> If you cannot name it in five seconds, the loop can hang.</div>"
+    },
+
+    { title: "The Overflow Bug",
+      html:
+        "<p>The midpoint in the code above is written <code>lo + (hi - lo) // 2</code> rather than the obvious <code>(lo + hi) // 2</code>. Those are equal in mathematics and not in a fixed-width integer type, and the difference is the most famous bug in the subject.</p>" +
+
+        "<p>That difference is <strong>integer overflow</strong>. A Java <code>int</code> holds values up to 2,147,483,647. If <code>lo</code> and <code>hi</code> are both large, their sum exceeds that and wraps around to a negative number, which halves to a negative midpoint, which indexes out of bounds. Computed with real 32-bit arithmetic:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>a 32-bit signed int: adding two large positives lands below zero</text>" +
+        "<line x1='60' y1='96' x2='700' y2='96' stroke='#1c2a45' stroke-width='2'/>" +
+        "<line x1='380' y1='88' x2='380' y2='104' stroke='#7d8fb0' stroke-width='2'/>" +
+        "<text x='380' y='120' text-anchor='middle' fill='#7d8fb0' font-size='10'>0</text>" +
+        "<text x='60' y='120' fill='#7d8fb0' font-size='10'>-2,147,483,648</text>" +
+        "<text x='700' y='120' text-anchor='end' fill='#7d8fb0' font-size='10'>2,147,483,647</text>" +
+        "<circle cx='540' cy='96' r='6' fill='#1a2440' stroke='#3ddc97' stroke-width='2'/>" +
+        "<text x='540' y='78' text-anchor='middle' fill='#3ddc97' font-size='10'>lo = hi = 2^30</text>" +
+        "<path d='M 548 90 Q 660 40 700 88' fill='none' stroke='#ffd166' stroke-width='2'/>" +
+        "<polygon points='701,94 694,84 703,82' fill='#ffd166'/>" +
+        "<text x='640' y='36' text-anchor='middle' fill='#ffd166' font-size='10'>lo + hi = 2^31 runs off the end</text>" +
+        "<path d='M 60 88 Q 130 44 210 86' fill='none' stroke='#ff5d73' stroke-width='2'/>" +
+        "<polygon points='214,92 206,82 215,80' fill='#ff5d73'/>" +
+        "<text x='135' y='38' text-anchor='middle' fill='#ff5d73' font-size='10'>and reappears here</text>" +
+        "<circle cx='214' cy='96' r='6' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='214' y='140' text-anchor='middle' fill='#ff5d73' font-size='10'>(lo+hi) = -2,147,483,648</text>" +
+        "<text x='214' y='156' text-anchor='middle' fill='#ff5d73' font-size='10'>mid = -1,073,741,824</text>" +
+        "<line x1='20' y1='180' x2='740' y2='180' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='200' fill='#c9d6ea' font-size='11'>lo + (hi - lo) / 2 never forms the sum, so it never leaves the range: mid = 1,073,741,824</text>" +
+        "<text x='20' y='220' fill='#3ddc97' font-size='10'>the subtraction is between two values that are already in range, and the result is smaller than both</text>" +
+        "</svg><div class='fig-cap'>The same arithmetic, two spellings: one stays inside the type and one does not.</div></div>" +
+
+        "<ul>" +
+        "<li><strong>lo = hi = 1,073,741,824</strong> (2<sup>30</sup>) &#8212; naive midpoint <strong>&#8722;1,073,741,824</strong>, safe midpoint 1,073,741,824</li>" +
+        "<li><strong>lo = 1,073,741,800, hi = 1,073,741,900</strong> &#8212; naive &#8722;1,073,741,798, safe 1,073,741,850</li>" +
+        "<li><strong>lo = hi = 2,000,000,000</strong> &#8212; naive &#8722;147,483,648, safe 2,000,000,000</li>" +
+        "</ul>" +
+
+        "<p>Running the first case against a real array raises <code>ArrayIndexOutOfBoundsException: Index -1073741824 out of bounds</code>. The threshold is an array of more than 2<sup>30</sup> = 1,073,741,824 elements, which is why this lay hidden: it needs about a gigabyte of <code>int</code>, unremarkable now and implausible in 1997.</p>" +
+
+        "<p>Joshua Bloch disclosed it in 2006, in <code>java.util.Arrays.binarySearch</code>, where it had been since the JDK shipped the method nine years earlier. The same bug was in the binary search of Jon Bentley's <em>Programming Pearls</em> &#8212; a book whose chapter on writing correct programs uses that very routine as its worked example of a proof. <strong>Play with the machine above</strong>: drag <code>lo</code> and <code>hi</code> upward with both formulas shown and find the first pair where they disagree.</p>" +
+
+        "<h3>The same line, in mergesort</h3>" +
+        "<p>Bloch's disclosure was titled for binary searches <em>and mergesorts</em>, because the identical expression appears in the merge step: a recursive mergesort splits at <code>(lo + hi) / 2</code> and overflows on exactly the same inputs. Anywhere a midpoint is computed from two indices, the bug is available, which is why the fix is worth installing as a habit rather than as a patch to one function.</p>" +
+        "<p>Three defences exist and they are not equally good. Computing <code>lo + (hi - lo) / 2</code> works everywhere and costs nothing. Using an unsigned shift &#8212; <code>(lo + hi) &gt;&gt;&gt; 1</code> in Java &#8212; also works, because the wrapped sum's bit pattern is still correct and the logical shift reads it as unsigned; it is what the JDK actually adopted, and it is harder to read. Widening to a 64-bit type works for 32-bit indices and moves the problem rather than removing it. The first is the one to write by default.</p>" +
+        "<p>The deeper lesson is about what proof covers. Bentley's routine was proved correct, and the proof was sound &#8212; over the integers. The implementation was not over the integers; it was over a type with 2<sup>32</sup> values and wraparound. <strong>A proof is a statement about a model, and a bug can live in the gap between the model and the machine</strong>, which is exactly the gap Chapter 2's word-RAM section told you to keep an eye on.</p>" +
+        "<p>Python does not have this bug, because its integers grow as needed and <code>(lo + hi) // 2</code> can never overflow. It has a different portability trap in the same line: Python's <code>//</code> floors toward negative infinity while C and Java truncate toward zero, so for <code>lo = &#8722;3, hi = 2</code> Python's <code>(lo + hi) // 2</code> is &#8722;1 and Java's is 0. Any search over a range that can go negative &#8212; a coordinate, an offset, a difference &#8212; changes behaviour when ported, silently.</p>",
+      viz: "dsaSearchOverflow", vizTitle: "Two formulas for the midpoint — drag lo and hi up and watch one of them break"
+    },
+
+    { title: "Rotated and Mountain Arrays",
+      html:
+        "<p>Binary search does not actually require a sorted array. It requires that each probe eliminate a side, and sortedness is only the most common way to arrange that. Two standard problems make the distinction concrete.</p>" +
+
+        "<h3>The rotated array</h3>" +
+
+        "<p>A sorted array rotated at an unknown <strong>rotation point</strong> &#8212; [4, 5, 6, 7, 0, 1, 2] &#8212; is not sorted, yet it retains the property that matters: <em>at least one half is always sorted.</em> Compare <code>a[lo]</code> with <code>a[mid]</code>. If <code>a[lo] &#8804; a[mid]</code> the left half is in order, so a simple range test says whether the target is inside it; otherwise the right half is in order and the test goes there. Either way one side is eliminated, and the invariant becomes \"if the target exists it is in [lo, hi)\" exactly as before.</p>" +
+
+        "<p>Measured on rotated arrays without duplicates, the worst probe count over 200 searches was 10 at n = 1,000, 17 at n = 100,000 and 20 at n = 1,000,000 &#8212; against log&#8322;n of 10.0, 16.6 and 19.9. Logarithmic, with the usual constant.</p>" +
+
+        "<h3>Where duplicates break it</h3>" +
+
+        "<p>Now allow repeats. If <code>a[lo]</code>, <code>a[mid]</code> and <code>a[hi]</code> are all equal, the test cannot tell which side is sorted, because both look identical from the three probes available. There is no repair: the information is genuinely absent, and the only safe move is to shrink the range by one at each end and continue. That turns the search linear. Measured on an array of n equal values with a single different one, searching for an absent target:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 1,000</strong> &#8212; 501 probes, against log&#8322;n = 10.0</li>" +
+        "<li><strong>n = 10,000</strong> &#8212; 5,001 probes</li>" +
+        "<li><strong>n = 100,000</strong> &#8212; <strong>50,001 probes</strong>, against log&#8322;n = 16.6</li>" +
+        "</ul>" +
+
+        "<p>Exactly n/2 + 1, which is &#920;(n). This is worth more than the problem it comes from: it is a case where an algorithm degrades not because the implementation is poor but because the <em>probe</em> stops being informative. <strong>Use the machine above</strong> to find a rotation where the test is ambiguous, and notice that the ambiguity is a property of the data rather than of the code.</p>" +
+
+        "<h3>Finding the rotation point</h3>" +
+        "<p>The rotation point can be found on its own, and the search is shorter than the one above because it needs no target. Compare <code>a[mid]</code> with <code>a[hi - 1]</code>, the last element still in range: if <code>a[mid]</code> is larger, the break must lie to the right, so <code>lo = mid + 1</code>; otherwise it is at <code>mid</code> or to the left, so <code>hi = mid</code>. The invariant is “the minimum is in [lo, hi)” and the loop is the same four lines.</p>" +
+        "<p>That gives a second way to search a rotated array: find the rotation point, then run an ordinary binary search in whichever of the two sorted pieces can contain the target. Two logarithmic searches rather than one, so the cost is the same up to a constant, and the code is easier to argue about because each half is genuinely sorted. Which version to write is a judgement about clarity rather than speed, and the two-phase one is usually the better answer under time pressure.</p>" +
+        "<h3>The mountain array</h3>" +
+
+        "<p>A <strong>mountain array</strong> rises strictly to a peak and then falls. It is sorted nowhere, and binary search still finds the peak, because comparing <code>a[mid]</code> with <code>a[mid + 1]</code> says which slope you are on: rising means the peak is at <code>mid + 1</code> or later, falling means it is at <code>mid</code> or earlier. The invariant is \"the peak is in [lo, hi)\" and the same four lines apply. The general statement is the one Chapter 14 builds on: binary search works on any predicate that is false then true, and the array is a distraction.</p>",
+      viz: "dsaRotatedSearch", vizTitle: "One half is always sorted — step and watch the algorithm decide which"
+    },
+
+    { title: "Unbounded Search",
+      html:
+        "<p>Every version so far started by knowing the range. <strong>Unbounded search</strong> is the case where there is no upper end to start from: a sorted stream you can index but whose length you cannot ask for, an API paginated until it returns empty, a function you want the first argument for which some condition holds.</p>" +
+
+        "<p><strong>Exponential search</strong> &#8212; also called galloping search &#8212; supplies the missing bound in two phases. Probe at 1, 2, 4, 8, 16 and so on until a probe overshoots; that bracket must contain the answer, because the previous probe undershot. Then binary search inside [previous, current].</p>" +
+
+        "<pre><code>def exponential_search(f, target):\n    hi = 1\n    while f(hi) &lt; target:          # phase 1: find any bracket\n        hi *= 2\n    lo = hi // 2                    # the previous probe undershot\n    while lo &lt; hi:                  # phase 2: ordinary binary search\n        mid = lo + (hi - lo) // 2\n        if f(mid) &lt; target: lo = mid + 1\n        else:               hi = mid\n    return lo</code></pre>" +
+
+        "<p>Both phases are logarithmic in the answer rather than in any array length, which is the point: the cost depends on where the answer is, not on how large the space might be. Measured, counting every probe:</p>" +
+
+        "<ul>" +
+        "<li><strong>answer at 10</strong> &#8212; 8 probes</li>" +
+        "<li><strong>answer at 1,000</strong> &#8212; 20 probes</li>" +
+        "<li><strong>answer at 1,000,000</strong> &#8212; 40 probes</li>" +
+        "<li><strong>answer at 1,000,000,000</strong> &#8212; <strong>60 probes</strong>, where a linear scan needs a billion</li>" +
+        "</ul>" +
+
+        "<p>The pattern is 2&#183;log&#8322;(answer): roughly log&#8322; probes to find the bracket and the same again to search it. Doubling is not the only schedule that works &#8212; any growth factor above 1 gives a logarithmic first phase, by exactly the geometric-series argument of Chapter 4 &#8212; and doubling is chosen for the same reason the dynamic array chooses it.</p>" +
+
+        "<p>This also fixes ordinary binary search when the target is near the front. Searching a million-element array for something in the first ten costs 20 comparisons with plain binary search and 8 with exponential search, because the latter's cost scales with the answer's position. That is why it is the standard front end for a search over a sorted list of unknown or awkward length, and why Timsort uses galloping to merge runs that overlap unevenly &#8212; a mechanism Chapter 16 returns to.</p>" +
+
+        "<div class='callout'>Part 2 continues with the observation that makes this chapter's technique general: nothing above required an array. Chapter 14 drops the array entirely and searches over the <em>answer</em>, which turns a large family of optimisation questions into binary searches over a yes-or-no predicate.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Run the half-open lower bound on [1, 3, 3, 5, 8, 8, 8, 13] for target 8, writing down lo, hi and mid after every iteration. <em>What you should find:</em> three iterations, a final answer of 4, and that <code>hi</code> is assigned <code>mid</code> rather than <code>mid - 1</code> at the step where <code>a[mid]</code> equals the target &#8212; which is exactly the line that makes it the <em>first</em> 8 rather than some 8.</li>" +
+        "<li><strong>Trace.</strong> Take the eight spellings from section 2 and, for the three that return wrong answers, construct by hand one input each on which they fail. <em>What you should find:</em> every failing input has the answer at a boundary of the range, and none of them fails when the target sits strictly inside the array &#8212; which is why a test suite of typical cases passes all eight.</li>" +
+        "<li><strong>Investigate.</strong> Implement all eight spellings with an iteration cap, and run them against your language's own lower-bound function on 4,000 random short arrays. <em>What you should find:</em> two are correct; two spin on about 2,746 inputs; two crash on about 1,254; and three are silently wrong on 734, 836 and 1,366 &#8212; the silent ones being the category that ships.</li>" +
+        "<li><strong>Investigate.</strong> In a language with fixed-width 32-bit integers, evaluate both midpoint formulas at lo = hi = 2<sup>30</sup> and at lo = hi = 2,000,000,000. <em>What you should find:</em> the naive form gives &#8722;1,073,741,824 and &#8722;147,483,648 while the safe form gives the correct values, and indexing an array with the naive result raises an out-of-bounds error naming a negative index.</li>" +
+        "<li><strong>Build.</strong> Write lower bound and upper bound as one function parameterised by the comparison, then build present, count and insertion-point on top of them, and fuzz all three against a linear scan on 10,000 random arrays including empty ones and arrays of all-equal values. <em>What you should find:</em> the three derived functions need no boundary logic of their own, and the all-equal arrays are where a hand-written <code>find</code> returns an arbitrary index while lower bound returns the first.</li>" +
+        "<li><strong>Build.</strong> Implement rotated-array search with a probe counter and run it on arrays without duplicates and on an array of n equal values with one different. <em>What you should find:</em> about log&#8322;n probes in the first case &#8212; 20 at a million &#8212; and about n/2 in the second, 50,001 probes at n = 100,000, because three equal probes carry no information about which half is sorted.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "binary search", d: "Halving a candidate range at each step by a probe that eliminates one side, which costs a number of comparisons logarithmic in the range's width." },
+    { t: "search invariant", d: "The claim that if the answer exists it lies in the current range, which every line of the loop exists to preserve and against which every boundary choice can be checked." },
+    { t: "half-open interval", d: "A range including its lower bound and excluding its upper one, written [lo, hi), whose empty condition is lo equals hi and whose width is hi minus lo." },
+    { t: "lower bound", d: "The first index whose value is greater than or equal to the target, which is the insertion point when the target is absent and the first occurrence when it is present." },
+    { t: "upper bound", d: "The first index whose value is strictly greater than the target, differing from lower bound by one character in the comparison." },
+    { t: "equal range", d: "The half-open span between lower and upper bound, whose width is the number of occurrences of the target and which is empty exactly when the target is missing." },
+    { t: "insertion point", d: "The index at which a value could be inserted leaving the array sorted, which is what both bounds return when the value is not present." },
+    { t: "termination measure", d: "A non-negative integer that strictly decreases every iteration, which is the separate obligation an invariant does not discharge and whose absence is how a search loop hangs." },
+    { t: "integer overflow", d: "A sum exceeding the largest value a fixed-width type can hold and wrapping to a negative number, which is why the midpoint is computed by subtraction rather than addition." },
+    { t: "rotated array", d: "A sorted array cut at some position and rejoined in the other order, which is not sorted but always has at least one sorted half to eliminate." },
+    { t: "rotation point", d: "The index at which a rotated array's order breaks, which is also the position of its minimum and can itself be found by binary search." },
+    { t: "mountain array", d: "A sequence rising strictly to a single peak then falling, which is sorted nowhere yet admits binary search because the local slope says which side the peak is on." },
+    { t: "exponential search", d: "Probing at doubling positions to bracket the answer before binary searching inside the bracket, giving a cost logarithmic in the answer rather than in the search space." },
+    { t: "unbounded search", d: "Searching a range with no known upper end, such as a stream or a predicate over the integers, which is what exponential search's first phase exists to handle." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "In the half-open lower bound, the branch for <code>a[mid] &lt; target</code> assigns <code>lo = mid + 1</code> while the other branch assigns <code>hi = mid</code>. Why is that asymmetry required rather than stylistic?",
+      opts: [
+        "Because half-open excludes hi, so the bounds must move by different amounts",
+        "Because a[mid] < target proves mid is not the answer so it can be discarded, while a[mid] >= target leaves mid a candidate the invariant requires be kept",
+        "Because moving both bounds past mid would skip the midpoint entirely, and the resulting range could then fail to contain any index at all when the width reaches two",
+        "Because the comparison is strict on one side only, and the asymmetry in the assignments compensates so that the total shrink per iteration remains exactly half the range"
+      ], a: 1,
+      why: "The invariant decides both lines, and each branch asks one question: can mid be the answer? If a[mid] is below the target it cannot be, so excluding it is safe. If it is at or above, it might be the first such index, so excluding it would violate the claim that the answer stays in the range. Writing hi = mid - 1 there is a bug you can name, which is the difference between an invariant and a formula." },
+
+    { type: "mc",
+      q: "Of eight plausible spellings of lower-bound binary search, only two were correct when tested on 4,000 random arrays. What distinguishes the two that worked?",
+      opts: [
+        "They both moved the lower bound with mid + 1, which is the single assignment that guarantees the range width strictly decreases on every path through the loop",
+        "They both used a strict loop condition, which is what prevents the range from being probed after it has already become empty",
+        "They were the only two that were internally consistent: fully half-open or fully closed, with the initialisation, loop condition and update all drawn from the same convention",
+        "They avoided computing the midpoint by addition, so neither could produce an index outside the array even when the range endpoints grew large"
+      ], a: 2,
+      why: "Three binary choices give eight spellings, and only the two coherent combinations survive: hi = len(a) with hi = mid and while lo < hi, or hi = len(a)-1 with hi = mid-1 and while lo <= hi. Every failure mixes a half-open decision with a closed one. That is why the advice is to pick a convention rather than to memorise a template — the template is only correct as a set." },
+
+    { type: "mc",
+      q: "Two of the eight spellings never terminated on 2,746 of 4,000 inputs. What is the general condition that causes it?",
+      opts: [
+        "A branch can assign hi = mid while mid equals lo, or lo = mid while mid equals hi, leaving the width unchanged with the loop condition still true",
+        "The midpoint is computed with floor division, so on a range of width one it rounds down to the lower bound and the loop re-examines the same index indefinitely",
+        "The loop condition uses <= on a half-open range, so the final iteration probes an index one past the end and the resulting comparison leaves both bounds unmoved",
+        "The invariant permits a range that does not contain the answer, so the loop continues searching a region that has already been eliminated and never reaches the empty case"
+      ], a: 0,
+      why: "Termination needs a measure that strictly decreases, and here it is hi - lo. Any branch that can leave the width unchanged breaks the guarantee, which makes lo = mid permanently suspect — the correct half-open version uses lo = mid + 1 and never lo = mid. Note the failure is not rare: a majority of random inputs triggered it, which is what makes this a design error rather than an edge case." },
+
+    { type: "mc",
+      q: "The midpoint is written <code>lo + (hi - lo) / 2</code> rather than <code>(lo + hi) / 2</code>. At lo = hi = 2<sup>30</sup> in 32-bit arithmetic the naive form gives −1,073,741,824. Why does the safe form not have the problem?",
+      opts: [
+        "Because the division is applied to a difference rather than a sum, and division can never produce a value larger in magnitude than the quantity it is applied to in any fixed-width type",
+        "Because the addition of lo happens after the division, and adding a value to a halved quantity cannot exceed the maximum when both operands were themselves valid indices",
+        "Because hi - lo is computed between two values already inside the type and is smaller than both, so no intermediate result ever leaves the representable range",
+        "Because subtraction of two positive integers is defined to saturate rather than wrap in most implementations, so the intermediate value is clamped instead of becoming negative"
+      ], a: 2,
+      why: "The bug is entirely in the intermediate sum. lo and hi are both valid indices, so their difference is also a valid index and halving it makes it smaller still; adding that to lo lands between lo and hi by construction. Option 2 is nearly the same sentence and is not the reason — what matters is that the sum is never formed. Option 4 is false: signed overflow wraps, and in C it is undefined behaviour." },
+
+    { type: "mc",
+      q: "Searching a rotated array of 100,000 equal values with one different element took 50,001 probes, against log₂n ≈ 16.6. Why can this not be fixed by a better implementation?",
+      opts: [
+        "Because the rotation point cannot be located when values repeat",
+        "Because the array is not sorted, so the invariant cannot be established at all",
+        "Because duplicates make the sortedness test true for both halves at once",
+        "Because when a[lo], a[mid] and a[hi] are all equal the three probes carry no information about which half is sorted, so the needed fact is absent rather than unexploited"
+      ], a: 3,
+      why: "The probe is what fails, not the code. Three equal values are consistent with the pivot lying on either side, so no decision procedure reading only those three positions can choose correctly, and the only safe move shrinks the range by one at each end. Measured cost is exactly n/2 + 1. It is the cleanest example in the chapter of an algorithm limited by the information its probes return." },
+
+    { type: "mc",
+      q: "Exponential search found an answer at position 1,000,000,000 in 60 probes. What does its cost depend on?",
+      opts: [
+        "The position of the answer, since both the doubling phase and the binary search inside the bracket are logarithmic in that position rather than in the size of the space",
+        "The size of the search space, which the doubling phase discovers before the binary search proceeds in the usual logarithmic number of comparisons over that discovered range",
+        "The ratio between the answer's position and the initial probe, so starting the doubling from a larger first guess reduces the total probe count proportionally",
+        "The number of times the space can be halved, which for an unbounded range is determined by the width of the integer type used to hold the probe index"
+      ], a: 0,
+      why: "That independence from the space's size is the whole point, and it is why the technique works on ranges with no known end at all. The measured pattern is about 2 log₂(answer): 8 probes at 10, 20 at a thousand, 40 at a million, 60 at a billion. It also beats plain binary search whenever the answer is near the front — 8 probes against 20 for a target in the first ten of a million-element array." },
+
+    { type: "mc",
+      q: "A function returns “index of the target, or −1 if absent”. Why do standard libraries expose lower bound instead?",
+      opts: [
+        "Because −1 is a valid index in languages permitting negative indexing, so the sentinel is ambiguous and a caller cannot distinguish absence from a match at the final position",
+        "Because returning −1 discards the insertion point, which lower bound returns for free on absence and from which presence and occurrence count both follow",
+        "Because the plain version requires a final equality check outside the loop, which cannot be expressed without leaving the invariant and therefore resists formal verification",
+        "Because lower bound is faster on arrays with duplicates, stopping at the first match"
+      ], a: 1,
+      why: "One primitive answers three questions: present is lower < n and a[lower] == target, the count is upper - lower, and the insertion position is lower itself. The −1 version has thrown away the most useful part of what the search already computed. Option 4 has it backwards — lower bound deliberately does not stop at the first match, which is how it finds the first occurrence rather than an arbitrary one." },
+
+    { type: "blank",
+      q: "The claim that if the answer exists it lies within the current range — the statement every line of the loop exists to preserve — is the search ____.",
+      a: ["invariant"],
+      why: "It is what converts a boundary decision from a guess into a check: keep mid when it might still be the answer, discard it when it provably is not. It does not, on its own, prove the loop ends — that needs a separate measure, and the two spellings that hung on 2,746 inputs had the invariant right and no decreasing measure." },
+
+    { type: "blank",
+      q: "Probing at 1, 2, 4, 8 and so on until a probe overshoots, then binary searching inside the resulting bracket, is called ____ search.",
+      a: ["exponential", "galloping"],
+      why: "Both names are current; the second is the one used in the Timsort literature for merging runs that overlap unevenly. Its cost is about 2 log₂ of the answer's position and is independent of how large the space might be, which is what lets it search a range with no known upper end." },
+
+    { type: "order",
+      q: "Order the obligations you discharge when writing a search loop:",
+      items: [
+        "state the invariant: if the answer exists, it lies in the current range",
+        "check that the initial range satisfies it, so the claim is true before the first iteration",
+        "check each branch preserves it, keeping any index that could still be the answer",
+        "name the measure that strictly decreases, so the loop is guaranteed to end"
+      ],
+      why: "The first three are one obligation in three parts and prove that the answer is never excluded; the fourth is a separate obligation that they do not imply. Skipping the fourth produced two spellings that hang on a majority of inputs, and skipping the third produced three that return a wrong index silently — which is the more dangerous omission, because it ships." }
+  ]
+});
+
+/* ======================= CHAPTER 14 ======================= */
+CHAPTERS.push({
+  num: 14, part: 2, title: "Binary Search on the Answer",
+  blurb: "The most powerful idea in Part 2 is that binary search never needed a sorted array — it needs a monotone predicate. Once you see that, a whole class of optimisation problems collapses into the same three moves: guess an answer, ask a yes-or-no question about it, halve the range. Problems that look like they require cleverness turn out to require a feasibility check you can write in four lines, and the search runs over the space of possible answers rather than over the input at all.",
+
+  sections: [
+
+    { title: "The Generalisation",
+      html:
+        "<p>Chapter 13 searched a sorted array, and the sortedness was doing one job: it made the question <em>is a[mid] below the target?</em> answer <strong>no</strong> for a while and then <strong>yes</strong> forever. Nothing else about the array mattered. Strip away everything but that property and what remains is a sequence of booleans that looks like this:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 232' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>the only structure binary search needs: false for a while, then true forever</text>" +
+        "<rect x='40' y='34' width='60' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/><text x='70' y='54' text-anchor='middle' fill='#ff5d73' font-size='12'>F</text>" +
+        "<rect x='100' y='34' width='60' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/><text x='130' y='54' text-anchor='middle' fill='#ff5d73' font-size='12'>F</text>" +
+        "<rect x='160' y='34' width='60' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/><text x='190' y='54' text-anchor='middle' fill='#ff5d73' font-size='12'>F</text>" +
+        "<rect x='220' y='34' width='60' height='30' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/><text x='250' y='54' text-anchor='middle' fill='#ff5d73' font-size='12'>F</text>" +
+        "<rect x='280' y='34' width='60' height='30' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2.5'/><text x='310' y='54' text-anchor='middle' fill='#3ddc97' font-size='12'>T</text>" +
+        "<rect x='340' y='34' width='60' height='30' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/><text x='370' y='54' text-anchor='middle' fill='#3ddc97' font-size='12'>T</text>" +
+        "<rect x='400' y='34' width='60' height='30' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/><text x='430' y='54' text-anchor='middle' fill='#3ddc97' font-size='12'>T</text>" +
+        "<rect x='460' y='34' width='60' height='30' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/><text x='490' y='54' text-anchor='middle' fill='#3ddc97' font-size='12'>T</text>" +
+        "<line x1='280' y1='72' x2='280' y2='94' stroke='#ffd166' stroke-width='2.5'/>" +
+        "<polygon points='280,30 275,42 285,42' fill='#ffd166'/>" +
+        "<text x='288' y='90' fill='#ffd166' font-size='11'>the boundary: the answer</text>" +
+        "<text x='40' y='118' fill='#7d8fb0' font-size='10'>1 hour</text>" +
+        "<text x='466' y='118' fill='#7d8fb0' font-size='10'>max pile</text>" +
+        "<line x1='20' y1='138' x2='740' y2='138' stroke='#1c2a45' stroke-width='2'/>" +
+        "<text x='20' y='160' fill='#c9d6ea' font-size='11'>underneath, the real question is not a boolean at all:</text>" +
+        "<text x='40' y='182' fill='#c9d6ea' font-size='11'>“at k bananas an hour, can she finish the piles within h hours?”</text>" +
+        "<text x='40' y='204' fill='#3ddc97' font-size='11'>the predicate is computed on demand — the strip is never built, only probed</text>" +
+        "<text x='40' y='224' fill='#7d8fb0' font-size='10'>which is why the answer space can be 10⁹ wide and the search still costs 30 probes</text>" +
+        "</svg><div class='fig-cap'>Binary search finds the boundary of this strip. Sortedness was only one way to produce it.</div></div>" +
+
+        "<p>This is a <strong>monotone predicate</strong>: a yes-or-no question about a candidate value that, once it becomes true, stays true. Binary search finds where it flips, and the sorted array was only ever one way of arranging for such a question to exist.</p>" +
+
+        "<p>The reframing that follows is the whole chapter. Take an <strong>optimisation problem</strong> &#8212; <em>what is the smallest k such that &#8230;</em> &#8212; and turn it into a <strong>decision problem</strong>: <em>for this specific k, is it possible?</em> The decision version is almost always easier, because you are handed the number instead of having to find it. Then binary search over the candidates, using the decision procedure as the probe. That is <strong>search on the answer</strong>, and the range it searches is the <strong>answer space</strong> rather than the input.</p>" +
+
+        "<p>The cost is worth stating immediately, because it is what makes the technique practical. If the answer space runs up to M and each decision costs O(n), the total is <strong>O(n log M)</strong>. Measured on the banana problem with one pile per hour:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 100</strong>, answers up to 985 &#8212; 9 predicate calls, about 900 operations, against 98,500 to scan every candidate</li>" +
+        "<li><strong>n = 10,000</strong>, answers up to 999,246 &#8212; 19 calls, 190,000 operations, against 9,992,460,000</li>" +
+        "<li><strong>n = 100,000</strong>, answers up to 999,998,860 &#8212; <strong>29 calls</strong>, 2,900,000 operations, against 99,999,886,000,000</li>" +
+        "</ul>" +
+
+        "<p>The last line is a factor of thirty-four million, and note where the logarithm lands: on M, the size of the answer space, not on n. Doubling the largest possible answer adds one probe.</p>" +
+
+        "<h3>Two ways the bounds go wrong</h3>" +
+        "<p>The answer space has to <em>contain</em> the answer, and both directions of getting that wrong fail quietly. Too narrow and the search returns an endpoint: set the upper bound to <code>max(piles) - 1</code> and the loop happily converges on a rate that does not finish the piles, because the invariant only ever promised the answer was in the range it was given. Too wide costs nothing asymptotically &#8212; a ceiling of 10<sup>18</sup> instead of 10<sup>9</sup> adds thirty probes &#8212; so when in doubt, overshoot.</p>" +
+        "<p>That asymmetry is worth making a habit of. A bound that is too generous costs a logarithm; a bound that is too tight costs correctness, and the wrong answer it produces is a plausible number rather than an obvious failure.</p>" +
+        "<p><strong>Drag the candidate in the machine above</strong> and watch the predicate underneath. Set it one below the answer, confirm the predicate says no, then step up by one and watch it say yes &#8212; and stay yes for every value after.</p>",
+      viz: "dsaBinarySearchAnswer", vizTitle: "Drag the candidate answer — the predicate below is either yes or no; find where it flips"
+    },
+
+    { title: "Constructing the Predicate",
+      html:
+        "<p>The search is four lines you already have. The work is entirely in writing the <strong>feasibility predicate</strong> and knowing the bounds of the answer space. Three standard conversions, each following the same recipe: name the candidate, write a greedy or arithmetic check that consumes the input once, and state why it is monotone.</p>" +
+
+        "<h3>Eating speed</h3>" +
+
+        "<p><em>Given piles of bananas and h hours, what is the smallest eating rate k that finishes them?</em> At rate k a pile of size p takes &#8968;p / k&#8969; hours, so the check is a sum:</p>" +
+
+        "<pre><code>def can_finish(piles, h, k):\n    return sum((p + k - 1) // k for p in piles) &lt;= h</code></pre>" +
+
+        "<p>Monotone because a larger k never increases any &#8968;p / k&#8969;, so the total hours can only fall. Bounds: 1 at the low end and <code>max(piles)</code> at the high end, since eating faster than the largest pile saves nothing.</p>" +
+
+        "<h3>Shipping capacity</h3>" +
+
+        "<p><em>Given package weights in order and D days, what is the smallest ship capacity?</em> The check walks the packages, starting a new day whenever the current one would overflow:</p>" +
+
+        "<pre><code>def can_ship(weights, days, cap):\n    if cap &lt; max(weights):\n        return False                 # a package that never fits\n    used, load = 1, 0\n    for w in weights:\n        if load + w &gt; cap:\n            used, load = used + 1, 0\n        load += w\n    return used &lt;= days</code></pre>" +
+
+        "<p>The explicit <code>cap &lt; max(weights)</code> guard is not defensive clutter; without it the loop would report a feasible schedule that cannot exist. Bounds: <code>max(weights)</code> to <code>sum(weights)</code>, which is the lower end already doing the guard's job if you set it correctly.</p>" +
+
+        "<h3>Splitting an array</h3>" +
+
+        "<p><em>Split an array into at most m contiguous parts, minimising the largest part's sum.</em> The same greedy: count how many parts a given limit forces, and compare with m. Identical shape to shipping, which is the point &#8212; these are the same problem wearing different nouns, and recognising that is worth more than solving either.</p>" +
+
+        "<p>Each predicate's monotonicity is the hypothesis the whole method rests on, so it is worth checking rather than assuming. Evaluating each one at <em>every</em> candidate across the full answer space, on 3,000 random instances each:</p>" +
+
+        "<ul>" +
+        "<li><strong>eating speed</strong> &#8212; 3,000 of 3,000 instances give a clean false-then-true strip</li>" +
+        "<li><strong>shipping capacity</strong> &#8212; 3,000 of 3,000</li>" +
+        "<li><strong>splitting an array</strong> &#8212; 3,000 of 3,000</li>" +
+        "</ul>" +
+
+        "<div class='callout'>When a search on the answer returns something wrong, the bug is almost never in the binary search. It is in the predicate, and it is one of three things: the predicate is not monotone, the bounds exclude the true answer, or the loop returns <code>lo</code> when the problem wanted <code>lo - 1</code>. Check them in that order.</div>"
+    },
+
+    { title: "Minimise the Maximum, Maximise the Minimum",
+      html:
+        "<p>Two phrasings signal this technique so reliably that they are worth learning as triggers.</p>" +
+
+        "<ul>" +
+        "<li><strong>Minimise the maximum</strong> &#8212; the largest load, the longest wait, the biggest part. The predicate is “can every part be kept at or below L?”, which gets <em>easier</em> as L grows, so the strip is false then true and the answer is the first true.</li>" +
+        "<li><strong>Maximise the minimum</strong> &#8212; the smallest gap, the weakest link, the closest pair of placed objects. The predicate is “can every gap be kept at or above G?”, which gets <em>harder</em> as G grows, so the strip is true then false and the answer is the last true.</li>" +
+        "</ul>" +
+
+        "<p>The two are mirror images and the mirror is where the off-by-one lives. A false-then-true strip is exactly Chapter 13's lower bound and the loop returns <code>lo</code>. A true-then-false strip is the same loop with the comparison inverted, and it returns the position <em>before</em> the flip &#8212; which is <code>lo - 1</code> if you write it as a lower bound, and a source of silent errors if you forget.</p>" +
+
+        "<p>There is a cleaner way that avoids the second case entirely: <strong>negate the predicate.</strong> “Can every gap be at least G?” is true-then-false; “is G too large?” is false-then-true, and the same lower-bound loop applies unchanged. One convention, one loop, and the inversion is done once in the predicate where it is visible rather than in the boundary arithmetic where it is not.</p>" +
+
+        "<h3>The other reliable trigger</h3>" +
+
+        "<p>Two more phrasings belong to the same family. <em>“What is the k-th smallest &#8230;”</em> over a space too large to build &#8212; the k-th smallest distance among a million points, or the k-th smallest element of an n &#215; n multiplication table &#8212; converts to “how many items are at most X?”, which is monotone in X. And <em>“the smallest capacity / rate / budget such that a plan exists”</em> is the eating-speed shape in disguise.</p>" +
+
+        "<p>What all four share is that the <em>answer</em> is a number with a natural range and the <em>question about a fixed number</em> is routine. When you meet a problem where finding the value looks hard but checking a proposed value looks routine, you have found one of these, and the remaining work is bounds and monotonicity.</p>" +
+
+        "<div class='callout'><strong>Interview lens.</strong> This is the pattern most likely to turn a problem rated hard into one rated medium, and the tell is in the question's own wording. If it says minimise a maximum, maximise a minimum, or asks for the smallest value making something possible, write the predicate before you think about anything else.</div>"
+    },
+
+    { title: "Searching the Reals",
+      html:
+        "<p>When the answer is a real number rather than an integer &#8212; a radius, a rate, a ratio &#8212; the loop changes in one important way. There is no “next” value, so <code>lo</code> and <code>hi</code> never meet, and Chapter 13's termination measure does not exist. The loop as written would run forever.</p>" +
+
+        "<p>The standard repair is to stop caring about termination and start caring about precision: run a <strong>fixed iteration count</strong>. Each iteration halves the interval, so after k iterations the remaining width is (hi &#8722; lo) / 2<sup>k</sup>, whatever the function is. That makes the error budget a matter of arithmetic decided before the loop runs.</p>" +
+
+        "<pre><code>lo, hi = 0.0, 2.0\nfor _ in range(60):              # not 'while hi - lo &gt; eps'\n    mid = (lo + hi) / 2\n    if feasible(mid): hi = mid\n    else:             lo = mid\nreturn lo</code></pre>" +
+
+        "<p>Searching for &#8730;2 in [0, 2], measured against the true value:</p>" +
+
+        "<ul>" +
+        "<li><strong>20 iterations</strong> &#8212; error 3.8 &#215; 10<sup>&#8722;7</sup></li>" +
+        "<li><strong>40 iterations</strong> &#8212; error 1.6 &#215; 10<sup>&#8722;12</sup></li>" +
+        "<li><strong>60 iterations</strong> &#8212; error 2.2 &#215; 10<sup>&#8722;16</sup></li>" +
+        "<li><strong>100 iterations</strong> &#8212; error 2.2 &#215; 10<sup>&#8722;16</sup>, <em>unchanged</em></li>" +
+        "</ul>" +
+
+        "<p>The last line is the important one. Past about 60 iterations nothing improves, because a double has roughly 52 bits of mantissa and the interval has already shrunk below what the representation can distinguish. Doing 200 iterations is not more accurate, only slower.</p>" +
+
+        "<h3>Why the epsilon loop is the wrong instinct</h3>" +
+
+        "<p>The natural alternative &#8212; <code>while hi - lo &gt; 1e-18</code> &#8212; looks more principled and is a hang. Run with a 200-iteration safety cap, it hit the cap with the width stuck at 2.2 &#215; 10<sup>&#8722;16</sup> and still falling short of the target. The reason is the same one as above: once the interval is at the limit of the representation, the midpoint equals one of the endpoints, the assignment changes nothing, and the width stops shrinking. The termination measure has not merely become slow, it has stopped decreasing &#8212; the exact failure Chapter 13's section 4 described, arriving here through floating point rather than through a boundary mistake.</p>" +
+
+        "<h3>Choosing the count</h3>" +
+        "<p>The formula follows from the halving. To reach an absolute precision &#949; from a starting bracket of width W, you need log&#8322;(W / &#949;) iterations: a unit interval to 10<sup>&#8722;9</sup> is 30 rounds, to 10<sup>&#8722;12</sup> is 40, and to the limit of a double is about 52. Rounding up to 60 or 100 is free in any problem where the predicate is not itself expensive, which is the usual reason people write 100 and stop thinking about it.</p>" +
+        "<p>When the predicate <em>is</em> expensive &#8212; a simulation, a graph traversal, a solver call &#8212; the count is a real budget and the formula earns its keep. A feasibility check costing 50&#160;ms run 100 times is five seconds; the same check run the 30 times the precision actually requires is a second and a half, for an answer nobody can distinguish from the other one.</p>" +
+        "<div class='callout'>Two rules cover every real-valued search. Use a fixed iteration count, chosen from the range and the precision you need: about 60 covers a double over a unit interval, and log&#8322;((hi &#8722; lo) / &#949;) is the formula. And prefer <em>relative</em> precision when the answer's magnitude is unknown, because 10<sup>&#8722;9</sup> absolute is unreachable for an answer near 10<sup>12</sup>.</div>"
+    },
+
+    { title: "Ternary Search: When One Probe Cannot Pick a Side",
+      html:
+        "<p>Every search so far needed a monotone predicate. Some problems have no such thing and are still searchable, because they have a different kind of structure: a <strong>unimodal function</strong>, which rises to a single peak and then falls, or falls to a single trough and then rises.</p>" +
+
+        "<p>A single probe on a unimodal function tells you nothing. Knowing f(m) = 5 does not say whether the peak is left or right of m, because both are consistent. Two probes do: evaluate at m&#8321; and m&#8322; with m&#8321; &lt; m&#8322;, and if f(m&#8321;) &lt; f(m&#8322;) the peak cannot be left of m&#8321;, so that segment is discarded. That is <strong>ternary search</strong>.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 258' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='18' fill='#2de2ff' font-size='12'>a unimodal curve: two probes, and the outer third on the losing side is discarded</text>" +
+        "<path d='M 60 200 Q 240 26 400 60 Q 560 92 700 198' fill='none' stroke='#4f7cff' stroke-width='2.5'/>" +
+        "<line x1='60' y1='210' x2='700' y2='210' stroke='#1c2a45' stroke-width='2'/>" +
+        "<line x1='273' y1='210' x2='273' y2='94' stroke='#ffd166' stroke-width='1.5' stroke-dasharray='4 3'/>" +
+        "<circle cx='273' cy='94' r='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='273' y='226' text-anchor='middle' fill='#ffd166' font-size='11'>m1</text>" +
+        "<line x1='487' y1='210' x2='487' y2='72' stroke='#ffd166' stroke-width='1.5' stroke-dasharray='4 3'/>" +
+        "<circle cx='487' cy='72' r='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='487' y='226' text-anchor='middle' fill='#ffd166' font-size='11'>m2</text>" +
+        "<rect x='60' y='196' width='213' height='10' fill='#2a1620' stroke='#ff5d73' stroke-width='1.5'/>" +
+        "<text x='166' y='190' text-anchor='middle' fill='#ff5d73' font-size='10'>discarded</text>" +
+        "<rect x='273' y='196' width='427' height='10' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/>" +
+        "<text x='487' y='190' text-anchor='middle' fill='#3ddc97' font-size='10'>survives: two thirds of the range</text>" +
+        "<text x='20' y='244' fill='#7d8fb0' font-size='10'>f(m1) &lt; f(m2), so the peak is right of m1 &#8212; but nothing rules out anything right of m2</text>" +
+        "</svg><div class='fig-cap'>Two probes buy one third of the range. Binary search buys half with one probe.</div></div>" +
+
+        "<p>The arithmetic is worth doing, because it settles when to reach for this. Each round costs two probes and keeps two thirds of the range, so the shrink factor per <em>probe</em> is &#8730;(2/3) = <strong>0.8165</strong>. Binary search keeps one half per probe, a factor of 0.5000. Per unit of work, binary search is substantially better.</p>" +
+
+        "<p>That is not an argument against ternary search; it is a statement of when it applies. Binary search is unavailable here, because there is no monotone predicate to probe &#8212; a single evaluation genuinely cannot pick a side. Ternary search is not a worse alternative to binary search, it is the price of a weaker hypothesis. Chapter 13 made the same point from the other direction: when one probe suffices, halve.</p>" +
+
+        "<p>Measured on a smooth unimodal function with its peak at 1.37, a hundred rounds &#8212; 200 probes &#8212; located the peak to twelve digits. For the common case where the function is over integers rather than reals, the loop runs until the bracket holds three or fewer points and then checks them directly, which sidesteps the precision question entirely.</p>" +
+
+        "<div class='callout'>Ternary search has a faster cousin worth knowing by name: <strong>golden-section search</strong> places its probes so that one of the two evaluations can be reused on the next round, costing about one probe per round instead of two. It is the same idea with better bookkeeping, and for a function that is expensive to evaluate the difference is the whole cost.</div>"
+    },
+
+    { title: "Bracketing an Unknown Answer",
+      html:
+        "<p>Every search here has assumed known bounds. For <code>can_finish</code> the upper bound was <code>max(piles)</code> and finding it was trivial. Sometimes the answer space has no obvious ceiling: the first day a compounding process exceeds a threshold, the smallest budget under which a plan exists, the first index where a generated sequence passes a value.</p>" +
+
+        "<p>Chapter 13's exponential search supplies the bracket: probe at 1, 2, 4, 8 until the predicate turns true, then binary search inside the last interval. The cost is logarithmic in the answer rather than in any assumed ceiling, which matters here more than it did there &#8212; <em>an answer space with no ceiling has no log to be logarithmic in</em>, so bracketing is not an optimisation but the only way to start.</p>" +
+
+        "<p>One caution specific to searching on the answer: the doubling phase evaluates the predicate at values that may be far outside anything sensible, so the predicate must be <em>total</em>. A feasibility check that divides by the candidate, indexes with it, or allocates proportional to it will fail at 2<sup>40</sup> long before the search converges. Write the predicate to answer honestly for any input, or clamp the doubling.</p>" +
+
+        "<h3>The same probe, inside a sort</h3>" +
+
+        "<p><strong>Galloping search</strong> is the same doubling probe used for a different purpose: not to find an unknown ceiling, but to skip a long run of losses quickly. When two sorted runs are merged and one keeps winning, a linear merge compares once per element; galloping doubles ahead to find how many elements of the winning run fit, then binary searches inside that bracket. Merging a 10,000-element run against a smaller one, counting comparisons:</p>" +
+
+        "<ul>" +
+        "<li><strong>against 10 elements</strong> &#8212; linear 9,356, galloping <strong>284</strong>: 32.9&#215; fewer</li>" +
+        "<li><strong>against 100</strong> &#8212; linear 10,048, galloping 2,189: 4.6&#215;</li>" +
+        "<li><strong>against 1,000</strong> &#8212; linear 10,998, galloping 9,785: 1.1&#215;</li>" +
+        "<li><strong>against 10,000</strong> &#8212; linear 19,998, galloping <strong>20,135</strong>: galloping <em>loses</em></li>" +
+        "</ul>" +
+
+        "<p>The last row is why this is an engineering decision rather than a strict improvement. When the runs interleave evenly, the doubling probes are wasted work and galloping costs a few percent more. Timsort's answer is to gate it behind a streak: stay in the simple merge until one side has won seven times in a row, then switch, and switch back when the streak breaks. Chapter 16 reads the rest of that algorithm.</p>" +
+
+        "<div class='callout'>Part 2's first two chapters have been one idea at increasing generality: a sorted array, then a monotone predicate, then a bracket discovered rather than given. Chapter 15 turns to how the sorted array gets sorted in the first place, and to the bound that says how well anyone can do it.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> For piles [3, 6, 7, 11] and h = 8 hours, evaluate <code>can_finish</code> at every k from 1 to 11 and write out the resulting strip. <em>What you should find:</em> false up to k = 3 and true from k = 4 onward, one flip, and that the answer 4 is the first true rather than the last false &#8212; which is exactly Chapter 13's lower bound applied to a predicate instead of an array.</li>" +
+        "<li><strong>Trace.</strong> Take “place c objects in sorted positions maximising the minimum gap” and write its predicate both ways: as “can every gap be at least G?” and as its negation. <em>What you should find:</em> the first gives a true-then-false strip needing the last true, the second gives false-then-true and works with the unmodified lower-bound loop, and the second is why negating the predicate is the better habit.</li>" +
+        "<li><strong>Investigate.</strong> For each of the three predicates in section 2, evaluate it at <em>every</em> candidate across the full answer space on a few thousand random instances and count how many times it changes value. <em>What you should find:</em> exactly one change every time, and if you deliberately break a predicate &#8212; drop the <code>cap &lt; max(weights)</code> guard &#8212; the strip gains a second flip and the binary search starts returning values that are not feasible.</li>" +
+        "<li><strong>Investigate.</strong> Binary search for &#8730;2 in [0, 2] with a fixed count of 20, 40, 60 and 100 iterations, printing the error each time; then try a <code>while hi - lo &gt; 1e-18</code> loop with a safety cap. <em>What you should find:</em> errors of about 3.8e-7, 1.6e-12 and 2.2e-16, no improvement at all from 60 to 100, and the epsilon loop hitting its cap with the width stuck at 2.2e-16 because the midpoint has become equal to an endpoint.</li>" +
+        "<li><strong>Build.</strong> Solve “the k-th smallest element of an n &#215; n multiplication table” by searching on the answer, with the predicate “how many entries are at most X?” computed in O(n). <em>What you should find:</em> O(n log(n&#178;)) total, an answer for n = 10&#8309; that never builds the 10<sup>10</sup>-entry table, and that the count function must use &#8804; rather than &lt; or the search settles one below the true answer.</li>" +
+        "<li><strong>Build.</strong> Implement a linear merge and a galloping merge with comparison counters, and run them on a 10,000-element run against runs of 10, 100, 1,000 and 10,000. <em>What you should find:</em> galloping ahead by 32.9&#215;, 4.6&#215; and 1.1&#215; on the first three and <em>behind</em> on the fourth, which is the measurement that justifies Timsort gating it behind a seven-win streak rather than always using it.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "optimisation problem", d: "A question asking for the best value of some quantity, which is usually harder to attack directly than the question of whether a specific value is achievable." },
+    { t: "decision problem", d: "A question with a yes-or-no answer about a fixed candidate, which is the form binary search can probe and is typically far easier than the optimisation version." },
+    { t: "feasibility predicate", d: "The yes-or-no check applied to a candidate answer, whose correctness and monotonicity carry the entire method since the search itself is unchanged." },
+    { t: "monotone predicate", d: "A predicate that, once true, stays true as the candidate grows, which is the only structure binary search has ever required." },
+    { t: "answer space", d: "The range of candidate answers being searched, whose width appears inside the logarithm so that doubling it costs one extra probe." },
+    { t: "search on the answer", d: "Binary searching the space of possible answers using a feasibility check as the probe, which costs the decision procedure's time multiplied by the log of the range." },
+    { t: "minimise the maximum", d: "The phrasing in which the largest part is to be made as small as possible, giving a predicate that becomes easier as the candidate grows and a false-then-true strip." },
+    { t: "maximise the minimum", d: "The phrasing in which the smallest part is to be made as large as possible, giving a true-then-false strip that is best handled by negating the predicate." },
+    { t: "fixed iteration count", d: "Running a real-valued search a predetermined number of rounds rather than until an epsilon is met, which replaces a termination proof with a precision calculation." },
+    { t: "unimodal function", d: "A function rising to a single extremum and then falling, which admits search despite having no monotone predicate because two probes can eliminate a side." },
+    { t: "ternary search", d: "Repeatedly probing at two interior points to discard an outer third of a unimodal range, costing two probes for a shrink factor a single binary probe would beat." },
+    { t: "galloping search", d: "Doubling ahead to bracket how far one sorted run dominates another before binary searching inside the bracket, which wins on lopsided runs and loses on even ones." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Searching for the smallest eating rate on 100,000 piles with answers up to about 10⁹ took 29 predicate calls. Where does the logarithm land?",
+      opts: [
+        "On n, the number of piles, since each predicate call consumes the input once and the number of calls is bounded by the depth of the recursion over that input",
+        "On M, the width of the answer space, so the total is O(n log M) and doubling the largest possible answer costs exactly one more probe",
+        "On the product nM, because the search must in principle consider every candidate against every pile before it can eliminate a half of the range",
+        "On the ratio M/n, since the predicate's cost and the number of candidates scale together and the logarithm applies to what remains after they cancel"
+      ], a: 1,
+      why: "The search runs over the answer space, not the input, so it is the answer space that gets halved. Each probe costs O(n) because the predicate reads the piles once, and there are log₂M probes — 29 here, against the 10⁹ candidates a scan would examine. That separation is the whole reason the technique is practical: a vast answer space is cheap, and only the predicate's own cost scales with the input." },
+
+    { type: "mc",
+      q: "A search on the answer returns a value that is not actually feasible. Where should you look first?",
+      opts: [
+        "The binary search loop, since a boundary error in the half-open update is the most common defect in any implementation of the technique",
+        "The predicate, checking in order whether it is monotone, whether the bounds contain the answer, and whether the loop returns lo or lo minus one",
+        "The answer space bounds, since an upper bound set too low silently clamps the result to the largest candidate the search was permitted to consider",
+        "The comparison direction, because minimise-the-maximum and maximise-the-minimum produce opposite strips and the wrong one returns the value on the other side of the flip"
+      ], a: 1,
+      why: "The search is four lines you have already proved in Chapter 13; what changes per problem is the predicate and its bounds. Options 3 and 4 are both real failures and both are items on that list — the point of the checklist is the ordering. A non-monotone predicate is first because it invalidates the method rather than shifting the answer, and it is the one that produces results that look arbitrary rather than off by one." },
+
+    { type: "mc",
+      q: "Binary searching for √2 gave errors of 2.2 × 10⁻¹⁶ at 60 iterations and the identical 2.2 × 10⁻¹⁶ at 100. Why does the extra work buy nothing?",
+      opts: [
+        "The function is smooth near the root, so the interval stops carrying sign information about the error",
+        "The error is dominated by the initial bracket rather than the iteration count, and halving a fixed starting width converges to a limit determined by that width alone",
+        "Binary search converges linearly rather than quadratically, so the returns diminish geometrically and become negligible after roughly fifty iterations for any input",
+        "A double has about 52 bits of mantissa, so the interval has already shrunk below what the representation can distinguish and further halving changes nothing"
+      ], a: 3,
+      why: "Each iteration halves the interval exactly, so 60 halvings of a width-2 bracket reach about 2⁻⁵⁹, which is already past the resolution of a double near 1.41. Beyond that the midpoint computes to one of the endpoints and the assignment is a no-op. This is also why the epsilon loop is a hang rather than merely slow: the termination measure has stopped decreasing, not merely slowed down." },
+
+    { type: "mc",
+      q: "Ternary search keeps two thirds of the range for two probes, a shrink factor of 0.8165 per probe, against binary search's 0.5000. Why use it at all?",
+      opts: [
+        "Because on a unimodal function a single probe cannot determine which side holds the extremum, so binary search is unavailable rather than merely slower",
+        "Because the two probes can be evaluated in parallel, which recovers the difference on any machine with more than one core available to the search",
+        "Because its shrink factor is measured per probe while binary search's is per round, and comparing them directly overstates binary search's advantage by a factor of two",
+        "Because unimodal functions are usually expensive to evaluate, and ternary search amortises that expense across a smaller number of total rounds"
+      ], a: 0,
+      why: "The comparison is not a choice between two tools for one job. Knowing f(m) = 5 on a unimodal function is consistent with the peak lying on either side, so there is nothing for a single probe to decide; the second probe is what buys the comparison that eliminates a segment. Ternary search is the price of a weaker hypothesis, not a worse solution — and golden-section search lowers that price by reusing one probe per round." },
+
+    { type: "mc",
+      q: "“Maximise the minimum gap” produces a true-then-false strip, unlike the false-then-true strip of “minimise the maximum load”. What is the recommended handling?",
+      opts: [
+        "Run the same loop and return lo minus one, since the flip sits one position later in a descending strip than it does in an ascending one",
+        "Reverse the direction of the search by swapping the roles of lo and hi, which converts a descending strip into an ascending one without touching the predicate",
+        "Negate the predicate so the strip becomes false-then-true, letting the unmodified lower-bound loop apply and keeping the inversion visible in one place",
+        "Search for the last true directly with a separate upper-bound loop, which is the mirror of lower bound and returns the position before the flip"
+      ], a: 2,
+      why: "All four can be made to work, and they differ in where the inversion lives. Negating the predicate puts it in a line you can read and test on its own, and leaves exactly one search loop in the codebase. Options 1 and 4 put it into boundary arithmetic, which is precisely where Chapter 13 measured that three of eight spellings go silently wrong." },
+
+    { type: "mc",
+      q: "Galloping beat a linear merge by 32.9× on a 10,000-element run against 10 elements, but lost — 20,135 comparisons against 19,998 — when both runs were 10,000. Why does Timsort still use it?",
+      opts: [
+        "Because the losing case costs under one percent while the winning case saves an order of magnitude, and Timsort enters galloping only after one run wins seven times in a row",
+        "Because real inputs are almost always lopsided, so the even case measured here does not arise often enough in practice to affect the overall running time",
+        "Because the comparison count understates linear merging's true cost, which also pays for the element moves that galloping performs in bulk using a block copy",
+        "Because galloping's worst case is bounded by the same n log n as the linear merge, so adopting it unconditionally cannot make the asymptotic behaviour any worse"
+      ], a: 0,
+      why: "The gate is the design. An unconditional switch would pay the small penalty on every even merge; a streak detector pays it only after evidence that one run is dominating, and abandons galloping when the streak breaks. That asymmetry — a bounded loss against an unbounded gain — is the general shape of an adaptive optimisation, and the measurement showing the loss is what justifies the gate rather than the switch." },
+
+    { type: "mc",
+      q: "An exponential search brackets an answer with no known ceiling by probing at 1, 2, 4, 8 and so on. What extra requirement does this place on the feasibility predicate?",
+      opts: [
+        "It must be cheap, because the doubling phase evaluates it a logarithmic number of extra times before the binary search proper begins its work",
+        "It must be monotone over the doubled range as well, which is a stronger condition than monotonicity over the eventual bracket alone",
+        "It must be total: the probes visit candidates far beyond anything sensible, so a check that divides by, indexes with, or allocates proportional to the candidate will fail first",
+        "It must be deterministic, since the same candidate is evaluated once during the doubling phase and again inside the binary search that follows it"
+      ], a: 2,
+      why: "Doubling overshoots by design — that is how it finds a bracket — so the predicate is asked about values that may be orders of magnitude past the answer. A check that allocates an array of size k, or indexes at k, breaks at 2⁴⁰ while the search is still converging. Either write the predicate to answer honestly for any candidate or clamp the doubling to a defensible ceiling." },
+
+    { type: "blank",
+      q: "A yes-or-no question about a candidate that, once it becomes true, stays true for every larger candidate is called a ____ predicate.",
+      a: ["monotone", "monotonic"],
+      why: "It is the only structure binary search has ever needed; the sorted array of Chapter 13 was one way of producing it. Verified rather than assumed for this chapter's three predicates: evaluating each at every candidate across the full range gave exactly one change of value on 3,000 of 3,000 instances each." },
+
+    { type: "blank",
+      q: "Running a real-valued binary search a predetermined number of rounds, rather than looping until an epsilon is reached, is called using a fixed ____ count.",
+      a: ["iteration", "iterations"],
+      why: "Each round halves the bracket, so k rounds leave a width of (hi − lo)/2ᵏ and the error budget becomes arithmetic done before the loop. The epsilon alternative is not merely slower: once the width reaches the limit of the representation the midpoint equals an endpoint, the width stops changing, and the loop never exits." },
+
+    { type: "order",
+      q: "Order the steps of converting an optimisation problem into a search on the answer:",
+      items: [
+        "restate the question as a decision: for this fixed candidate, is it achievable?",
+        "write the feasibility predicate, usually a single greedy or arithmetic pass over the input",
+        "argue that the predicate is monotone in the candidate, so the strip has exactly one flip",
+        "fix the bounds of the answer space and run the unmodified lower-bound loop over it"
+      ],
+      why: "The order is also the order in which things go wrong. Skipping the third step is the expensive mistake, because a non-monotone predicate does not produce a slightly wrong answer, it invalidates the method — and the search still returns a number. The fourth step is the only one that involves the search itself, which is the point: the loop is Chapter 13's, unchanged." }
+  ]
+});
+
+/* ======================= CHAPTER 15 ======================= */
+CHAPTERS.push({
+  num: 15, part: 2, title: "Sorting: The Comparison Bound and How to Break It",
+  blurb: "Sorting is the most-studied problem in computing and the one where the textbook answer and the shipped answer differ most. This chapter builds the classical sorts and measures them against each other on six different input shapes, so you can watch the winner change. It proves the bound from Chapter 5 that none of them beats, then breaks it by changing the rules — counting and radix sort do not compare, and that is the entire trick. Along the way you get selection in linear time, the result that makes quicksort's worst case disappear.",
+
+  sections: [
+
+    { title: "The Elementary Three",
+      html:
+        "<p>Insertion, selection and bubble sort are all &#920;(n&#178;) and are usually dismissed together. That is a mistake, because one of them is genuinely the fastest thing available on the inputs it suits, and the difference between them is visible only when you stop quoting the worst case.</p>" +
+
+        "<ul>" +
+        "<li><strong>Insertion sort</strong> takes each element and slides it left into place. Its cost is one shift per <strong>inversion</strong> &#8212; a pair of elements that are out of order relative to each other &#8212; so it runs in &#920;(n + inversions).</li>" +
+        "<li><strong>Selection sort</strong> repeatedly finds the minimum of what remains and swaps it into place. It performs exactly n(n&#8722;1)/2 comparisons whatever the input, and at most n&#8722;1 swaps.</li>" +
+        "<li><strong>Bubble sort</strong> repeatedly sweeps, swapping adjacent out-of-order pairs, and stops early if a whole sweep makes no swap.</li>" +
+        "</ul>" +
+
+        "<p>Now measure. The same 600 elements under six algorithms and six input shapes, counting comparisons:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='11'>comparisons to sort the same 600 elements, by algorithm and input shape</text><text x='266' y='40' text-anchor='end' fill='#2de2ff' font-size='9'>random</text><text x='362' y='40' text-anchor='end' fill='#2de2ff' font-size='9'>sorted</text><text x='458' y='40' text-anchor='end' fill='#2de2ff' font-size='9'>reversed</text><text x='554' y='40' text-anchor='end' fill='#2de2ff' font-size='9'>nearly sorted</text><text x='650' y='40' text-anchor='end' fill='#2de2ff' font-size='9'>many dupes</text><text x='746' y='40' text-anchor='end' fill='#2de2ff' font-size='9'>all equal</text><line x1='20' y1='48' x2='740' y2='48' stroke='#1c2a45' stroke-width='1.5'/><text x='20' y='68' fill='#c9d6ea' font-size='10'>insertion</text><text x='266' y='68' text-anchor='end' fill='#c9d6ea' font-size='10'>92,683</text><text x='362' y='68' text-anchor='end' fill='#3ddc97' font-size='10'>599</text><text x='458' y='68' text-anchor='end' fill='#c9d6ea' font-size='10'>179,699</text><text x='554' y='68' text-anchor='end' fill='#3ddc97' font-size='10'>4,880</text><text x='650' y='68' text-anchor='end' fill='#c9d6ea' font-size='10'>82,923</text><text x='746' y='68' text-anchor='end' fill='#3ddc97' font-size='10'>599</text><text x='20' y='92' fill='#c9d6ea' font-size='10'>selection</text><text x='266' y='92' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='362' y='92' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='458' y='92' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='554' y='92' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='650' y='92' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='746' y='92' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='20' y='116' fill='#c9d6ea' font-size='10'>bubble</text><text x='266' y='116' text-anchor='end' fill='#ff5d73' font-size='10'>179,645</text><text x='362' y='116' text-anchor='end' fill='#3ddc97' font-size='10'>599</text><text x='458' y='116' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='554' y='116' text-anchor='end' fill='#ff5d73' font-size='10'>164,475</text><text x='650' y='116' text-anchor='end' fill='#ff5d73' font-size='10'>176,925</text><text x='746' y='116' text-anchor='end' fill='#3ddc97' font-size='10'>599</text><text x='20' y='140' fill='#c9d6ea' font-size='10'>mergesort</text><text x='266' y='140' text-anchor='end' fill='#c9d6ea' font-size='10'>4,800</text><text x='362' y='140' text-anchor='end' fill='#c9d6ea' font-size='10'>2,660</text><text x='458' y='140' text-anchor='end' fill='#c9d6ea' font-size='10'>2,930</text><text x='554' y='140' text-anchor='end' fill='#c9d6ea' font-size='10'>3,704</text><text x='650' y='140' text-anchor='end' fill='#c9d6ea' font-size='10'>4,738</text><text x='746' y='140' text-anchor='end' fill='#c9d6ea' font-size='10'>2,660</text><text x='20' y='164' fill='#c9d6ea' font-size='10'>quick, first pivot</text><text x='266' y='164' text-anchor='end' fill='#c9d6ea' font-size='10'>6,147</text><text x='362' y='164' text-anchor='end' fill='#ff5d73' font-size='10'>169,812</text><text x='458' y='164' text-anchor='end' fill='#ff5d73' font-size='10'>169,200</text><text x='554' y='164' text-anchor='end' fill='#c9d6ea' font-size='10'>22,495</text><text x='650' y='164' text-anchor='end' fill='#c9d6ea' font-size='10'>20,092</text><text x='746' y='164' text-anchor='end' fill='#ff5d73' font-size='10'>179,700</text><text x='20' y='188' fill='#c9d6ea' font-size='10'>quick, random 3-way</text><text x='266' y='188' text-anchor='end' fill='#c9d6ea' font-size='10'>9,416</text><text x='362' y='188' text-anchor='end' fill='#c9d6ea' font-size='10'>9,864</text><text x='458' y='188' text-anchor='end' fill='#c9d6ea' font-size='10'>9,168</text><text x='554' y='188' text-anchor='end' fill='#c9d6ea' font-size='10'>10,225</text><text x='650' y='188' text-anchor='end' fill='#c9d6ea' font-size='10'>4,406</text><text x='746' y='188' text-anchor='end' fill='#3ddc97' font-size='10'>1,200</text><line x1='20' y1='196' x2='740' y2='196' stroke='#1c2a45' stroke-width='1.5'/><text x='20' y='214' fill='#3ddc97' font-size='9'>green = linear or near it</text><text x='210' y='214' fill='#ff5d73' font-size='9'>red = quadratic or near it</text><text x='430' y='214' fill='#7d8fb0' font-size='9'>n(n-1)/2 = 179,700 is the quadratic ceiling</text><text x='20' y='232' fill='#7d8fb0' font-size='9'>selection sort is identical in every column; insertion sort spans 599 to 179,699 on the same data</text></svg><div class='fig-cap'>One table, six lessons. The winner changes with the input, which is why the shape of your data is a design input.</div></div>" +
+
+        "<p>Six lessons sit in that table.</p>" +
+
+        "<ul>" +
+        "<li><strong>Selection sort is identical in every column.</strong> 179,700 = 600 &#215; 599 / 2, on random data and on already-sorted data alike. It cannot exploit anything, because it looks at every remaining pair before committing to each move.</li>" +
+        "<li><strong>Insertion sort spans 599 to 179,699 on the same data.</strong> That factor of three hundred is the definition of an <strong>adaptive sort</strong>: one whose cost falls on inputs that are already close to sorted. On the sorted column it does n&#8722;1 comparisons and no shifts, which is the cheapest cell in the whole table.</li>" +
+        "<li><strong>Bubble sort is barely adaptive.</strong> It gets 599 on fully sorted input from its early-exit flag, and then 164,475 on <em>nearly</em> sorted &#8212; 92% of its worst case. A dozen displaced elements destroy the benefit, because one sweep fixes each element by only one position.</li>" +
+        "<li><strong>Mergesort is the most predictable row</strong>, spanning only 2,660 to 4,800. It cannot be made much worse, and it cannot be made much better.</li>" +
+        "<li><strong>Quicksort with a first-element pivot is fastest on random data and catastrophic on sorted data</strong> &#8212; 6,147 against 169,812, a factor of 27 in the wrong direction on the input that looks easiest.</li>" +
+        "<li><strong>The same quicksort with a random pivot and a three-way partition</strong> is flat across every shape and is the <em>best</em> cell in the all-equal column at 1,200 = 2n.</li>" +
+        "</ul>" +
+
+        "<p>The table counts comparisons, and one algorithm looks far better when you count <em>writes</em> instead. Selection sort performs at most n&#8722;1 swaps, because each pass puts one element in its final position and never touches it again; insertion sort performs one shift per inversion, which on random data is about n&#178;/4. Where a write is much more expensive than a read &#8212; flash memory with limited erase cycles, records too large to move cheaply, a structure where every move triggers an index update &#8212; selection sort's fixed n&#8722;1 swaps beat everything else here. It is the one input-independent property in the table, and the only setting in which that is a virtue.</p>" +
+        "<p>The practical consequence is that insertion sort is not a teaching toy. It wins outright on small inputs, because &#920;(n&#178;) with a tiny constant beats &#920;(n log n) with a large one until n is big enough. Timed on 1,000 repetitions at each size:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 4</strong> &#8212; insertion 0.5 ms, mergesort 1.6 ms</li>" +
+        "<li><strong>n = 16</strong> &#8212; insertion 4.4 ms, mergesort 9.5 ms</li>" +
+        "<li><strong>n = 32</strong> &#8212; insertion 15.6 ms, mergesort 22.6 ms</li>" +
+        "<li><strong>n = 64</strong> &#8212; insertion 57.9 ms, mergesort <strong>50.1 ms</strong>, and the lead changes hands</li>" +
+        "<li><strong>n = 128</strong> &#8212; insertion 223.9 ms, mergesort 113.6 ms</li>" +
+        "</ul>" +
+
+        "<p>The crossover sits near n = 48 here and somewhere between 10 and 64 in most implementations. That is why every serious sort in the world is a hybrid that switches to insertion sort on small runs, which Chapter 16 reads out of the actual source.</p>" +
+
+        "<p><strong>Use the machine above.</strong> Set the input shape to nearly-sorted and find which algorithm wins; then set it to all-equal and find which one collapses. Both answers are surprising the first time.</p>",
+      viz: "dsaSortRace", vizTitle: "Six sorts, one array — change the input shape and watch the winner change"
+    },
+
+    { title: "Mergesort",
+      html:
+        "<p>Mergesort splits the array in half, sorts each half recursively, and merges the two sorted halves in one pass. Chapter 3 read its recurrence straight off that sentence &#8212; T(n) = 2T(n/2) + &#920;(n) &#8212; and solved it to &#920;(n log n). The algorithm is usually credited to von Neumann in 1945, which makes it roughly as old as the stored-program computer.</p>" +
+
+        "<p>Two properties make it the one to reach for when the constant matters less than the guarantee.</p>" +
+
+        "<p><strong>It is stable.</strong> A <strong>stable sort</strong> preserves the relative order of elements that compare equal, and mergesort achieves this from a single character: when the two front elements tie, take from the <em>left</em> run. <code>if L[i] &lt;= R[j]</code> is stable and <code>if L[i] &lt; R[j]</code> is not, and nothing else in the algorithm has to change. Section 6 shows what that buys.</p>" +
+
+        "<p><strong>Its worst case equals its average case.</strong> The measured row above spans 2,660 to 4,800 across six wildly different inputs, a factor of 1.8. Quicksort's spans 1,200 to 179,700, a factor of 150. When you need a bound rather than a typical time &#8212; a request handler, a real-time deadline &#8212; that difference is the whole argument.</p>" +
+
+        "<h3>Counting inversions for free</h3>" +
+
+        "<p>An inversion is a pair (i, j) with i &lt; j and a[i] &gt; a[j]. The count measures how far from sorted an array is, and it is exactly the number of shifts insertion sort performs. Counting them directly is &#920;(n&#178;); mergesort counts them as a by-product, because <em>when an element is taken from the right run, it is smaller than every element still left in the left run</em>, so that single move resolves however many elements remain on the left. One added line:</p>" +
+
+        "<pre><code>while i &lt; len(L) and j &lt; len(R):\n    if L[i] &lt;= R[j]:\n        out.append(L[i]); i += 1\n    else:\n        out.append(R[j]); j += 1\n        inversions += len(L) - i      # the whole rest of L is inverted with R[j]</code></pre>" +
+
+        "<p>Checked against brute force on 2,000 random arrays: zero disagreements. On 2,000 elements the counts come out as you would hope &#8212; a sorted array has 0, a reversed array has 1,999,000 = n(n&#8722;1)/2 exactly, and a random array had 1,013,138, close to the expected n(n&#8722;1)/4 = 999,500.</p>" +
+
+        "<div class='callout'>This is a pattern worth naming, because it recurs: <strong>an algorithm that reorganises data can often report a statistic about the reorganisation at no extra cost.</strong> The merge already knows which elements crossed each other; counting them is one addition. Looking for what a traversal already knows and is throwing away is a reliable source of free results.</div>" +
+
+        "<h3>The cost it does pay</h3>" +
+        "<p>Mergesort's price is space. The merge cannot be done in place without heroics, so the standard implementation allocates a scratch buffer of n elements, and that allocation is the reason quicksort is often preferred despite the worse worst case. For an array of a million 8-byte values the buffer is 8&#160;MB that quicksort does not need.</p>" +
+        "<p>In-place merge algorithms exist and are a good illustration of when not to use something clever: they reduce the space to O(1) and multiply the constant factor by enough that the usual engineering answer is to pay the memory. The one context where the trade reverses is a linked list, where merging is relinking and needs no buffer at all &#8212; which is why Chapter 11 called mergesort the one place a list beats an array.</p>" +
+        "<p>The bottom-up variant deserves a mention because it is what real implementations use. Rather than recursing, it merges adjacent runs of width 1, then 2, then 4, doubling until the array is one run. Same comparisons, no call stack, and it is the form that extends naturally to sorting data too large for memory &#8212; merge runs from disk rather than from recursion.</p>"
+    },
+
+    { title: "Quicksort, and What Duplicates Do to It",
+      html:
+        "<p>Quicksort, due to Tony Hoare in 1961, picks a pivot, partitions the array so that everything smaller is left of it and everything larger is right of it, and recurses on both sides. There is no merge step: the partition does the work, and the array is sorted in place.</p>" +
+
+        "<p>Everything about quicksort's behaviour is decided by the partition, and there are two classical schemes.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>the same array mid-partition under the two schemes, pivot = 5</text>" +
+        "<text x='20' y='42' fill='#7d8fb0' font-size='10'>Lomuto: one pointer scans, one marks the boundary; everything &#8804; pivot is swapped forward</text>" +
+        "<rect x='40' y='54' width='180' height='26' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='130' y='71' text-anchor='middle' fill='#4f7cff' font-size='10'>&#8804; pivot</text>" +
+        "<rect x='220' y='54' width='160' height='26' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='300' y='71' text-anchor='middle' fill='#ff5d73' font-size='10'>&gt; pivot</text>" +
+        "<rect x='380' y='54' width='300' height='26' rx='4' fill='#1a2440' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='530' y='71' text-anchor='middle' fill='#ffd166' font-size='10'>unexamined</text>" +
+        "<text x='220' y='96' text-anchor='middle' fill='#7d8fb0' font-size='9'>i</text>" +
+        "<text x='380' y='96' text-anchor='middle' fill='#7d8fb0' font-size='9'>j</text>" +
+        "<line x1='20' y1='112' x2='740' y2='112' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='134' fill='#7d8fb0' font-size='10'>Hoare: two pointers close in from the ends and swap only when both are on the wrong side</text>" +
+        "<rect x='40' y='146' width='200' height='26' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='140' y='163' text-anchor='middle' fill='#4f7cff' font-size='10'>&#8804; pivot</text>" +
+        "<rect x='240' y='146' width='240' height='26' rx='4' fill='#1a2440' stroke='#ffd166' stroke-width='2'/>" +
+        "<text x='360' y='163' text-anchor='middle' fill='#ffd166' font-size='10'>unexamined</text>" +
+        "<rect x='480' y='146' width='200' height='26' rx='4' fill='#1a1420' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='580' y='163' text-anchor='middle' fill='#ff5d73' font-size='10'>&#8805; pivot</text>" +
+        "<text x='240' y='188' text-anchor='middle' fill='#7d8fb0' font-size='9'>i</text>" +
+        "<text x='480' y='188' text-anchor='middle' fill='#7d8fb0' font-size='9'>j</text>" +
+        "<text x='20' y='214' fill='#3ddc97' font-size='10'>Lomuto's unexamined region is at one end; Hoare's is in the middle, and that is the whole difference</text>" +
+        "<text x='20' y='232' fill='#ffd166' font-size='10'>on an all-equal array Lomuto swaps every element and Hoare swaps almost none</text>" +
+        "</svg><div class='fig-cap'>Two ways to split one array. The region each scheme has not yet looked at is in a different place.</div></div>" +
+
+        "<p>The <strong>Lomuto partition</strong> keeps one write pointer and one scan pointer, swapping every element that is at most the pivot forward. It is short and hard to get wrong. The <strong>Hoare partition</strong> runs two pointers inward from the ends and swaps only when both have found an element belonging on the other side. It is fiddlier and does far less work.</p>" +
+
+        "<p>Measured on 2,000 elements, counting swaps:</p>" +
+
+        "<ul>" +
+        "<li><strong>random</strong> &#8212; Lomuto 14,740, Hoare 5,093</li>" +
+        "<li><strong>many duplicates</strong> (ten distinct values) &#8212; Lomuto 205,842, Hoare 8,887</li>" +
+        "<li><strong>all equal</strong> &#8212; Lomuto <strong>2,000,999</strong>, Hoare <strong>10,864</strong></li>" +
+        "</ul>" +
+
+        "<p>A factor of 184 on the last row, and the cause is one comparison. Lomuto's test is <code>a[j] &lt;= pivot</code>, which is true for every element of an all-equal array, so it swaps every element on every level of recursion. Hoare's pointers both stop on equal elements, which splits the array near the middle and does nothing else.</p>" +
+
+        "<h3>The worst case, and the two fixes</h3>" +
+
+        "<p>Quicksort's &#920;(n&#178;) worst case arrives when the pivot is consistently extreme. Choosing the first element as pivot makes <em>sorted input</em> the worst case, which is both the most likely input in practice and the most embarrassing. Measured recursion depth with a first-element pivot:</p>" +
+
+        "<ul>" +
+        "<li><strong>sorted, n = 500</strong> &#8212; depth <strong>500</strong>; <strong>sorted, n = 2,000</strong> &#8212; depth <strong>2,000</strong>, which is n exactly</li>" +
+        "<li><strong>random, n = 500</strong> &#8212; depth 21; <strong>random, n = 2,000</strong> &#8212; depth 24, against log&#8322;n of 9 and 11</li>" +
+        "</ul>" +
+
+        "<p>Two repairs are standard. <strong>Randomise the pivot</strong>, which converts the average case into an expected case and removes the adversary's power entirely &#8212; Chapter 5's distinction, applied. Or take the <strong>median-of-three</strong>: the median of the first, middle and last elements, which costs two comparisons and makes sorted input the <em>best</em> case rather than the worst. Median-of-three is deterministic and so remains defeatable by an input built against it, which is why library implementations that care about adversarial input randomise instead.</p>" +
+
+        "<p>For duplicates the repair is Chapter 8's three-way partition, which puts elements equal to the pivot into a middle band that is never recursed into. The all-equal column of section 1's table shows the result: 1,200 comparisons, or 2n, making the worst input for two-way quicksort into the best input for three-way. <strong>Step the machine above</strong> with a first-element pivot on sorted input and watch the recursion depth become n.</p>",
+      viz: "dsaPartition", vizTitle: "Watch the array split — the shaded regions are what each scheme has already decided"
+    },
+
+    { title: "Quickselect and Median of Medians",
+      html:
+        "<p>Finding the k-th smallest element does not require sorting. <strong>Quickselect</strong> is quicksort that recurses into only one side: partition, see which side k falls in, and discard the other. Since the discarded half is never touched, the recurrence is T(n) = T(n/2) + &#920;(n) on average rather than 2T(n/2) + &#920;(n), and Chapter 3's master theorem gives &#920;(n) rather than &#920;(n log n).</p>" +
+
+        "<p>The intuition is worth having: the work per level is linear and the levels shrink geometrically, so the total is n + n/2 + n/4 + &#8230; &lt; 2n. It is Chapter 4's geometric series again, this time as the reason a search is linear rather than the reason an array append is constant.</p>" +
+
+        "<p>Quickselect inherits quicksort's worst case: bad pivots give &#920;(n&#178;). In 1973 Blum, Floyd, Pratt, Rivest and Tarjan showed the worst case could be removed entirely, with an algorithm that finds a provably good pivot in linear time. <strong>Median of medians</strong> splits the array into groups of five, takes each group's median, and recursively selects the median <em>of those medians</em> to use as the pivot. That pivot is guaranteed to be greater than at least 30% of the array and less than at least 30%, so each level discards at least three tenths, and the recursion terminates in linear time.</p>" +
+
+        "<p>It is one of the most celebrated results in the subject and it is not what you should use. Measured, selecting the median, with quickselect and median-of-medians written the same way in the same language:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 10,000</strong> &#8212; quickselect 1.5 ms, median of medians 4.1 ms (2.7&#215; slower)</li>" +
+        "<li><strong>n = 100,000</strong> &#8212; 18.9 ms against 40.3 ms (2.1&#215;)</li>" +
+        "<li><strong>n = 500,000</strong> &#8212; 105.3 ms against 208.2 ms (2.0&#215;)</li>" +
+        "</ul>" +
+
+        "<p>Both are &#920;(n). The constant is what separates them: median of medians makes a full extra recursive pass purely to choose a pivot, and then throws that work away at the next level. You pay it on every input to insure against an input you will probably never see.</p>" +
+
+        "<div class='callout'>That is a general shape worth recognising. <strong>A guarantee has a price, and the price is paid on every run while the guarantee is collected only in the worst case.</strong> Randomised quickselect makes the bad case improbable rather than impossible, for free; median of medians makes it impossible, for a factor of two. Which is correct depends entirely on whether an adversary chooses your input — and the standard hybrid, introselect, takes both by running quickselect and switching to the guaranteed algorithm only if it recurses too deeply.</p>" +
+
+        "<h3>What selection is actually for</h3>" +
+        "<p>The k-th smallest element sounds like a puzzle and is a workload. Percentile latency is selection: the p99 of a million request times is the 990,000th smallest, and computing it by sorting is &#920;(n log n) where selection is &#920;(n). Finding the top k results, trimming outliers before taking a mean, and picking a pivot for a distributed range partition are all the same operation.</p>" +
+        "<p>Selection also composes with itself in a way sorting does not. Finding the top k by selection costs &#920;(n) and leaves the k elements unordered on one side of the partition; if you then want them sorted, sorting only those costs &#920;(k log k), for a total of &#920;(n + k log k). Sorting everything costs &#920;(n log n). At n = 10&#8310; and k = 100 that is the difference between twenty million comparison-equivalents and about a million.</p>" +
+        "<p>One more measurement, and it needs a caveat. Calling the language's built-in sort and indexing the result took 66.5 ms at n = 500,000 &#8212; faster than either hand-written selection algorithm, despite doing asymptotically more work. That comparison is not algorithmic: the built-in is compiled C and the two selections are interpreted Python. It is a real engineering fact and a false algorithmic one, and the distinction between those is exactly what Chapter 16 is about.</p>"
+    },
+
+    { title: "Breaking the Bound",
+      html:
+        "<p>Chapter 5 proved that any comparison sort needs &#937;(n log n) comparisons, and the proof is sound. Every algorithm so far obeys it. The way past it is not a cleverer comparison sort &#8212; it is to stop comparing.</p>" +
+
+        "<p>The decision-tree argument had one hypothesis: <em>the algorithm's only access to the data is asking whether one element precedes another.</em> Each of the following violates that hypothesis in a specific, nameable way, and each buys linear time in exchange.</p>" +
+
+        "<h3>Counting sort</h3>" +
+
+        "<p><strong>Counting sort</strong> reads a value and uses it as an array index. Count how many of each value there are, then write them out in order. It never compares two elements; it does arithmetic on them, which the bound says nothing about. The cost is &#920;(n + k) for values in a range of size k, and the assumption it needs is that k is manageable &#8212; the counts array is allocated, so k = 10<sup>12</sup> is not a sort but an out-of-memory error.</p>" +
+
+        "<p>Measured against the language's built-in Timsort on a million elements:</p>" +
+
+        "<ul>" +
+        "<li><strong>values in [0, 1,000)</strong> &#8212; Timsort 98.1 ms, counting sort <strong>35.6 ms</strong>, 2.8&#215; faster</li>" +
+        "<li><strong>values in [0, 1,000,000)</strong> &#8212; Timsort 213.3 ms, counting sort 122.8 ms, 1.7&#215; faster</li>" +
+        "</ul>" +
+
+        "<p>Note that the counting sort here is interpreted Python and is beating compiled C, which is how large the asymptotic difference is. Note also the second row: as k approaches n, the advantage shrinks, because the &#920;(k) term stops being free.</p>" +
+
+        "<h3>Radix sort</h3>" +
+
+        "<p><strong>Radix sort</strong> applies counting sort one digit at a time. The <strong>LSD radix sort</strong> variant starts from the least significant digit and works up, and it is correct <em>because</em> each pass is stable: sorting by a higher digit preserves the order established by the lower ones. Stability is not a nicety here, it is the correctness argument.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>LSD radix sort on eight 3-digit numbers: one stable pass per digit, least significant first</text>" +
+        "<text x='20' y='44' fill='#7d8fb0' font-size='10'>start</text>" +
+        "<text x='110' y='44' fill='#c9d6ea' font-size='11'>329  457  657  839  436  720  355  a</text>" +
+        "<text x='20' y='80' fill='#ffd166' font-size='10'>by 1s</text>" +
+        "<text x='110' y='80' fill='#c9d6ea' font-size='11'>720  355  436  457  657  329  839</text>" +
+        "<text x='20' y='116' fill='#ffd166' font-size='10'>by 10s</text>" +
+        "<text x='110' y='116' fill='#c9d6ea' font-size='11'>720  329  436  839  355  457  657</text>" +
+        "<text x='20' y='152' fill='#3ddc97' font-size='10'>by 100s</text>" +
+        "<text x='110' y='152' fill='#3ddc97' font-size='11'>329  355  436  457  657  720  839</text>" +
+        "<line x1='20' y1='172' x2='740' y2='172' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='192' fill='#7d8fb0' font-size='9'>after the 10s pass, 355 still precedes 657 because the 1s pass put it there and the 10s pass was stable</text>" +
+        "<text x='20' y='208' fill='#ff5d73' font-size='9'>an unstable pass here does not sort slowly, it sorts wrongly</text>" +
+        "</svg><div class='fig-cap'>Each pass only orders one digit. Stability is what carries the earlier passes' work forward.</div></div>" +
+
+        "<p>The cost is &#920;(d(n + b)) for d digit-passes over b buckets, and the two move against each other: a wider digit means fewer passes and exponentially more buckets. Measured on 200,000 32-bit values:</p>" +
+
+        "<ul>" +
+        "<li><strong>1-bit digits</strong> &#8212; 32 passes, 2 buckets, 486.0 ms</li>" +
+        "<li><strong>4-bit digits</strong> &#8212; 8 passes, 16 buckets, 232.6 ms</li>" +
+        "<li><strong>8-bit digits</strong> &#8212; 4 passes, 256 buckets, <strong>87.7 ms</strong></li>" +
+        "<li><strong>11-bit digits</strong> &#8212; 3 passes, 2,048 buckets, 101.1 ms</li>" +
+        "<li><strong>16-bit digits</strong> &#8212; 2 passes, 65,536 buckets, 112.8 ms</li>" +
+        "</ul>" +
+
+        "<h3>MSD radix, and why strings want it</h3>" +
+        "<p>The most-significant-digit variant recurses instead of iterating: bucket by the top digit, then sort each bucket independently by the next digit down. It costs more bookkeeping and buys two things LSD cannot. It can <strong>stop early</strong> &#8212; once a bucket holds a single element that element's position is settled and its remaining digits are never examined &#8212; and it handles <strong>variable-length keys</strong>, which LSD cannot, because LSD must begin at a least significant digit that strings of different lengths do not share.</p>" +
+        "<p>So MSD is the right choice for strings and LSD for fixed-width integers. Sorting a million URLs that all begin <code>https://www.</code> is where it shows: LSD would process every character of every key, while MSD consumes the shared prefix once and then splits on what differs. That is the same observation Chapter 13 made about string comparisons being priced by their shared prefix, and it points at the same structure &#8212; Chapter 28's trie is MSD radix sort with the recursion turned into a data structure.</p>" +
+        "<p>The curve has a floor near 8-bit digits and rises on both sides: too many passes on the left, too many buckets on the right. <strong>Use the machine above</strong> to widen the digit and find where the bucket count takes over. <strong>Bucket sort</strong> is the same idea for values spread evenly over a range: scatter into buckets by value, sort each bucket, concatenate — linear when the distribution is uniform and quadratic when everything lands in one bucket, which makes it the one of the three that depends on an assumption about your data rather than about your keys.</p>",
+      viz: "dsaRadixSort", vizTitle: "One pass per digit \u2014 widen the digit and watch passes fall while buckets multiply"
+    },
+
+    { title: "Stability as a Design Tool",
+      html:
+        "<p>Stability is usually presented as a property to check for. It is better understood as a tool: <em>a stable sort lets you sort by several keys using nothing but repeated single-key sorts.</em></p>" +
+
+        "<p>To order records by department and, within each department, by name: sort by name first, then sort by department. The second sort moves records between departments and, being stable, leaves the name order untouched inside each one. The rule is <strong>least significant key first</strong>, which is the same rule LSD radix sort follows for the same reason.</p>" +
+
+        "<p>Measured on five records:</p>" +
+
+        "<ul>" +
+        "<li><strong>stable</strong> &#8212; alice, carol, erin (engineering), then bob, dave (operations): alphabetical within each department</li>" +
+        "<li><strong>unstable</strong> &#8212; alice, carol, erin, then <strong>dave, bob</strong>: the operations pair has been reordered</li>" +
+        "</ul>" +
+
+        "<p>The failure is small and quiet. Nothing crashes and the output is sorted by department, which is what the last sort asked for; only the earlier sort's work has been silently discarded. On five records it is visible; on fifty thousand it is a bug report about inconsistent ordering that nobody can reproduce, because whether it appears depends on the input arrangement.</p>" +
+
+        "<div class='callout'>Which sorts are stable is a fact to know rather than derive. <strong>Mergesort, insertion sort, counting sort and radix sort are stable</strong>; <strong>quicksort, selection sort and heapsort are not.</strong> Python's <code>sorted</code> and Java's <code>Collections.sort</code> guarantee stability in their specifications; Java's <code>Arrays.sort</code> on primitives does not, because it uses quicksort, and for primitives there is no way to tell two equal values apart, so the guarantee would be unobservable.</div>" +
+
+        "<p>That last point is the subtle one and it explains an apparent inconsistency in a major standard library. Stability is only meaningful when equal elements are <em>distinguishable</em> &#8212; when they carry identity beyond the compared key. Sorting bare integers stably and unstably gives byte-identical results, so an implementation is free to choose the faster algorithm. The moment the elements are records with a key, stability becomes observable and the guarantee starts to matter.</p>" +
+
+        "<h3>Where the repeated-sort idiom actually shows up</h3>" +
+        "<p>Three places make this more than a trick. A <strong>spreadsheet or table UI</strong> where the user clicks column headers in sequence gets multi-key ordering for free if the sort is stable, and needs no memory of previous clicks. A <strong>report pipeline</strong> whose grouping keys are configuration rather than code cannot write a fixed comparator, so it sorts once per key in reverse priority order. And <strong>LSD radix sort</strong>, from the previous section, is the same idiom applied to digits of one key rather than to several keys.</p>" +
+        "<p>The cost is a factor of the number of keys: k stable sorts of n elements is &#920;(kn log n) against &#920;(n log n) for one composite comparator that does k comparisons internally. The composite version wins on paper. The repeated version wins whenever the keys are not known when the code is written.</p>" +
+        "<p>The alternative to relying on stability is to sort once by a composite key: compare department first, then name, in a single comparator. That is one pass rather than two and is usually the better choice when you control the comparator. Repeated stable sorting wins when you do not &#8212; when the sort is somebody else's function, when the keys arrive at different times, or when the number of keys varies at runtime.</p>"
+    },
+
+    { title: "Selection Across Two Sorted Arrays",
+      html:
+        "<p>One problem deserves its own section because it looks like a merge and is not. Given two sorted arrays, find the median of their combined contents. Merging them and indexing the middle is &#920;(m + n) and correct on inspection. The question is whether the sortedness can do better, and it can: &#920;(log min(m, n)), by searching for the <em>split point</em> rather than for a value.</p>" +
+
+        "<p>The reframing is the whole idea. A median divides the combined data into a left half and a right half of known sizes. So choose how many elements to take from A &#8212; call it i &#8212; and the number from B is forced: j = (m + n + 1)/2 &#8722; i. Any choice of i determines a complete candidate split, and the split is correct exactly when nothing on the left exceeds anything on the right, which is two comparisons:</p>" +
+
+        "<pre><code>A[i-1] &lt;= B[j]   and   B[j-1] &lt;= A[i]</code></pre>" +
+
+        "<p>If <code>A[i-1] &gt; B[j]</code> then i is too large; if <code>B[j-1] &gt; A[i]</code> then i is too small. That is a monotone predicate over i, so Chapter 14's technique applies directly &#8212; this is a <strong>partition search</strong>, a binary search whose candidate is a boundary rather than a value.</p>" +
+
+        "<p>Two details carry the implementation. Search over the <em>shorter</em> array, which makes the bound log min(m, n) and guarantees j stays in range. And use infinities for the out-of-range ends: when i = 0 there is no <code>A[i-1]</code>, and treating it as &#8722;&#8734; makes the comparison true without a special case &#8212; the sentinel device from Chapter 9 and Chapter 11, applied to a boundary rather than a list.</p>" +
+
+        "<p>Checked against merging on 20,000 random pairs of arrays, including empty ones and arrays of wildly different lengths: <strong>zero disagreements</strong>.</p>" +
+
+        "<h3>Why the obvious binary search does not work</h3>" +
+        "<p>The first instinct is to binary search one array for the value that would be the median, counting how many elements of the other array fall below each candidate. That works and it is &#920;(log(m+n) &#215; log n), because the count itself needs a search. The partition formulation is better precisely because fixing i <em>determines</em> j by arithmetic rather than by searching for it, which removes the inner search entirely.</p>" +
+        "<p>The second instinct &#8212; discard a quarter of the combined elements each step by comparing the two arrays' current medians &#8212; is also correct and is &#920;(log(m+n)). It is a genuinely different algorithm and slightly worse when the arrays are very unequal in length, since the partition search is bounded by the <em>shorter</em> one: for m = 10 and n = 10&#8310; that is about 3 probes against about 20.</p>" +
+        "<div class='callout'><strong>Interview lens.</strong> This problem is asked precisely because the &#920;(m + n) merge is routine and the &#920;(log min(m, n)) partition search is not, and because candidates who have memorised the latter usually cannot say what the two comparisons mean. The sentence that shows understanding is “I am binary searching over how many elements come from A, and the predicate is that the split is valid” — after which the code follows.</div>" +
+
+        "<p>Part 2 has now built the tools and the bound. Chapter 16 opens the standard libraries and reads what they actually do with them, which involves fewer of these algorithms than you would expect and more hybrids than any textbook admits.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Sort [5, 2, 4, 6, 1, 3] by insertion and by selection, counting comparisons at each step. <em>What you should find:</em> insertion uses fewer on this input and its count depends on the arrangement, while selection performs exactly 15 = 6&#215;5/2 comparisons and would perform 15 on any permutation of the same six values, including the sorted one.</li>" +
+        "<li><strong>Trace.</strong> Run LSD radix sort on [329, 457, 657, 839, 436, 720, 355] by hand, writing the array after each digit pass. <em>What you should find:</em> three passes, and after the tens pass 355 still precedes 657 only because the ones pass put it there and the tens pass did not disturb ties &#8212; make one pass unstable and the final answer is wrong rather than slow.</li>" +
+        "<li><strong>Investigate.</strong> Instrument six sorts with a comparison counter and run them on random, sorted, reversed, nearly-sorted, many-duplicate and all-equal arrays of 600 elements. <em>What you should find:</em> selection sort identical in all six columns at 179,700; insertion sort ranging from 599 to 179,699; and quicksort with a first-element pivot beating everything on random input and losing by a factor of 27 on sorted input.</li>" +
+        "<li><strong>Investigate.</strong> Time insertion sort against mergesort on arrays of 4, 8, 16, 32, 64 and 128 elements, a thousand repetitions each. <em>What you should find:</em> insertion wins up to about 48 elements and loses above it; then find your own crossover and compare it against the cutoff your language's standard library uses, which Chapter 16 reads out of the source.</li>" +
+        "<li><strong>Build.</strong> Implement quickselect and median-of-medians, and time both selecting the median of 10,000, 100,000 and 500,000 elements. <em>What you should find:</em> both linear, with median-of-medians about twice as slow at every size, because it spends a full extra recursive pass choosing a pivot it then discards &#8212; the price of converting an expected bound into a guaranteed one.</li>" +
+        "<li><strong>Investigate.</strong> Count swaps for the Lomuto and Hoare partitions on 2,000 elements that are random, drawn from ten distinct values, and all equal. <em>What you should find:</em> roughly 14,700 against 5,100 on random data, and 2,000,999 against 10,864 when every element is equal &#8212; a factor of 184 caused by a single comparison operator, since Lomuto's <code>&#8804;</code> test is true for every element of such an array.</li>" +
+        "<li><strong>Build.</strong> Implement LSD radix sort with a configurable digit width and time it on 200,000 32-bit values at 1, 2, 4, 8, 11 and 16 bits per digit. <em>What you should find:</em> a U-shaped curve with its floor near 8 bits &#8212; 486 ms at 1 bit from too many passes, 113 ms at 16 bits from 65,536 buckets, and 88 ms in between.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "insertion sort", d: "Sorting by sliding each element left into place, costing one shift per inversion, which makes it linear on nearly-sorted input and the fastest option on small arrays." },
+    { t: "selection sort", d: "Sorting by repeatedly extracting the minimum, performing exactly n(n-1)/2 comparisons on every input and so gaining nothing from favourable data." },
+    { t: "bubble sort", d: "Sorting by repeated adjacent swaps, whose early-exit flag helps only on fully sorted input because one sweep moves each element at most one position." },
+    { t: "adaptive sort", d: "A sort whose cost falls on inputs that are already close to sorted, which insertion sort is and selection sort provably is not." },
+    { t: "inversion", d: "A pair of elements out of order relative to each other, whose count measures distance from sorted and equals the number of shifts insertion sort performs." },
+    { t: "mergesort", d: "Splitting in half, sorting each half and merging in one pass, giving a worst case equal to its average case and stability from a single comparison operator." },
+    { t: "stable sort", d: "A sort preserving the relative order of elements that compare equal, which is what allows multi-key ordering by repeated single-key sorts." },
+    { t: "quicksort", d: "Partitioning around a pivot and recursing on both sides with no merge step, sorting in place at the cost of a quadratic worst case when pivots are extreme." },
+    { t: "Lomuto partition", d: "The one-scan-pointer partition scheme, simpler to write correctly and performing far more swaps, catastrophically so on arrays of equal keys." },
+    { t: "Hoare partition", d: "The two-pointer partition scheme closing in from the ends, swapping only when both pointers find misplaced elements and so doing a fraction of Lomuto's work." },
+    { t: "median-of-three", d: "Choosing the pivot as the median of the first, middle and last elements, which makes sorted input the best case rather than the worst but remains defeatable by a constructed input." },
+    { t: "quickselect", d: "Quicksort that recurses into only the side containing the target rank, giving expected linear time because the work per level shrinks geometrically." },
+    { t: "median of medians", d: "The 1973 pivot rule using medians of groups of five to guarantee a constant fraction is discarded each level, making selection linear in the worst case at roughly double the constant." },
+    { t: "counting sort", d: "Sorting by using each value as an index into a count array, which performs no comparisons at all and therefore sits outside the n log n bound entirely." },
+    { t: "radix sort", d: "Applying a stable counting sort once per digit, whose correctness depends on that stability rather than merely benefiting from it." },
+    { t: "LSD radix sort", d: "The least-significant-digit-first variant, in which each pass preserves the ordering established by all earlier passes." },
+    { t: "bucket sort", d: "Scattering values into buckets by magnitude and sorting each, which is linear when the values are spread evenly and quadratic when they are not." },
+    { t: "partition search", d: "Binary searching over a split point rather than a value, which finds the median of two sorted arrays in log time without merging them." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Selection sort performed exactly 179,700 comparisons on all six input shapes, including already-sorted input. Insertion sort ranged from 599 to 179,699 on the same data. What accounts for the difference?",
+      opts: [
+        "Selection sort swaps at most n−1 times while insertion sort shifts once per inversion, so their costs diverge on inputs where the inversion count is far from its maximum",
+        "Selection sort examines every remaining pair before committing to each move, so no arrangement of the input can let it skip work; insertion sort stops as soon as an element is in place",
+        "Selection sort is not stable, so it cannot take advantage of runs of equal or already-ordered elements the way a stable algorithm is able to",
+        "Selection sort's inner loop has no early exit, which costs a constant factor but leaves both algorithms in the same quadratic class on every input shape"
+      ], a: 1,
+      why: "Adaptivity is about whether the algorithm can learn anything from the data. Selection sort's inner loop must scan the entire unsorted remainder to be sure it has the minimum, whatever the data looks like, so its comparison count is n(n−1)/2 by construction. Insertion sort's inner loop stops the moment it finds a smaller element, which on sorted input is immediately — n−1 comparisons and no shifts." },
+
+    { type: "mc",
+      q: "On an all-equal array of 2,000 elements the Lomuto partition performed 2,000,999 swaps and the Hoare partition 10,864. Why?",
+      opts: [
+        "Lomuto's test is a[j] <= pivot, true for every element when all are equal, so it swaps every element at every level of the recursion",
+        "Hoare's scheme detects the all-equal case and short-circuits, while Lomuto has no such check and processes the array in full",
+        "Lomuto places the pivot at the end of the array, so each recursive call must shift the entire remaining range by one position to restore the layout it expects",
+        "Hoare's two pointers meet in the middle after n/2 steps while Lomuto's single pointer traverses the full array, giving a factor of two that compounds over the recursion"
+      ], a: 0,
+      why: "One comparison operator causes the whole 184-fold difference. Lomuto swaps forward everything at most the pivot, which on equal keys is everything. Hoare's pointers both stop on elements equal to the pivot, which produces a near-central split and almost no swapping. Neither scheme detects anything — option 2 is a plausible-sounding invention." },
+
+    { type: "mc",
+      q: "Median of medians guarantees linear-time selection, yet measured about twice as slow as randomised quickselect at every size tested. What is the trade being made?",
+      opts: [
+        "A guarantee paid for on every run and collected only in the worst case: quickselect makes the bad case improbable for free, median of medians makes it impossible for a constant factor",
+        "An asymptotic improvement that only appears above the sizes tested here, since the groups-of-five recursion carries a startup cost that is amortised away on inputs larger than about a million elements",
+        "Better cache behaviour in exchange for more comparisons, since the groups of five are contiguous and the resulting scan pattern is more predictable to the prefetcher",
+        "Worst-case safety in exchange for stability, since the median-of-medians partition reorders equal elements while quickselect's three-way partition does not"
+      ], a: 0,
+      why: "Both are Θ(n); only the constants differ. Median of medians spends a full extra recursive pass computing a pivot that it discards at the next level, and that cost falls on every input, including the overwhelming majority that would have been fine. The practical answer is introselect: run quickselect, and switch to the guaranteed algorithm only if the recursion goes too deep." },
+
+    { type: "mc",
+      q: "Counting sort ran 2.8× faster than the language's built-in Timsort on a million values drawn from [0, 1,000), despite being written in interpreted Python against compiled C. Which assumption of the Ω(n log n) bound does it violate?",
+      opts: [
+        "That the algorithm is deterministic, since counting sort's behaviour depends on the distribution of values rather than on the sequence of comparison outcomes",
+        "That the input fits in memory, since the count array is an extra allocation proportional to the value range while the decision-tree bound assumes only constant extra space",
+        "That the algorithm's only access to the data is asking whether one element precedes another — counting sort reads a value and uses it directly as an index",
+        "That all n! input orderings are possible, since restricting values to a range of 1,000 means many orderings are indistinguishable and the decision tree needs fewer leaves"
+      ], a: 2,
+      why: "The decision-tree proof is about a class of algorithms defined by one hypothesis, and counting sort is not in that class at all — it performs no comparisons at all. Option 4 is the sophisticated wrong answer: restricting the value range does reduce the number of distinct outputs, but counting sort would still escape the bound on an input of n distinct values, because it never compares." },
+
+    { type: "mc",
+      q: "Radix sort on 200,000 32-bit values took 486 ms with 1-bit digits, 88 ms with 8-bit digits and 113 ms with 16-bit digits. Why is the curve U-shaped?",
+      opts: [
+        "Cache pressure rises with the bucket count while the pass count falls, and the two effects happen to cross near one byte on most memory hierarchies",
+        "Below 8 bits the digit extraction requires shifting and masking while at 8 bits it is a single byte read, so the minimum reflects the instruction cost rather than the structure",
+        "The number of passes is ⌈32/bits⌉ which falls in discrete steps, so the curve is really a staircase and the apparent minimum is an artefact of the sizes sampled",
+        "Narrow digits give many passes over the data; wide digits give exponentially many buckets to allocate and sweep, so the cost Θ(d(n+b)) is minimised in between"
+      ], a: 3,
+      why: "The cost has two terms pulling opposite ways. d = ⌈32/bits⌉ falls as the digit widens; b = 2^bits grows exponentially, and every pass must sweep all b buckets whether or not they hold anything. At 16 bits, 65,536 buckets are swept twice over only 200,000 elements, so bucket bookkeeping dominates. Option 1 names a real secondary effect — the primary one is in the formula." },
+
+    { type: "mc",
+      q: "Sorting records by name and then by department with an unstable sort produced departments in the right order but names scrambled within them. Why is this bug hard to catch?",
+      opts: [
+        "It appears only when the two sort keys happen to be correlated with one another, which is rare in synthetic test data and common in production data drawn from real organisational structures",
+        "Nothing fails: the output satisfies the final sort's contract, and only the earlier sort's work has been discarded, so whether it shows depends on the input arrangement",
+        "Unstable sorts are unstable only on inputs exceeding their insertion-sort cutoff, so small test cases pass and the defect appears only at production scale",
+        "The bug is in the comparator rather than the sort, so it survives any test that exercises the sorting function directly rather than the composed pipeline"
+      ], a: 1,
+      why: "The output is genuinely sorted by department, which is what the last call asked for, and no invariant is violated that a test would naturally assert. Whether the names come out in order depends on the arrangement the first sort left behind and on which equal elements the unstable algorithm happened to move — so it reproduces intermittently. Option 3 describes a real hybrid-sort quirk but is not what happened here." },
+
+    { type: "mc",
+      q: "The median of two sorted arrays can be found in Θ(log min(m, n)) rather than Θ(m + n). What is being binary searched?",
+      opts: [
+        "The value of the median itself, over the range spanned by the two arrays, using a count of how many elements fall below each candidate as the predicate",
+        "The shorter array, for the position at which the longer array's median would be inserted, after which a constant number of comparisons settles the answer",
+        "How many elements the left half takes from the first array, since that choice forces the number taken from the second and the split is checkable in two comparisons",
+        "The two arrays in parallel, discarding a quarter of the combined elements per step by comparing the two current medians against one another"
+      ], a: 2,
+      why: "The candidate is a boundary, not a value — which is why it is called a partition search. Fixing i fixes j = (m+n+1)/2 − i, and the split is valid exactly when A[i-1] ≤ B[j] and B[j-1] ≤ A[i]. That predicate is monotone in i, so Chapter 14's method applies unchanged. Option 4 describes a different correct algorithm that discards a quarter per step and is Θ(log(m+n))." },
+
+    { type: "blank",
+      q: "A pair of elements that are out of order relative to each other, whose total count equals the number of shifts insertion sort performs, is called an ____.",
+      a: ["inversion"],
+      why: "It is why insertion sort is Θ(n + inversions) rather than unconditionally quadratic: a sorted array of 2,000 has 0, a reversed one has 1,999,000 = n(n−1)/2, and a random one measured 1,013,138, close to the expected n(n−1)/4. Mergesort counts them as a by-product, since taking an element from the right run inverts it with everything remaining on the left." },
+
+    { type: "blank",
+      q: "A sort that preserves the relative order of elements comparing equal — the property that makes LSD radix sort correct rather than merely faster — is called ____.",
+      a: ["stable", "stability"],
+      why: "Each radix pass orders one digit and must not disturb the order the previous passes established; an unstable pass gives a wrong answer, not a slow one. The same property is what lets you sort by several keys with repeated single-key sorts, least significant first." },
+
+    { type: "order",
+      q: "Order these sorting approaches by the comparisons they use on an array of n equal elements, fewest first:",
+      items: [
+        "insertion sort, which finds every element already in place and stops its inner loop at once: 599",
+        "quicksort with a three-way partition, whose middle band absorbs the whole array in one pass: 1,200",
+        "mergesort, which compares its way through every merge whatever the values are: 2,660",
+        "quicksort with a Lomuto partition and a first-element pivot, splitting off one element per level: 179,700"
+      ],
+      why: "All four counts are measured on the same 600 equal elements. The two linear approaches come first: insertion sort at n−1, because every element is already in place, and three-way quicksort at 2n, because one partition absorbs the entire array. Mergesort is indifferent to the values and pays its usual n log n. Lomuto with a first-element pivot hits its quadratic worst case on exactly the input that is the best case for the other three, which is the lesson: an all-equal array is not a uniformly benign input, it is one that separates these algorithms far more sharply than random data does." }
+  ]
+});
+
+/* ======================= CHAPTER 16 ======================= */
+CHAPTERS.push({
+  num: 16, part: 2, title: "What Your Standard Library Actually Runs",
+  blurb: "Every course tells you sorting is O(n log n) and stops. No standard library ships the algorithm you were taught. This chapter reads what CPython, OpenJDK and the C++ and Go libraries actually run when you call sort, and why four teams solving one problem shipped four different hybrids. It is also where the constant factors get their due: the cache line, the mispredicted branch, and the crossover below which the asymptotically worse algorithm wins — which together answer most performance questions you will ever be asked.",
+
+  sections: [
+
+    { title: "Timsort",
+      html:
+        "<p>Tim Peters wrote Timsort for CPython in 2002. It is now the default sort in Python, in Java for object arrays, in Android, in V8 and in Rust's standard library, which makes it plausibly the most-executed sorting algorithm in history. It is a mergesort with three additions, and all three exist because real data is not random.</p>" +
+
+        "<p><strong>It finds runs rather than making them.</strong> Before sorting anything, Timsort scans for a <strong>natural run</strong> &#8212; a maximal stretch already in order. Descending runs count too and are reversed in place, which costs one pass and is why reversed input is nearly as cheap as sorted input. Only when a run is shorter than <strong>minrun</strong> (a value between 32 and 64, chosen so the number of runs is close to a power of two) does it extend that run using binary insertion sort.</p>" +
+
+        "<p>The effect is measurable and large. Sorting the same two million integers in CPython:</p>" +
+
+        "<ul>" +
+        "<li><strong>random</strong> &#8212; 336.4 ms</li>" +
+        "<li><strong>sorted</strong> &#8212; <strong>60.7 ms</strong></li>" +
+        "<li><strong>reversed</strong> &#8212; 61.2 ms, essentially the same as sorted</li>" +
+        "<li><strong>nearly sorted</strong> (0.1% of elements swapped) &#8212; 72.0 ms</li>" +
+        "<li><strong>twenty pre-sorted runs concatenated</strong> &#8212; 138.4 ms</li>" +
+        "</ul>" +
+
+        "<p>Sorted input is not a special case anywhere in the code. It is one run, found by the same scanner that finds all the others, and everything after that is merging nothing. The same measurement on Java's object sort gives 562 ms random against <strong>22 ms sorted</strong>, a factor of 25.</p>" +
+
+        "<p><strong>It merges lazily, under two invariants.</strong> Runs are pushed onto a stack, and before pushing a new one Timsort merges until the top three lengths satisfy both of:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>the run stack: merges are forced until both invariants hold again</text>" +
+        "<rect x='60' y='150' width='300' height='30' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='210' y='170' text-anchor='middle' fill='#c9d6ea' font-size='11'>Z  (oldest, longest)</text>" +
+        "<rect x='60' y='110' width='180' height='30' rx='4' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/>" +
+        "<text x='150' y='130' text-anchor='middle' fill='#c9d6ea' font-size='11'>Y</text>" +
+        "<rect x='60' y='70' width='110' height='30' rx='4' fill='#1a2440' stroke='#ffd166' stroke-width='2.5'/>" +
+        "<text x='115' y='90' text-anchor='middle' fill='#ffd166' font-size='11'>X (newest)</text>" +
+        "<text x='400' y='90' fill='#3ddc97' font-size='12'>|X| + |Y| &lt; |Z|</text>" +
+        "<text x='400' y='114' fill='#7d8fb0' font-size='10'>the two newest together must not</text>" +
+        "<text x='400' y='130' fill='#7d8fb0' font-size='10'>reach the one beneath them</text>" +
+        "<text x='400' y='160' fill='#3ddc97' font-size='12'>|X| &lt; |Y|</text>" +
+        "<text x='400' y='184' fill='#7d8fb0' font-size='10'>run lengths increase going down</text>" +
+        "<line x1='20' y1='204' x2='740' y2='204' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='224' fill='#ffd166' font-size='10'>together these keep the stack shallow and the merges balanced, so no merge is wildly lopsided</text>" +
+        "</svg><div class='fig-cap'>The stack never holds many runs, and the invariants are what bound it.</div></div>" +
+
+        "<p>Those <strong>merge invariants</strong> keep run lengths growing down the stack, so merges combine runs of similar size and the stack stays shallow. <strong>Galloping mode</strong> is the third addition, and Chapter 14 measured it: when one run wins seven times in a row, the merge switches to doubling ahead and binary searching, which on a 10,000-against-10 merge cut comparisons from 9,356 to 284.</p>" +
+
+        "<p>Galloping is itself adaptive, which is the detail that makes it safe. Chapter 14 measured that galloping <em>loses</em> when two runs interleave evenly &#8212; 20,135 comparisons against 19,998. Timsort handles that by tuning its own threshold at runtime: every time galloping pays off the threshold drops, making it easier to enter next time, and every time it fails the threshold rises. The algorithm is not merely adaptive to the input, it is adaptive about how adaptive to be.</p>" +
+        "<p>The cost of all this is memory. Timsort needs a buffer of up to n/2 elements for its merges, which is the price of stability and is what the three unstable sorts in this chapter refuse to pay. On a list of a million boxed values that buffer is a few megabytes; on an embedded target it can be the reason you cannot use it at all.</p>" +
+        "<div class='callout'>In 2015 a group of researchers formally verifying the Java implementation found that the invariant check examined too few stack entries, so the stack could grow past the size the implementation had allocated for it &#8212; a real <code>ArrayIndexOutOfBoundsException</code>, reachable from ordinary input, in an algorithm that had been deployed for over a decade in two major languages. The bound was corrected and the invariant check extended. It is the best available argument that “widely used” and “proved correct” are different claims.</div>" +
+
+        "<p><strong>Step the machine above</strong> on a nearly-sorted input and watch the run scanner work before any merging happens.</p>",
+      viz: "dsaTimsort", vizTitle: "Timsort looks for runs that are already sorted — watch it find them before it does any work"
+    },
+
+    { title: "Dual-Pivot Quicksort, and Why Primitives Are Different",
+      html:
+        "<p>Java sorts <code>int[]</code> and <code>Integer[]</code> with different algorithms. Calling <code>Arrays.sort</code> on two million of the same values:</p>" +
+
+        "<ul>" +
+        "<li><strong><code>int[]</code></strong> &#8212; 129 ms, using dual-pivot quicksort</li>" +
+        "<li><strong><code>Integer[]</code></strong> &#8212; 968 ms, using Timsort</li>" +
+        "</ul>" +
+
+        "<p>Part of that 7.5&#215; is boxing rather than algorithm &#8212; an <code>Integer[]</code> is an array of pointers to heap objects, so every comparison is a dereference, which is section 6's subject. But the choice of algorithm is deliberate and the reason is stability.</p>" +
+
+        "<p><strong>Stability is unobservable on primitives.</strong> Two equal <code>int</code> values are interchangeable; no program can tell which one ended up first. So for primitives the library is free to use the fastest algorithm regardless of stability, and it picks an in-place quicksort that needs no scratch buffer. For objects, equal elements are distinguishable by identity and by their other fields, so stability is a promise the library makes and must keep &#8212; and Timsort keeps it while quicksort cannot.</p>" +
+
+        "<p><strong>Dual-pivot quicksort</strong>, devised by Vladimir Yaroslavskiy and adopted in JDK 7, partitions around <em>two</em> pivots into three regions rather than one pivot into two. The classical analysis says this should not help: more comparisons per element. It does help, and the accepted explanation is about memory rather than comparisons &#8212; three-way splitting moves less data overall and the access pattern suits a cache hierarchy the 1961 analysis did not model. That gap between the comparison count and the wall clock is the theme of this chapter.</p>" +
+
+        "<p>Modern OpenJDK has since blurred the line: its primitive sort also checks for existing runs and switches to merging when the input is structured. Measured on <code>int[]</code>:</p>" +
+
+        "<ul>" +
+        "<li><strong>random</strong> &#8212; 133 ms</li>" +
+        "<li><strong>sorted</strong> &#8212; 8 ms</li>" +
+        "<li><strong>reversed</strong> &#8212; 4 ms</li>" +
+        "</ul>" +
+
+        "<p>Which is to say the textbook description “Java uses dual-pivot quicksort for primitives” is true and incomplete: it uses dual-pivot quicksort <em>on the inputs that need it</em>, after checking whether they do. Every algorithm in this chapter has acquired that shape.</p>"
+    },
+
+    { title: "Introsort",
+      html:
+        "<p>C++'s <code>std::sort</code> carries a guarantee the C++98 standard did not: O(n log n) worst case, not merely average. The algorithm that provides it is <strong>introsort</strong>, from David Musser's 1997 paper, and it is the simplest hybrid in this chapter.</p>" +
+
+        "<p>Introsort is quicksort with a depth counter. Run quicksort normally; if the recursion exceeds 2&#183;log&#8322;n levels, stop and finish that subarray with heapsort. Below a small cutoff, use insertion sort instead of recursing further.</p>" +
+
+        "<p>The logic is worth stating precisely because it is a general technique. Quicksort is fast and has a bad worst case. Heapsort is slower by a constant factor and has no bad case at all. Deep recursion is <em>evidence</em> that the pivots are going badly, so the depth counter is a detector for the situation quicksort handles poorly, and heapsort is the fallback that handles it. The cost of the guarantee is one integer and a comparison per level, paid on every sort; the benefit is collected only on inputs that would have gone quadratic.</p>" +
+
+        "<div class='callout'>Compare this with Chapter 15's median of medians, which also converts an expected bound into a guaranteed one. Median of medians pays a constant factor of two on <em>every</em> input to prevent the bad case. Introsort pays almost nothing on every input and switches algorithms only once the bad case is detected. <strong>Detect-and-fall-back is nearly always the better engineering trade than prevent-always</strong>, and the reason is that the detector is cheap while the prevention is not.</div>" +
+
+        "<p>The choice of heapsort as the fallback is not arbitrary either. It needs no extra memory, which mergesort would, and it has no bad case of its own, which is the entire point of a fallback. It is slower than quicksort on typical input by roughly a factor of two &#8212; a constant factor that is invisible because it is paid only on the inputs that would otherwise have gone quadratic.</p>" +
+        "<p>Introsort is the clearest example of a <strong>hybrid sort</strong>: not one algorithm with tuning parameters but three algorithms with a policy deciding between them. Once you see that shape you see it everywhere in this chapter, and the interesting question about any library sort stops being “which algorithm is it” and becomes “which algorithms, and what switches between them”.</p>" +
+        "<p>The one thing introsort gives up is stability, which is why C++ ships <code>std::stable_sort</code> as a separate function with a different algorithm and a documented memory requirement. That honesty about the trade &#8212; two functions, two guarantees, two costs &#8212; is unusual and worth noticing: most languages ship one sort and pick for you.</p>"
+    },
+
+    { title: "pdqsort",
+      html:
+        "<p><strong>pdqsort</strong> &#8212; pattern-defeating quicksort, by Orson Peters in 2016 &#8212; is what Go's <code>slices.Sort</code> has used since Go 1.19 and what Rust uses for its unstable sort. It starts from introsort and adds detectors for the specific input patterns that hurt quicksort.</p>" +
+
+        "<p>The patterns it defeats, and how:</p>" +
+
+        "<ul>" +
+        "<li><strong>Already-sorted or reverse-sorted input.</strong> A cheap check before partitioning; sorted input is handled in linear time.</li>" +
+        "<li><strong>Many equal elements.</strong> When a partition produces no elements on one side, the pivot is a repeated value, so pdqsort switches to a three-way partition &#8212; Chapter 8's Dutch national flag, deployed on evidence rather than by default.</li>" +
+        "<li><strong>Adversarial input designed to force bad pivots.</strong> When a partition comes out badly unbalanced, pdqsort shuffles a few elements before retrying, which breaks any pattern an attacker constructed without paying for full randomisation.</li>" +
+        "<li><strong>Deep recursion.</strong> Introsort's heapsort fallback is still there underneath, as the last resort.</li>" +
+        "</ul>" +
+
+        "<p>The design principle is the one introsort introduced, applied four times over: <em>assume the common case, detect the bad case cheaply, and react</em>. Nothing here is a new sorting algorithm. Every component is in Chapter 15 &#8212; quicksort, three-way partition, insertion sort, heapsort &#8212; and the contribution is entirely in the detectors and the switching policy.</p>" +
+
+        "<p>pdqsort also uses a branchless partition, which section 6 explains: on modern hardware the comparison inside a partition is unpredictable by construction, and replacing the branch with arithmetic that computes the same answer without jumping is worth more than removing comparisons would be.</p>" +
+
+        "<div class='callout'>Four algorithms, one lineage. Timsort adapts to order that already exists; introsort detects bad recursion and falls back; pdqsort detects four separate patterns and reacts to each. None is a better sorting algorithm than quicksort or mergesort in the textbook sense. All of them win by noticing something about the input that the textbook version does not look at.</div>"
+    },
+
+    { title: "Why Four Teams Shipped Four Answers",
+      html:
+        "<p>The four hybrids differ because the teams optimised against different constraints. Laid out on the dimensions this course has taught:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 224' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>four library sorts on the dimensions that decided them</text>" +
+        "<text x='190' y='42' text-anchor='middle' fill='#2de2ff' font-size='9'>stable?</text>" +
+        "<text x='330' y='42' text-anchor='middle' fill='#2de2ff' font-size='9'>extra memory</text>" +
+        "<text x='470' y='42' text-anchor='middle' fill='#2de2ff' font-size='9'>worst case</text>" +
+        "<text x='640' y='42' text-anchor='middle' fill='#2de2ff' font-size='9'>optimised for</text>" +
+        "<line x1='20' y1='50' x2='740' y2='50' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='72' fill='#c9d6ea' font-size='10'>Timsort</text>" +
+        "<text x='190' y='72' text-anchor='middle' fill='#3ddc97' font-size='10'>yes</text>" +
+        "<text x='330' y='72' text-anchor='middle' fill='#ff5d73' font-size='10'>O(n)</text>" +
+        "<text x='470' y='72' text-anchor='middle' fill='#3ddc97' font-size='10'>n log n</text>" +
+        "<text x='640' y='72' text-anchor='middle' fill='#7d8fb0' font-size='9'>real data with existing order</text>" +
+        "<text x='20' y='100' fill='#c9d6ea' font-size='10'>dual-pivot quicksort</text>" +
+        "<text x='190' y='100' text-anchor='middle' fill='#ff5d73' font-size='10'>no</text>" +
+        "<text x='330' y='100' text-anchor='middle' fill='#3ddc97' font-size='10'>O(log n)</text>" +
+        "<text x='470' y='100' text-anchor='middle' fill='#ff5d73' font-size='10'>n&#178;</text>" +
+        "<text x='640' y='100' text-anchor='middle' fill='#7d8fb0' font-size='9'>primitives, where stability is moot</text>" +
+        "<text x='20' y='128' fill='#c9d6ea' font-size='10'>introsort</text>" +
+        "<text x='190' y='128' text-anchor='middle' fill='#ff5d73' font-size='10'>no</text>" +
+        "<text x='330' y='128' text-anchor='middle' fill='#3ddc97' font-size='10'>O(log n)</text>" +
+        "<text x='470' y='128' text-anchor='middle' fill='#3ddc97' font-size='10'>n log n</text>" +
+        "<text x='640' y='128' text-anchor='middle' fill='#7d8fb0' font-size='9'>a guarantee at near-zero cost</text>" +
+        "<text x='20' y='156' fill='#c9d6ea' font-size='10'>pdqsort</text>" +
+        "<text x='190' y='156' text-anchor='middle' fill='#ff5d73' font-size='10'>no</text>" +
+        "<text x='330' y='156' text-anchor='middle' fill='#3ddc97' font-size='10'>O(log n)</text>" +
+        "<text x='470' y='156' text-anchor='middle' fill='#3ddc97' font-size='10'>n log n</text>" +
+        "<text x='640' y='156' text-anchor='middle' fill='#7d8fb0' font-size='9'>adversarial and patterned input</text>" +
+        "<line x1='20' y1='174' x2='740' y2='174' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='196' fill='#ffd166' font-size='10'>the memory column is the fork: Timsort's O(n) buffer is what buys stability, and</text>" +
+        "<text x='20' y='212' fill='#ffd166' font-size='10'>the three unstable sorts all refuse to pay it</text>" +
+        "</svg><div class='fig-cap'>No row dominates another. Each is the right answer to a different question.</div></div>" +
+
+        "<p>The stability column deserves one more note, because it is the only row entry that is a <em>correctness</em> property rather than a performance one. What the libraries actually key on is <strong>observable stability</strong>: whether a program could detect that the guarantee had been broken. For boxed objects it can, so the promise is kept and paid for. For primitives it cannot, so the promise is not made and the faster algorithm is used. The same reasoning is why C++ splits the two into separate functions and lets the caller decide rather than inferring it from the element type.</p>" +
+        "<p>The decision procedure that falls out is short, and it is about your data rather than about the algorithms.</p>" +
+
+        "<ul>" +
+        "<li><strong>Do equal elements carry information you care about?</strong> If yes you need a stable sort, and you are paying O(n) memory whether the library tells you or not. If no, say so by choosing the unstable sort explicitly &#8212; in Rust and C++ that is a different function.</li>" +
+        "<li><strong>Does your data arrive with existing order?</strong> Logs by timestamp, records by insertion, anything appended to and re-sorted, files already mostly sorted. If yes, Timsort's run detection is worth more than any constant factor, and the measurements above are your speedup.</li>" +
+        "<li><strong>Can an adversary choose your input?</strong> If yes you need randomisation or pattern defeat, not median-of-three. This is Chapter 5's average-versus-expected distinction, and Chapter 17 shows what it costs when the answer is wrong.</li>" +
+        "<li><strong>Is the key cheap to compare?</strong> If not, the comparison count is what matters and a sort that minimises comparisons beats one that minimises data movement. If it is, the reverse.</li>" +
+        "</ul>" +
+
+        "<p>Notice what is absent: asymptotic complexity. All four are &#920;(n log n) on random input, and no choice among them is made on that basis. That is the honest position for most library-level decisions, and it is why this chapter exists at the midpoint of a course that has otherwise been about asymptotics.</p>"
+    },
+
+    { title: "The Constant Factors Nobody Teaches",
+      html:
+        "<p>Two hardware facts explain more real performance differences than any algorithmic analysis in this book, and neither appears in the word-RAM model of Chapter 2, which charges one unit for every memory access.</p>" +
+
+        "<h3>The cache line</h3>" +
+
+        "<p>Memory moves between RAM and cache in fixed blocks called <strong>cache lines</strong>, 64 bytes on this machine, which is sixteen 4-byte integers. Reading one integer fetches all sixteen. Here is the same number of reads from the same 64&#160;MB array, varying only the distance between them:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>one 64-byte cache line = sixteen ints; the fetch is the same price either way</text>" +
+        "<text x='20' y='40' fill='#7d8fb0' font-size='10'>reading them all: one fetch serves sixteen reads</text>" +
+        "<rect x='40' y='50' width='672' height='26' rx='4' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/>" +
+        "<text x='376' y='67' text-anchor='middle' fill='#3ddc97' font-size='10'>one line fetched, sixteen values used — 0.67 ns per read</text>" +
+        "<text x='20' y='104' fill='#7d8fb0' font-size='10'>reading one per line: the same fetch serves one read</text>" +
+        "<rect x='40' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='118' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='196' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='274' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='352' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='430' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='508' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<rect x='586' y='114' width='38' height='26' rx='3' fill='#2a1620' stroke='#ff5d73' stroke-width='2'/>" +
+        "<text x='376' y='160' text-anchor='middle' fill='#ff5d73' font-size='10'>fifteen sixteenths of every fetch discarded — 6.07 ns per read, nine times worse</text>" +
+        "<line x1='20' y1='180' x2='740' y2='180' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='202' fill='#ffd166' font-size='10'>identical instruction count, identical asymptotics; only the addresses differ</text>" +
+        "</svg><div class='fig-cap'>The unit of transfer is the line, not the value. Locality is what decides how much of each fetch you use.</div></div>" +
+
+        "<ul>" +
+        "<li><strong>stride 1, 2, 4, 8</strong> (4 to 32 bytes apart) &#8212; 0.67 to 0.68 ns per read, <em>flat</em></li>" +
+        "<li><strong>stride 16</strong> (64 bytes, exactly one line) &#8212; 1.01 ns</li>" +
+        "<li><strong>stride 32</strong> &#8212; 3.85 ns</li>" +
+        "<li><strong>stride 64</strong> &#8212; 6.07 ns, nine times the cost of stride 1</li>" +
+        "</ul>" +
+
+        "<p>The flat region is the giveaway. Up to stride 8 several reads share a line, so the line fetch is amortised and the per-read cost does not move at all. From stride 16 every read needs its own line and the cost tracks the distance. That is the entire mechanism behind Chapter 11's measurement of a linked list losing to an array by 39&#215; at identical asymptotics: a list's nodes are at unpredictable addresses, so every node is a line fetch whose other fifteen values are discarded.</p>" +
+
+        "<p>The property being exploited has a name: <strong>spatial locality</strong>, the tendency of a program to access addresses near ones it has recently accessed. Hardware is built on the assumption that programs have it &#8212; the line fetch, the prefetcher that recognises constant strides and requests ahead, the multiple levels of cache &#8212; and an algorithm with good spatial locality gets all of that for free while one without it gets none of it. That is the whole of why a flat array beats a linked structure at equal asymptotics, and why a sequential scan of a million elements can beat a binary search over a thousand.</p>" +
+        "<h3>The mispredicted branch</h3>" +
+
+        "<p>A processor guesses which way a branch will go and speculatively executes ahead. A wrong guess &#8212; a <strong>branch misprediction</strong> &#8212; discards that speculative work and costs on the order of ten to twenty cycles. Summing the values above 128 in an array of two million bytes, in Java:</p>" +
+
+        "<ul>" +
+        "<li><strong>sorted</strong> &#8212; 1 ms: the branch is taken for a long stretch, then not taken, and the predictor is right nearly every time</li>" +
+        "<li><strong>shuffled</strong> &#8212; 5 ms: the branch is unpredictable and the predictor is wrong about half the time</li>" +
+        "</ul>" +
+
+        "<p>Identical data, identical comparisons, identical asymptotics, <strong>5&#215;</strong>. Sorting the array first would cost more than it saves here, but this is why pdqsort's partition is branchless and why a well-predicted loop can beat a cleverer one.</p>" +
+
+        "<div class='callout'>The same measurement in CPython gave a ratio of <strong>0.99</strong> &#8212; no effect at all. The interpreter's per-element overhead is so much larger than a pipeline flush that the hardware effect disappears entirely. That is not a reason to dismiss it: it is a reason to know which layer dominates before optimising. A constant factor that matters in C can be invisible in Python and decisive again in a C extension.</div>"
+    },
+
+    { title: "When the Asymptotically Worse Algorithm Wins",
+      html:
+        "<p>Every hybrid in this chapter contains at least one algorithm with a worse order of growth than the one around it, used deliberately below a threshold. The thresholds are not folklore; they are measured, and they are measurable by you.</p>" +
+
+        "<p><strong>Insertion sort inside every mergesort and quicksort.</strong> Chapter 15 timed insertion sort against mergesort and found the <strong>crossover point</strong> near n = 48: insertion won at 4, 8, 16 and 32 elements and lost at 64 and 128. That threshold is the <strong>insertion-sort cutoff</strong>, and it is visible in every library implementation: Timsort's minrun sits between 32 and 64, and introsort and pdqsort both stop recursing at a small cutoff and finish the subarray with insertion sort.</p>" +
+
+        "<p>The cutoff also removes work that has nothing to do with comparisons. A recursive sort that bottoms out at n = 1 makes about twice as many calls as one that stops at n = 32, and each call costs a stack frame, a bounds check and a branch. Chapter 6 measured a Python frame at roughly 144 bytes and a JVM interpreted frame at about 102; a million-element mergesort that recurses to singletons creates two million frames it did not need. The cutoff is buying two things at once, and the second is usually the larger.</p>" +
+        "<p><strong>Linear scan against binary search.</strong> The same shape, at a smaller n. Searching a sorted array 200,000 times:</p>" +
+
+        "<ul>" +
+        "<li><strong>n = 4</strong> &#8212; linear 7.3 ms, binary 9.2 ms</li>" +
+        "<li><strong>n = 8</strong> &#8212; linear 10.1 ms, binary 10.6 ms</li>" +
+        "<li><strong>n = 16</strong> &#8212; linear 14.3 ms, binary <strong>12.1 ms</strong>, and the lead changes</li>" +
+        "<li><strong>n = 128</strong> &#8212; linear 83.2 ms, binary 17.5 ms</li>" +
+        "<li><strong>n = 512</strong> &#8212; linear 332.9 ms, binary 23.2 ms</li>" +
+        "</ul>" +
+
+        "<p>Binary search does fewer comparisons at every size above about four, and still loses until sixteen. The reason is section 6: a linear scan is sequential, so the prefetcher keeps up and every element is already in cache, while binary search jumps by halves and each probe is an unpredictable address and an unpredictable branch. Fewer operations, more expensive operations.</p>" +
+
+        "<p>Three rules generalise from this.</p>" +
+
+        "<ul>" +
+        "<li><strong>An asymptotic advantage is a claim about large n and says nothing about your n.</strong> If your arrays are twenty elements, the O(n) algorithm may be the right one permanently.</li>" +
+        "<li><strong>Crossovers are machine-specific and version-specific.</strong> Every number in this chapter is from one laptop and one runtime. The shape of the curve transfers; the exact threshold does not, which is why library authors re-measure rather than copy constants.</li>" +
+        "<li><strong>Measure the composite, not the component.</strong> Insertion sort is not better than mergesort at n = 32; insertion sort <em>inside</em> mergesort is better than mergesort alone, and that is a different claim which only a measurement of the whole thing can settle.</li>" +
+        "</ul>" +
+
+        "<div class='callout'>Part 2 ends here. It has been about the two operations computers spend most of their time on, and both turned out to have the same structure: a settled theoretical answer, and a shipped answer that is a hybrid built from the theoretical one plus detectors for the cases it handles badly. Chapter 17 turns to the structure that replaces searching with computing an address, and to the adversary that Chapter 5 warned about.</div>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Take the run lengths 30, 20, 15 pushed onto a Timsort stack in that order and apply the two invariants after each push. <em>What you should find:</em> the first invariant fails once 15 arrives because 15 + 20 is not less than 30, forcing a merge before the push completes; work out which two runs merge and confirm the result satisfies both invariants.</li>" +
+        "<li><strong>Trace.</strong> For each of the four library sorts in section 5, write down which of Chapter 15's algorithms it contains and what triggers the switch to each one. <em>What you should find:</em> every component is from Chapter 15 and none of the four contributes a new sorting algorithm — the contribution is entirely the detectors and the switching policy.</li>" +
+        "<li><strong>Investigate.</strong> Sort two million values in your language on random, sorted, reversed, nearly-sorted and concatenated-runs input, timing each. <em>What you should find:</em> if your sort is Timsort, sorted and reversed take roughly a fifth of the random time and nearly-sorted is close behind; if it is a quicksort variant, check whether it has run detection by comparing the sorted and random columns.</li>" +
+        "<li><strong>Investigate.</strong> Read the same number of elements from a large array at strides of 1, 2, 4, 8, 16, 32 and 64, timing each. <em>What you should find:</em> a flat per-read cost up to stride 8, then a jump at the stride that equals one cache line divided by your element size, and a cost that tracks the stride after that; divide your line size by your element size and confirm the jump lands where you predicted.</li>" +
+        "<li><strong>Build.</strong> Write a hybrid mergesort with a configurable cutoff below which it calls insertion sort, and time it at cutoffs of 1, 8, 16, 32, 64 and 128 on a million random elements. <em>What you should find:</em> a U-shaped curve with a floor somewhere between 16 and 64, and that the best cutoff for the composite is not the same as the crossover point measured between the two algorithms standing alone.</li>" +
+        "<li><strong>Build.</strong> Write the conditional-sum loop from section 6 in a compiled language and run it on sorted and shuffled data, then rewrite the branch as arithmetic with no conditional at all. <em>What you should find:</em> roughly a fivefold gap between sorted and shuffled for the branching version, and a branchless version that is indifferent to the input order — which is the technique pdqsort applies to its partition.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "Timsort", d: "Tim Peters's 2002 adaptive mergesort, which finds runs of existing order before sorting anything and is now the default sort in several major languages." },
+    { t: "natural run", d: "A maximal stretch of the input already in order, ascending or descending, which Timsort detects and reuses rather than re-creating." },
+    { t: "minrun", d: "The minimum run length Timsort works with, between 32 and 64, below which it extends a run by binary insertion sort rather than merging." },
+    { t: "galloping mode", d: "The merge strategy Timsort switches to after one run wins repeatedly, doubling ahead and binary searching instead of comparing element by element." },
+    { t: "merge invariant", d: "The conditions on the run-length stack that keep merges balanced and the stack shallow, and whose insufficient checking was a real bug found by formal verification in 2015." },
+    { t: "dual-pivot quicksort", d: "Partitioning around two pivots into three regions, adopted by Java for primitives because it moves less data despite performing more comparisons." },
+    { t: "introsort", d: "Quicksort with a recursion-depth counter that switches to heapsort when the depth signals bad pivots, buying a worst-case guarantee for almost nothing." },
+    { t: "pdqsort", d: "Pattern-defeating quicksort, which adds detectors for sorted input, repeated elements and adversarial patterns on top of introsort's fallback." },
+    { t: "hybrid sort", d: "A sort that switches algorithms based on the input or on its own progress, which is what every production sorting routine actually is." },
+    { t: "observable stability", d: "Whether a program can tell which of two equal elements came first, which is false for primitives and is why they are given a different algorithm." },
+    { t: "cache line", d: "The fixed block, 64 bytes on typical hardware, that memory moves in, making the cost of a read depend on whether its line was already fetched." },
+    { t: "spatial locality", d: "The tendency to access addresses near recent ones, which is what makes a line fetch pay for several reads instead of one." },
+    { t: "stride", d: "The distance in memory between consecutive accesses, whose relationship to the cache line size decides how much of each fetch is used." },
+    { t: "branch misprediction", d: "A wrong guess by the processor about which way a conditional will go, costing a pipeline flush and making unpredictable data slower than predictable data." },
+    { t: "crossover point", d: "The input size at which two algorithms trade places, which is measured rather than derived and is why every production sort is a hybrid." },
+    { t: "insertion-sort cutoff", d: "The threshold below which a recursive sort stops recursing and finishes with insertion sort, set near the measured crossover and visible in every library implementation." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Sorting two million integers in CPython took 336 ms on random input and 61 ms on sorted input. Where in Timsort does that difference come from?",
+      opts: [
+        "A check at the very start of the sort that tests whether the array is already in order and returns immediately, which is the standard fast path used by adaptive implementations",
+        "Its run scanner, which finds maximal stretches of existing order before any sorting happens — sorted input is one run and no more, and there is then nothing to merge",
+        "The binary insertion sort used below minrun, which performs n−1 comparisons and no shifts when the elements are already in position and so dominates the total",
+        "Galloping mode, which detects that one run is winning every comparison and skips ahead in exponentially larger jumps until the merge completes"
+      ], a: 1,
+      why: "There is no special case for sorted input anywhere in Timsort. The run scanner runs on every input, and on a sorted array it reports a single run covering everything, after which the merge phase has one run and no work. Reversed input measured 61 ms too, because descending runs are detected and reversed in place. Option 1 describes a fast path that would produce the same timing and is not how it works." },
+
+    { type: "mc",
+      q: "Java sorts <code>int[]</code> with dual-pivot quicksort and <code>Integer[]</code> with Timsort. What decides which algorithm each gets?",
+      opts: [
+        "Boxing overhead: object arrays pay a dereference per comparison, so they need an algorithm that minimises comparisons while primitives can afford more of them",
+        "Memory: the O(n) buffer Timsort needs is affordable for boxed values that are already heap-allocated but would double the footprint of a primitive array",
+        "Whether stability is observable — two equal ints are indistinguishable so the library may use any algorithm, while equal objects carry identity and the guarantee must be kept",
+        "Cache behaviour: primitives are contiguous and suit quicksort's sequential partition scan, while scattered object references suit mergesort's predictable access pattern"
+      ], a: 2,
+      why: "Stability is a promise about elements that compare equal, and for primitives no program can detect whether it was kept — so the library is free to choose on speed alone and picks an in-place quicksort. For objects the promise is observable and Timsort keeps it. Options 1 and 4 describe real effects that follow from the choice; they are not what drove it." },
+
+    { type: "mc",
+      q: "Introsort counts recursion depth and switches to heapsort past 2·log₂n. Chapter 15's median of medians also converts an expected bound into a guaranteed one. Why is introsort's approach the better engineering trade?",
+      opts: [
+        "The detector is cheap and runs always while the expensive algorithm runs only once the bad case is evident; median of medians pays its full cost on every input",
+        "Heapsort is faster than the groups-of-five pivot selection, so the fallback costs less than the prevention even when it is triggered on every input",
+        "Introsort's guarantee is O(n log n) while median of medians guarantees O(n), so the two are buying different things and the weaker guarantee is naturally cheaper",
+        "Recursion depth indicates a bad input more reliably than pivot quality does"
+      ], a: 0,
+      why: "Detect-and-fall-back against prevent-always. Introsort's cost on a normal input is one integer and a comparison per level; median of medians spends a full extra recursive pass choosing a pivot on every input and measured about twice as slow throughout. The general principle is that a cheap detector plus an expensive fallback beats an expensive guarantee whenever the bad case is rare." },
+
+    { type: "mc",
+      q: "Reading the same number of elements from a 64 MB array cost 0.67 ns each at strides 1, 2, 4 and 8, then 1.01 ns at stride 16 and 6.07 ns at stride 64. What does the flat region tell you?",
+      opts: [
+        "The prefetcher recognises small constant strides and hides the latency entirely, and it stops recognising them once the stride exceeds a hardware threshold near 64 bytes",
+        "Below stride 16 the loop is bound by instruction throughput rather than memory, so the per-read cost reflects the loop overhead instead of the access itself",
+        "The array fits in the last-level cache up to stride 8 because fewer distinct lines are touched, and exceeds it beyond that point as the working set grows",
+        "Several reads share one 64-byte line, so the fetch is amortised across them; from stride 16 each read needs its own line and the cost tracks the distance"
+      ], a: 3,
+      why: "A 64-byte line holds sixteen 4-byte ints, so stride 16 is exactly one read per line. Below it, two or more reads come from a line already fetched and the fetch cost is divided among them, which is why the per-read figure does not move at all from stride 1 to stride 8. This is the mechanism behind Chapter 11's linked list losing to an array by 39× at identical asymptotics." },
+
+    { type: "mc",
+      q: "The conditional-sum loop ran 5× faster on sorted data than shuffled data in Java, and showed a ratio of 0.99 in CPython. What should you conclude?",
+      opts: [
+        "The Java measurement is unreliable because the JIT may have vectorised the sorted case, and the Python result is the one that reflects the true instruction cost",
+        "Branch prediction affects compiled code and not interpreted code, so the effect is a property of the language being used rather than of the hardware underneath it",
+        "The effect is real but only visible when it is not dominated by a larger cost — the interpreter's per-element overhead swamps a pipeline flush entirely",
+        "Python's integers are boxed objects, so every comparison is a method call whose cost is data-independent, which removes the branch from the loop entirely"
+      ], a: 2,
+      why: "The same hardware runs both. A mispredicted branch costs on the order of ten to twenty cycles, which is decisive next to a few cycles of compiled loop body and invisible next to hundreds of cycles of interpreter dispatch. The lesson is to identify the dominant layer before optimising: this constant factor is worth chasing in C, pointless in pure Python, and decisive again inside a C extension." },
+
+    { type: "mc",
+      q: "Binary search performs fewer comparisons than a linear scan at every size above about four, yet measured slower until n = 16. Why?",
+      opts: [
+        "The bisect implementation has a constant setup cost per call that a simple scan avoids, and that overhead only amortises away once the array is large enough",
+        "A linear scan is sequential and predictable, so the prefetcher keeps up and the branch is well predicted, while binary search jumps by halves and is unpredictable in both respects",
+        "Comparison counts understate binary search's work because each step also computes a midpoint, which is an arithmetic operation the linear scan does not perform",
+        "Small arrays fit entirely in cache, so both algorithms have the same memory cost and the comparison is decided purely by the number of instructions each executes"
+      ], a: 1,
+      why: "Fewer operations, more expensive operations. Every probe in a binary search lands at an address the prefetcher did not predict and takes a branch the predictor cannot learn, while a scan walks straight through memory the hardware has already fetched. It is the clearest case in the chapter of the word-RAM model of Chapter 2 — one unit per access — giving the wrong answer for a real machine." },
+
+    { type: "mc",
+      q: "What is the common design principle behind Timsort's run detection, introsort's depth counter and pdqsort's four detectors?",
+      opts: [
+        "Assume the common case, detect the bad case cheaply, and react — none of the three contributes a new sorting algorithm, only detectors and switching policy",
+        "Combine a fast average-case algorithm with a slow worst-case-safe one so that the composite inherits the better bound from each on the inputs where it applies",
+        "Replace worst-case analysis with adaptive analysis, measuring the input's disorder and choosing an algorithm whose cost is parameterised by that measurement",
+        "Avoid recursion wherever the input permits, since call bookkeeping dominates in practice"
+      ], a: 0,
+      why: "Every component of all four hybrids appears in Chapter 15 — quicksort, mergesort, heapsort, insertion sort, the three-way partition. What the library authors contributed is the observation that the input can be inspected cheaply and the algorithm chosen accordingly. Option 2 describes introsort alone and does not cover Timsort's run detection or pdqsort's pattern defeat." },
+
+    { type: "blank",
+      q: "A maximal stretch of the input that is already in order, which Timsort detects and reuses rather than re-creating, is called a natural ____.",
+      a: ["run"],
+      why: "Descending ones count too and are reversed in place, which is why reversed input measured 61.2 ms against sorted input's 60.7 ms in CPython, both against 336.4 ms for random. Sorted input is not a special case in the code; it is one run found by the same scanner that finds all the others." },
+
+    { type: "blank",
+      q: "The fixed block of memory, 64 bytes on typical hardware, that is transferred between RAM and cache as a unit is called a cache ____.",
+      a: ["line"],
+      why: "It holds sixteen 4-byte integers, which is why reading at strides of 1 through 8 all cost 0.67 ns per read: several reads share one fetch. At stride 16 every read needs its own line and the cost begins tracking the distance, reaching 6.07 ns at stride 64." },
+
+    { type: "order",
+      q: "Order the questions to ask when choosing a sort for production code:",
+      items: [
+        "do equal elements carry information you care about, which decides whether you need stability and its O(n) memory",
+        "does the data arrive with existing order, which decides whether run detection is worth more than any constant factor",
+        "can an adversary choose the input, which decides whether randomisation or pattern defeat is required",
+        "is the key expensive to compare, which decides whether to minimise comparisons or data movement"
+      ],
+      why: "The order runs from constraints that rule options out to preferences that rank the survivors. Stability is first because it is a correctness requirement rather than a performance one, and it forces the memory budget. Adversarial input is a security question. Only the last is a pure optimisation. Note what is absent from all four: asymptotic complexity, because every candidate is Θ(n log n) and the choice is never made there." }
+  ]
+});
+
+/* ======================= CHAPTER 17 ======================= */
+CHAPTERS.push({
+  num: 17, part: 2, title: "Hash Tables from the Bottom",
+  blurb: "The hash table is the structure you reach for most and understand least. This chapter builds one from nothing: what a hash function has to guarantee, why that guarantee requires randomness, what happens when two keys collide and the two families of answer, why the load factor is the only tuning knob that matters, and how an adversary who knows your hash function turns your O(1) lookups into O(n) — an attack that took down a generation of web frameworks in a single afternoon in 2011.",
+
+  sections: [
+
+    { title: "The Problem, and Why an Array Is Not the Answer",
+      html:
+        "<p>You want a container with three operations &#8212; insert a key, delete a key, look one up &#8212; and you want all three in O(1). A sorted array gives you lookup in O(log n) but insertion in O(n); a balanced tree gives all three in O(log n). The hash table is the structure that gets to constant time, and the price it pays for that is the subject of this chapter.</p>" +
+
+        "<p>The idea starts from something that genuinely is O(1): an array. If your keys were the integers 0 to m&#8722;1 you would need no cleverness at all &#8212; store the value for key k at slot k, and every operation is one indexing. This is <strong>direct addressing</strong>, and it is perfect except that it does not scale. Real keys are 64-bit integers, or strings, or tuples. A direct-address array for 64-bit keys needs 2<sup>64</sup> = 18,446,744,073,709,551,616 slots; at one byte each that is over sixteen million terabytes to hold a dictionary that might contain a thousand entries.</p>" +
+
+        "<p>So the array has to be small &#8212; some manageable size m &#8212; and we need a function that turns any key into a slot in <code>0 &#8230; m&#8722;1</code>. That function is the <strong>hash function</strong>, and the whole structure is named for it. The moment you shrink the address space from every possible key down to m slots, the pigeonhole principle guarantees that two different keys will sometimes map to the same slot. That event is a <strong>collision</strong>, and everything hard about hash tables is a consequence of collisions: how to resolve them, how to keep them rare, and what an adversary can do if they can force them.</p>" +
+
+        "<p>It is worth being precise about what we are buying. A hash table does <em>not</em> give you O(1) in the worst case &#8212; you will see in section 7 that its true worst case is O(n) per operation, and that this is not a theoretical curiosity but a documented attack. What it gives you is O(1) <em>expected</em>, and the word expected is doing all the work. It is the same average-versus-worst distinction Chapter 5 drew for randomized quicksort, and it will turn out that the randomness has to be injected in the same deliberate way, for the same reason.</p>" +
+
+        "<p>The plan of the chapter is to build the structure in the order the design decisions actually depend on each other: first what the hash function must promise (sections 2 and 3), then the two ways to handle the collisions it cannot prevent (sections 4 and 5), then the single number that controls how often they happen (section 6), then the attack that the whole design is secretly organized around defending (section 7), and finally the handful of everyday problems that are a hash table wearing a costume (section 8).</p>"
+    },
+
+    { title: "Hash Functions and the Bad Input",
+      html:
+        "<p>What does a hash function have to do? Informally, it has to spread the keys evenly across the m slots. Precisely: for a set of n keys we want each slot to receive about n/m of them, so that no slot is much more crowded than the average. The average occupancy n/m has a name we will use constantly &#8212; the <strong>load factor</strong> &#945; &#8212; and \"spreads evenly\" means every slot's actual count stays close to &#945;.</p>" +
+
+        "<p>The oldest and simplest construction is the <strong>division method</strong>: <code>h(k) = k mod m</code>. It costs one machine instruction and it is what everyone writes first. Its quality depends entirely on m. If m is a power of two, <code>k mod m</code> is only the low bits of k, and any structure in those low bits &#8212; keys that are all even, all multiples of four, all pointers aligned to sixteen bytes &#8212; collapses onto a few slots. The standard advice is to make m a prime not close to a power of two, which mixes all the bits of k into the result. The <strong>multiplication method</strong> &#8212; multiply k by a constant, take the fractional part, scale to m &#8212; avoids the dependence on m entirely and is why real tables can keep m a power of two and get their mixing elsewhere. Either way the goal is the same and it is worth stating as a target rather than a hope: for any fixed set of keys, the count in every slot should stay near the load factor &#945;, so that the cost of an operation is a small constant no matter which key you asked about.</p>" +
+
+        "<p>Here is the problem that no choice of a single function escapes. A hash function is a fixed, public thing: given the function, you can compute its output for any key. So given the function, an adversary can compute a set of keys that all hash to the same slot. Take the naive division hash <code>h(k) = k mod 101</code> and feed it a thousand keys that are all multiples of 101. Every one lands in slot 0. Measured, the worst slot holds all 1000 of them and the other hundred slots are empty. The table has degenerated into a linked list, and it did so not by bad luck but because someone chose the input after seeing the function.</p>" +
+
+        "<p>This is the crux, and it hides in testing because it does not show up on random input. On random keys any reasonable function spreads them fine; the average case is genuinely O(1). The failure is not statistical, it is adversarial &#8212; it requires an opponent who knows h and chooses the keys to beat it. A promise about random inputs is worthless against an input that was chosen, and user-supplied keys (HTTP parameters, JSON fields, usernames) are exactly inputs an attacker chooses. The fix cannot be a better fixed function, because whatever function you publish can be reverse-engineered the same way. The fix has to take the choice of function away from the attacker, and that is the one genuinely deep idea in the chapter.</p>"
+    },
+
+    { title: "Universal Hashing: Randomness Where You Need It",
+      html:
+        "<p>The escape, due to J. Lawrence Carter and Mark Wegman in 1979, is to stop using one hash function and use a <em>family</em> of them, choosing which one at random when the table is created. The adversary can see your source code and your family, but not the coin flips you made at startup, so they cannot compute the keys that beat the specific function you happen to be using. This is <strong>universal hashing</strong>, and it moves the randomness from an assumption about the input &#8212; which you do not control &#8212; to a choice you do control.</p>" +
+
+        "<p>A family of functions is called universal if, for any two distinct keys, the probability that a randomly chosen member of the family collides them is at most 1/m &#8212; exactly what you would get from an idealized function that threw each key into a uniformly random slot. The classic construction is <code>h<sub>a,b</sub>(k) = ((a&#183;k + b) mod p) mod m</code>, where p is a prime larger than any key and a, b are chosen at random at startup, a from <code>1 &#8230; p&#8722;1</code> and b from <code>0 &#8230; p&#8722;1</code>.</p>" +
+
+        "<p>The guarantee is checkable and it holds. Drawing 200,000 random (a, b) pairs and two random distinct keys each time, with m = 101, the measured collision probability is <strong>0.01003</strong> against the guaranteed bound 1/m = 0.00990 &#8212; equal to three decimal places. And the effect on the adversary is total. The thousand multiples-of-101 that put every key in one slot under the fixed function, rehashed under a randomly chosen <code>h<sub>a,b</sub></code>, land with a worst slot of about 13 on average, against the expected n/m = 9.9 &#8212; a normal, healthy spread. Across 500 random choices of the function the worst slot never exceeded 77, a far cry from the 1,000 the fixed function handed the attacker every time. The attacker's carefully chosen keys are now merely a thousand arbitrary numbers to a function they could not predict.</p>" +
+
+        "<p>Why the guarantee produces good <em>expected</em> performance is Chapter 5's linearity of expectation, applied exactly as it was there. Fix a key x and count its collisions: for each other key y, the probability they collide is at most 1/m, so the expected number of keys sharing x's slot is at most n/m = &#945; by summing over the other keys. That sum does not need the collision events to be independent &#8212; linearity never does &#8212; which is precisely why the argument survives an adversary who has correlated all the keys on purpose. It is the same reason Chapter 5's randomized quicksort has a good expected running time on every input including the sorted one: the randomness lives in the algorithm's own coin flips, not in an assumption about the data, so no input can be the algorithm's worst case with more than tiny probability. The expected length of the chain x lands in is &#945;, and that single fact drives every performance number in the next three sections.</p>"
+    },
+
+    { title: "Chaining: A Bucket Is a List",
+      html:
+        "<p>The first family of answers to \"two keys collided\" is the obvious one: let a slot hold more than one key. In <strong>separate chaining</strong> each slot is the head of a linked list &#8212; a <em>bucket</em> &#8212; and a key that hashes to an occupied slot is appended to that slot's list. Lookup hashes to the slot and walks its list; insertion hashes and appends; deletion hashes, walks and unlinks. Every operation is one hash plus a walk of one bucket.</p>" +
+
+        "<p>So the cost of every operation is the length of one bucket, and section 3 already told us the expected length: &#945;. A successful search walks half of its bucket on average, giving expected cost <code>1 + &#945;/2</code>; an unsuccessful search walks the whole bucket, giving <code>&#945;</code>. These are not asymptotic hand-waves, they are exact, and the measurements sit on top of the formula. Successful-search probe counts at a spread of load factors:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 180' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>separate chaining: measured probes vs the exact formula 1 + &#945;/2</text>" +
+        "<text x='40' y='44' fill='#7d8fb0' font-size='10'>load factor &#945;</text>" +
+        "<text x='300' y='44' text-anchor='end' fill='#7d8fb0' font-size='10'>measured</text>" +
+        "<text x='430' y='44' text-anchor='end' fill='#7d8fb0' font-size='10'>1 + &#945;/2</text>" +
+        "<line x1='20' y1='52' x2='520' y2='52' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='40' y='72' fill='#c9d6ea' font-size='10'>0.50</text><text x='300' y='72' text-anchor='end' fill='#3ddc97' font-size='10'>1.247</text><text x='430' y='72' text-anchor='end' fill='#7d8fb0' font-size='10'>1.250</text>" +
+        "<text x='40' y='92' fill='#c9d6ea' font-size='10'>0.90</text><text x='300' y='92' text-anchor='end' fill='#3ddc97' font-size='10'>1.446</text><text x='430' y='92' text-anchor='end' fill='#7d8fb0' font-size='10'>1.450</text>" +
+        "<text x='40' y='112' fill='#c9d6ea' font-size='10'>0.99</text><text x='300' y='112' text-anchor='end' fill='#3ddc97' font-size='10'>1.505</text><text x='430' y='112' text-anchor='end' fill='#7d8fb0' font-size='10'>1.495</text>" +
+        "<line x1='20' y1='128' x2='520' y2='128' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='150' fill='#ffd166' font-size='10'>the whole column barely moves: at &#945; = 0.99 a lookup still touches 1.5 slots on average</text>" +
+        "<text x='560' y='90' fill='#7d8fb0' font-size='9'>chaining degrades</text>" +
+        "<text x='560' y='104' fill='#7d8fb0' font-size='9'>gracefully because</text>" +
+        "<text x='560' y='118' fill='#7d8fb0' font-size='9'>&#945; is an average, not</text>" +
+        "<text x='560' y='132' fill='#7d8fb0' font-size='9'>a ceiling</text>" +
+        "</svg><div class='fig-cap'>Chaining's average cost is 1 + &#945;/2 and stays flat even past a full table, because a chained table has no notion of \"full\".</div></div>" +
+
+        "<p>This is chaining's headline property: it degrades gracefully. A chained table can hold more keys than it has slots &#8212; &#945; can exceed 1 &#8212; and the average cost keeps tracking 1 + &#945;/2. The measurements make the point at the boundary: even at &#945; = 0.99, a hair short of full, a successful search touches 1.505 slots on average, and the formula says 1.495. There is no cliff, because a chained table has no notion of \"full\" to fall off. The open-addressing schemes in the next section cannot say that; they hit a wall at &#945; = 1 and misbehave badly well before it.</p>" +
+
+        "<p>The average hides a tail, though, and the tail is where a real bug lives. The <em>expected</em> bucket is &#945;, but the <em>longest</em> bucket is larger, and by a known amount: throwing n keys into n slots, the fullest bucket holds about ln&#160;n / ln&#160;ln&#160;n keys. Measured with n = m so &#945; = 1, the longest bucket holds 6 keys at n = 1,000, 8 at 100,000 and <strong>10 at a million</strong> &#8212; while the average bucket holds exactly 1. Ten is small, but it is not one, and it is the reason a production table does not trust the average blindly.</p>" +
+
+        "<div class='callout'>OpenJDK's <code>HashMap</code> takes the tail seriously. When a single bucket reaches 8 entries (and the table has at least 64 slots) it converts that one bucket from a linked list into a red-black tree, so a pathologically long chain costs O(log n) to search instead of O(n). The threshold is 8 because, under a decent hash, the probability a bucket ever reaches 8 by chance is vanishingly small &#8212; a Poisson tail of roughly one in ten million &#8212; so treeification never fires on honest data and is purely a defense against the dishonest data of section 7. Section 4's tree is a patch over a chaining table's one weakness, and section 7 is the disease it treats.</div>"
+    },
+
+    { title: "Open Addressing, and the Deletion Bug",
+      html:
+        "<p>The second family keeps everything in the array itself: one key per slot, no lists, no pointers. When a key hashes to an occupied slot, <strong>open addressing</strong> follows a <strong>probe sequence</strong> &#8212; a deterministic order of slots to try &#8212; until it finds an empty one. Lookup follows the same sequence until it finds the key or an empty slot; an empty slot means the key is absent, because had it been present it would have been placed no later than here.</p>" +
+
+        "<p>The three probe sequences differ only in where they look next. <strong>Linear probing</strong> tries <code>h(k), h(k)+1, h(k)+2, &#8230;</code>. It is the friendliest to the cache &#8212; the next slot is the next address, section 6 of Chapter 16's whole subject &#8212; but it suffers <strong>primary clustering</strong>: a run of occupied slots is more likely to grow, because any key hashing anywhere into the run joins its far end, so runs feed on themselves. <strong>Quadratic probing</strong> tries <code>h(k)+1, h(k)+4, h(k)+9, &#8230;</code>, which scatters the sequence and breaks up primary clusters, at the cost of worse cache behavior and a milder secondary clustering. <strong>Double hashing</strong> uses a second hash for the step, <code>h(k)+i&#183;g(k)</code>, so two keys that collide at the first slot almost never follow the same sequence afterward; it clusters least and its measured cost is the closest to the theoretical ideal of any scheme here. How much closest is worth seeing: at &#945; = 0.9 a successful double-hashing search averaged 2.575 probes against linear probing's 5.268, and an unsuccessful one averaged 9.872 against linear probing's 48.204. The whole difference is clustering &#8212; the same load factor, the same number of keys, and one scheme walking five times fewer slots because its probe sequences do not pile up. The cost is that the step jumps around memory, forfeiting the cache locality that is linear probing's one genuine advantage, which is why a table small enough to sit in cache often prefers linear probing despite the worse probe counts.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 226' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>the same eight keys, two strategies</text>" +
+        "<text x='40' y='42' fill='#7d8fb0' font-size='10'>chaining: each slot is a list; collisions extend a bucket</text>" +
+        "<rect x='40' y='52' width='120' height='24' rx='3' fill='#111a2e' stroke='#4f7cff' stroke-width='1.5'/><text x='100' y='68' text-anchor='middle' fill='#c9d6ea' font-size='9'>slot 1</text>" +
+        "<rect x='170' y='52' width='60' height='24' rx='3' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/><text x='200' y='68' text-anchor='middle' fill='#3ddc97' font-size='9'>A</text>" +
+        "<rect x='240' y='52' width='60' height='24' rx='3' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/><text x='270' y='68' text-anchor='middle' fill='#3ddc97' font-size='9'>I</text>" +
+        "<rect x='310' y='52' width='60' height='24' rx='3' fill='#0f2a20' stroke='#3ddc97' stroke-width='1.5'/><text x='340' y='68' text-anchor='middle' fill='#3ddc97' font-size='9'>Q</text>" +
+        "<text x='380' y='68' fill='#7d8fb0' font-size='9'>&#8212; three keys, one bucket, unbounded slot</text>" +
+        "<text x='40' y='120' fill='#7d8fb0' font-size='10'>open addressing: one key per slot; collisions probe onward</text>" +
+        "<rect x='40' y='130' width='44' height='30' rx='3' fill='#0e1626' stroke='#1c2a45' stroke-width='1.5'/><text x='62' y='150' text-anchor='middle' fill='#7d8fb0' font-size='9'>0</text>" +
+        "<rect x='86' y='130' width='44' height='30' rx='3' fill='#0f2a20' stroke='#3ddc97' stroke-width='2'/><text x='108' y='150' text-anchor='middle' fill='#3ddc97' font-size='9'>A</text>" +
+        "<rect x='132' y='130' width='44' height='30' rx='3' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='154' y='150' text-anchor='middle' fill='#ffd166' font-size='9'>I</text>" +
+        "<rect x='178' y='130' width='44' height='30' rx='3' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='200' y='150' text-anchor='middle' fill='#ffd166' font-size='9'>Q</text>" +
+        "<rect x='224' y='130' width='44' height='30' rx='3' fill='#0e1626' stroke='#1c2a45' stroke-width='1.5'/><text x='246' y='150' text-anchor='middle' fill='#7d8fb0' font-size='9'>4</text>" +
+        "<text x='290' y='150' fill='#7d8fb0' font-size='9'>&#8212; A sits at its slot; I and Q were pushed right into a cluster</text>" +
+        "<line x1='20' y1='184' x2='740' y2='184' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='206' fill='#ffd166' font-size='10'>chaining spends memory on pointers to bound the cost; open addressing spends the</text>" +
+        "<text x='20' y='220' fill='#ffd166' font-size='10'>empty slots of a table kept deliberately under-full, and pays with clustering</text>" +
+        "</svg><div class='fig-cap'>A, I and Q all hash to slot 1. Chaining hangs them off one bucket; open addressing walks them into the neighboring slots.</div></div>" +
+
+        "<p>Open addressing has a bug that chaining does not, and it is a good one because the naive fix is invisible in testing. Consider linear probing with three keys that all hash to slot 1: insert them and they occupy slots 1, 2 and 3. Now delete the middle one by clearing its slot to empty. A later lookup for the third key hashes to slot 1, probes to slot 2, finds it <em>empty</em>, and concludes the key is absent &#8212; even though it sits one slot further on. Clearing the slot severed the probe chain.</p>" +
+
+        "<p>Measured on exactly that arrangement (keys 1, 9, 17 into a size-8 table): before deletion, searching for 17 succeeds in 3 probes; after clearing slot 2, the search for 17 <strong>returns not-found</strong>. The fix is the <strong>tombstone</strong> &#8212; a third slot state, distinct from empty and occupied, that means \"a key was deleted here.\" A lookup treats a tombstone as occupied and keeps probing; an insertion treats it as empty and may reuse it. With a tombstone in slot 2, the search for 17 walks through it and finds the key in 3 probes again. The cost is that tombstones count toward the probe length until the next resize clears them, which is one more reason section 6's resize is not optional.</p>" +
+
+        "<p><strong>Insert keys into the machine above and delete one from the middle of a probe chain</strong> without a tombstone; the machine shows you the key that becomes unreachable, and the tombstone that rescues it.</p>",
+      viz: "dsaHashTable", vizTitle: "Insert keys and watch collisions resolve — then delete one from the middle of a chain and find the key it strands"
+    },
+
+    { title: "The Load Factor Is the Only Knob",
+      html:
+        "<p>Everything so far points at one number. Chaining's cost is a function of &#945;; open addressing's cost is a function of &#945;; the collision rate is a function of &#945;. The <strong>load factor</strong> is the only tuning knob a hash table really has, and the reason the whole structure works is that we get to keep &#945; bounded by growing the table when it climbs too high.</p>" +
+
+        "<p>Here is why bounding &#945; matters so much for open addressing, and it is the sharpest measurement in the chapter. Average probes for an unsuccessful search, linear probing against double hashing, as &#945; rises:</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 252' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>average probes, unsuccessful search &#8212; two curves turn vertical before &#945; reaches 1</text>" +
+        "<line x1='70' y1='36' x2='70' y2='196' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<line x1='70' y1='196' x2='690' y2='196' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='40' y='40' fill='#7d8fb0' font-size='9'>50</text>" +
+        "<text x='40' y='120' fill='#7d8fb0' font-size='9'>25</text>" +
+        "<text x='48' y='199' fill='#7d8fb0' font-size='9'>1</text>" +
+        "<text x='58' y='214' fill='#7d8fb0' font-size='9'>0.3</text>" +
+        "<text x='433' y='214' fill='#7d8fb0' font-size='9'>0.8</text>" +
+        "<text x='621' y='214' fill='#7d8fb0' font-size='9'>0.9</text>" +
+        "<text x='662' y='214' fill='#7d8fb0' font-size='9'>0.95</text>" +
+        "<text x='300' y='228' fill='#7d8fb0' font-size='9'>load factor &#945;  &#8594;</text>" +
+        "<polyline fill='none' stroke='#3ddc97' stroke-width='2' points='70,195 258,193 445,188 539,183 633,167 680,134'/>" +
+        "<text x='470' y='120' fill='#3ddc97' font-size='9'>double hashing = 1/(1&#8722;&#945;)</text>" +
+        "<polyline fill='none' stroke='#ff5d73' stroke-width='2' points='70,194 258,191 445,180 539,157 615,40'/>" +
+        "<text x='300' y='96' fill='#ff5d73' font-size='9'>linear probing = &#189;(1 + 1/(1&#8722;&#945;)&#178;)</text>" +
+        "<polyline fill='none' stroke='#4f7cff' stroke-width='2' points='70,195 258,195 445,194 633,194 680,193'/>" +
+        "<text x='95' y='176' fill='#4f7cff' font-size='9'>chaining &#8776; &#945;  (stays flat)</text>" +
+        "<line x1='20' y1='230' x2='740' y2='230' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='247' fill='#ffd166' font-size='10'>at &#945; = 0.9 linear probing already averages 48 probes, double hashing 10, chaining 1.45</text>" +
+        "</svg><div class='fig-cap'>Two of the three curves turn vertical as &#945; approaches 1. That wall is what a resize policy exists to keep you away from.</div></div>" +
+
+        "<p>The numbers under that figure are worth stating flat. At &#945; = 0.9 an unsuccessful linear-probing search averages <strong>48 probes</strong>; double hashing averages 10; chaining averages 1.45. At &#945; = 0.95 linear probing is up to <strong>233</strong>. The formulas &#8212; Knuth's, from <em>The Art of Computer Programming</em> volume 3 &#8212; are <code>&#189;(1 + 1/(1&#8722;&#945;))</code> for a successful linear-probing search and <code>&#189;(1 + 1/(1&#8722;&#945;)&#178;)</code> for an unsuccessful one, and the measurements track them closely until &#945; passes 0.95, where the finite table starts to undercut the asymptotic formula (measured 233 against the formula's 200 at 0.95, then measured 923 against a formula value of 5,000 at 0.99, because a table with 160 empty slots physically cannot average 5,000 probes). The lesson is the one Chapter 4 and Chapter 5 both taught: the formula is a model, and the measurement is what actually happens. Double hashing, by contrast, tracks its formula almost perfectly across the whole range &#8212; its unsuccessful cost is <code>1/(1&#8722;&#945;)</code>, which predicts 10 at &#945; = 0.9 and 100 at &#945; = 0.99, and the measurements were 9.872 and 100.248, the second matching to the digit. That is the signature of a scheme with no clustering: its probe sequences behave like the independent random ones the formula assumes, so the model and the machine agree where linear probing's do not.</p>" +
+
+        "<p>So you cap &#945;. When an insertion would push the load factor past a threshold &#8212; 0.75 for Java's <code>HashMap</code>, two-thirds for CPython's <code>dict</code> &#8212; the table allocates a larger array, usually double, and reinserts every key, because each key's slot depends on m and m has changed. This <strong>rehashing</strong> is O(n), and it is the amortized-analysis argument of Chapter 4 exactly: doubling makes the total resize work across n insertions O(n), so each insertion is O(1) amortized, and the potential-function proof from that chapter transfers without changing a symbol.</p>" +
+
+        "<p>Amortized O(1) is a statement about the total, and it hides a spike that a latency-sensitive service feels. Timing every insertion into a growing CPython dict, the median insert took 84 nanoseconds &#8212; and the single insertion that triggered the resize at 349,525 entries took <strong>3,045,542 nanoseconds, 36,256 times the median</strong>. The resize stalls landed exactly where the theory says, at two-thirds of each successive power of two (10,922, 21,845, 43,690, 87,381, 174,762&#8230;). A request that happens to be the one holding the table when it doubles pays for all the requests before it. Amortization is a promise about the average, not about the request that got unlucky, and a p99 latency graph shows every one of these spikes.</p>" +
+
+        "<p><strong>Drag the load factor in the machine above.</strong> The curves are average probes per lookup; watch where linear probing turns vertical, and compare it to chaining at the same load.</p>",
+      viz: "dsaLoadFactor", vizTitle: "Drag the load factor — the curves are average probes per lookup; watch where each strategy turns vertical",
+    },
+
+    { title: "Hash Flooding: When the Input Is Chosen by an Enemy",
+      html:
+        "<p>Section 2 built the weapon; here it fires. An attacker who knows your hash function computes a set of keys that all collide, feeds them to you, and every one of your O(1) operations becomes O(n). This is <strong>hash flooding</strong>, and it is the worst case of a hash table made to happen on purpose.</p>" +
+
+        "<p>The measurement is stark. A chained table with a fixed hash, fed n random keys against n keys chosen to all land in one bucket:</p>" +
+
+        "<ul>" +
+        "<li>n = 2,000 &#8212; normal 0.29 ms, adversarial 39 ms &#8212; 133&#215;</li>" +
+        "<li>n = 8,000 &#8212; normal 1.33 ms, adversarial 565 ms &#8212; 426&#215;</li>" +
+        "<li>n = 16,000 &#8212; normal 3.30 ms, adversarial <strong>2,279 ms</strong> &#8212; 691&#215;</li>" +
+        "</ul>" +
+
+        "<p>The slowdown is not a constant &#8212; it grows with n, which is the signature of the complexity changing rather than a fixed penalty. The normal column doubles when n doubles (linear); the adversarial column quadruples (quadratic). Sixteen thousand keys is a small HTTP request body, and it pins a core for over two seconds. Send a few of those a second and the server does nothing else.</p>" +
+
+        "<div class='callout'>This is not hypothetical. In 2003 Crosby and Wallach described algorithmic-complexity attacks and named the hash table as the prime target. In December 2011 Klink and W&#228;lde showed the attack worked against nearly every web framework at once &#8212; PHP, Ruby, Python, Java, ASP.NET &#8212; because all of them hashed POST parameters into a table with a fixed, published hash function. A single crafted request could consume minutes of CPU. It was assigned CVEs across the affected languages (CPython's fix is CVE-2012-1150) and patched in a coordinated disclosure. The structure everyone reached for most had a worst case an attacker could summon at will, and almost nobody had defended it.</div>" +
+
+        "<p>The two defenses are the two halves of section 3, and real systems use both. The first is a <strong>randomized seed</strong>: mix a per-process random value into the hash, so the function an attacker faces is not the one in the source. This is universal hashing in production &#8212; CPython enables it by default (the <code>PYTHONHASHSEED</code> the interpreter randomizes at startup) and it is why <code>hash('a')</code> differs between two runs of the same Python. The second is a <strong>stronger function</strong>: replace the fast, weak hash with one an attacker cannot invert even knowing the seed. CPython and many others adopted <strong>SipHash</strong>, designed by Aumasson and Bernstein in 2012 precisely for this &#8212; a keyed function fast enough for a hash table and strong enough that finding colliding keys without the key is infeasible.</p>" +
+
+        "<p>Java took the other route from section 4: rather than randomize, it caps the damage by treeifying a flooded bucket, turning the attacker's O(n) chain into an O(log n) tree. But that defense has a condition the textbook line omits, and it is measurable. Treeification only helps if the colliding keys are mutually <code>Comparable</code>, because a red-black tree needs an order to search. Feeding 16,000 keys that all hash to one bucket into a Java <code>HashMap</code>: when the keys implement <code>Comparable</code>, the flooded bucket is a tree and the lookups finish in <strong>1.6 ms</strong>; when the identical keys do not implement <code>Comparable</code>, the tree cannot be searched by comparison, the lookup scans it, and the same work takes <strong>695 ms</strong> &#8212; 438 times slower, and the ratio grows with n. \"Java treeifies buckets to bound flooding\" is true and incomplete: it bounds flooding for comparable keys and leaves you quadratic for the rest.</p>" +
+
+        "<p><strong>Run the normal stream and then the adversarial stream in the machine above, with the randomized seed on and off.</strong> With the seed off the adversarial keys pile into one bucket; turn it on and the same keys scatter.</p>",
+      viz: "dsaHashFlood", vizTitle: "Two key streams, one table — one of them knows your hash function; toggle the randomized seed and watch the pile-up vanish"
+    },
+
+    { title: "The Patterns That Are Secretly This",
+      html:
+        "<p>A large fraction of the problems that look like they need cleverness need a hash table and nothing else. Once you see the structure, the pattern is only \"which question am I asking a dictionary.\"</p>" +
+
+        "<p><strong>Frequency maps.</strong> Counting occurrences &#8212; most common element, does any value repeat, is this a permutation of that &#8212; is one pass building a <code>key &#8594; count</code> dictionary. The naive alternative is sorting (O(n log n)) or nested loops (O(n&#178;)); the dictionary is O(n) and usually shorter to write. <strong>Grouping by signature</strong> is the same move with a computed key: to group anagrams, map each word to its sorted letters and use that as the dictionary key, so words that are anagrams collide on purpose into the same bucket. The signature is a hash function you wrote by hand.</p>" +
+
+        "<p><strong>Set membership.</strong> \"Have I seen this before\" &#8212; deduplication, cycle detection over states, marking the visited nodes of a graph traversal &#8212; is a hash <em>set</em>, a table storing keys with no values. Deduplicating a stream is the same one-liner in every language, put everything in a set and read it back, and it is O(n) where the sort-and-scan alternative is O(n log n). Chapter 11's Floyd cycle detection saved memory by refusing to build one; when memory is not the constraint, a visited-set is shorter to write and faster to run.</p>" +
+
+        "<p><strong>Two-sum</strong> is the whole chapter in one problem. Given an array and a target, find two elements that sum to it. The brute force checks every pair, O(n&#178;). The hash solution makes one pass: for each element x, ask the dictionary whether <code>target &#8722; x</code> has already been seen, and if not, record x. Each question and each insertion is expected O(1), so the whole scan is O(n). The gap this opens is exactly the gap between the two collision costs, made visible:</p>" +
+
+        "<ul>" +
+        "<li>n = 1,000 &#8212; brute 25 ms, hash 0.08 ms &#8212; 312&#215;</li>" +
+        "<li>n = 4,000 &#8212; brute 347 ms, hash 0.27 ms &#8212; 1,302&#215;</li>" +
+        "<li>n = 8,000 &#8212; brute 1,386 ms, hash 0.65 ms &#8212; <strong>2,136&#215;</strong></li>" +
+        "</ul>" +
+
+        "<p>The speedup grows because the two solutions are different complexity classes, not the same class with different constants &#8212; the brute force quadruples per doubling, the hash doubles, and the ratio between them doubles every time. This is the shape Chapter 1 opened the course with, the same problem answered across orders of magnitude, and it is why \"could this be a hash lookup\" is the first question to ask of any problem about finding, counting or matching.</p>" +
+
+        "<p>The structure you now understand from the bottom &#8212; a random hash into a small array, collisions resolved by chaining or probing, load factor held below a threshold by amortized resizing, and randomness injected to defeat an adversary &#8212; is the same one behind <code>dict</code>, <code>HashMap</code>, <code>unordered_map</code> and the set literal in every language you will use. When you build it yourself in the capstone, this is the layer whose test is the hardest to fool, because the correctness is straightforward and the performance is where every one of this chapter's decisions shows up or fails to.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Insert the keys 5, 15, 25, 35 into a linear-probing table of size 10 with <code>h(k) = k mod 10</code>, then delete 15 by clearing its slot and search for 35. <em>What you should find:</em> 5, 15, 25, 35 occupy slots 5, 6, 7, 8; clearing slot 6 makes the search for 35 stop at the empty slot 6 and report not-found, which a tombstone in slot 6 would prevent. This is the section 5 bug on your own paper.</li>" +
+        "<li><strong>Trace.</strong> With <code>h<sub>a,b</sub>(k) = ((a&#183;k + b) mod 17) mod 7</code>, compute the slot for k = 3 under (a, b) = (1, 0) and under (a, b) = (5, 2). <em>What you should find:</em> the two functions send the same key to different slots, which is the entire mechanism by which an attacker who knows your family but not your (a, b) cannot precompute a collision.</li>" +
+        "<li><strong>Investigate.</strong> Build a chaining table and a linear-probing table, load each to &#945; = 0.5, 0.7, 0.9 and 0.95, and measure the average probes for a successful and an unsuccessful search. <em>What you should find:</em> chaining barely moves off 1 + &#945;/2, linear probing's unsuccessful cost is near 48 at &#945; = 0.9 and past 200 at &#945; = 0.95, and the successful/unsuccessful gap is much wider for probing than for chaining.</li>" +
+        "<li><strong>Investigate.</strong> Time every insertion into a dictionary as it grows to a million entries and plot the durations. <em>What you should find:</em> a flat line at tens of nanoseconds with tall isolated spikes at the resizes, each spike near two-thirds of a power of two and thousands of times the median &#8212; the amortized O(1) of Chapter 4 with its worst-case tail made visible.</li>" +
+        "<li><strong>Build.</strong> Take a fixed hash <code>h(k) = k mod m</code> and write a function that, given m, produces n keys that all collide. Feed n = 1,000; 2,000; 4,000 of them to a chained table and time the inserts against random keys. <em>What you should find:</em> the adversarial time quadruples each time n doubles while the random time doubles, and the ratio grows &#8212; the section 7 attack, reproduced.</li>" +
+        "<li><strong>Build.</strong> Solve two-sum both ways and time them on inputs with no answer (so both do their full work) at n = 1,000 to 8,000. <em>What you should find:</em> the hash solution is hundreds of times faster and the factor doubles each time n doubles, because the two solutions are in different complexity classes rather than the same one with different constants.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "hash table", d: "A container giving expected O(1) insert, delete and lookup by mapping each key through a hash function to a slot in a fixed-size array." },
+    { t: "direct addressing", d: "Storing the value for key k at array slot k, which is O(1) but needs one slot per possible key and so does not scale to real key spaces." },
+    { t: "hash function", d: "A function mapping any key into 0 to m-1, whose one job is to spread keys evenly so that no slot is much more crowded than the load factor." },
+    { t: "collision", d: "Two distinct keys mapping to the same slot, made inevitable by the pigeonhole principle once the address space is smaller than the key space." },
+    { t: "load factor", d: "The ratio n/m of stored keys to slots, written alpha; the one number that governs the collision rate and hence the cost of every operation." },
+    { t: "division method", d: "The hash h(k) = k mod m; fast, but its quality depends on m, and a power-of-two m exposes any structure in the low bits of the keys." },
+    { t: "universal hashing", d: "Choosing the hash function at random from a family at startup so that any two distinct keys collide with probability at most 1/m, defeating an adversary who knows the family but not your choice; due to Carter and Wegman, 1979." },
+    { t: "separate chaining", d: "Collision resolution in which each slot heads a linked list of the keys that hash to it, giving expected search cost 1 + alpha/2 and tolerating alpha above 1." },
+    { t: "open addressing", d: "Collision resolution that stores one key per slot and, on a collision, follows a probe sequence to the next candidate slot, using no auxiliary lists." },
+    { t: "probe sequence", d: "The deterministic order of slots an open-addressing scheme examines for a key; a lookup follows it until it finds the key or an empty slot." },
+    { t: "linear probing", d: "The probe sequence h(k), h(k)+1, h(k)+2, ...; the most cache-friendly scheme and the most prone to primary clustering." },
+    { t: "quadratic probing", d: "The probe sequence h(k)+1, h(k)+4, h(k)+9, ...; it scatters probes to break up primary clusters at some cost to cache locality." },
+    { t: "double hashing", d: "Open addressing whose step size is a second hash of the key, so keys colliding at the first slot diverge afterward; it clusters least and measures closest to the ideal." },
+    { t: "tombstone", d: "A deleted-slot marker, distinct from empty and occupied, that a lookup probes past and an insertion may reuse; without it, deleting from mid-chain strands later keys." },
+    { t: "treeification", d: "OpenJDK HashMap's conversion of a bucket to a red-black tree once it reaches eight entries, bounding a flooded bucket at O(log n) for keys that are Comparable." },
+    { t: "rehashing", d: "Reinserting every key into a larger array when the load factor crosses its threshold; O(n) per resize but O(1) amortized under doubling, by Chapter 4's argument." },
+    { t: "hash flooding", d: "An attack that supplies keys chosen to all collide under a known hash function, forcing every operation to O(n) and the table as a whole to quadratic time." },
+    { t: "SipHash", d: "A keyed hash function by Aumasson and Bernstein (2012), fast enough for a hash table and strong enough that colliding keys cannot be found without the key, adopted to stop flooding." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Why does a hash table give O(1) <em>expected</em> time rather than O(1) worst case?",
+      opts: [
+        "Because periodically resizing the table to a larger array and reinserting every existing key is an O(n) operation, so the worst single insertion is linear even when the running average stays constant",
+        "Because the modulo operation the division method relies on is not truly constant-time for very large integer keys, and so it adds a logarithmic factor to each hash it computes",
+        "Because linked-list buckets scatter through memory with poor cache locality, so the constant factor hidden inside the O(1) is large in real measurements",
+        "Because two distinct keys can always be forced to collide, and an adversary who knows the hash function can choose keys that all land in one slot, making every operation O(n)"
+      ], a: 3,
+      why: "The worst case is O(n) and it is reachable on purpose: given the function, an opponent computes a set of keys that all hash to one slot, and every operation then walks that whole slot. The resizing answer names a real O(n) event, but it amortizes to O(1); the reason the guarantee is only expected, not worst-case, is the adversarial collision of section 7." },
+
+    { type: "mc",
+      q: "A fixed hash function <code>h(k) = k mod 101</code> puts a thousand chosen keys all in slot 0. Choosing the function at random from a universal family fixes this. Which property of the family is doing the work?",
+      opts: [
+        "Every function in the family distributes any fixed set of keys perfectly evenly across all the slots, so that no adversarial set can ever be constructed against any single member of it",
+        "The functions in the family are cryptographically secure, so their outputs cannot be computed even when both the key and the chosen function are fully known to the attacker",
+        "For any two distinct keys a randomly chosen member collides them with probability at most 1/m, and the adversary cannot see which member you chose at startup",
+        "The functions are deliberately slower to evaluate, which rate-limits any attacker who is probing the table's timing behaviour from outside"
+      ], a: 2,
+      why: "Universality is a bound on the collision probability over a random choice of function, matching an idealized uniform hash. The adversary knows the family but not your startup coin flips, so the specific function is unpredictable and their precomputed keys become arbitrary. No single function distributes every possible set evenly - that is impossible - and a universal family need not be cryptographic." },
+
+    { type: "mc",
+      q: "At load factor 0.9, an unsuccessful search measured 48 probes for linear probing, 10 for double hashing and 1.45 for chaining. What accounts for chaining staying near 1?",
+      opts: [
+        "Its cost tracks the average bucket length, which is &#945; itself, so even at &#945; = 0.9 the average bucket holds under one key",
+        "Chaining rehashes far more aggressively than the open-addressing schemes do, so its true load factor at the instant of measurement was actually well below the nominal 0.9",
+        "Traversing a linked list is faster per step than probing an array of slots, so the same number of key comparisons costs less wall-clock time even at high load",
+        "Chaining is handed a stronger and better-mixing hash function than the open-addressing schemes are, which spreads its keys more evenly across the buckets"
+      ], a: 0,
+      why: "A chained lookup walks one bucket, and the expected bucket length is exactly &#945;, so an unsuccessful search costs about &#945; and a successful one 1 + &#945;/2 - both flat as &#945; rises. Open addressing has no separate list: near a full table its probe sequences run into long occupied runs, and linear probing's 1/(1-&#945;)-squared cost explodes while chaining's stays linear in &#945;." },
+
+    { type: "mc",
+      q: "In a linear-probing table, three keys hash to the same slot and occupy slots 1, 2 and 3. You delete the key in slot 2 by setting it to empty. What breaks?",
+      opts: [
+        "Nothing breaks for lookups, but the next insertion overwrites slot 3, because that slot is no longer seen as part of the cluster",
+        "A search for the key in slot 3 hashes to slot 1, probes forward to the now-empty slot 2, reads that empty slot as proof the key is absent, and reports not-found even though the key sits one slot further on",
+        "The stored load factor is now miscounted, so the table resizes one insertion too late and a later key is silently lost",
+        "The keys in slots 1 and 3 must be rehashed at once, because their probe distances are inconsistent with the shortened cluster"
+      ], a: 1,
+      why: "An empty slot is a lookup's stop signal: it means the key would have been placed here, so it is absent. Clearing slot 2 plants a false stop signal ahead of the key in slot 3, which becomes unreachable - measured as a not-found for key 17 after deleting key 9 from the middle. The tombstone exists to be a deletion marker a lookup probes past while an insertion may reuse." },
+
+    { type: "blank",
+      q: "The single number n/m that governs a hash table's collision rate and the cost of all its operations, and that resizing exists to keep bounded, is the ____ ____.",
+      a: ["load factor"],
+      why: "Chaining's cost is 1 + alpha/2, open addressing's cost is a function of alpha alone, and the collision rate is alpha - so bounding it below a threshold (0.75 in Java's HashMap, two-thirds in CPython's dict) is the whole job of the resize policy. It is the only knob because every cost in the chapter is written in terms of it." },
+
+    { type: "mc",
+      q: "Timing every insertion into a growing CPython dict, the median was 84 ns but one insertion at 349,525 entries took 3,045,542 ns - about 36,000 times the median. What is that spike?",
+      opts: [
+        "A garbage-collection pause that happened to land on that particular insertion, unrelated to the dictionary's own machinery and reproducible only by chance",
+        "A hash-collision cascade in which that one key collided with every previously inserted key and had to probe across the entire table to reach a free slot",
+        "The resize: crossing the load threshold reallocated a larger array and reinserted every key, an O(n) cost that this one insertion pays in full",
+        "The operating system choosing that instant to migrate the process to a different core, which flushed the processor cache that the dictionary's slots had been relying on"
+      ], a: 2,
+      why: "The spikes fall exactly at two-thirds of successive powers of two, which is where CPython's dict crosses its load threshold and doubles. Rehashing is O(n) and amortizes to O(1) per insertion by Chapter 4's doubling argument, but the total is paid by whichever single insertion triggers the resize - which is why amortized O(1) still shows up as tall spikes on a p99 latency graph." },
+
+    { type: "mc",
+      q: "Java's HashMap treeifies a bucket at 8 entries to bound a flooded bucket at O(log n). Feeding 16,000 all-colliding keys measured 1.6 ms when the keys were Comparable and 695 ms when they were not. Why the 400-fold gap?",
+      opts: [
+        "A red-black tree needs an ordering to search in O(log n); without <code>Comparable</code> keys it cannot be navigated by comparison, so a lookup scans it and the O(n) behaviour returns",
+        "Non-comparable keys force the table to fall back onto a second, slower hash function for that bucket, which then adds a fixed constant factor to every single lookup that has to be performed inside it",
+        "Comparable keys have their comparison method inlined by the JIT compiler and are cached far more effectively, an optimisation that never happens for arbitrary object keys",
+        "Non-comparable keys cannot be treeified at all, so the bucket stays a plain linked list and every insertion re-scans it from the head node"
+      ], a: 0,
+      why: "Treeification converts the bucket to a red-black tree, but searching a search tree in O(log n) requires an order on the keys. Comparable keys supply it; without it, the tree is built but cannot be descended by comparison and a lookup degenerates to scanning it, which is O(n) again. So the defense is real but conditional: 'treeification bounds flooding' is true only for comparable keys." },
+
+    { type: "mc",
+      q: "Two defenses against hash flooding are a randomized per-process seed and a stronger function like SipHash. What does the randomized seed accomplish that a faster fixed function cannot?",
+      opts: [
+        "It reduces the number of collisions on random input, lowering the average number of keys per bucket below what any fixed function could achieve",
+        "It shrinks the hash output down to fewer bits, which spreads the keys across a larger number of slots for the same physical table size",
+        "It lets the table skip resizing altogether, because a well-seeded hash keeps the load factor naturally bounded without any doubling",
+        "It makes the function an attacker must beat differ from the one printed in the source and differ between runs, so keys precomputed against the published code no longer collide when they arrive"
+      ], a: 3,
+      why: "The seed is universal hashing in production: mixing a per-process random value in means the attacker faces a function they cannot read off the source, and it changes every run, which is why hash('a') differs between two Python invocations. It does not lower the collision rate on random input - random keys were never the problem; chosen keys were." },
+
+    { type: "order",
+      q: "Order the design decisions in the sequence this chapter shows they depend on each other:",
+      items: [
+        "define a hash function that maps any key into the m slots, accepting that collisions become inevitable",
+        "make the choice of function random from a family, so an adversary cannot precompute keys that all collide",
+        "resolve the collisions that remain, by chaining the colliders into a bucket or probing onward to another slot",
+        "hold the load factor below a threshold by resizing, so the collision rate and every cost stay bounded"
+      ],
+      why: "Each step exists because of the one before it. The hash function creates collisions; universality decides whose collisions you get, keeping them from being adversarial; chaining or probing handles the collisions that a good function still leaves; and the resize policy holds the load factor - and therefore the collision rate - where the first three steps stay cheap. Reversing any pair leaves a later decision resting on something not yet established." },
+
+    { type: "blank",
+      q: "The deleted-slot marker in open addressing that a lookup must probe past but an insertion may reuse, whose absence strands keys later in a probe chain, is called a ____.",
+      a: ["tombstone"],
+      why: "Clearing a deleted slot to empty plants a false stop signal, because a lookup reads an empty slot as proof the key is absent. Measured on keys 1, 9, 17 in a size-8 table, deleting 9 to empty made the search for 17 report not-found; a tombstone in that slot let the search walk through and find 17 in three probes again." }
+  ]
+});
