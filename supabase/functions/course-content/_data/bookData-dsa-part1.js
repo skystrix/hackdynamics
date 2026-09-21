@@ -1,6 +1,23 @@
 /* ==========================================================================
    bookData-dsa-part1.js — DSA By Patterns, Part 1 chapters (1–12)
    Original explanatory writing.
+   Sources consulted for Chapter 20: the 0/1 knapsack dynamic program is
+   standard (Bellman); Garey & Johnson, "Computers and Intractability", 1979,
+   for pseudopolynomial time and the weakly/strongly NP-complete distinction;
+   Karp, "Reducibility Among Combinatorial Problems", 1972, for subset sum and
+   knapsack among the NP-complete problems; Horowitz & Sahni, "Computing
+   partitions with applications to the knapsack problem", JACM 21(2):277-292,
+   1974, for meet in the middle. Measured 2026-09-21, CPython 3.13.2 arm64:
+   0/1 knapsack on items A(v60,w10) B(v100,w20) C(v120,w30) at capacity 50 =
+   220 taking {B,C}, against greedy-by-ratio's 160 taking {A,B} (the optimum
+   skips the best-ratio item); the same items unbounded = 300 (five copies of
+   A); subset sum, partition and coin-change variants off one table;
+   pseudopolynomial arithmetic for n=20 (W=2^10/2^20/2^40/2^60 -> table cells
+   20,480 / 2.1e7 / 2.2e13 / 2.3e19 while input stays 50/100/200/300 bytes);
+   0/1 knapsack wall clock for n=300 (W=1e3/1e4/1e5 -> 34.5/412.7/4790.7 ms,
+   exactly linear in W); meet-in-the-middle subset sum on 40 numbers ~1e15,
+   found in ~1 s by enumerating 2^20 = 1,048,576 sums per half instead of
+   2^40, where the O(nT) table (~3e17 cells) cannot be built.
    Sources consulted for Chapter 19: MIT 6.006 (Erik Demaine, Jason Ku, Justin
    Solomon) for the SRTBOT framework; Richard Bellman coined "dynamic
    programming" in the 1950s (the naming anecdote is from his autobiography
@@ -6445,5 +6462,267 @@ CHAPTERS.push({
       q: "Keeping only the rows a recurrence actually reads &#8212; two variables for Fibonacci, one array for knapsack &#8212; and letting the window advance over the table is the space optimization called the ____ ____.",
       a: ["rolling array"],
       why: "It is safe exactly when the discarded cells are never read again: Fibonacci reads only the last two values, knapsack row i reads only row i-1. It cuts the knapsack table from 201,201 cells to 1,001 with the same answer, but it overwrites the trail reconstruction would need, which is why you optimize the space only once you know you need the number and not the object." }
+  ]
+});
+
+/* ======================= CHAPTER 20 ======================= */
+CHAPTERS.push({
+  num: 20, part: 3, title: "The Knapsack Family and Pseudopolynomial Time",
+  blurb: "Knapsack is the most reused shape in dynamic programming, and it is also the place where almost everyone, tutorials included, says something false. The standard algorithm runs in O(nW), and O(nW) is routinely called polynomial. It is not, and the gap between why it looks polynomial and why it is not is the difference between an interview answer that is correct and one that merely sounds correct. This chapter fills the table, shows the four problems that are the same table wearing different labels, and then uses the bits-versus-elements distinction from Chapter 2 to explain exactly what O(nW) costs.",
+
+  sections: [
+
+    { title: "0/1 Knapsack, Filled In",
+      html:
+        "<p>You have n items, each with a value and a weight, and a knapsack that holds a total weight of W. Take a subset of maximum total value that fits. The \"0/1\" is the constraint that each item is taken once or not at all &#8212; no fractions, no copies &#8212; and it is what makes the problem hard, because you cannot decide each item independently.</p>" +
+
+        "<p>The fractional version &#8212; where you may take any fraction of an item &#8212; is genuinely tractable: sort by value-per-weight and fill greedily, taking whole items until one does not fit and then a slice of it, which is provably optimal and is one of Chapter 23's opening examples. The 0/1 constraint destroys that. Once you cannot take a slice, the greedy choice can be wrong, because committing to an item changes what the remaining capacity is worth &#8212; a dependency between decisions that greedy ignores and a table captures. That one word, no fractions, is the whole distance from a one-line greedy to an nW table.</p>" +
+
+        "<p>Chapter 19's checklist gives the algorithm without invention. <strong>Subproblems:</strong> <code>K(i, c)</code> = the most value obtainable from the first i items within capacity c. <strong>Relate:</strong> the i-th item is either left out, giving <code>K(i-1, c)</code>, or taken when it fits, giving <code>K(i-1, c-w<sub>i</sub>) + v<sub>i</sub></code>, and you keep the larger. <strong>Topological order:</strong> increasing i. <strong>Base case:</strong> <code>K(0, c) = 0</code> &#8212; no items, no value. <strong>Original:</strong> <code>K(n, W)</code>. <strong>Time:</strong> nW subproblems at O(1) each, so O(nW). That last line is the one this whole chapter is about, and for now note it and move on.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>K(i,c) for items A(v60,w10) B(v100,w20) C(v120,w30), capacity 50 &#8212; traceback in gold</text>" +
+        "<text x='95' y='44' fill='#7d8fb0' font-size='9'>capacity &#8594;</text>" +
+        "<g font-size='9' fill='#7d8fb0' text-anchor='middle'>" +
+        "<text x='250' y='44'>0</text><text x='340' y='44'>10</text><text x='430' y='44'>20</text><text x='520' y='44'>30</text><text x='610' y='44'>40</text><text x='700' y='44'>50</text>" +
+        "</g>" +
+        "<g font-size='10' text-anchor='middle'>" +
+        // row headers
+        "<text x='60' y='72' fill='#7d8fb0'>{ }</text><text x='60' y='104' fill='#c9d6ea'>+A</text><text x='60' y='136' fill='#c9d6ea'>+B</text><text x='60' y='168' fill='#c9d6ea'>+C</text>" +
+        // row 0
+        "<text x='250' y='72' fill='#556'>0</text><text x='340' y='72' fill='#556'>0</text><text x='430' y='72' fill='#556'>0</text><text x='520' y='72' fill='#556'>0</text><text x='610' y='72' fill='#556'>0</text><text x='700' y='72' fill='#556'>0</text>" +
+        // row A
+        "<text x='250' y='104' fill='#7d8fb0'>0</text><text x='340' y='104' fill='#c9d6ea'>60</text><text x='430' y='104' fill='#c9d6ea'>60</text><text x='520' y='104' fill='#c9d6ea'>60</text><text x='610' y='104' fill='#c9d6ea'>60</text><text x='700' y='104' fill='#c9d6ea'>60</text>" +
+        // row B
+        "<text x='250' y='136' fill='#7d8fb0'>0</text><text x='340' y='136' fill='#c9d6ea'>60</text><text x='430' y='136' fill='#c9d6ea'>100</text><text x='520' y='136' fill='#c9d6ea'>160</text><text x='610' y='136' fill='#c9d6ea'>160</text><text x='700' y='136' fill='#c9d6ea'>160</text>" +
+        // row C
+        "<text x='250' y='168' fill='#7d8fb0'>0</text><text x='340' y='168' fill='#c9d6ea'>60</text><text x='430' y='168' fill='#c9d6ea'>100</text><text x='520' y='168' fill='#c9d6ea'>160</text><text x='610' y='168' fill='#c9d6ea'>180</text><text x='700' y='168' fill='#ffd166'>220</text>" +
+        "</g>" +
+        // traceback highlight cells: (C,50)=700,168 ; (B,20)=430,136 ; (A,0)=250,104
+        "<circle cx='700' cy='164' r='15' fill='none' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<circle cx='430' cy='132' r='15' fill='none' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<circle cx='250' cy='100' r='15' fill='none' stroke='#ffd166' stroke-width='1.5'/>" +
+        "<line x1='685' y1='162' x2='445' y2='138' stroke='#ffd166' stroke-width='1' stroke-dasharray='3 2'/>" +
+        "<line x1='415' y1='132' x2='265' y2='104' stroke='#ffd166' stroke-width='1' stroke-dasharray='3 2'/>" +
+        "<line x1='20' y1='184' x2='740' y2='184' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='202' fill='#ffd166' font-size='10'>traceback: 220 took C (drop 30), 100 took B (drop 20), 0 took nothing &#8212; the answer is {B,C}, not the best-ratio A.</text>" +
+        "</svg><div class='fig-cap'>Each cell is the best value for its items and capacity; following where the value came from recovers the actual subset.</div></div>" +
+
+        "<p>The table gives the number, and the item set comes from a <strong>traceback</strong>: start at <code>K(n, W)</code> and, at each row, ask whether the value differs from the row above. If it does, the item was taken; subtract its weight and step to that column in the previous row. If it does not, the item was skipped; step straight up. For the three items above at capacity 50 the optimum is 220, and the traceback recovers the set {B, C} &#8212; weights 20 and 30, exactly filling the bag.</p>" +
+
+        "<p>That result is worth pausing on, because it is why knapsack needs a table at all. The <strong>greedy-by-ratio</strong> instinct is to take the best value-per-weight first: item A has ratio 6, the highest, so greedy grabs it, then B, and is then stuck with 20 capacity too small for C, landing at 160. The optimum <em>skips the best-ratio item entirely</em> and takes B and C for 220. No order of local choices finds that; you have to consider taking A against not taking it with the rest of the bag in view, which is exactly what the table does and what the greedy of Chapter 23 provably cannot. <strong>Fill the table in the machine above and trace it back</strong>; the item the traceback drops is the one greedy would have grabbed first.</p>",
+      viz: "dsaKnapsack", vizTitle: "Fill the table cell by cell, then trace back to see which items the answer actually uses"
+    },
+
+    { title: "Four Problems, One Table",
+      html:
+        "<p>The reason knapsack is worth this much attention is that a dozen problems are it in disguise, differing by a single line of the recurrence. Learn to see the shape and the disguises stop working.</p>" +
+
+        "<p><strong>Unbounded knapsack</strong> lets you take each item any number of times. The only change is that after taking item i you may take it again, so the recurrence reads from the current row rather than the row above: <code>K(c) = max over items i of K(c - w<sub>i</sub>) + v<sub>i</sub></code>. On the same three items and capacity 50, where 0/1 knapsack scored 220, unbounded scores <strong>300</strong> &#8212; five copies of item A, the best-ratio item, which now that repetition is allowed is the right greedy after all. Same items, same capacity, one word of the rules changed, a different answer.</p>" +
+
+        "<p><strong>Subset sum</strong> asks whether some subset hits an exact target &#8212; it is knapsack with value equal to weight and the question \"can we exactly fill capacity T\" instead of \"maximise\". The cell holds a boolean: <code>reachable(c)</code> is true if some subset sums to c. On <code>[3, 34, 4, 12, 5, 2]</code> with target 9 it is true, by 4+5 or by 3+4+2. <strong>The partition problem</strong> &#8212; split the items into two groups of equal sum &#8212; is subset sum with target equal to half the total: <code>[1, 5, 11, 5]</code> partitions because a subset sums to 11, half of 22, while <code>[1, 2, 3, 5]</code> cannot because its total is odd and no target exists. <strong>Coin change</strong>, from Chapter 19, is unbounded knapsack counting or minimising instead of maximising. Minimum coin change makes the minimising cell explicit: <code>C(a) = 1 + min over coins c of C(a - c)</code>, the fewest coins for amount a, with <code>C(0) = 0</code> and unreachable amounts held at infinity &#8212; the same table with the objective and the loop direction swapped. Five problems, one table, and the differences are: value equals weight or not, take-once or take-many, maximise or count or decide.</p>" +
+
+        "<div class='callout'>Recognising the shape is the entire skill, and it is why this chapter sits where it does. A problem statement about splitting a bill fairly, or fitting jobs in a time budget, or choosing which features ship in a release, is knapsack the moment it has items with a scalar cost, a scalar budget, and a take-or-leave decision. The interview signal is exactly those three: a capacity, per-item costs, and no partial items. When you see them, you are not inventing an algorithm, you are relabelling this one.</div>" +
+
+        "<p>What does <em>not</em> change across the family is the running time: every one of them fills a table of size roughly n&#215;(capacity), and every one of them is therefore O(n&#183;capacity). That shared cost is the family's shared liability, and the rest of the chapter is about the word \"capacity\" hiding in that bound &#8212; because capacity is a number, and a number's size is not what it looks like.</p>"
+    },
+
+    { title: "Why the Loop Flips for Unbounded",
+      html:
+        "<p>Chapter 19 ended on two coin problems that differed only in which loop was outer, and promised that the knapsack family would show the same effect with a reason you can watch in the table. Here it is. The 0/1 and unbounded versions differ by the direction of one loop, and the direction decides whether an item can be reused.</p>" +
+
+        "<p>Both use the rolling one-dimensional array from Chapter 19 &#8212; a single row <code>dp[c]</code> updated item by item. For <strong>0/1</strong>, the capacity loop runs <em>downward</em>, from W to w<sub>i</sub>. For <strong>unbounded</strong>, it runs <em>upward</em>, from w<sub>i</sub> to W. That is the whole difference, and Chapter 19 measured its effect blind: on 200 items the descending loop gave 3,513 and the ascending loop 46,000. Now the table says why.</p>" +
+
+        "<p>When you compute <code>dp[c]</code> from <code>dp[c - w<sub>i</sub>]</code>, the question is whether that earlier cell already reflects the current item. Descending, you fill large c before small c, so <code>dp[c - w<sub>i</sub>]</code> &#8212; a smaller index &#8212; has <em>not</em> yet been touched this pass and still holds the previous item's answer: item i is added to a solution that did not contain it, so it is used at most once. Ascending, you fill small c first, so <code>dp[c - w<sub>i</sub>]</code> <em>has</em> already been updated with item i this pass: item i is added to a solution that may already contain it, so it can be taken again and again. The direction of the sweep is the same as choosing whether <code>dp[c - w<sub>i</sub>]</code> means \"before this item\" or \"including this item\", and that choice is the entire distinction between the two problems.</p>" +
+
+        "<p>A three-cell trace makes it visible. One item of weight 2 and value 3, capacity 6, ascending: <code>dp[2]</code> becomes 3, then <code>dp[4] = dp[2] + 3 = 6</code> reads the freshly updated cell, then <code>dp[6] = dp[4] + 3 = 9</code> &#8212; three copies of a single item. Run the same fill descending and <code>dp[6]</code> is computed first from the still-zero <code>dp[4]</code>, giving 3, and no cell is read after it has absorbed the item. Nine versus three is the reuse, and it lives entirely in which cell the read lands on.</p>" +
+
+        "<p>This is the concrete form of the lesson Chapter 19 stated abstractly: in a space-optimized dynamic program the loop order and direction are not style, they encode which subproblems are allowed to depend on which. The extra dimension the rolling array removed &#8212; the item index i &#8212; was what kept \"before item i\" and \"including item i\" in separate rows. Take it away and the sweep direction has to enforce the separation by hand, and a flipped <code>range</code> silently solves the other problem. Read any one-dimensional knapsack by checking the direction first; it tells you which member of the family the code actually computes.</p>"
+    },
+
+    { title: "Pseudopolynomial: A Number Is Not Its Size",
+      html:
+        "<p>Now the claim this chapter exists to correct. The knapsack table is O(nW), and O(nW) is a product of two numbers, so it is tempting &#8212; and common, in tutorials and interviews &#8212; to call it polynomial. It is not, and seeing why requires the distinction Chapter 2 drew between the number of <em>elements</em> in an input and the number of <em>bits</em> it takes to write down.</p>" +
+
+        "<p>An algorithm's running time is polynomial when it is polynomial in the <em>length of its input</em> &#8212; the number of bits. The n items contribute n elements, and n bits of length, fine. But W is a single number, and a single number of magnitude W takes only log<sub>2</sub>W bits to write. So a capacity of a billion is not a billion-length input; it is a thirty-bit input, four bytes. The table, meanwhile, has nW cells &#8212; a billion times n. The running time is exponential in the number of bits used to write the capacity, and an algorithm that is polynomial in the <em>value</em> of a number but exponential in its <em>length</em> is called <strong>pseudopolynomial</strong>.</p>" +
+
+        "<p>The phrase to hold onto is <em>value versus length</em>. Polynomial time is measured against the length of the input in bits, because that is what it costs to read the input at all, and the length of a number is its logarithm, not the number itself. A capacity of a billion is a thirty-bit input, the same length as the ten-digit numeral 1,000,000,000 on a page. An algorithm whose cost is proportional to the billion, rather than to the thirty bits, is doing exponential work in the size of what it was handed, and its being \"only a for-loop up to W\" changes nothing about that.</p>" +
+
+        "<div class='fig'><svg viewBox='0 0 760 220' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
+        "<text x='20' y='16' fill='#2de2ff' font-size='11'>n = 20 items: the input barely grows while the table explodes &#8212; each bit of W doubles it</text>" +
+        "<g font-size='9' fill='#7d8fb0'>" +
+        "<text x='30' y='44'>capacity W</text><text x='250' y='44'>bits to write W</text><text x='420' y='44'>input size</text><text x='560' y='44'>table cells (nW)</text>" +
+        "</g>" +
+        "<line x1='20' y1='52' x2='740' y2='52' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<g font-size='10'>" +
+        "<text x='30' y='76' fill='#c9d6ea'>~1 thousand</text><text x='250' y='76' fill='#3ddc97'>10 bits</text><text x='420' y='76' fill='#3ddc97'>50 bytes</text><text x='560' y='76' fill='#c9d6ea'>20,480</text>" +
+        "<text x='30' y='104' fill='#c9d6ea'>~1 billion</text><text x='250' y='104' fill='#3ddc97'>30 bits</text><text x='420' y='104' fill='#3ddc97'>150 bytes</text><text x='560' y='104' fill='#ffd166'>21 billion</text>" +
+        "<text x='30' y='132' fill='#c9d6ea'>~1 quintillion</text><text x='250' y='132' fill='#3ddc97'>60 bits</text><text x='420' y='132' fill='#3ddc97'>300 bytes</text><text x='560' y='132' fill='#ff5d73'>2.3 &#215; 10&#185;&#8313;</text>" +
+        "</g>" +
+        "<line x1='20' y1='148' x2='740' y2='148' stroke='#1c2a45' stroke-width='1.5'/>" +
+        "<text x='20' y='168' fill='#c9d6ea' font-size='10'>input grew 50, 150, 300 bytes (6x); table grew 2e4, 2e10, 2e19 cells (1e15x).</text>" +
+        "<text x='20' y='188' fill='#ffd166' font-size='10'>at 60 bits the table has more cells than a data centre has bytes, and the whole input fits in a tweet.</text>" +
+        "<text x='20' y='208' fill='#7d8fb0' font-size='10'>polynomial in W's value, exponential in W's length &#8212; that gap is what \"pseudopolynomial\" names.</text>" +
+        "</svg><div class='fig-cap'>Doubling the capacity adds one bit to the input and doubles the table. The two columns are not measuring the same growth.</div></div>" +
+
+        "<p>The worked numbers make the gap impossible to wave away. Hold n at 20 items. At a capacity of a thousand the table has twenty thousand cells and the input is fifty bytes. Raise the capacity to a billion &#8212; thirty bits, an input of a hundred and fifty bytes &#8212; and the table has twenty-one billion cells. Raise it to a quintillion, a sixty-bit capacity that still fits the input in three hundred bytes, and the table would need 2.3&#215;10<sup>19</sup> cells &#8212; more than a large data centre has bytes of storage, for an input you could write on a postcard. Each single bit added to W doubles the table while adding a fixed handful of bytes to the input. That is the exact signature of exponential-in-the-input-length, and it is why calling O(nW) polynomial is not a rounding error but a category mistake.</p>"
+    },
+
+    { title: "Why It Matters: You Have Not Beaten NP",
+      html:
+        "<p>The distinction is not pedantry, and here is the stake. <strong>Subset sum</strong> &#8212; can any subset hit an exact target &#8212; is <strong>NP-complete</strong>. So are partition and 0/1 knapsack's decision version. If O(nW) were genuinely polynomial, you would have a polynomial-time algorithm for an NP-complete problem, which would settle the biggest open question in computer science and is almost certainly false. The pseudopolynomial reading is what keeps the world consistent: the algorithm is fast when W is small and blows up when W is large, and \"W is large\" is exactly the case &#8212; capacities with many bits &#8212; that makes the problem hard.</p>" +
+
+        "<p>This is why the vocabulary is worth getting exactly right, and it is a real interview failure to get it wrong. Saying \"knapsack is solvable in polynomial time by dynamic programming\" is a claim to have beaten NP-completeness, and an interviewer who knows the field hears it as either a misunderstanding or a boast. The correct statement is that knapsack has a pseudopolynomial algorithm &#8212; polynomial in n and in the <em>magnitude</em> of W, exponential in the number of bits of W &#8212; which is precise, true, and signals that you know where the hardness lives. Chapter 46 makes the NP-completeness formal; here it is enough to know that the O(nW) table does not contradict it, because O(nW) is not polynomial in the input.</p>" +
+
+        "<p>It is the same category error as claiming a number can be tested for primality by trial division \"in O(n) time\": true if n is the number, but the number has only log n digits, so that O(n) is exponential in the input length and the claim is hollow. Knapsack's O(nW) is the identical trap with W in the role of the number. Recognising it is a transferable skill &#8212; any time a bound is linear in a numeric <em>value</em> rather than in its bit length, suspect a pseudopolynomial wearing a polynomial's clothes.</p>" +
+
+        "<div class='callout'>Subset sum is what is called <em>weakly</em> NP-complete: NP-complete in general, but solvable in pseudopolynomial time, so the hardness can be escaped whenever the numbers involved are small. That is a genuine and useful category &#8212; it is why knapsack with small integer weights is a routine table-fill while knapsack with sixty-bit weights is intractable. A <em>strongly</em> NP-complete problem stays hard even when its numbers are small and bounded, and has no pseudopolynomial algorithm unless P equals NP. Knowing which kind you face tells you whether \"the numbers are small\" is a way out or not.</div>" +
+
+        "<p>The practical reading is a decision rule. When a problem reduces to knapsack, the question that decides whether you can solve it is not n &#8212; a thousand or a million items is fine &#8212; but the magnitude of the capacity and the weights. Small numbers, even with many items: fill the table, it is fast. Large numbers, even with few items: the table is a fiction, and you need one of the escapes in the last section or an approximation. The size of the numbers, not the count of the items, is the axis the hardness runs along, and that is the one fact the O(nW) bound hides until you read it in bits.</p>"
+    },
+
+    { title: "When It Is Fine, and When It Is Not",
+      html:
+        "<p>None of this makes the table useless &#8212; it makes it conditional, and the condition is one you can check. The O(nW) algorithm is not merely correct but excellent whenever W is small, and \"small\" covers an enormous fraction of real problems, because real capacities are often bounded by something physical: a truck holds a few tons, a sprint has forty hours, a page has a fixed number of pixels. When the capacity is a few thousand and the items a few hundred, the table is a few million cells and fills in milliseconds.</p>" +
+
+        "<p>The measurements show both the comfort and the cliff. With 300 items, the 0/1 table fills in 34 milliseconds at capacity 1,000, 413 milliseconds at capacity 10,000, and 4.8 seconds at capacity 100,000 &#8212; ten times the capacity, ten times the time, exactly the O(nW) bound made visible. Read that trend forward and the cliff is obvious: at a capacity of a billion the same code needs on the order of a day, and at a quintillion it needs longer than the universe has run. The algorithm does not fail gracefully; it is instant until the capacity crosses a line, and then it is never.</p>" +
+
+        "<p>The line is not vague; it is a memory budget divided by n. If you can hold a table of nW cells, the algorithm runs; if nW exceeds your memory, it does not, and W is the only free variable in that inequality. So the check is arithmetic: multiply n by the largest capacity the problem admits and compare it against what you can allocate. A capacity the problem itself bounds &#8212; hours in a week, grams a scale reads, pixels across a row &#8212; almost always passes; a capacity that is an arbitrary user-supplied integer almost always fails, and the two are indistinguishable in the code.</p>" +
+
+        "<p>So the honest engineering answer has two parts. First, look at the actual range of the capacity in your problem, in bits, before writing anything &#8212; a capacity that fits in twenty bits is a table you will not notice, a capacity that needs forty is a table you cannot build. Second, if the numbers are genuinely large, stop trying to fill the table and change technique: approximate with a fully-polynomial approximation scheme that trades a controlled error for a polynomial running time, or, when n is small even though W is huge, use the exact method of the next section. What you must not do is write the O(nW) table, test it on small inputs where it flies, and ship it toward inputs where it cannot run &#8212; the failure mode that the word \"pseudopolynomial\" exists to prevent.</p>"
+    },
+
+    { title: "Meet in the Middle, When n Is Small",
+      html:
+        "<p>The pseudopolynomial table fails exactly when the numbers are huge, and it fails hardest in the case where n is small but W is astronomical &#8212; twenty items, a target in the quadrillions. There the O(nW) table has more cells than atoms in reach, but n is small enough that a different exponential is affordable, and Chapter 12's <strong>meet in the middle</strong> is the exact tool.</p>" +
+
+        "<p>The brute force over all subsets is O(2<sup>n</sup>), which at n = 40 is a trillion &#8212; too many. Meet in the middle splits the items into two halves of twenty, enumerates the 2<sup>20</sup> = 1,048,576 subset sums of each half, sorts one list, and for each sum in the other binary-searches its complement against the target. The exponential is halved in the exponent: 2<sup>n/2</sup> per side instead of 2<sup>n</sup> overall, which at n = 40 is about a million per side against a trillion for the full enumeration &#8212; a factor of a million saved, turning an impossible search into a one-second one. Measured on forty 50-bit numbers, it finds a target subset in under a second, enumerating 1,048,576 sums per half rather than the trillion the brute force would.</p>" +
+
+        "<p>The trade is exactly the one Chapter 12 drew. Meet in the middle costs O(2<sup>n/2</sup>) time and, crucially, O(2<sup>n/2</sup>) <em>space</em> to hold one sorted half, so it is the method for small n and huge numbers &#8212; the corner the pseudopolynomial table cannot reach. The knapsack table is the opposite corner: cheap in space, polynomial in n, and usable only while the numbers stay small. Between them they cover the two ways a subset-selection problem can be tractable, and the axis that decides which to reach for is the same axis this whole chapter has been about &#8212; not how many items there are, but how big the numbers are.</p>" +
+
+        "<p>Named as a table of when each wins: the O(nW) fill costs time and space O(nW), so it is cheap in memory, linear in n, and usable only while W stays small. Meet in the middle costs time and space O(2<sup>n/2</sup>), so it is exponential in n but wholly indifferent to the magnitude of the numbers, usable only while n stays small. One covers many items with small numbers, the other few items with huge numbers, and reaching for the wrong one is not slow but impossible &#8212; the table cannot be allocated, or the enumeration cannot finish.</p>" +
+
+        "<p>Neither method makes subset sum tractable in general, and neither should be read as beating its NP-completeness. The table is fast only for small numbers; meet in the middle is fast only for small n. When both n and the numbers are large, the problem is genuinely hard, and the right move is an approximation or a heuristic, not a cleverer exact algorithm &#8212; because a polynomial exact algorithm for this problem would resolve P versus NP, and Chapter 46 explains why nobody expects to find one.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Trace.</strong> Fill the 0/1 knapsack table for items A(v60,w10), B(v100,w20), C(v120,w30) at capacity 50, then trace back from the last cell. <em>What you should find:</em> the optimum is 220 and the traceback selects {B, C}; the best-ratio item A, which greedy takes first, is never on the traceback path &#8212; the value is the same in its row and the row above at every column the path visits.</li>" +
+        "<li><strong>Trace.</strong> On the same items and capacity, change the rule to unbounded (each item any number of times) and refill. <em>What you should find:</em> the answer rises to 300 &#8212; five copies of A &#8212; and the only change to the code is the direction of the inner capacity loop, from descending to ascending.</li>" +
+        "<li><strong>Investigate.</strong> Time the 0/1 table for a few hundred items at capacities of 1,000, 10,000 and 100,000. <em>What you should find:</em> the time grows in exact proportion to the capacity &#8212; ten times W, ten times the clock &#8212; confirming O(nW) and showing that the cost is driven by the capacity's magnitude, not the item count.</li>" +
+        "<li><strong>Investigate.</strong> For n = 20, tabulate the input length in bits and the table size nW as W runs through 2<sup>10</sup>, 2<sup>20</sup>, 2<sup>40</sup> and 2<sup>60</sup>. <em>What you should find:</em> each doubling of W adds one bit to the input and doubles the table, so the input grows linearly in the bit length while the table grows exponentially &#8212; the definition of pseudopolynomial, seen in two columns.</li>" +
+        "<li><strong>Build.</strong> Write subset sum both ways: the O(n&#183;T) table and meet-in-the-middle, and run them on 40 numbers around 10<sup>15</sup> with a reachable target. <em>What you should find:</em> the table cannot be allocated &#8212; T is astronomical &#8212; while meet in the middle answers in about a second by enumerating 2<sup>20</sup> sums per half instead of 2<sup>40</sup> overall.</li>" +
+        "<li><strong>Build.</strong> Reduce a small real problem &#8212; splitting a set of amounts into two equal-sum groups &#8212; to subset sum, and solve it with the boolean table. <em>What you should find:</em> partition is subset sum with target equal to half the total, feasible only when the total is even, and the same table that maximises value decides reachability by holding a boolean instead of a number.</li>" +
+        "</ol>"
+    }
+  ],
+
+  terms: [
+    { t: "0/1 knapsack", d: "Choosing a subset of weighted, valued items to maximise value within a capacity, each item taken once or not at all; the canonical dynamic program of this family, O(nW)." },
+    { t: "unbounded knapsack", d: "Knapsack in which each item may be taken any number of times; identical to 0/1 except the recurrence reads the current capacity row, computed by an ascending capacity loop." },
+    { t: "subset sum", d: "Deciding whether some subset of a set of numbers sums to an exact target; knapsack with value equal to weight and a reachability question, and NP-complete in general." },
+    { t: "partition problem", d: "Splitting a set into two groups of equal sum; subset sum with the target set to half the total, feasible only when the total is even." },
+    { t: "coin change", d: "Counting or minimising the ways to make an amount from coin denominations; unbounded knapsack whose cell holds a count or a minimum rather than a maximum value." },
+    { t: "capacity", d: "The scalar budget a knapsack solution must fit within; the number W whose magnitude, not whose bit length, drives the O(nW) running time and hence the family's cost." },
+    { t: "traceback", d: "Recovering the chosen items after filling the table, by walking back from the final cell and testing at each row whether the value changed, meaning that item was taken." },
+    { t: "pseudopolynomial time", d: "A running time polynomial in the magnitude of the numeric inputs but exponential in their bit length, as O(nW) is; fast for small numbers, intractable for large ones." },
+    { t: "input length in bits", d: "The true measure of input size against which polynomial time is defined; a number of magnitude W contributes only log W bits, which is why O(nW) is not polynomial." },
+    { t: "NP-complete", d: "Among the hardest problems in NP, with no known polynomial-time algorithm; subset sum, partition and knapsack's decision version are all NP-complete, formalised in Chapter 46." },
+    { t: "weakly NP-complete", d: "NP-complete in general but solvable in pseudopolynomial time, so the hardness disappears when the numbers are small; the exact status of subset sum and knapsack." },
+    { t: "meet in the middle", d: "Splitting the items into two halves, enumerating each half's subset sums and matching them, turning an O(2^n) search into O(2^(n/2)) time and space; the tool for small n and huge numbers." },
+    { t: "greedy-by-ratio", d: "Taking items in decreasing value-per-weight order; optimal for fractional knapsack but provably wrong for 0/1, where it can grab a high-ratio item the optimum must skip." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "For items A(v60,w10), B(v100,w20), C(v120,w30) and capacity 50, greedy-by-ratio scores 160 but the optimum is 220. What does the optimum do that greedy cannot?",
+      opts: [
+        "It skips item A, the highest-ratio item that greedy grabs first, and takes B and C instead &#8212; a choice no sequence of locally best picks can reach",
+        "It sorts the items by value rather than by value-per-weight ratio, which for this instance happens to select the two heaviest items and fill the bag exactly",
+        "It splits item A into a fraction that exactly fills the capacity left after B and C, recovering the value greedy left on the table",
+        "It runs greedy twice, once by ratio and once by raw value, and returns the better of the two results, which for this instance is the value-ordered one"
+      ], a: 0,
+      why: "Greedy takes A (ratio 6) first, then B, then cannot fit C, landing at 160. The optimum takes B and C for 220 and never touches A. Reaching it requires weighing A against the whole rest of the bag, which is what the table does; no ordering of one-at-a-time choices finds it, and 0/1 forbids the fractional split that one distractor proposes." },
+
+    { type: "mc",
+      q: "0/1 knapsack and unbounded knapsack, written as a rolling 1-D array, differ only in the direction of the inner capacity loop. Why does descending give 0/1 and ascending give unbounded?",
+      opts: [
+        "Descending visits larger capacities first, which happen to be the ones that fit fewer items, so the item is naturally used less often under that order",
+        "Ascending accumulates floating-point error that inflates the totals, so its larger answers are an artefact of the order rather than a different problem",
+        "Reading dp[c - w] descending finds a cell not yet updated this pass, so it reflects the solution before this item; ascending finds one already updated, so the item can be reused",
+        "The two directions compute the same values but ascending overwrites the answer cell last, so it reports a stale maximum that overcounts the available items"
+      ], a: 2,
+      why: "The cell dp[c - w] is read to extend a solution by item i. Descending fills large c first, so dp[c - w] (smaller c) still holds the previous item's value - item i joins a set without it, used once. Ascending fills small c first, so dp[c - w] already includes item i this pass - item i joins a set that may already have it, reused. The direction selects which problem the code solves." },
+
+    { type: "mc",
+      q: "Knapsack's O(nW) running time is often called polynomial. Why is that wrong?",
+      opts: [
+        "Because the traceback adds another factor of n that the O(nW) bound quietly omits, making the true cost O(n&#178;W), which is not polynomial once the hidden factor is properly counted in",
+        "Because the constant hidden by the O is itself proportional to the number of items, so the real running cost grows strictly faster than the notation admits on the larger instances",
+        "Because filling the table requires O(nW) space as well as time, and an algorithm counts as polynomial only when its space is polynomial in its time, which this bound violates",
+        "Because W is one number written in only log W bits, so O(nW) is exponential in the input length, not polynomial in it"
+      ], a: 3,
+      why: "Polynomial time means polynomial in the input's bit length. The n items are n bits of length, but the capacity W is a single number needing only log W bits to write, while the table has nW cells. So the work is exponential in the bits of W - pseudopolynomial - which is why a billion-capacity instance has a four-byte capacity but a billion-row table." },
+
+    { type: "blank",
+      q: "A running time that is polynomial in the magnitude of the numeric inputs but exponential in the number of bits used to write them &#8212; as knapsack's O(nW) is &#8212; is called ____ time.",
+      a: ["pseudopolynomial"],
+      why: "It is fast when the numbers are small and intractable when they are large: for n = 20, a capacity of a thousand fills a 20,000-cell table but a sixty-bit capacity would need 2.3x10^19 cells for a 300-byte input. The name marks the gap between being polynomial in a number's value and exponential in its length." },
+
+    { type: "mc",
+      q: "Why does the pseudopolynomial reading of O(nW) keep the world consistent with subset sum being NP-complete?",
+      opts: [
+        "Because subset sum is only NP-complete for real-valued targets, and the O(nW) table applies solely to integer targets, so the two never describe the same instances",
+        "Because O(nW) is fast only when W is small, which is exactly the case that is not hard; the NP-hard instances have large W and there the table is exponential too",
+        "Because the table solves the optimisation version while NP-completeness is about the decision version, and the two versions have unrelated complexities",
+        "Because dynamic programming is exempt from the P-versus-NP question, so a polynomial-time dynamic program does not count as beating an NP-complete problem"
+      ], a: 1,
+      why: "If O(nW) were genuinely polynomial it would be a polynomial algorithm for an NP-complete problem. The pseudopolynomial reading dissolves the paradox: the table is fast precisely when W is small, and small-number instances are the tractable ones. The hard instances have capacities with many bits, and there nW is exponential in the input length, so nothing has been beaten." },
+
+    { type: "mc",
+      q: "A colleague says \"knapsack is solvable in polynomial time by dynamic programming, so subset sum is not hard.\" What is the precise correction?",
+      opts: [
+        "Knapsack has a pseudopolynomial algorithm &#8212; polynomial in n and W's value, exponential in W's bit length &#8212; fast only when the numbers are small",
+        "Knapsack is indeed solvable in polynomial time, but subset sum is a strictly harder problem that this same table does not apply to, so the inference does not carry across at all",
+        "The dynamic program is genuinely polynomial but finds only the value and not the subset, and recovering the actual subset is the NP-complete part that the colleague's claim overlooks",
+        "Knapsack is polynomial only on average over random inputs, and subset sum is quick on average too, so the claim is right in expectation but wrong in the worst case that matters"
+      ], a: 0,
+      why: "The table is polynomial in n and in the value of W, but exponential in the number of bits of W, which is what pseudopolynomial means. Subset sum, partition and knapsack's decision version are all NP-complete; the table does not beat that because it is not polynomial in the input length. Recovering the subset is a cheap traceback, not the hard part." },
+
+    { type: "mc",
+      q: "You must solve subset sum on 40 numbers each around 10<sup>15</sup>, with a reachable target. Why is meet-in-the-middle the right tool and the O(nT) table the wrong one?",
+      opts: [
+        "The table is wrong because 40 items exceed its item limit, while meet-in-the-middle has no such limit and scales to any number of items by splitting them",
+        "The table needs O(nT) cells and T is astronomical, so it cannot be built; meet-in-the-middle is O(2^(n/2)) &#8212; about a million per half at n = 40 &#8212; which is affordable",
+        "The table gives only an approximate answer for large targets, while meet-in-the-middle is exact, so correctness alone decides the choice here",
+        "Meet-in-the-middle is faster than the table on every subset-sum instance, so it should always be preferred and the table is never the right choice"
+      ], a: 1,
+      why: "With T around 10^15 the O(nT) table has more cells than can be stored - the pseudopolynomial cost realised. But n = 40 is small, so meet-in-the-middle's O(2^(n/2)) - 2^20, about a million, per half - is cheap in time and space. It is the tool for small n and huge numbers, the exact corner the table cannot reach; when the numbers are small instead, the table wins." },
+
+    { type: "order",
+      q: "Order these knapsack-family problems by what one line of the recurrence changes, starting from plain 0/1 knapsack:",
+      items: [
+        "0/1 knapsack: maximise value, each item taken at most once",
+        "subset sum: set each item's value equal to its weight and ask whether a capacity is hit exactly",
+        "partition: run subset sum with the target fixed to half the total of all the items",
+        "unbounded knapsack: allow each item to be taken repeatedly by reading the current capacity row"
+      ],
+      why: "Each is the previous with one change. Subset sum is knapsack with value equal to weight and a reachability test instead of a maximum. Partition is subset sum with a specific target, half the total. Unbounded is a separate axis - repetition allowed - orthogonal to the value-equals-weight and decide-versus-maximise changes, which is why it sits apart. One table, four labels." },
+
+    { type: "blank",
+      q: "The technique that splits the items into two halves, enumerates each half's 2<sup>n/2</sup> subset sums and matches them &#8212; the tool for subset sum when n is small but the numbers are huge &#8212; is called ____ ____ ____ ____.",
+      a: ["meet in the middle"],
+      why: "It trades the O(2^n) full enumeration for O(2^(n/2)) time and space: 2^20 sums per half at n = 40 rather than 2^40 overall, a million-fold cut that solves in a second what brute force could not. It is the opposite corner from the O(nW) table - small n and large numbers, where the table cannot be built." },
+
+    { type: "mc",
+      q: "Subset sum is called <em>weakly</em> NP-complete. What does the qualifier mean?",
+      opts: [
+        "That it is NP-complete but rarely arises in practice, so the hardness is mostly theoretical and can be ignored in most engineering settings",
+        "That it is only NP-complete under some reductions and not others, leaving its true status open pending a resolution of P versus NP",
+        "That it is NP-complete in general but has a pseudopolynomial algorithm, so the hardness disappears whenever the numbers involved are small",
+        "That it is easier than the other NP-complete problems and can be solved in polynomial time on inputs whose targets are bounded by a polynomial in n alone"
+      ], a: 2,
+      why: "A weakly NP-complete problem is NP-complete but admits a pseudopolynomial algorithm - so it is tractable exactly when its numbers are small, which is why small-integer knapsack is a routine table-fill. A strongly NP-complete problem stays hard even with small, bounded numbers and has no pseudopolynomial algorithm unless P = NP. The qualifier tells you whether 'the numbers are small' is an escape." }
   ]
 });
