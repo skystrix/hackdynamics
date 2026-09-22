@@ -8391,3 +8391,249 @@ CHAPTERS.push({
       why: "The B-tree's wide fanout gives the shallowest tree by far, a handful of levels for a billion keys. Among the binary trees, the strict AVL invariant keeps it shorter than the looser red-black tree, though both are logarithmic. The plain BST on sorted input is the outlier, degenerating to a linear path. The two balanced binary trees are close, and either order between them reflects their bounds." }
   ]
 });
+
+/* ======================= CHAPTER 27 ======================= */
+CHAPTERS.push({
+  num: 27, part: 4, title: "Heaps and Priority Queues",
+  blurb: "A heap is a tree that lives in an array with no pointers at all, which is the first surprise, and building one takes linear rather than n-log-n time, which is the second and is genuinely counterintuitive. This chapter proves the linear build by summing the work level by level, uses the heap for heapsort and for the top-K pattern, and then answers the question every two-heaps problem is really asking: how do you keep a running median. Along the way it corrects a piece of folklore &mdash; that repeated insertion is always the slow way to build a heap &mdash; and explains why the theoretically superior Fibonacci heap is the one you should not use.",
+  sections: [
+
+    { title: "The Array Trick",
+      viz: "dsaHeap", vizTitle: "The array and the tree are the same thing; insert a value and watch it sift",
+      html:
+        "<p>A <strong>heap</strong> is a <strong>complete binary tree</strong> &mdash; every level full except the last, which fills left to right, the shape of Chapter 24 &mdash; with one ordering rule: every node is smaller than both of its children, for a <strong>min-heap</strong>, so the smallest element is always at the root. That is a weaker rule than a search tree's; a heap says nothing about the order between siblings or across subtrees, only that a parent beats its children. The weakness is the point, because it is exactly enough to find and remove the minimum quickly and no more, and asking for no more is what makes the structure cheap.</p>" +
+        "<p>The completeness is what lets the tree shed its pointers. Number the nodes in level order starting from zero and lay them in an array in that order; then the tree's edges become arithmetic. The node at index i has its left child at 2i plus 1, its right child at 2i plus 2, and its parent at i minus one, integer-divided by two. No node stores a pointer to anything &mdash; the array index <em>is</em> the position in the tree.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 270' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>A heap is a complete tree stored in an array: node i sits at index i</text><line x1='380' y1='64' x2='250' y2='106' stroke='#334a6a' stroke-width='1.5'/><line x1='380' y1='64' x2='510' y2='106' stroke='#334a6a' stroke-width='1.5'/><line x1='250' y1='134' x2='185' y2='176' stroke='#334a6a' stroke-width='1.5'/><line x1='250' y1='134' x2='315' y2='176' stroke='#334a6a' stroke-width='1.5'/><line x1='510' y1='134' x2='445' y2='176' stroke='#334a6a' stroke-width='1.5'/><line x1='510' y1='134' x2='575' y2='176' stroke='#334a6a' stroke-width='1.5'/><circle cx='380' cy='50' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='380' y='54' text-anchor='middle' fill='#c9d6ea' font-size='12'>0</text><circle cx='250' cy='120' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='250' y='124' text-anchor='middle' fill='#c9d6ea' font-size='12'>1</text><circle cx='510' cy='120' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='510' y='124' text-anchor='middle' fill='#c9d6ea' font-size='12'>2</text><circle cx='185' cy='190' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='185' y='194' text-anchor='middle' fill='#c9d6ea' font-size='12'>3</text><circle cx='315' cy='190' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='315' y='194' text-anchor='middle' fill='#c9d6ea' font-size='12'>4</text><circle cx='445' cy='190' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='445' y='194' text-anchor='middle' fill='#c9d6ea' font-size='12'>5</text><circle cx='575' cy='190' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='575' y='194' text-anchor='middle' fill='#c9d6ea' font-size='12'>6</text><text x='40' y='253' fill='#8fa3c4' font-size='11'>array</text><rect x='170' y='235' width='56' height='28' rx='3' fill='#12233f' stroke='#3ddc97' stroke-width='1.1'/><text x='198' y='254' text-anchor='middle' fill='#3ddc97' font-size='12'>0</text><rect x='230' y='235' width='56' height='28' rx='3' fill='#12233f' stroke='#3ddc97' stroke-width='1.1'/><text x='258' y='254' text-anchor='middle' fill='#3ddc97' font-size='12'>1</text><rect x='290' y='235' width='56' height='28' rx='3' fill='#12233f' stroke='#3ddc97' stroke-width='1.1'/><text x='318' y='254' text-anchor='middle' fill='#3ddc97' font-size='12'>2</text><rect x='350' y='235' width='56' height='28' rx='3' fill='#12233f' stroke='#3ddc97' stroke-width='1.1'/><text x='378' y='254' text-anchor='middle' fill='#3ddc97' font-size='12'>3</text><rect x='410' y='235' width='56' height='28' rx='3' fill='#12233f' stroke='#3ddc97' stroke-width='1.1'/><text x='438' y='254' text-anchor='middle' fill='#3ddc97' font-size='12'>4</text><rect x='470' y='235' width='56' height='28' rx='3' fill='#12233f' stroke='#3ddc97' stroke-width='1.1'/><text x='498' y='254' text-anchor='middle' fill='#3ddc97' font-size='12'>5</text><rect x='530' y='235' width='56' height='28' rx='3' fill='#12233f' stroke='#3ddc97' stroke-width='1.1'/><text x='558' y='254' text-anchor='middle' fill='#3ddc97' font-size='12'>6</text><text x='400' y='229' text-anchor='middle' fill='#ffd166' font-size='11'>node i:  left = 2i+1    right = 2i+2    parent = (i-1)/2</text></svg></div>" +
+        "<p>This is not only a memory saving, though it is that: no per-node allocation and no pointer overhead, where a pointer-based tree spends more bytes on links than on data. It is also a cache win, the effect measured in Chapter 16. A heap operation walks a root-to-leaf path, and those nodes, though scattered across the tree, sit at indices that are near each other's arithmetic descendants, so the traversal touches contiguous-ish memory rather than chasing pointers to wherever the allocator happened to put each node. The array heap is the <strong>priority queue</strong> your standard library ships &mdash; Python's <code>heapq</code>, Java's <code>PriorityQueue</code>, C++'s <code>priority_queue</code> &mdash; and it is an array underneath in every one.</p>" + "<p>The arithmetic is worth doing once by hand. In the array [1, 4, 3, 7, 5, 8], the value 4 sits at index 1, so its children are at indices 3 and 4, holding 7 and 5, and its parent is at index (1 minus 1) over 2 equals 0, holding 1 &mdash; and indeed 1 beats 4 beats both 7 and 5, so the heap property holds along that path. The last internal node is at index (n over 2) minus 1, and everything past it is a leaf with no children to check, a boundary the next two sections lean on.</p>"
+    },
+
+    { title: "Sift Up and Sift Down",
+      html:
+        "<p>Two operations maintain the heap, and both restore the parent-beats-child invariant by moving one element along a single path. To <strong>insert</strong>, append the new value at the end of the array &mdash; the next open leaf &mdash; and <strong>sift it up</strong>: while it is smaller than its parent, swap the two, and repeat. The value climbs until it finds a parent that beats it or reaches the root, at most the height of the tree, so insertion is O(log n).</p>" +
+        "<p>To <strong>extract the minimum</strong>, take the root, move the last element into the root's slot to keep the tree complete, and <strong>sift it down</strong>: while it is larger than its smaller child, swap them, and repeat. It sinks until both children beat it or it becomes a leaf, again at most the height, so extraction is O(log n) too. The two operations are mirror images, one climbing and one sinking, and each restates the same invariant at every step: after the swap, the element and its former neighbour are back in heap order, and the disturbance has moved one level along.</p>" + "<p>Trace a sift up. Insert the value 2 into the min-heap [1, 4, 3, 7, 5] by appending it at index 5, whose parent is at index (5 minus 1) over 2 equals 2, holding 3. Since 2 is below 3, swap them: 2 rises to index 2 and 3 sinks to index 5. Now 2's parent is index 0, holding 1, and 1 beats 2, so it stops &mdash; two comparisons, one swap, and the new value has climbed to its rightful level. That climb is what sift up means, and sift down is the same motion inverted, a too-large root sinking past its smaller child until both children beat it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def sift_up(a, i):\n" +
+        "    while i > 0:\n" +
+        "        p = (i - 1) // 2\n" +
+        "        if a[i] < a[p]:\n" +
+        "            a[i], a[p] = a[p], a[i]; i = p\n" +
+        "        else: break\n\n" +
+        "def sift_down(a, i, n):\n" +
+        "    while True:\n" +
+        "        l, r, small = 2*i+1, 2*i+2, i\n" +
+        "        if l < n and a[l] < a[small]: small = l\n" +
+        "        if r < n and a[r] < a[small]: small = r\n" +
+        "        if small == i: break\n" +
+        "        a[i], a[small] = a[small], a[i]; i = small</code></pre>" +
+        "<pre data-lang='java' hidden><code>void siftUp(int[] a, int i) {\n" +
+        "    while (i > 0) {\n" +
+        "        int p = (i - 1) / 2;\n" +
+        "        if (a[i] < a[p]) { int t=a[i]; a[i]=a[p]; a[p]=t; i=p; }\n" +
+        "        else break;\n" +
+        "    }\n" +
+        "}\n" +
+        "void siftDown(int[] a, int i, int n) {\n" +
+        "    while (true) {\n" +
+        "        int l=2*i+1, r=2*i+2, small=i;\n" +
+        "        if (l<n && a[l]<a[small]) small=l;\n" +
+        "        if (r<n && a[r]<a[small]) small=r;\n" +
+        "        if (small==i) break;\n" +
+        "        int t=a[i]; a[i]=a[small]; a[small]=t; i=small;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p>Everything else the priority queue does is these two. Changing a key's priority is a sift in whichever direction the change points; deleting an arbitrary element is a swap-with-the-last followed by a sift. The heap is two motions along a path, and the rest of the chapter is what those two motions buy.</p>"
+    },
+
+    { title: "Why Build-Heap Is O(n)",
+      html:
+        "<p>Given a whole array at once, there are two ways to make it a heap. The obvious one is to insert the elements one at a time, n sift-ups, which looks like n times O(log n) equals O(n log n). The clever one, <strong>build-heap</strong>, runs sift-down on every internal node from the last one up to the root, and it is O(n) &mdash; linear, not n log n. That a single pass of sift-downs beats n insertions is the chapter's most counterintuitive fact, and it is worth proving rather than asserting.</p>" +
+        "<p>The proof is a sum over levels. Sift-down from a node costs at most the distance to the bottom, so it is cheap for the nodes near the leaves and dear only for the few near the root &mdash; the exact opposite of where the nodes are. A complete tree has about half its nodes as leaves, which sift-down does not touch at all; a quarter one level up, each sifting at most one step; an eighth two levels up; and so on. The total work is the sum, over levels, of the node count at that level times the maximum sift distance from it, and that series converges to a constant times n.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 250' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Build-heap work per level = (nodes at level) x (sift distance): the bottom level does none</text><rect x='70' y='198' width='46' height='2' rx='2' fill='#2de2ff' opacity='0.85'/><text x='93' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='124' y='195' width='46' height='5' rx='2' fill='#2de2ff' opacity='0.85'/><text x='147' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='178' y='191' width='46' height='9' rx='2' fill='#2de2ff' opacity='0.85'/><text x='201' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>2</text><rect x='232' y='184' width='46' height='16' rx='2' fill='#2de2ff' opacity='0.85'/><text x='255' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>3</text><rect x='286' y='172' width='46' height='28' rx='2' fill='#2de2ff' opacity='0.85'/><text x='309' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>4</text><rect x='340' y='154' width='46' height='46' rx='2' fill='#2de2ff' opacity='0.85'/><text x='363' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>5</text><rect x='394' y='125' width='46' height='75' rx='2' fill='#2de2ff' opacity='0.85'/><text x='417' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>6</text><rect x='448' y='88' width='46' height='112' rx='2' fill='#2de2ff' opacity='0.85'/><text x='471' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>7</text><rect x='502' y='50' width='46' height='150' rx='2' fill='#3ddc97' opacity='0.85'/><text x='525' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>8</text><rect x='556' y='50' width='46' height='150' rx='2' fill='#3ddc97' opacity='0.85'/><text x='579' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>9</text><rect x='610' y='200' width='46' height='0' rx='2' fill='#7d8fb0' opacity='0.85'/><text x='633' y='213' text-anchor='middle' fill='#8fa3c4' font-size='10'>10</text><text x='633' y='196' text-anchor='middle' fill='#7d8fb0' font-size='9'>0</text><text x='70' y='230' fill='#8fa3c4' font-size='10'>level (0 = root)</text><text x='232' y='40' fill='#3ddc97' font-size='11'>peak work is near the bottom, not AT it</text><text x='232' y='56' fill='#c9d6ea' font-size='10'>bottom level: half the nodes, zero sifting</text><text x='232' y='72' fill='#c9d6ea' font-size='10'>sum over levels = 2n -> build-heap is O(n)</text></svg></div>" +
+        "<p>The figure is the argument. The bottom level holds half the nodes and contributes zero work, because a leaf sifts nowhere; the level above holds a quarter and each sifts at most one; and the per-level total actually <em>peaks near the bottom and falls to zero at it</em>, because the growing node count and the shrinking sift distance trade off, with their product largest a level or two above the leaves. Summed over all levels the total is about 2n, so build-heap is O(n). Measured on a million random values, build-heap performed 744,003 swaps, almost exactly 0.74 times n, while inserting the same values one by one took 1.28 million &mdash; both linear on random data, the insert version merely carrying a larger constant.</p>" +
+        "<p>So where does the textbook's O(n log n) for repeated insertion come from? The worst case, not the average. Insert values in <em>descending</em> order into a min-heap and every new value is the smallest so far, so it sifts all the way to the root; the swap count then grows as n log n &mdash; measured at 18 million swaps for a million elements, against build-heap's unbudged one million on the same adversarial input. Build-heap's O(n) is a guarantee that holds for every input; repeated insertion is linear on random data and n-log-n only when the order is against you. The honest statement is that build-heap is never worse and sometimes a factor of log n better, which is reason enough to prefer it.</p>"
+    },
+
+    { title: "Heapsort",
+      html:
+        "<p>A heap sorts. Build a max-heap of the array in place with build-heap, then repeatedly swap the root &mdash; the maximum &mdash; with the last element, shrink the heap by one, and sift the new root down; the array fills with the sorted order from the back. This is <strong>heapsort</strong>, and it has two properties nothing else on the sorting shelf combines: it is <em>in place</em>, using no extra array, and its worst case is O(n log n), with no adversarial input that degrades it the way sorted input degrades a naive quicksort. On paper it dominates.</p>" +
+        "<p>In practice it loses, and Chapter 16 explains why. Heapsort's sift-down phase jumps around the array by powers of two &mdash; from index i to 2i and back &mdash; so consecutive memory accesses are far apart, defeating the cache that rewards sequential access, and its comparisons are hard to predict, defeating the branch predictor. Measured on a million random integers, heapsort ran in 932 milliseconds against the library's Timsort at 153, a factor of six slower for the identical asymptotic class, the entire gap explained by memory behaviour rather than operation count.</p>" +
+        "<p>This is why heapsort survives not as a default but as a <em>guarantee</em>. The C++ standard library's <code>sort</code> is <strong>introsort</strong>: it runs quicksort, which is cache-friendly and fast, but watches its recursion depth, and if quicksort's worst case threatens &mdash; the depth exceeding about two log n &mdash; it switches to heapsort for the rest, buying the O(n log n) worst-case bound that quicksort alone cannot promise. Heapsort is the safety net under the fast algorithm, chosen precisely because its worst case is its only case. The lesson is Chapter 16's: asymptotic class is a floor, not a ranking, and the constant factors that separate two n-log-n sorts are made of cache lines and branches.</p>" + "<p>The in-place trick is worth seeing, because it is what lets one array hold both the shrinking heap and the growing sorted tail. Build a max-heap so the largest is at index 0; swap it with the last slot, which is now its final sorted position; shrink the heap's logical size by one so that slot is frozen; and sift the new root down through the smaller heap. Repeat, and the sorted region grows from the right while the heap shrinks from the right, sharing the same array with no second buffer &mdash; the property that keeps heapsort in the standard library as the O(n log n) fallback despite its cache cost.</p>"
+    },
+
+    { title: "Top-K",
+      html:
+        "<p>A recurring interview and production task: from a stream or array of n items, keep the K largest. The naive answer sorts everything and takes the first K, O(n log n). The heap answer is better whenever K is much smaller than n. Keep a min-heap of size K &mdash; note the polarity, a <em>min</em>-heap to hold the largest values, so that its root is the smallest of the current top K and the cheapest to evict. For each new item, if it exceeds that root, replace the root and sift down; otherwise discard it. The heap never grows past K, so each of the n items costs O(log K), for O(n log K) overall.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "def top_k(stream, K):\n" +
+        "    h = []                          # min-heap of the K largest so far\n" +
+        "    for x in stream:\n" +
+        "        if len(h) < K: heapq.heappush(h, x)\n" +
+        "        elif x > h[0]: heapq.heapreplace(h, x)   # evict the smallest\n" +
+        "    return sorted(h, reverse=True)\n" +
+        "# heapq.nlargest(K, stream) is the library's version of exactly this</code></pre>" +
+        "<pre data-lang='java' hidden><code>PriorityQueue&lt;Integer&gt; h = new PriorityQueue&lt;&gt;();  // min-heap\n" +
+        "for (int x : stream) {\n" +
+        "    if (h.size() &lt; K) h.add(x);\n" +
+        "    else if (x &gt; h.peek()) { h.poll(); h.add(x); }\n" +
+        "}</code></pre></div>" +
+        "<p>The measurement shows the trade sharply. Finding the top K of a million integers, the size-K heap took about 25 milliseconds whether K was ten, a hundred or a thousand, while a full sort took 152 milliseconds every time &mdash; the heap six times faster, and flat in K because O(n log K) barely moves when K is small. Push K to 100,000, a tenth of n, and the heap's advantage shrinks to 1.2 times: once K approaches n, maintaining the heap costs about as much as sorting. The rule follows directly. Sort when you need all K in order and K is a large fraction of n; use the size-K heap when K is small, which is the usual case; and reach for <strong>quickselect</strong>, Chapter 15's O(n) partition-based selection, when you may mutate the array and want the top K as an unordered set, since it beats both by skipping the ordering entirely.</p>" + "<p>The three answers pick themselves once you name the constraint. A stream you cannot store all of leaves only the heap, since sorting needs the whole array in hand and quickselect needs to mutate it; a static array you may rearrange favours quickselect, linear and ordering nothing it need not; and a case where you want the K largest already sorted and K is a large slice of n makes the full sort's simplicity worth its cost. The heap is the default because the small-K-over-a-stream case is the one that keeps recurring.</p>"
+    },
+
+    { title: "Two Heaps for a Running Median",
+      html:
+        "<p>The median of a growing stream is the question two heaps were made for. You cannot keep a running median with one heap, because the median sits in the middle and a heap only exposes an end. So keep two: a <strong>max-heap</strong> of the smaller half of the values seen so far, and a <strong>min-heap</strong> of the larger half, arranged back to back so that the max-heap's root is the largest of the low values and the min-heap's root is the smallest of the high values. The median is then always at the boundary &mdash; one of those two roots, or their average &mdash; and reading it is O(1).</p>" +
+        "<p>The work is keeping the halves balanced. On each new value, push it to whichever side it belongs &mdash; below the max-heap's root goes low, otherwise high &mdash; and then, if the two heaps' sizes differ by more than one, move the offending root across to the other heap. That single rebalancing move is the whole invariant: the sizes stay within one of each other, and every value on the low side stays below every value on the high side. Each push is a heap insertion plus at most one cross-move, so O(log n) per element and O(1) to read the median.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "lo = []   # max-heap (store negatives), the smaller half\n" +
+        "hi = []   # min-heap, the larger half\n" +
+        "def push(x):\n" +
+        "    if not lo or x <= -lo[0]: heapq.heappush(lo, -x)\n" +
+        "    else: heapq.heappush(hi, x)\n" +
+        "    if len(lo) > len(hi) + 1: heapq.heappush(hi, -heapq.heappop(lo))\n" +
+        "    elif len(hi) > len(lo): heapq.heappush(lo, -heapq.heappop(hi))\n" +
+        "def median():\n" +
+        "    if len(lo) > len(hi): return -lo[0]\n" +
+        "    return (-lo[0] + hi[0]) / 2</code></pre>" +
+        "<pre data-lang='java' hidden><code>PriorityQueue&lt;Integer&gt; lo = new PriorityQueue&lt;&gt;(Collections.reverseOrder()); // max-heap\n" +
+        "PriorityQueue&lt;Integer&gt; hi = new PriorityQueue&lt;&gt;();                        // min-heap\n" +
+        "void push(int x) {\n" +
+        "    if (lo.isEmpty() || x <= lo.peek()) lo.add(x); else hi.add(x);\n" +
+        "    if (lo.size() > hi.size() + 1) hi.add(lo.poll());\n" +
+        "    else if (hi.size() > lo.size()) lo.add(hi.poll());\n" +
+        "}</code></pre></div>" +
+        "<p>Verified against the true median after every one of five thousand pushes, the two-heap value matched exactly. And the cost of the structure is the point: on a fifty-thousand-element stream it ran in 23 milliseconds, where maintaining a sorted list instead &mdash; inserting each value into place, O(n) per element because the tail must shift &mdash; took 312 milliseconds, thirteen times slower and widening with n. Whenever a problem asks for a statistic at the boundary of two growing halves, two heaps back to back are the answer, and recognising that shape is what the pattern buys.</p>"
+    },
+
+    { title: "d-ary Heaps and the Fibonacci Question",
+      html:
+        "<p>The binary heap has two children per node, but nothing requires two. A <strong>d-ary heap</strong> gives each node d children at indices d times i plus one through d times i plus d, which makes the tree shallower &mdash; height log base d of n instead of log base two &mdash; so sift-up, which walks one path, gets cheaper as d grows. The catch is sift-down, which must find the smallest of d children at each level, so it pays d comparisons per level against fewer levels; the two effects pull against each other.</p>" +
+        "<p>Measured on a million elements, build-heap's comparison count falls steadily with d &mdash; 1.88 times n at d equals two, 1.32 at four, 1.14 at eight, 1.03 at thirty-two &mdash; because building leans on sift-down but the shallower tree still wins overall. The reason production code nonetheless tends to pick a small d, around four, is the operation build-heap does not exercise: in Dijkstra's shortest-path algorithm of Chapter 35, the heap does many <em>decrease-key</em> operations, which are sift-ups and love a shallow tree, against fewer extract-mins, which are sift-downs and hate wide nodes. A fanout of about four balances the two and also fits a node's children into a cache line, the same argument the B-tree made.</p>" +
+        "<p>Which raises the structure that should end the chapter as a caution. The <strong>Fibonacci heap</strong>, from Fredman and Tarjan in 1987, achieves O(1) amortised decrease-key and O(log n) extract-min, which drops Dijkstra's bound from O of open-bracket E plus V, all times log V, to O of E plus V log V &mdash; asymptotically better, and for decades the answer to the exam question about the fastest Dijkstra. Yet no standard library ships it, and production Dijkstra uses a binary or d-ary heap. The reason is honest and worth internalising: the Fibonacci heap's constant factors and pointer-chasing overhead are so large that on any graph that fits in memory the theoretically slower binary heap finishes first. It is the standing example that an asymptotic win is a claim about large enough n, and that the n large enough to realise this one does not occur. The best algorithm on paper is not always the best algorithm.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>The index map.</strong> For the node at array index i, write its two children and its parent, and confirm on the seven-element heap that parent of 2i+1 and of 2i+2 are both i. Explain in one line why completeness is what makes the mapping exact.</li>" +
+        "<li><strong>Sift both ways.</strong> Implement sift-up and sift-down, and use them to build a priority queue with insert and extract-min. Show that extracting repeatedly yields the values in sorted order.</li>" +
+        "<li><strong>Prove build-heap linear.</strong> Count swaps for build-heap and for n successive inserts on random data, reproducing the roughly 0.74n against 1.28n. Then feed both a descending array and watch inserts blow up to n log n while build-heap stays at n.</li>" +
+        "<li><strong>Where the work is.</strong> For a full heap, tabulate node count times sift distance per level and confirm the total is about 2n and that the peak-work level is not the bottom one.</li>" +
+        "<li><strong>Heapsort versus the library.</strong> Implement in-place heapsort and time it against your language's sort on a million random values, reproducing the roughly sixfold gap, and name the two hardware effects behind it.</li>" +
+        "<li><strong>Top-K and the crossover.</strong> Implement the size-K min-heap top-K and time it against a full sort as K grows from 10 to a large fraction of n, finding the K at which the heap's advantage disappears.</li>" +
+        "<li><strong>Running median.</strong> Implement the two-heap median and assert it against the true median on a random stream, then time it against inserting into a sorted list.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "heap", d: "A complete binary tree with the property that every node beats its children (smaller, for a min-heap), so the extreme element is at the root; stored in an array with no pointers." },
+    { t: "complete binary tree", d: "A tree filled level by level from the top, every level full except possibly the last which fills left to right; the shape that lets a heap live in a contiguous array." },
+    { t: "min-heap", d: "A heap whose root is the smallest element, each node no greater than its children; a max-heap is the mirror with the largest at the root." },
+    { t: "priority queue", d: "An abstract queue that dequeues the highest-priority element rather than the oldest; a heap is its standard implementation, giving O(log n) insert and extract." },
+    { t: "sift up", d: "Restoring the heap after an insertion by swapping a value with its parent while it beats the parent, moving it up at most the tree's height; O(log n)." },
+    { t: "sift down", d: "Restoring the heap after the root is removed by swapping a value with its smaller child while a child beats it, moving it down at most the height; O(log n)." },
+    { t: "extract the minimum", d: "Removing a min-heap's root by moving the last element to the root and sifting it down; returns the smallest element in O(log n)." },
+    { t: "build-heap", d: "Turning an unordered array into a heap by running sift-down on every internal node from the last up to the root; O(n) total, not O(n log n), by the per-level summation." },
+    { t: "heapsort", d: "An in-place O(n log n) worst-case sort that build-heaps the array then repeatedly extracts the extreme; loses to Timsort and quicksort in practice on cache and branch behaviour." },
+    { t: "introsort", d: "The hybrid sort behind C++'s std::sort: quicksort for speed, switching to heapsort once recursion depth threatens quicksort's worst case, to guarantee O(n log n)." },
+    { t: "top-K", d: "Keeping the K largest of n items with a size-K min-heap of opposite polarity, O(n log K); beats a full sort when K is much smaller than n." },
+    { t: "running median", d: "The median of a growing stream, kept in O(log n) per element by a max-heap of the lower half and a min-heap of the upper half with a size-balance invariant." },
+    { t: "d-ary heap", d: "A heap with d children per node at indices d*i+1 through d*i+d; shallower than a binary heap, trading more comparisons per sift-down for fewer levels, with about four a common sweet spot." },
+    { t: "Fibonacci heap", d: "A heap (Fredman & Tarjan 1987) with O(1) amortised decrease-key that improves Dijkstra's bound in theory but whose large constants keep it out of production." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A heap is stored in a plain array with no child or parent pointers. What makes that possible, and what does it buy beyond saving memory?",
+      opts: [
+        "The heap ordering fixes each element's array index directly from its value, so the array is kept sorted and a lookup is a binary search over it",
+        "The tree is complete, so numbering nodes in level order gives node i its children at 2i+1 and 2i+2 by arithmetic; the contiguous layout also gives better cache behaviour than pointer-chasing",
+        "Each node stores its two children's array indices as small integers rather than as full-width pointers, which halves the per-node overhead while still keeping the whole tree structure fully explicit",
+        "The array holds the tree in sorted order, so both children of a node are always adjacent to it in memory, which is what the cache rewards"
+      ], a: 1,
+      why: "Completeness means the nodes fill the array with no gaps, so level-order numbering makes the parent-child relation pure arithmetic (children at 2i+1, 2i+2), needing no stored pointers. Beyond the memory saving, a root-to-leaf walk touches near-contiguous memory rather than chasing scattered pointers, the cache win of Chapter 16. A heap is not kept sorted and does not store child indices." },
+
+    { type: "mc",
+      q: "Build-heap runs sift-down on every internal node and is O(n), while inserting the same n elements one at a time looks like O(n log n). Why is build-heap only linear?",
+      opts: [
+        "Because sift-down is O(1) per node, since each node only ever swaps with exactly one of its children before the heap property has been fully restored at that position",
+        "Because build-heap skips over the leaf nodes entirely, and skipping fully half of all of the nodes is what turns the n log n cost into n over two, which is linear",
+        "Because most nodes are near the leaves where sift-down travels almost no distance, and the sum over levels of node count times sift distance converges to about 2n",
+        "Because the array is already partially ordered by the time build-heap starts, so the total number of swaps it performs is bounded by the number of inversions, which is O(n)"
+      ], a: 2,
+      why: "Sift-down costs the distance to the bottom, which is large only for the few nodes near the root; a complete tree has half its nodes as leaves (zero work), a quarter one level up, and so on, and that series of node-count-times-distance sums to about 2n. Sift-down is not O(1) per node, skipping leaves alone would not suffice, and the input is arbitrary, not partially ordered." },
+
+    { type: "mc",
+      q: "The textbook says repeated insertion builds a heap in O(n log n), but on random data it was measured at 1.28n swaps &mdash; linear. Where does the O(n log n) actually come from?",
+      opts: [
+        "From the worst case: inserting in descending order into a min-heap makes every value the new smallest, so each sifts to the root, and the swap count grows as n log n",
+        "From the average case being genuinely n log n; the measurement of 1.28n counts only the successful swaps and quietly omits the failed comparisons that actually dominate the true cost",
+        "From the cache misses, which add a log n factor to each insertion that a swap count cannot see but a wall-clock measurement would reveal",
+        "From the resizing of the backing array as it grows, which copies all elements each time it doubles and contributes the log n factor"
+      ], a: 0,
+      why: "Repeated insertion is linear in swaps on random data; the n-log-n figure is the worst case, reached by descending input where every new value bubbles all the way to the root, measured at 18 million swaps for a million elements against build-heap's one million. It is not an average-case truth, not hidden in comparisons or cache, and array resizing is amortised O(1), not a log factor." },
+
+    { type: "mc",
+      q: "Heapsort is in-place and O(n log n) in the worst case, with no input that degrades it, yet the C++ standard sort uses quicksort and only falls back to heapsort. Why keep heapsort at all?",
+      opts: [
+        "Because heapsort's guaranteed O(n log n) worst case backstops quicksort's O(n squared) one: introsort runs fast quicksort but switches to heapsort when recursion depth signals the bad case",
+        "Because heapsort is faster than quicksort specifically on already-sorted input, so the fallback exists to handle exactly the sorted case that a naive quicksort would otherwise turn quadratic on",
+        "Because heapsort uses no extra memory while quicksort's recursion needs O(log n) stack, so the fallback is triggered when memory runs out",
+        "Because heapsort produces a stable ordering that quicksort does not, so the fallback preserves stability on inputs with equal keys"
+      ], a: 0,
+      why: "Quicksort is fast on average but has an O(n squared) worst case; heapsort is slower in practice (cache and branches) but its worst case is O(n log n). Introsort gets the best of both: quicksort for speed, with a switch to heapsort once recursion depth exceeds about two log n, guaranteeing n log n overall. Heapsort is not faster on sorted input, the fallback is not about memory, and heapsort is not stable." },
+
+    { type: "blank",
+      q: "Turning an unordered array into a heap in O(n) by running sift-down on every internal node from the last one up to the root &mdash; rather than inserting the elements one by one &mdash; is called ____.",
+      a: ["build-heap", "build heap", "heapify"],
+      why: "Build-heap sifts down each internal node bottom-up, and because the nodes near the leaves (the majority) sift almost nowhere, the total work sums to about 2n, making it O(n). It is strictly better than n successive insertions, which is linear on random data but O(n log n) in the worst case." },
+
+    { type: "mc",
+      q: "To keep the K largest items of a stream, you maintain a heap of size K. Why is it a min-heap rather than a max-heap, and what is the cost?",
+      opts: [
+        "A max-heap, so its root is the largest of the top K and can be reported immediately; the cost is O(n) since each item is compared against that maximum",
+        "A min-heap, so its root is the smallest of the current top K and is the cheapest to evict when a larger item arrives; the cost is O(n log K)",
+        "A max-heap, because the K largest have to be stored in descending order, and a max-heap keeps them fully sorted as each one arrives; the cost is therefore O(n log n)",
+        "A min-heap, because it keeps the K items sorted in ascending order, so a binary search can place each new item in O(log K); the cost is therefore O(n log K)"
+      ], a: 1,
+      why: "The heap holds the K largest seen so far, and you compare each new item against the smallest of them, evicting it if the newcomer is larger &mdash; so the root must be that smallest, which is a min-heap. Each of n items costs O(log K), giving O(n log K), far below a full sort when K is small. A heap is not kept sorted, and the polarity is the opposite of what intuition suggests." },
+
+    { type: "mc",
+      q: "A running median is kept with a max-heap of the lower half and a min-heap of the upper half. What invariant makes reading the median O(1), and what restores it?",
+      opts: [
+        "The two heaps hold equal elements at all times, so the median is the average of the two roots; a full re-heapify after each push restores the equality",
+        "The max-heap always holds exactly the median and everything below it, so the median is its root; a binary search on each push finds where to split and restores the halves",
+        "Every element in the max-heap is below every element in the min-heap and the sizes differ by at most one, so the median is a root or the average of both; moving one root across restores it after a push",
+        "The two heaps are kept sorted internally, so the median is the middle of their concatenation; merging them after each push restores the order in O(log n)"
+      ], a: 2,
+      why: "The low half sits entirely below the high half and the sizes stay within one, so the boundary &mdash; a root, or the mean of the two roots &mdash; is the median, read in O(1). A single push may unbalance the sizes, and moving the larger heap's root to the other restores both the size and the below/above invariant in O(log n). Heaps are not sorted internally and are not re-heapified wholesale." },
+
+    { type: "blank",
+      q: "A heap giving each node d children instead of two, shallower by a factor of log d and often built with d around four to balance sift-up against sift-down, is called a ____ heap.",
+      a: ["d-ary", "d ary", "dary"],
+      why: "A d-ary heap places d children at indices d*i+1 through d*i+d, making the tree of height log base d of n. Sift-up gets cheaper on the shallower tree while sift-down pays d comparisons per level; a fanout near four balances the two and fits the children into a cache line, which is why Dijkstra implementations often use one." },
+
+    { type: "mc",
+      q: "The Fibonacci heap improves Dijkstra's asymptotic bound with O(1) amortised decrease-key, yet no standard library ships it and production code uses a binary heap. What is the lesson?",
+      opts: [
+        "That the Fibonacci heap's bound is wrong, since later analysis showed decrease-key is actually O(log n) amortised, which erases its advantage over the binary heap",
+        "That the Fibonacci heap only helps on dense graphs, which are rare, so the binary heap is chosen because real graphs are sparse and the two are then equivalent",
+        "That the improvement is real and libraries are merely behind; the Fibonacci heap is the correct default and will replace binary heaps as implementations mature",
+        "That its constant factors and pointer overhead are so large that on any graph fitting in memory the asymptotically slower binary heap finishes first &mdash; a paper win whose crossover n never arrives"
+      ], a: 3,
+      why: "The Fibonacci heap's asymptotics are genuine, but its large constants and heavy pointer structure mean the binary heap, though theoretically slower, wins on every input that fits in memory &mdash; the crossover point lies past any practical n. It is the standing example that an asymptotic advantage is a claim about large enough n, and sometimes that n never occurs. The bound is not wrong, and it is not merely a density issue." },
+
+    { type: "order",
+      q: "Order these ways to obtain the K largest of n items by their asymptotic cost, cheapest first (taking K much smaller than n):",
+      items: [
+        "quickselect to partition around the K-th largest: O(n)",
+        "a size-K min-heap over the stream: O(n log K)",
+        "a full sort, then take the first K: O(n log n)",
+        "n successive insertions into a max-heap, then K extractions: O(n log n) build plus O(K log n)"
+      ],
+      why: "Quickselect is linear, partitioning around the K-th largest without ordering the rest. The size-K heap is O(n log K), cheaper than a full sort because the heap never exceeds K. A full sort is O(n log n). Building a full heap by n insertions is also O(n log n) in the worst case and then pays for K extractions, the most work of the four for small K. The two n-log-n rows are close and either order between them is the intended judgement." }
+  ]
+});
