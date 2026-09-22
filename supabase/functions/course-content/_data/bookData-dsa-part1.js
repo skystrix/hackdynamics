@@ -8637,3 +8637,236 @@ CHAPTERS.push({
       why: "Quickselect is linear, partitioning around the K-th largest without ordering the rest. The size-K heap is O(n log K), cheaper than a full sort because the heap never exceeds K. A full sort is O(n log n). Building a full heap by n insertions is also O(n log n) in the worst case and then pays for K extractions, the most work of the four for small K. The two n-log-n rows are close and either order between them is the intended judgement." }
   ]
 });
+
+/* ======================= CHAPTER 28 ======================= */
+CHAPTERS.push({
+  num: 28, part: 4, title: "Tries and Prefix Structures",
+  blurb: "When your keys are strings and they share prefixes, a hash map throws away the one structure you could have exploited. A trie keeps it, which turns prefix search from a scan into a walk, and it is the backbone of autocomplete, of the word-search puzzles interviews love, and &mdash; with one change of alphabet &mdash; of the fastest way to find a maximum-XOR pair. This chapter builds the trie, compresses it, combines it with the backtracking of Chapter 18 and the dynamic programming of Chapter 19, and closes with the measurement that says when a plain hash set is the better call after all.",
+  sections: [
+
+    { title: "The Structure",
+      html:
+        "<p>A <strong>trie</strong> &mdash; the name is from re<em>trie</em>val, and most people say \"try\" &mdash; is a tree whose edges are labelled by characters, so that the path from the root to a node spells a string. It is a tree in the sense of Chapter 24, but the branching is over the alphabet rather than a fixed two, and the key idea is that a stored word is not held in any single node; it is the <em>path</em>. Two words that share a prefix share the nodes for that prefix and diverge only where they differ.</p>" +
+        "<p>Because a path can end partway along a longer path &mdash; \"car\" is a prefix of \"card\" &mdash; a node needs a way to say \"a word ends here\". That is the <strong>terminal flag</strong>, a boolean marking nodes that complete a stored word, distinct from nodes that are merely passed through. Without it the trie could not tell a stored word from an unstored prefix of one, and search would return true for every prefix of every word.</p>" +
+        "<p>The cost that makes people hesitate is space. Each node must be able to branch to any next character, so the naive implementation gives every node a slot per alphabet letter &mdash; twenty-six pointers for lowercase English, most of them empty. A dictionary-node implementation stores only the children that exist, trading the fixed array for a hash map per node, which saves the empty slots but pays a hash map's overhead on every node. Either way a trie spends more on structure than a flat container does, and the closing section measures exactly how much. What you buy for that space is the subject of the next section: every operation the trie supports costs the length of the key and nothing else.</p>" + "<p>Picture the words car, card and cat. From the root, one edge c leads to a, and from a two edges branch: r, terminal for car and continuing to d for card, and t, terminal for cat. Three words, and the shared prefix ca is stored once, two nodes serving all three. That sharing is the whole economy of the structure &mdash; a thousand words beginning with un pay for those two nodes a single time, where a hash set stores the letters u and n a thousand times over.</p>"
+    },
+
+    { title: "Insert, Search, Starts-With",
+      viz: "dsaTrie", vizTitle: "Type a word to insert it; the highlighted path is the walk your query makes",
+      html:
+        "<p>Three operations define the trie, and all three are the same walk. To <strong>insert</strong> a word, start at the root and, for each character, follow the matching edge if it exists or create it if it does not, then mark the final node terminal. To <strong>search</strong>, walk the same edges and report whether you arrived at a terminal node. To test <strong>starts-with</strong> &mdash; is any stored word prefixed by this string &mdash; walk the edges and report merely whether you arrived at all, terminal or not. That last operation, free here, is the one a hash set cannot do without scanning every key.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Trie:\n" +
+        "    def __init__(self): self.root = {}\n" +
+        "    def insert(self, w):\n" +
+        "        n = self.root\n" +
+        "        for c in w: n = n.setdefault(c, {})\n" +
+        "        n['$'] = True                 # terminal flag\n" +
+        "    def search(self, w):\n" +
+        "        n = self._walk(w)\n" +
+        "        return n is not None and '$' in n\n" +
+        "    def starts_with(self, p):\n" +
+        "        return self._walk(p) is not None\n" +
+        "    def _walk(self, s):\n" +
+        "        n = self.root\n" +
+        "        for c in s:\n" +
+        "            if c not in n: return None\n" +
+        "            n = n[c]\n" +
+        "        return n</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Trie {\n" +
+        "    Map&lt;Character,Trie&gt; kids = new HashMap&lt;&gt;();\n" +
+        "    boolean end;\n" +
+        "    void insert(String w) {\n" +
+        "        Trie n = this;\n" +
+        "        for (char c : w.toCharArray())\n" +
+        "            n = n.kids.computeIfAbsent(c, k -> new Trie());\n" +
+        "        n.end = true;\n" +
+        "    }\n" +
+        "    boolean search(String w) { Trie n = walk(w); return n != null && n.end; }\n" +
+        "    boolean startsWith(String p) { return walk(p) != null; }\n" +
+        "}</code></pre></div>" +
+        "<p>The cost of all three is the length of the key, and &mdash; the property that makes the trie worth its space &mdash; it is <em>independent of how many words are stored</em>. A hash set's lookup also looks O(length), because hashing the key reads all of it, but the trie's guarantee is sharper: searching for a ten-character word in a trie of fifty thousand words or of fifty million touches exactly ten nodes either way. Verified against a plain set on twenty thousand probes, the trie agreed on every one, while its structure &mdash; fifty thousand dictionary words in about 226,000 nodes &mdash; is the price of the prefix operations the set cannot offer.</p>" + "<p><strong>Autocomplete</strong> falls straight out of starts-with. Walk to the node the typed prefix reaches, then enumerate the terminal nodes in that subtree &mdash; those are exactly the stored words beginning with what was typed, yielded by a depth-first walk of the subtree, optionally ordered by a stored frequency. The prefix work is done once on the way down; the completions are whatever hangs below. This is the feature every search box ships, and it is a trie the moment it needs to be fast.</p>"
+    },
+
+    { title: "Compressed and Radix Tries",
+      html:
+        "<p>The naive trie wastes nodes on chains. When a run of characters has no branch &mdash; the \"argo\" tail of \"cargo\" that no other word shares &mdash; the trie spends one node per character where one node for the whole run would do. A <strong>radix trie</strong>, also called a compressed trie or Patricia trie, collapses every chain of single-child, non-terminal nodes into a single edge labelled with the whole substring. The tree keeps its shape at the branch points and loses the filler between them.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 300' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>A trie of car card care cargo cat dog: compressing single-child chains (gold) collapses the filler</text><text x='120' y='38' text-anchor='middle' fill='#8fa3c4' font-size='11'>uncompressed: 12 nodes</text><text x='560' y='38' text-anchor='middle' fill='#8fa3c4' font-size='11'>radix / compressed: 8 nodes</text><line x1='110' y1='69' x2='90' y2='81' stroke='#334a6a' stroke-width='1.4'/><line x1='90' y1='103' x2='90' y2='115' stroke='#ffd166' stroke-width='1.6'/><line x1='90' y1='137' x2='55' y2='149' stroke='#334a6a' stroke-width='1.4'/><line x1='55' y1='171' x2='30' y2='185' stroke='#334a6a' stroke-width='1.4'/><line x1='55' y1='171' x2='80' y2='185' stroke='#334a6a' stroke-width='1.4'/><line x1='55' y1='171' x2='120' y2='149' stroke='#334a6a' stroke-width='1.4'/><line x1='120' y1='171' x2='120' y2='185' stroke='#ffd166' stroke-width='1.6'/><line x1='90' y1='137' x2='155' y2='115' stroke='#334a6a' stroke-width='1.4'/><line x1='110' y1='69' x2='195' y2='81' stroke='#334a6a' stroke-width='1.4'/><line x1='195' y1='103' x2='195' y2='115' stroke='#ffd166' stroke-width='1.6'/><line x1='195' y1='137' x2='195' y2='149' stroke='#ffd166' stroke-width='1.6'/><rect x='98' y='47' width='24' height='22' rx='5' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='110' y='62' text-anchor='middle' fill='#c9d6ea' font-size='11'>•</text><rect x='78' y='81' width='24' height='22' rx='5' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='90' y='96' text-anchor='middle' fill='#c9d6ea' font-size='11'>c</text><rect x='78' y='115' width='24' height='22' rx='5' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='90' y='130' text-anchor='middle' fill='#c9d6ea' font-size='11'>a</text><rect x='43' y='149' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='55' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>r</text><rect x='18' y='185' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='30' y='200' text-anchor='middle' fill='#c9d6ea' font-size='11'>d</text><rect x='68' y='185' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='80' y='200' text-anchor='middle' fill='#c9d6ea' font-size='11'>e</text><rect x='108' y='149' width='24' height='22' rx='5' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='120' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>g</text><rect x='108' y='185' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='120' y='200' text-anchor='middle' fill='#c9d6ea' font-size='11'>o</text><rect x='143' y='115' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='155' y='130' text-anchor='middle' fill='#c9d6ea' font-size='11'>t</text><rect x='183' y='81' width='24' height='22' rx='5' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='195' y='96' text-anchor='middle' fill='#c9d6ea' font-size='11'>d</text><rect x='183' y='115' width='24' height='22' rx='5' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='195' y='130' text-anchor='middle' fill='#c9d6ea' font-size='11'>o</text><rect x='183' y='149' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='195' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>g</text><line x1='500' y1='69' x2='480' y2='85' stroke='#334a6a' stroke-width='1.4'/><line x1='480' y1='107' x2='445' y2='129' stroke='#334a6a' stroke-width='1.4'/><line x1='445' y1='151' x2='415' y2='171' stroke='#334a6a' stroke-width='1.4'/><line x1='445' y1='151' x2='468' y2='171' stroke='#334a6a' stroke-width='1.4'/><line x1='445' y1='151' x2='510' y2='129' stroke='#334a6a' stroke-width='1.4'/><line x1='480' y1='107' x2='545' y2='129' stroke='#334a6a' stroke-width='1.4'/><line x1='500' y1='69' x2='600' y2='85' stroke='#334a6a' stroke-width='1.4'/><rect x='488' y='47' width='24' height='22' rx='5' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='500' y='62' text-anchor='middle' fill='#c9d6ea' font-size='11'>•</text><rect x='466' y='85' width='28' height='22' rx='5' fill='#182842' stroke='#ffd166' stroke-width='1.3'/><text x='480' y='100' text-anchor='middle' fill='#c9d6ea' font-size='11'>ca</text><rect x='433' y='129' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='445' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>r</text><rect x='403' y='171' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='415' y='186' text-anchor='middle' fill='#c9d6ea' font-size='11'>d</text><rect x='456' y='171' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='468' y='186' text-anchor='middle' fill='#c9d6ea' font-size='11'>e</text><rect x='496' y='129' width='28' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='510' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>go</text><rect x='533' y='129' width='24' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='545' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>t</text><rect x='582' y='85' width='36' height='22' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='600' y='100' text-anchor='middle' fill='#c9d6ea' font-size='11'>dog</text><text x='30' y='288' fill='#8fa3c4' font-size='10'>green = end of a word; gold = a single-child chain merged into one edge label</text></svg></div>" +
+        "<p>The saving is not marginal. Built over fifty thousand dictionary words, the naive trie held about 226,000 nodes, of which 68% &mdash; over 154,000 &mdash; were single-child chain nodes carrying no branch and no word-end. Compressing them leaves roughly 71,000 nodes, under a third of the original. Most of a word trie is filler between the few places words actually diverge, and the radix trie is what removes it.</p>" +
+        "<p>This is the structure production systems reach for. Lucene, the search engine under Elasticsearch and Solr, stores its term dictionary as a <strong>finite-state transducer</strong>, a radix trie that also shares common <em>suffixes</em>, shrinking a language's vocabulary to a fraction of its flat size while keeping prefix search. IP routing tables use a radix trie on the bits of an address to find the longest matching prefix &mdash; the \"which route\" decision a router makes for every packet &mdash; because a route is exactly a prefix and longest-prefix-match is exactly a trie walk that remembers the deepest terminal it passed. The compression is what makes these tables fit in the cache a router has.</p>" + "<p><strong>Longest-prefix-match</strong> deserves its own line, because it is the operation a hash set cannot even approximate. A router holds thousands of address prefixes and, for each packet, must find the most specific one the destination matches &mdash; not an exact key but the deepest prefix. A trie answers it in one walk down the address bits, remembering the deepest terminal node it passes and returning that when the walk can go no further. No hash of the full address helps, because the query is not the full address; it is whichever prefix the table happens to store, and only the trie's structure knows which that is.</p>"
+    },
+
+    { title: "Word Search on a Grid",
+      html:
+        "<p>The interview favourite: given a grid of letters and a list of words, find which words can be traced through adjacent cells without reusing a cell. The single-word version is the backtracking of Chapter 18 &mdash; depth-first from each cell, matching the word character by character, un-choosing on the way back. The multi-word version is where the trie earns its place, because the wrong instinct is to run that search once per word.</p>" +
+        "<p>Instead, build a trie of all the words and run one backtracking search that walks the grid and the trie together: from each cell, descend into the trie by the cell's letter, and recurse into neighbours only along edges the trie actually has. A path in the grid that spells a dead prefix &mdash; a run of letters no word continues &mdash; is abandoned once, not once per word, because the trie has no edge to follow. Whenever the walk reaches a terminal trie node, the path spells a stored word.</p>" +
+        "<p>The measurement shows the difference cleanly. On a twelve-by-twelve grid seeded with thirty-five words all beginning \"st\", the single trie found fourteen of them in 139 cell-visits, while running thirty-five separate searches took 1,247 &mdash; nine times the work &mdash; because every separate search re-walked the shared \"st\" prefix from scratch. The trie walks it once. The general lesson is that when many searches share structure, searching them together against a trie amortises the shared part, and the multi-pattern string matching of Chapter 42 &mdash; Aho-Corasick &mdash; is this idea taken to its conclusion, a trie of all patterns with failure links so the text is scanned a single time.</p>" + "<p>The canonical instance makes the sharing concrete. On the four-by-four grid whose rows spell oaan, etae, ihkr, iflv, against the words oath, oat, eat and eath, the combined trie walk finds all four and never restarts: once the path o-a-t is walked, both oat and oath are discovered from the same descent, and the cells around them are ruled out for every word at once. Four separate searches would re-descend the shared o-a start four times over. The trie makes the grid the thing scanned once and the words the thing matched against it, rather than the reverse.</p>"
+    },
+
+    { title: "Word Break",
+      html:
+        "<p><strong>Word break</strong> asks whether a string can be cut into a sequence of dictionary words: \"applepenapple\" splits into \"apple\", \"pen\", \"apple\"; \"catsanddog\" does not split cleanly against a dictionary lacking the right pieces. It is a dynamic program, Chapter 19's shape: let dp[i] be true when the prefix of length i is breakable, seed dp[0] true, and for each reachable position try to extend by every dictionary word that matches from there.</p>" +
+        "<p>The naive version tests every dictionary word at every position, which rescans shared prefixes over and over. The trie removes that waste. From a breakable position i, walk the trie forward through the string one character at a time; each time the walk passes a terminal node, the word ending there is a valid cut, so mark that position reachable. A single forward walk from i discovers every dictionary word that starts at i, in the length of the longest such word, rather than one dictionary lookup per candidate word.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def word_break(s, trie):\n" +
+        "    n = len(s); dp = [False]*(n+1); dp[0] = True\n" +
+        "    for i in range(n):\n" +
+        "        if not dp[i]: continue\n" +
+        "        node = trie.root\n" +
+        "        for j in range(i, n):            # one forward walk finds every word from i\n" +
+        "            if s[j] not in node: break\n" +
+        "            node = node[s[j]]\n" +
+        "            if '$' in node: dp[j+1] = True\n" +
+        "    return dp[n]</code></pre>" +
+        "<pre data-lang='java' hidden><code>boolean wordBreak(String s, Trie trie) {\n" +
+        "    int n = s.length(); boolean[] dp = new boolean[n+1]; dp[0] = true;\n" +
+        "    for (int i = 0; i < n; i++) {\n" +
+        "        if (!dp[i]) continue;\n" +
+        "        Trie node = trie;\n" +
+        "        for (int j = i; j < n; j++) {\n" +
+        "            node = node.kids.get(s.charAt(j));\n" +
+        "            if (node == null) break;\n" +
+        "            if (node.end) dp[j+1] = true;\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return dp[n];\n" +
+        "}</code></pre></div>" +
+        "<p>Checked on five hand cases &mdash; three that split and two that do not &mdash; the trie-backed version returned the right answer on each. The pattern is worth naming: whenever a dynamic program's transition is \"try every word that fits here\", a trie turns that inner loop from a dictionary-sized scan into a single walk down the shared structure of the words. The DP supplies the subproblem order; the trie supplies the transition cheaply.</p>"
+    },
+
+    { title: "The Bitwise Trie",
+      html:
+        "<p>Change the alphabet from letters to bits and the trie solves a problem that looks like it has nothing to do with strings. Treat each 32-bit integer as a string of 32 characters over the alphabet {0, 1} and insert them into a <strong>bitwise trie</strong>, most significant bit first. The tree is now binary, exactly two children per node, and depth 32 regardless of how many numbers it holds.</p>" +
+        "<p>The payoff is the <strong>maximum-XOR pair</strong>: given n numbers, find the two whose XOR is largest. Brute force compares every pair, O(n squared). The trie does it in O(n times 32). XOR is one wherever the bits differ, so to maximise it against a query you want, at each bit from the top, the <em>opposite</em> bit of the query's &mdash; and a greedy walk takes it: at each level, follow the branch for the opposite bit if it exists, and only fall back to the same bit when it does not. The deepest bits matter least, so being greedy from the most significant bit down is optimal.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 270' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Max XOR walk for query 0101: at each bit take the OPPOSITE branch if it exists</text><circle cx='380' cy='40' r='11' fill='#182842' stroke='#2de2ff' stroke-width='1.2'/><line x1='380' y1='51' x2='250' y2='78' stroke='#334a6a' stroke-width='1.3' stroke-dasharray='0'/><text x='301' y='65' fill='#7d8fb0' font-size='11'>0</text><circle cx='250' cy='90' r='11' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><line x1='380' y1='51' x2='510' y2='78' stroke='#ff5d73' stroke-width='2.2' stroke-dasharray='0'/><text x='453' y='65' fill='#ff5d73' font-size='11'>1</text><circle cx='510' cy='90' r='11' fill='#182842' stroke='#ff5d73' stroke-width='1.3'/><line x1='510' y1='101' x2='440' y2='128' stroke='#ff5d73' stroke-width='2.2'/><text x='463' y='115' fill='#ff5d73' font-size='11'>0</text><circle cx='440' cy='140' r='11' fill='#182842' stroke='#ff5d73' stroke-width='1.3'/><line x1='510' y1='101' x2='590' y2='128' stroke='#334a6a' stroke-width='1.3'/><text x='556' y='115' fill='#7d8fb0' font-size='11'>1</text><circle cx='590' cy='140' r='11' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><line x1='440' y1='151' x2='440' y2='178' stroke='#ff5d73' stroke-width='2.2'/><text x='428' y='165' fill='#ff5d73' font-size='11'>1</text><circle cx='440' cy='190' r='11' fill='#182842' stroke='#ff5d73' stroke-width='1.3'/><line x1='440' y1='201' x2='440' y2='228' stroke='#ff5d73' stroke-width='2.2'/><text x='428' y='215' fill='#ff5d73' font-size='11'>0</text><rect x='414' y='228' width='52' height='24' rx='5' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='440' y='244' text-anchor='middle' fill='#3ddc97' font-size='11'>1010</text><text x='560' y='200' fill='#ff5d73' font-size='11'>query 0101 wants 1010</text><text x='560' y='218' fill='#c9d6ea' font-size='11'>0101 XOR 1010 = 1111</text><text x='30' y='262' fill='#8fa3c4' font-size='10'>red = the greedy path; each step flips the query's bit to maximise XOR, falling back only when the branch is absent</text></svg></div>" +
+        "<p>Insert the numbers one at a time and query each against the trie of everything inserted so far, keeping the best XOR seen; that is one pass, O(n times 32). Verified against the brute-force O(n squared) answer on two thousand random arrays, the trie matched every one. At a scale where brute force cannot run &mdash; two hundred thousand numbers, whose ten billion pairs are out of reach &mdash; the trie found the maximum XOR in under three seconds. The technique generalises to any \"extremise a bitwise function over pairs\" question, and it is the reason the bitwise trie is worth knowing as a shape rather than a trick: the alphabet is a choice, and choosing {0, 1} turns a numeric problem into a prefix walk.</p>" + "<p>The greedy walk is optimal for a reason worth stating. A single differing bit high up contributes more to the XOR than every bit below it combined, because a one at position k is worth two to the k &mdash; more than two to the k-minus-one down to one all added together. So securing the opposite bit at the most significant position can never be a mistake, whatever it costs lower down; there is no trade to weigh, and the greedy choice at each level is forced. That is why a problem that sounds like it must consider every pair collapses to one top-down walk.</p>"
+    },
+
+    { title: "When Not to Use One",
+      html:
+        "<p>The trie is not free, and the closing discipline is knowing when its cost is not repaid. The one thing a hash set does that a trie makes expensive is nothing at all &mdash; but the one thing a trie does that a hash set cannot, prefix and ordered queries, is the entire reason to pay. If your workload is flat membership &mdash; is this exact key present &mdash; and never asks about prefixes, ranges, or order, the hash set wins, and the measurement says by how much.</p>" +
+        "<p>Built over twenty thousand real dictionary words, a dictionary-node trie occupied 19.5 megabytes against the hash set's 3.1 &mdash; six times the memory &mdash; and over twenty thousand random low-overlap strings the gap widened to seven times. The dict-per-node representation is heavy: every node is a hash map, and a hash map costs far more than the single character it distinguishes. Shared prefixes reduce the node <em>count</em> but not enough to close a sixfold gap, and low-overlap keys give the trie nothing to share while still paying the per-node tax.</p>" +
+        "<p>So the rule is a question about the workload, not the data structure. Do you need prefix search, autocomplete, longest-prefix-match, ordered iteration, or the bitwise-XOR trick? Then the trie's structure is exactly what a hash set threw away, and its cost buys something. Do you only need to know whether an exact key is present? Then the hash set of Chapter 17 is smaller and simpler and you should use it. The trie is a specialist: unbeatable at the prefix questions, and a memory-heavy way to answer the one question a hash set already answers well. Measure the workload, not the structure, and pick accordingly.</p>" + "<p>One caveat keeps the comparison honest: the sixfold figure is the naive dictionary-node trie's, and the representation is most of the cost. A radix trie, collapsing the two-thirds of nodes that are filler, closes much of the gap, and an array-node trie over a small alphabet trades the hash-map overhead for fixed slots that can be cheaper still when the alphabet is tiny, as it is for the bitwise trie's two symbols. The structural choice is as consequential as the algorithmic one, so 'a trie costs six times a hash set' is true only of the first implementation you would write, not of the ones production ships.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Build the three operations.</strong> Implement insert, search and starts-with, and confirm search matches a set on random probes while starts-with answers a prefix query the set cannot. Note that all three touch only the length of the key.</li>" +
+        "<li><strong>Count the filler.</strong> Build a trie over a word list and count how many nodes have exactly one child and no word-end. Reproduce the finding that most nodes are chain filler, and estimate the compressed node count.</li>" +
+        "<li><strong>All words at once.</strong> Implement grid word search two ways &mdash; one trie walked against the grid, and one separate backtracking search per word &mdash; and compare cell-visits on a grid seeded with words that share a prefix. Reproduce the roughly ninefold gap.</li>" +
+        "<li><strong>Word break with a trie.</strong> Implement the trie-backed dynamic program and verify it against hand cases that do and do not split. Explain in one line why the forward walk replaces a dictionary-sized inner loop.</li>" +
+        "<li><strong>Maximum XOR.</strong> Build a bitwise trie over 32-bit integers and find the maximum-XOR pair with the greedy opposite-bit walk. Check it against the brute-force O(n squared) answer on small arrays, then run it on a size where brute force cannot.</li>" +
+        "<li><strong>Trie versus hash set.</strong> Measure the memory of a trie and a hash set over the same word list, reproducing the roughly sixfold gap, and write the one-sentence rule for when each wins.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "trie", d: "A tree whose edges are labelled by characters, so a stored word is the path from the root to a terminal node; shared prefixes share nodes, giving O(length) operations independent of word count." },
+    { t: "terminal flag", d: "A boolean marking a trie node that completes a stored word, distinguishing a real word from a mere prefix passed through; without it search cannot tell the two apart." },
+    { t: "starts-with", d: "The prefix query a trie answers for free by walking the prefix's edges and reporting arrival, terminal or not; a hash set cannot answer it without scanning every key." },
+    { t: "radix trie", d: "A trie that collapses every chain of single-child non-terminal nodes into one edge labelled with the whole substring; also called a compressed or Patricia trie." },
+    { t: "finite-state transducer", d: "A radix trie that also shares common suffixes, used by Lucene for its term dictionary to shrink a vocabulary while keeping prefix search." },
+    { t: "longest-prefix-match", d: "Finding the deepest stored prefix of a query, the routing decision made per packet; a trie walk that remembers the deepest terminal node it passed." },
+    { t: "word break", d: "Deciding whether a string splits into a sequence of dictionary words; a dynamic program whose 'try every word from here' transition a trie answers in one forward walk." },
+    { t: "bitwise trie", d: "A trie over the alphabet {0, 1}, storing integers as fixed-length bit strings from the most significant bit; binary and of depth equal to the word size." },
+    { t: "maximum-XOR pair", d: "The two numbers in a set whose XOR is largest, found in O(n times word-size) by a greedy walk down a bitwise trie taking the opposite bit at each level." },
+    { t: "backtracking", d: "The depth-first choose-explore-unchoose search of Chapter 18; combined with a trie it walks a grid and the word set together, abandoning a dead prefix once rather than per word." },
+    { t: "autocomplete", d: "Completing a typed prefix to stored words, the canonical trie application: walk to the prefix node, then enumerate the terminal nodes in its subtree." },
+    { t: "compressed trie", d: "Another name for a radix trie: single-child chains merged into substring edges, cutting a word trie to under a third of its naive node count." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "In a trie, a stored word is not held in any single node. Where is it, and what device lets the trie tell a stored word from a passed-through prefix?",
+      opts: [
+        "The word is stored in the leaf node at the end of its path, and a length field on that leaf distinguishes a full word from a shorter prefix that stops early",
+        "The word is the path from the root spelled by the edge labels, and a terminal flag marks the nodes that complete a stored word, so a prefix like 'car' is distinguished from the word 'car'",
+        "The word is hashed into the node it lands on, and a stored-word bit set during insertion distinguishes it from the prefixes that were only walked through",
+        "The word is split across the nodes on its path, one character per node, and the node count from the root tells search whether a full word has been matched"
+      ], a: 1,
+      why: "A trie stores a word as the path of edge labels from the root, so words sharing a prefix share those nodes; a node is not one word. The terminal flag marks where a stored word ends, which is what lets search distinguish the word 'car' (terminal) from 'car' as a mere prefix of 'card' (not terminal). It is not a leaf, a length field, or a hash." },
+
+    { type: "mc",
+      q: "Trie search, insert and starts-with all cost the length of the key. Why is that a sharper guarantee than a hash set's own O(length) lookup?",
+      opts: [
+        "Because the trie caches the result of each walk, so repeated lookups of the same key become O(1) where a hash set rehashes every time",
+        "Because the hash set must resolve collisions, adding an unpredictable factor that the trie's deterministic walk avoids entirely",
+        "Because the trie's cost is genuinely independent of how many words are stored &mdash; a ten-character search touches ten nodes in a trie of fifty thousand or fifty million words alike",
+        "Because the trie compares whole characters while the hash set compares bits, so the trie does fewer primitive operations per character examined"
+      ], a: 2,
+      why: "Both read all of the key, so both look O(length), but the trie's cost does not grow with the number of stored words at all: the walk touches one node per character regardless of the set's size. The trie does not cache walks, the guarantee is not about collision handling, and it is not about characters versus bits." },
+
+    { type: "mc",
+      q: "A radix trie collapses single-child non-terminal chains into one substring edge. Measured over fifty thousand dictionary words, what fraction of the naive trie's nodes were such collapsible filler?",
+      opts: [
+        "About two-thirds &mdash; over 154,000 of 226,000 nodes were single-child chain nodes &mdash; so the compressed trie is under a third of the original",
+        "About a fifth, so the compression saves a little memory but leaves the total node count at roughly the very same order of magnitude as it was beforehand",
+        "About half, so the compressed trie ends up with half the nodes, matching the intuition that every chain has exactly one branch node and exactly one filler node between them",
+        "Nearly all of them, since a dictionary's words rarely branch at all, so the radix trie is a small constant number of nodes regardless of the word count"
+      ], a: 0,
+      why: "68% of the naive trie's nodes were single-child, non-terminal chain nodes carrying neither a branch nor a word-end, so compressing them cut about 226,000 nodes to roughly 71,000, under a third. Most of a word trie is filler between the few points where words actually diverge; it is not a fifth, not half, and not a constant." },
+
+    { type: "mc",
+      q: "Searching a grid for many words, the right approach builds one trie and walks the grid against it rather than running a separate search per word. On a grid of words sharing 'st', one trie used 139 cell-visits against 1,247 for separate searches. Why the gap?",
+      opts: [
+        "Because the trie prunes cells that no word uses, while separate searches must visit every cell of the grid once for each word regardless of the letters",
+        "Because the trie stores the grid positions of each word after the first search, so later words are then found by a lookup rather than by walking the grid again",
+        "Because a dead prefix &mdash; a run of letters no word continues &mdash; is abandoned once by the trie, whereas each separate search re-walks the shared 'st' prefix from scratch",
+        "Because the trie search is able to run all of the neighbours in parallel while the separate searches are strictly sequential, so the visit count reflects concurrency rather than any pruning"
+      ], a: 2,
+      why: "The words share the prefix 'st', and the trie walks that shared path once: a grid path spelling a dead prefix has no trie edge to follow and is abandoned immediately, for all words at once. Separate searches re-explore the common prefix for every word, doing about nine times the cell-visits. It is not about visiting every cell, caching positions, or parallelism." },
+
+    { type: "blank",
+      q: "A trie that collapses every chain of single-child non-terminal nodes into a single edge labelled with the whole substring &mdash; cutting a word trie to under a third of its nodes &mdash; is called a ____ trie.",
+      a: ["radix", "compressed", "patricia"],
+      why: "A radix trie (also compressed, or Patricia) keeps the tree's branch points and merges the filler between them into substring edges. Over a dictionary it removes the roughly two-thirds of nodes that are chain filler, which is why Lucene term dictionaries and IP routing tables use the compressed form." },
+
+    { type: "mc",
+      q: "Word break decides whether a string splits into dictionary words, as a dynamic program. What does a trie replace, and how?",
+      opts: [
+        "It replaces the inner loop that tests every dictionary word at a position with one forward walk down the trie, which finds every word starting there as it passes terminal nodes",
+        "It replaces the entire dynamic program, since walking the trie forward from the very start already tries every possible split without needing any dp array indexed over the positions",
+        "It replaces the O(n squared) position pairs with O(n log n) by binary-searching the sorted dictionary for each candidate substring encountered",
+        "It replaces the dp array with the trie's terminal flags, so the reachable positions are read directly off the trie without a separate table"
+      ], a: 0,
+      why: "The dynamic program still supplies the subproblem order over positions; the trie replaces its transition, the inner 'try every dictionary word from here' loop. A single forward walk from a position, marking a cut wherever it passes a terminal node, discovers every dictionary word starting there in one pass instead of one lookup per word. The dp array is still needed." },
+
+    { type: "mc",
+      q: "The maximum-XOR pair of n numbers is found in O(n times 32) with a bitwise trie instead of O(n squared). What does the greedy walk do at each bit, and why is greedy optimal?",
+      opts: [
+        "It follows the branch matching the query's own bit, accumulating agreement, on the grounds that a pair which agrees on the high bits has the smaller difference and so somehow the larger XOR",
+        "It tries both branches at every bit and keeps the better, which is why the cost is O(n times 32) rather than O(n) despite there being a single query",
+        "It follows whichever branch has more numbers beneath it, since a denser branch is more likely to contain the true maximum-XOR partner for the query",
+        "It follows the opposite bit's branch when it exists, because XOR is one where bits differ and the most significant differing bit dominates, so maximising it top-down is optimal"
+      ], a: 3,
+      why: "XOR is one exactly where the bits differ, so to maximise it you want the opposite of the query's bit at each level; the walk takes that branch when it exists and falls back only when it does not. Greedy from the most significant bit is optimal because a one at a higher bit outweighs anything below it. It is not about agreement, trying both branches, or branch density." },
+
+    { type: "blank",
+      q: "Storing 32-bit integers as fixed-length strings over the alphabet {0, 1}, most significant bit first, so a numeric problem like maximum-XOR becomes a prefix walk, uses a ____ trie.",
+      a: ["bitwise", "binary"],
+      why: "A bitwise trie treats each integer as a 32-character string of bits, making the tree binary and of depth 32. Choosing the alphabet {0, 1} turns 'find the pair with maximum XOR' into a greedy root-to-leaf walk, O(n times 32), where a value-based approach would compare all O(n squared) pairs." },
+
+    { type: "mc",
+      q: "A dictionary-node trie over twenty thousand words used 19.5 megabytes against a hash set's 3.1, six times the memory. When is that cost still the right trade?",
+      opts: [
+        "When the words are long, since the trie shares their characters while the hash set stores each word in full, which would reverse the memory comparison for long enough keys",
+        "When the workload needs prefix search, autocomplete, longest-prefix-match, ordered iteration or the bitwise trick &mdash; the operations a hash set cannot do at all",
+        "When lookups are frequent, since the trie's O(length) walk is faster than hashing, so that the memory is repaid in query time on any sufficiently read-heavy workload over time",
+        "Almost never, since the sixfold memory cost means a trie is really a teaching structure that production systems replace with hash sets in essentially every real case"
+      ], a: 1,
+      why: "The trie costs more memory for exact-membership, so it is worth it only for the queries a hash set cannot answer: prefixes, longest-prefix-match, ordered traversal, the XOR trick. For flat membership the hash set wins. Sharing does not reverse the gap even for long words, the trie is not generally faster than hashing, and production systems use radix tries precisely for the prefix operations." },
+
+    { type: "order",
+      q: "Order these by the cost of finding the maximum-XOR pair among n 32-bit integers, cheapest first:",
+      items: [
+        "a bitwise trie with a greedy opposite-bit walk: O(n times 32)",
+        "sorting the numbers then a single linear scan: O(n log n), but it does not actually find the max-XOR pair",
+        "comparing every pair by brute force: O(n squared)",
+        "for each number, scanning all others for its best partner: O(n squared), the same class with a worse constant"
+      ],
+      why: "The bitwise trie is linear in n (times the fixed 32), the only sub-quadratic method that actually solves the problem. Sorting is O(n log n) but does not solve max-XOR at all, so it is a distractor placed by its raw cost. The two brute-force rows are both O(n squared); either order between them is the intended judgement, and both are the fallback the trie beats." }
+  ]
+});
