@@ -7885,3 +7885,292 @@ CHAPTERS.push({
       why: "A complete binary tree packs its nodes with no gaps except at the lower-right of the last level, which is exactly what lets the array representation store it contiguously with children at 2i+1 and 2i+2. It is looser than perfect, which also requires the last level to be full, and it is the shape Chapter 27's heap maintains." }
   ]
 });
+
+/* ======================= CHAPTER 25 ======================= */
+CHAPTERS.push({
+  num: 25, part: 4, title: "Tree DP: Returning a Tuple Upward",
+  blurb: "The single highest-yield idea about trees, and the interview banks teach it as four unrelated problems. Diameter, balance, maximum path sum and subtree aggregates are one technique: each node returns a small tuple to its parent, one component the answer that ends here and the other the answer that passes through here, with the global answer accumulated on the side. This chapter derives all of them from that one shape, corrects the folklore that the naive balance check is quadratic, shows the range-passing variant where information flows downward instead of up, and closes on rerooting, which computes the answer for every node as root in the time the naive approach spends on one.",
+  sections: [
+
+    { title: "The Shape",
+      viz: "dsaTreeDP", vizTitle: "Each node returns a small tuple upward; the box at the top is the running global answer",
+      html:
+        "<p>Here is the idea the rest of the chapter is variations on. You walk the tree in <strong>postorder</strong> &mdash; Chapter 24's left, right, root &mdash; and each node, after both of its children have returned, computes a small <strong>tuple</strong> and returns it to its parent. The tuple carries only enough for the parent to do its own computation, and it is almost always two kinds of thing at once: the answer <em>rooted at this node and going downward</em>, which is what the parent needs, and the answer <em>that turns at this node</em>, which the parent cannot use and which is therefore compared against a running <strong>global accumulator</strong> on the side.</p>" +
+        "<p>That split is the whole technique. A path in a tree either goes straight down from some node, or it comes up one subtree, turns at a node, and goes back down another. The downward answer composes &mdash; a parent builds its downward answer from its children's &mdash; so it travels up the return value. The turning answer does not compose, because a path that has already turned cannot be extended by the parent, so it is retired to the accumulator the moment it is found. Almost every tree question is the exercise of naming those two quantities.</p>" +
+        "<p>The cost is one postorder traversal, O(n) time and O(h) stack for the recursion, where h is the height &mdash; the same budget as any traversal from Chapter 24. What changes from problem to problem is only the contents of the tuple and the rule that combines the children's tuples into the parent's. Get those two right and the code writes itself; get the split between the returned value and the accumulator wrong and you will compute a plausible number that is not the answer. The sections that follow are that tuple, filled in five different ways.</p>" +
+        "<p>One discipline makes all of them reliable: decide, before writing a line, what a node <em>returns</em> and what it <em>records</em>. Returning the turning answer is the classic error, because the parent will try to extend a path that has already bent and produce a shape that is not a path at all. The interview banks present diameter, balance and maximum path sum as separate tricks to memorise; they are one procedure with three tuples, and a reader who sees that can derive the fourth and fifth unaided.</p>" + "<p>Make the split concrete on a tiny tree. Suppose you want the longest downward run of equal values. A node looks at each child's returned run; if the child holds the same value, the node can extend that child's run, so the returned number composes upward. But a run that goes down the left, through the node, and down the right is a different shape &mdash; the parent cannot extend it, because it has already used the node as its turning point &mdash; so that combined length is compared against the accumulator and never returned. Return what composes, record what does not: every section below is that one sentence with a different payload.</p>"
+    },
+
+    { title: "Height, Balance and Diameter",
+      html:
+        "<p>Start with the simplest tuple of all, a single number: a node's <strong>height</strong>, the edges to its deepest leaf, which is one more than the taller child's height. That is a tree DP already &mdash; the return value composes, there is no accumulator. Balance builds directly on it. A tree is height-balanced when every node's two subtrees differ in height by at most one, and the obvious check computes each node's height and compares, recursing everywhere.</p>" +
+        "<p>The obvious check is also the folklore's favourite cautionary tale, usually quoted as quadratic, and the folklore is wrong. Measured on this machine, the naive top-down balance check &mdash; recompute height at each node, then check &mdash; costs a number of height-visits that tracks n log n, not n squared. On a perfect tree of 262,143 nodes it performs 8.9 million height-visits against the linear version's 524,287, a ratio of exactly 17, which is the tree's height: the overhead is a factor of log n, not a factor of n. And on the skewed chain the folklore names as the worst case, the naive check is actually O(n): the imbalance is detected at the root and the whole thing short-circuits, ratio 2.0 at every size tested. The quadratic bound is loose in both directions.</p>" +
+        "<p>The fix is the canonical tree-DP move: fold the accumulator into the return value by making one number do two jobs. Return the height as usual, but return a sentinel of negative one the instant a subtree is found unbalanced, and propagate it upward so the whole traversal aborts. Now each node is visited once, height and balance are decided together, and the cost is a clean O(n).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def check(n):                 # returns height, or -1 if unbalanced\n" +
+        "    if n is None: return 0\n" +
+        "    lh = check(n.left)\n" +
+        "    if lh == -1: return -1\n" +
+        "    rh = check(n.right)\n" +
+        "    if rh == -1: return -1\n" +
+        "    if abs(lh - rh) > 1: return -1\n" +
+        "    return 1 + max(lh, rh)\n\n" +
+        "def is_balanced(root): return check(root) != -1</code></pre>" +
+        "<pre data-lang='java' hidden><code>int check(Node n) {           // height, or -1 if unbalanced\n" +
+        "    if (n == null) return 0;\n" +
+        "    int lh = check(n.left);  if (lh == -1) return -1;\n" +
+        "    int rh = check(n.right); if (rh == -1) return -1;\n" +
+        "    if (Math.abs(lh - rh) > 1) return -1;\n" +
+        "    return 1 + Math.max(lh, rh);\n" +
+        "}\n" +
+        "boolean isBalanced(Node root) { return check(root) != -1; }</code></pre></div>" +
+        "<p>Now the accumulator earns its keep. The <strong>diameter</strong> of a tree is its longest path in edges, and the catch that trips everyone is that the longest path need not touch the root. It is a turning path: it comes up one subtree, crosses some node, and goes down another. So each node still returns its height, but on the side it records the length of the path turning at it, which is the sum of its two children's heights plus the two connecting edges, and the global maximum of that quantity is the diameter. Measured against a brute force that runs a breadth-first search from every node, the tree-DP diameter agreed on all five thousand random trees tested &mdash; and the winning path avoided the root on 14% of trees of up to forty nodes, a share that climbs to 19% as the trees grow. The accumulator is not an optimisation; it is the only place the answer can live.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 300' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>Each node returns its height; the accumulator catches the longest path even when it skips the root</text><line x1='390' y1='67' x2='390' y2='109' stroke='#334a6a' stroke-width='1.5'/><line x1='390' y1='139' x2='285' y2='179' stroke='#3ddc97' stroke-width='3'/><line x1='390' y1='139' x2='495' y2='179' stroke='#3ddc97' stroke-width='3'/><line x1='285' y1='209' x2='285' y2='243' stroke='#3ddc97' stroke-width='3'/><line x1='495' y1='209' x2='495' y2='243' stroke='#3ddc97' stroke-width='3'/><circle cx='390' cy='52' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='390' y='56' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='410' y='56' fill='#8fa3c4' font-size='10'>h=3</text><circle cx='390' cy='124' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='390' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><text x='410' y='128' fill='#8fa3c4' font-size='10'>h=2</text><circle cx='285' cy='194' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='285' y='198' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><text x='305' y='198' fill='#8fa3c4' font-size='10'>h=1</text><circle cx='495' cy='194' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='495' y='198' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><text x='515' y='198' fill='#8fa3c4' font-size='10'>h=1</text><circle cx='285' cy='258' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='285' y='262' text-anchor='middle' fill='#c9d6ea' font-size='12'>e</text><text x='305' y='262' fill='#8fa3c4' font-size='10'>h=0</text><circle cx='495' cy='258' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='495' y='262' text-anchor='middle' fill='#c9d6ea' font-size='12'>f</text><text x='515' y='262' fill='#8fa3c4' font-size='10'>h=0</text><rect x='560' y='40' width='180' height='52' rx='6' fill='#12233f' stroke='#3ddc97' stroke-width='1.3'/><text x='650' y='60' text-anchor='middle' fill='#3ddc97' font-size='11'>global accumulator</text><text x='650' y='80' text-anchor='middle' fill='#c9d6ea' font-size='12'>best diameter = 4</text><text x='430' y='128' fill='#3ddc97' font-size='10'>h(c)+h(d)=2, +2 edges = 4 through b</text></svg></div>"
+    },
+
+    { title: "Maximum Path Sum",
+      html:
+        "<p>Keep the diameter's shape and change edges to values. In <strong>maximum path sum</strong> each node carries a number, possibly negative, a path's worth is the sum of the values on it, and you want the maximum over all paths &mdash; where, again, a path may turn at one node and need not reach the root. The tuple is the same as diameter's: return the best downward sum starting at this node, and record on the side the best turning sum through it.</p>" +
+        "<p>The one addition is the step everyone forgets, and it is a single call to max with zero. When a node combines its children's downward sums, a child that returns a negative total should be dropped rather than added, because a path is never improved by extending it into a region that only subtracts. So each child's contribution is clamped at zero before use: take it if it helps, ignore it if it hurts. Forget the clamp and you drag negative subtrees into sums that should have excluded them.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def max_path_sum(root):\n" +
+        "    best = float('-inf')\n" +
+        "    def down(n):\n" +
+        "        nonlocal best\n" +
+        "        if n is None: return 0\n" +
+        "        l = max(0, down(n.left))     # clamp: drop a losing subtree\n" +
+        "        r = max(0, down(n.right))\n" +
+        "        best = max(best, n.val + l + r)   # the turning path, retired to the side\n" +
+        "        return n.val + max(l, r)          # the downward path, returned upward\n" +
+        "    down(root)\n" +
+        "    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>int best;\n" +
+        "int down(Node n) {\n" +
+        "    if (n == null) return 0;\n" +
+        "    int l = Math.max(0, down(n.left));    // clamp\n" +
+        "    int r = Math.max(0, down(n.right));\n" +
+        "    best = Math.max(best, n.val + l + r); // turning path\n" +
+        "    return n.val + Math.max(l, r);        // downward path\n" +
+        "}\n" +
+        "int maxPathSum(Node root) { best = Integer.MIN_VALUE; down(root); return best; }</code></pre></div>" +
+        "<p>The clamp is not a rare corner: on random trees with mixed signs it changed the answer on 31% of them. And it hides a second trap that the clamp alone does not fix. On a tree whose values are all negative, the accumulator must still be seeded to negative infinity, not zero, so that the answer comes out as the single least-negative node &mdash; the best path is one node long. Measured on three thousand all-negative trees, the correct version returned exactly that largest node every time; a version that seeds the accumulator at zero would wrongly report zero, the same empty-path confusion Chapter 9's Kadane variant had. On the worked tree with root minus ten, a left child of nine and a right subtree of twenty over fifteen and seven, the answer is 42 &mdash; the path fifteen, twenty, seven &mdash; and it skips the root entirely.</p>" + "<p>Trace that tree to see the tuple work. At the leaf 15 the downward best is 15 and the turning best is 15; likewise 7 returns 7. At their parent 20, the two children clamp to 15 and 7, both positive, so the turning path through 20 is 20 plus 15 plus 7, which is 42, written to the accumulator; the value returned upward is 20 plus the better child, 35. At the root minus ten, the left child 9 clamps to 9 and the right returns 35, so the turning path through the root is minus ten plus nine plus thirty-five, which is 34 &mdash; less than the 42 already banked. The root returns minus ten plus thirty-five, but that number is never used, because the traversal is over. The answer, 42, was retired to the side two levels below the root.</p>"
+    },
+
+    { title: "Lowest Common Ancestor",
+      html:
+        "<p>The same postorder shape solves a problem whose tuple is not a number but a node. The <strong>lowest common ancestor</strong> of two nodes is the deepest node that has both of them in its subtree, and the recursive solution is four lines with no explicit accumulator. Search for the two targets; a node returns a target if it is one, returns whatever its children return if only one side found something, and &mdash; the key case &mdash; returns <em>itself</em> the moment both children report a find, because that is the deepest node with both descendants.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lca(node, a, b):\n" +
+        "    if node is None or node is a or node is b:\n" +
+        "        return node\n" +
+        "    left  = lca(node.left, a, b)\n" +
+        "    right = lca(node.right, a, b)\n" +
+        "    if left and right: return node    # both found below: this is the LCA\n" +
+        "    return left or right              # pass the one find upward</code></pre>" +
+        "<pre data-lang='java' hidden><code>Node lca(Node node, Node a, Node b) {\n" +
+        "    if (node == null || node == a || node == b) return node;\n" +
+        "    Node left  = lca(node.left, a, b);\n" +
+        "    Node right = lca(node.right, a, b);\n" +
+        "    if (left != null && right != null) return node;  // the LCA\n" +
+        "    return left != null ? left : right;\n" +
+        "}</code></pre></div>" +
+        "<p>The return value carries the whole state: a found target, or the ancestor once both are found, flowing up until it reaches the root. There is no separate accumulator because the answer is itself a return value &mdash; the first node that sees a find on both sides. Checked against a brute force that computes each target's path from the root and intersects them, the recursive version agreed on all five thousand random cases, in a single O(n) pass rather than two path walks. This is the linear-scan answer to a problem Chapter 29 revisits: with preprocessing, an Euler tour turns repeated lowest-common-ancestor queries into constant-time range-minimum lookups, which is worth it only when the queries are many.</p>" + "<p>The single-pass version is the right tool for one query or a handful: it touches every node once and stops, O(n) time and O(h) stack, no preprocessing to amortise. Its weakness is repetition &mdash; a thousand lowest-common-ancestor queries on the same tree redo the whole walk a thousand times, a thousand times O(n). When queries are the workload rather than a one-off, the balance tips toward building the Euler-tour structure of Chapter 29 once, in O(n), and answering each query in constant time thereafter. The recursive version here is the honest default; the preprocessing is the optimisation you reach for only when a profiler shows the queries dominating.</p>"
+    },
+
+    { title: "Validate a BST",
+      viz: "dsaValidateBST", vizTitle: "One check looks at neighbours, the other carries a range down; find where they disagree",
+      html:
+        "<p>Every problem so far pushed information <em>up</em> the tree. Validating a binary search tree is the one that pushes it <em>down</em>, and it is the cleanest illustration of why local structure does not imply global structure. A <strong>binary search tree</strong> requires that for every node, all keys in its left subtree are smaller and all keys in its right subtree are larger. The tempting check verifies only the immediate neighbours: at each node, confirm the left child is smaller and the right child is larger. It is wrong, and the smallest counterexample has three nodes.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>Local check passes, range check fails: 6 sits in 5's left subtree but 6 &gt; 5</text><line x1='330' y1='76' x2='230' y2='124' stroke='#334a6a' stroke-width='1.5'/><line x1='230' y1='156' x2='330' y2='179' stroke='#334a6a' stroke-width='1.5'/><text x='175' y='105' fill='#3ddc97' font-size='11'>3 &lt; 5  ok</text><text x='245' y='185' fill='#3ddc97' font-size='11'>3 &lt; 6  ok</text><circle cx='330' cy='60' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='330' y='65' text-anchor='middle' fill='#c9d6ea' font-size='13'>5</text><circle cx='230' cy='140' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='230' y='145' text-anchor='middle' fill='#c9d6ea' font-size='13'>3</text><circle cx='330' cy='195' r='16' fill='#2a1420' stroke='#ff5d73' stroke-width='1.5'/><text x='330' y='200' text-anchor='middle' fill='#c9d6ea' font-size='13'>6</text><text x='380' y='150' fill='#ff5d73' font-size='11'>range for this slot is (3, 5)</text><text x='380' y='168' fill='#ff5d73' font-size='11'>6 is outside it: not a BST</text><text x='150' y='232' fill='#8fa3c4' font-size='10'>both parent-child checks pass; the whole tree is still invalid</text></svg></div>" +
+        "<p>Take a root of 5 with a left child of 3, and give that 3 a right child of 6. Every parent-child comparison passes: 3 is less than 5, and 6 is greater than 3. Yet the tree is not a search tree, because 6 sits in the left subtree of 5 and must therefore be less than 5, which it is not. The local check has no way to see this, because 6's constraint comes not from its parent 3 but from its grandparent 5. Measured over twenty thousand random trees, the local check and the correct one disagreed on 119 &mdash; every disagreement a tree the local check wrongly accepted.</p>" +
+        "<p>The correct check carries a <strong>range</strong> downward. The root may hold any key; its left child is bounded above by the root's value, its right child bounded below by it, and each step tightens one end of the interval. A node is valid when its key lies strictly inside the range it inherited, and it passes to each child the range narrowed by its own value.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def is_bst(n, lo=float('-inf'), hi=float('inf')):\n" +
+        "    if n is None: return True\n" +
+        "    if not (lo < n.val < hi): return False\n" +
+        "    return (is_bst(n.left,  lo, n.val) and     # tighten the upper bound\n" +
+        "            is_bst(n.right, n.val, hi))        # tighten the lower bound</code></pre>" +
+        "<pre data-lang='java' hidden><code>boolean isBst(Node n, long lo, long hi) {\n" +
+        "    if (n == null) return true;\n" +
+        "    if (n.val &lt;= lo || n.val &gt;= hi) return false;\n" +
+        "    return isBst(n.left, lo, n.val) && isBst(n.right, n.val, hi);\n" +
+        "}\n" +
+        "// call isBst(root, Long.MIN_VALUE, Long.MAX_VALUE)</code></pre></div>" +
+        "<p>Information flowing down and information flowing up are the two directions a tree recursion has, and the range check is the down-flowing archetype: the parameter descends, the answer is a simple conjunction of the children. An equivalent up-flowing solution exists &mdash; an inorder traversal must produce strictly increasing keys, which is Chapter 24's inorder property &mdash; but the range version generalises to the many problems where a child's legality depends on an ancestor several levels above.</p>" + "<p>The up-flowing alternative is worth writing once, because it is a different proof of the same fact. Do an inorder traversal &mdash; left, node, right &mdash; and keep the previously visited value; a binary search tree is valid exactly when every node's key strictly exceeds the one before it, since inorder on a search tree emits sorted keys, Chapter 24's property. On the counterexample it catches the bug from the other side: the inorder of the tree with 6 hanging off 3's right is 3, 6, 5, and 6 comes before 5, so the sequence is not increasing. Two directions, one truth &mdash; the range check pushes the constraint down as a parameter, the inorder check pulls the violation up as an out-of-order pair, and which you prefer is a matter of whether the rest of your recursion already flows down or up.</p>"
+    },
+
+    { title: "Tree DP Proper: Independent Set",
+      html:
+        "<p>The problems so far were single quantities. The name <em>tree DP</em> is usually reserved for the case where each node returns a genuine tuple of two or more incomparable options, and the parent chooses between them &mdash; a dynamic program in the sense of Chapter 19, with the tree's structure as the subproblem order. The archetype is the <strong>maximum-weight independent set</strong>: choose a set of nodes with no two adjacent, maximising the total weight. On a general graph this is NP-hard; on a tree it falls to a linear DP, and the gap between those two facts is the reason the section exists.</p>" +
+        "<p>Each node returns a pair: the best total for its subtree if the node is <em>taken</em>, and the best if it is <em>skipped</em>. Taking a node forbids its children, so it adds the node's weight to both children's skip-totals. Skipping a node frees its children, so it adds the better of each child's two options. The parent reads whichever component it is entitled to, and the answer at the root is the larger of its two.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def mwis(root):\n" +
+        "    def go(n):                       # returns (take n, skip n)\n" +
+        "        if n is None: return (0, 0)\n" +
+        "        lt, ls = go(n.left)\n" +
+        "        rt, rs = go(n.right)\n" +
+        "        take = n.val + ls + rs       # take n -> skip both children\n" +
+        "        skip = max(lt, ls) + max(rt, rs)   # skip n -> children free\n" +
+        "        return (take, skip)\n" +
+        "    return max(go(root))</code></pre>" +
+        "<pre data-lang='java' hidden><code>int[] go(Node n) {                    // {take, skip}\n" +
+        "    if (n == null) return new int[]{0, 0};\n" +
+        "    int[] l = go(n.left), r = go(n.right);\n" +
+        "    int take = n.val + l[1] + r[1];\n" +
+        "    int skip = Math.max(l[0], l[1]) + Math.max(r[0], r[1]);\n" +
+        "    return new int[]{take, skip};\n" +
+        "}\n" +
+        "int mwis(Node root) { int[] a = go(root); return Math.max(a[0], a[1]); }</code></pre></div>" +
+        "<p>Checked against a brute force that tries all two-to-the-n subsets and keeps the best independent one, the DP matched on all three thousand random trees tested. On a path &mdash; a tree with no branching &mdash; the technique reproduces the familiar result that the largest independent set has size ceiling of n over two, and the take-skip recurrence is exactly the one behind that count. The lesson is the one Chapter 20 set up with knapsack: the same optimisation problem can be intractable or linear depending on the structure it is posed over, and a tree is the structure that makes this family of selection problems tractable. Weighted tree matching, minimum vertex cover on a tree and maximum independent set are all this one pair, recomputed with a different combining rule.</p>" + "<p>The path case is worth pinning down because it connects to a number you have already met. On a path of n nodes with unit weights, the take-skip recurrence is exactly Chapter 19's stair-climbing recurrence: the best on a length-n path is the better of skipping the last node, or taking it and skipping its one neighbour, so the sizes run 1, 1, 2, 2, 3, 3 and the maximum set has size ceiling of n over two &mdash; and the number of distinct maximum sets follows a Fibonacci pattern for the same reason. On a general graph the story ends differently: there is no ordering of the vertices that makes a node's choice depend only on already-solved subproblems, because a cycle couples choices that a tree keeps independent, and the problem is NP-hard. The tree is not a convenience here; it is the precise structural property &mdash; no cross-edges between subtrees &mdash; that turns an intractable problem linear.</p>"
+    },
+
+    { title: "Rerooting",
+      viz: "dsaRerooting", vizTitle: "Two passes: the first goes down, the second carries the rest of the tree back up",
+      html:
+        "<p>The last idea is the one no bank names, and it answers a question the others cannot: what if you need the tree-DP answer not for the root, but for <em>every</em> node as if it were the root? Recomputing from scratch at each of n roots is n separate traversals, quadratic. <strong>Rerooting</strong> does it in O(n) total with two passes, and it is the technique that separates people who know tree DP from people who have memorised four instances of it.</p>" +
+        "<p>Take the concrete task of computing, for every node, the sum of its distances to all other nodes. The first pass is an ordinary postorder that computes, for the fixed root, its subtree sizes and its own answer &mdash; the total distance from the root down into the tree. The second pass walks downward from the root and slides the answer from a parent to a child in O(1): moving the root across one edge brings the child's subtree one step closer, so those nodes each lose a unit of distance, while every other node moves one step farther. The child's answer is the parent's, minus its subtree size, plus the number of nodes outside its subtree.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code># res[child] = res[parent] - size[child] + (n - size[child])\n" +
+        "def reroot(adj, n):\n" +
+        "    size = [1] * n; dp = [0] * n; res = [0] * n\n" +
+        "    order, parent = toposort(adj)          # root-first ordering\n" +
+        "    for u in reversed(order):              # pass 1: up\n" +
+        "        for w in children(u):\n" +
+        "            size[u] += size[w]\n" +
+        "            dp[u]   += dp[w] + size[w]\n" +
+        "    res[root] = dp[root]\n" +
+        "    for u in order:                        # pass 2: down, reroot in O(1)\n" +
+        "        for w in children(u):\n" +
+        "            res[w] = res[u] - size[w] + (n - size[w])\n" +
+        "    return res</code></pre>" +
+        "<pre data-lang='java' hidden><code>// res[child] = res[parent] - size[child] + (n - size[child])\n" +
+        "// pass 1 (postorder): size[u] and dp[u] = sum of downward distances\n" +
+        "// pass 2 (preorder):  res[w] = res[u] - size[w] + (n - size[w])\n" +
+        "// both passes are O(n); n answers for the price of about two traversals.</code></pre></div>" +
+        "<p>The measurement is the argument. Against the naive method &mdash; a breadth-first search from every node &mdash; rerooting produced identical answers for all n nodes, at n equals 200, 800 and 2000, while running 75, 333 and 794 times faster respectively. The speedup grows with n because the naive method is quadratic and rerooting is linear: at 2000 nodes the naive run took 758 milliseconds and rerooting took under one. Every subtree aggregate you can compute for the root &mdash; distances, counts, maxima &mdash; can be rerooted to all nodes this way, and recognising when a problem is secretly asking for the all-roots version is what the technique buys.</p>" + "<p>The reroot step deserves one concrete edge. Suppose the root's total distance to all nodes is 30, the tree has 10 nodes, and you slide the root to a child whose subtree holds 4 of them. Those 4 nodes each get one step closer, saving 4; the other 6 nodes each get one step farther, costing 6; so the child's total is 30 minus 4 plus 6, which is 32. That is the whole second pass &mdash; one subtraction and one addition per edge, O(1) each, n edges, O(n) total. The first pass had to compute the root's answer and every subtree's size the slow honest way; the second pass never recomputes a distance, it only adjusts. Seeing that a whole-tree quantity can be slid across an edge in constant time, rather than recomputed, is the entire idea, and it recurs far beyond distances.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>The two-part tuple.</strong> Write the diameter as a function that returns a height and records a global maximum, and state in one sentence which of the two is the composable downward answer and which is the retired turning answer.</li>" +
+        "<li><strong>Balance, measured.</strong> Implement the naive top-down balance check and the sentinel version, and count height-visits on perfect trees of growing height to reproduce the log-n ratio. Confirm the naive check short-circuits to O(n) on a skewed chain rather than the folklore's O(n squared).</li>" +
+        "<li><strong>Maximum path sum, both traps.</strong> Implement it with the zero clamp, and demonstrate on random mixed-sign trees that removing the clamp changes about a third of the answers. Then show that seeding the accumulator at zero instead of negative infinity fails on an all-negative tree.</li>" +
+        "<li><strong>Recursive LCA.</strong> Implement the four-line lowest common ancestor and check it against a path-intersection brute force on random trees. Explain why it needs no separate accumulator.</li>" +
+        "<li><strong>Where local BST validation breaks.</strong> Build the three-node counterexample, confirm the parent-child check accepts it and the range check rejects it, then implement the range check and the inorder-is-increasing alternative.</li>" +
+        "<li><strong>Independent set on a tree.</strong> Implement the take-skip DP, verify it against a brute force over all subsets on small trees, and confirm that on a path it reproduces the ceiling-of-n-over-two maximum.</li>" +
+        "<li><strong>Reroot the distances.</strong> Compute every node's total distance to all others two ways: n separate breadth-first searches, and the two-pass rerooting. Check the answers match and reproduce the growing speedup as n rises.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "tree DP", d: "Dynamic programming with a tree's structure as the subproblem order: a postorder recursion in which each node returns a small tuple built from its children's, with any non-composable answer sent to a global accumulator." },
+    { t: "tuple", d: "The small bundle of values a node returns to its parent in a tree DP; typically the composable answer rooted at the node together with, or separate from, the answer that turns at it." },
+    { t: "global accumulator", d: "A running best kept on the side of a tree recursion, holding answers that cannot be extended by a parent, such as a path that turns at a node." },
+    { t: "height", d: "The number of edges from a node to its deepest leaf, one more than the taller child's height; the simplest composable tree-DP return value." },
+    { t: "height-balanced", d: "A tree in which every node's two subtrees differ in height by at most one; checkable in O(n) by returning height or a -1 sentinel for imbalance." },
+    { t: "diameter", d: "The longest path in a tree measured in edges; a turning path that need not touch the root, found as the maximum over nodes of the two child heights plus two." },
+    { t: "maximum path sum", d: "The largest sum of node values along any path in a tree, where each child's downward contribution is clamped at zero and the accumulator is seeded to negative infinity." },
+    { t: "lowest common ancestor", d: "The deepest node having two given nodes in its subtree; found by a postorder that returns a node, itself once both targets are seen on different sides." },
+    { t: "binary search tree", d: "A tree where every node's whole left subtree holds smaller keys and its whole right subtree larger keys; validated by carrying a range downward, not by a local parent-child check." },
+    { t: "range check", d: "The correct BST validation: each node must lie strictly within an inherited interval, and passes to each child that interval narrowed by its own value; information flows downward." },
+    { t: "maximum-weight independent set", d: "The heaviest set of pairwise non-adjacent nodes; NP-hard on a general graph but a linear tree DP returning a (take, skip) pair per node." },
+    { t: "take-skip", d: "The two-component tuple of a selection tree DP: the best subtree total with the node taken (children forbidden) and with it skipped (children free)." },
+    { t: "rerooting", d: "Computing a tree-DP answer for every node as root in O(n) total, by one postorder pass fixing the root's answer and one downward pass that slides it across each edge in O(1)." },
+    { t: "postorder", d: "The left, right, root traversal in which a node is processed only after both children, the order every tree DP runs in so that children's tuples exist before the parent needs them." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "In the tree-DP shape, a node returns one quantity to its parent and records another on the side. What distinguishes the two?",
+      opts: [
+        "The returned quantity is the composable answer the parent can extend, such as a downward path, while the recorded one is a non-composable answer, such as a path that has already turned",
+        "The returned quantity is always a single number while the recorded one is always a tuple, since parents can only combine scalar values from their children",
+        "The returned quantity is computed in preorder before any of the children are seen, while the recorded one is computed in postorder only after both children have already returned their own results",
+        "The returned quantity is the global answer and the recorded one is a local intermediate, so the accumulator is discarded once the traversal reaches the root"
+      ], a: 0,
+      why: "A path that still goes straight down can be extended by the parent, so it travels up as the return value; a path that has turned at a node cannot be extended and is retired to the accumulator. It is about composability, not scalar-versus-tuple, not preorder-versus-postorder, and the accumulator holds the answer rather than being discarded." },
+
+    { type: "mc",
+      q: "The naive top-down balance check is widely quoted as O(n squared), worst on a skewed tree. The measurements contradict both halves. What is actually true?",
+      opts: [
+        "It is O(n squared) on balanced trees, because every node's height is recomputed from scratch, and only becomes linear once the tree is skewed enough to share subtrees",
+        "It is genuinely O(n squared) in the worst case, but the worst case is a perfect tree rather than a skewed one, which is the only correction the measurements make",
+        "It costs about n log n on trees that pass the check, since each of n nodes recomputes a height of at most log n, and it short-circuits to O(n) on a skewed tree because the imbalance is caught at the root",
+        "It is O(n) in all cases, because the height computation is memoised across nodes, and the folklore merely predates that optimisation"
+      ], a: 2,
+      why: "On a perfect tree the check passes and recurses everywhere, doing n height-visits each of depth log n, which the measured ratio of 17 at 262,143 nodes confirms is n log n; on a skewed tree the root's own subtrees differ in height by far more than one, so the check fails and short-circuits at O(n). The quadratic bound is loose in both directions; nothing is memoised." },
+
+    { type: "mc",
+      q: "Diameter and maximum path sum share a tuple, but the longest or heaviest path need not pass through the root. How does the technique find an answer it cannot return?",
+      opts: [
+        "It runs a second, separate traversal rooted at the deepest leaf of the tree, so that the path which avoided the first root is then guaranteed to pass through the second one",
+        "Each node records the turning answer through it in a global accumulator the moment it is computed, so the maximum is captured wherever in the tree it occurs",
+        "It returns the turning answer up the tree to the parent anyway, and the root then compares all of the turning answers it has received to select the global maximum among them",
+        "It reroots the tree at every node in turn, computing the through-root answer for each, which is why the technique is inherently quadratic in the number of nodes"
+      ], a: 1,
+      why: "The turning answer at a node cannot be extended by the parent, so it is written to a side accumulator as soon as it is found; the global maximum over all nodes is the diameter or best path sum, wherever it sits. There is no second traversal, the turning answer is not returned upward, and the whole thing is one linear pass, not a reroot." },
+
+    { type: "mc",
+      q: "Maximum path sum clamps each child's downward contribution at zero. On all-negative trees a further subtlety appears. What are the two things that must be right?",
+      opts: [
+        "Clamp each child at zero so losing subtrees are dropped, and seed the global accumulator at negative infinity so an all-negative tree returns its single largest node rather than zero",
+        "Clamp each child at zero and then also seed the accumulator at zero as well, so that a tree that happens to contain no positive path at all still correctly returns a total sum of zero for the empty path",
+        "Skip the clamp entirely on negative trees and instead negate all of the values, solve the resulting maximum, and negate the result back, which handles the all-negative case as a special path",
+        "Clamp each child at the parent's value rather than at zero, and seed the accumulator at the root's own value, so that the root node is always guaranteed to be included in the final answer that is produced"
+      ], a: 0,
+      why: "The clamp drops a subtree whose best downward sum is negative, since extending into it only subtracts; but the accumulator must start at negative infinity, not zero, or an all-negative tree wrongly reports zero instead of its least-negative node. Seeding at zero is exactly the empty-path bug; negating or clamping at the parent value are not the technique." },
+
+    { type: "mc",
+      q: "The recursive lowest common ancestor uses no separate accumulator, unlike diameter or path sum. Why not?",
+      opts: [
+        "Because the lowest common ancestor is by definition always the root of the whole tree, so the answer is already known before the traversal even begins and so needs no accumulation at all",
+        "Because the answer is itself a return value &mdash; the first node to receive a found target from both of its sides &mdash; so the return channel carries the whole state up to the root",
+        "Because it performs two separate downward passes, one per target, and intersects their paths, which replaces the accumulator with a set operation",
+        "Because it visits the nodes in inorder rather than postorder, and inorder traversals cannot maintain a running accumulator across the two subtrees"
+      ], a: 1,
+      why: "A node returns a target if it is one, the single find if only one side reports, and itself once both sides report &mdash; that node is the lowest common ancestor, and it flows up the return channel. No side accumulator is needed because the answer is a return value; the LCA is not always the root, the recursive version is a single postorder pass, and it does not intersect two path walks." },
+
+    { type: "blank",
+      q: "The correct BST validation carries an interval downward, tightening one end at each step, and rejects any node whose key falls outside it; this is the ____ check.",
+      a: ["range"],
+      why: "The range check gives the root the whole real line, bounds a left child above by the parent's value and a right child below by it, and narrows the interval at every descent. It catches the case a local parent-child comparison misses, where a node's constraint comes from a distant ancestor rather than its immediate parent." },
+
+    { type: "mc",
+      q: "Checking only that each node's left child is smaller and right child is larger accepts trees that are not binary search trees. What is the smallest such tree, and why does the check miss it?",
+      opts: [
+        "A four-node tree in which two cousins violate the ordering, which the local check misses precisely because it never once compares any of the nodes that happen to live in two different subtrees against one another",
+        "A two-node tree, root 5 with a right child 5, which the check misses because it tests strict order in one direction but allows equality in the other",
+        "A single node with a self-referential pointer, which the check misses because it assumes the tree is acyclic and never revisits a node",
+        "A three-node tree, root 5 with left child 3 and that 3's right child 6: each parent-child pair is ordered, yet 6 lies in 5's left subtree and exceeds 5, a constraint the local check cannot see"
+      ], a: 3,
+      why: "Root 5, left 3, and 3's right child 6 passes both parent-child tests (3 under 5, 6 over 3) but violates the BST property because 6 is in 5's left subtree and must be under 5. The failure is that 6's real bound comes from its grandparent, which the local check never consults; it is three nodes, not four, and not about equality or cycles." },
+
+    { type: "mc",
+      q: "Maximum-weight independent set is NP-hard on a general graph but linear on a tree, via a per-node pair. What does the pair hold, and why does the tree make it tractable?",
+      opts: [
+        "The pair holds the node's weight and its depth, and the tree is tractable because depths are bounded by the logarithm of the node count for balanced trees",
+        "The pair holds the maximum and minimum weights in the subtree, and the tree is tractable because a greedy that always takes the maximum-weight node is optimal on trees",
+        "The pair holds the best subtree total with the node taken (forbidding its children) and with it skipped (freeing them), and the tree is tractable because each subtree is an independent subproblem with no cross-edges",
+        "The pair holds the answers for the left and right subtrees, and the tree is tractable because the two subtrees can be solved in parallel on separate cores"
+      ], a: 2,
+      why: "Each node returns (take, skip): taking it adds its weight to both children's skip-totals, skipping it adds the better option of each child. The tree makes this work because subtrees share no edges, so a node's choice interacts only with its own children &mdash; the clean subproblem decomposition a general graph lacks. It is not about depth, a greedy, or parallelism." },
+
+    { type: "blank",
+      q: "Computing a tree-DP answer for every node as if it were the root, in O(n) total rather than O(n squared), using one upward pass and one downward pass, is called ____.",
+      a: ["rerooting", "re-rooting"],
+      why: "Rerooting fixes an arbitrary root, computes its answer and subtree sizes in a postorder pass, then slides the answer across each edge in O(1) during a downward pass, so all n rooted answers cost about two traversals. The measured speedup over n separate traversals grows with n because it replaces a quadratic method with a linear one." },
+
+    { type: "order",
+      q: "Order these four tree computations by how their information flows, from purely upward to purely downward:",
+      items: [
+        "subtree height: each node returns a value built only from its children",
+        "diameter: values return upward, but a global accumulator is written on the side",
+        "lowest common ancestor: a node flows upward, yet the answer depends on where both targets sit below",
+        "BST range validation: an interval parameter descends and the node is tested against it"
+      ],
+      why: "Height is purely upward &mdash; a return value composed from children with nothing on the side. Diameter is mostly upward with a side accumulator for the turning path. LCA is upward in its return but its meaning depends on the whole subtree below each node. BST range validation is the down-flowing archetype: the constraint is a parameter that descends, and the answer is a conjunction. The exact placement of the two middle rows is the intended judgement." }
+  ]
+});
