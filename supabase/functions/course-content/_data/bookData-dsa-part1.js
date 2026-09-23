@@ -14045,3 +14045,249 @@ CHAPTERS.push({
       why: "The deque is amortised O(1) per step because slopes and queries arrive sorted; Li Chao pays O(log C) per operation for handling any order; brute force is O(n\u00b2). All three gave identical answers on 300 random instances." }
   ]
 });
+
+/* ======================= CHAPTER 46 ======================= */
+CHAPTERS.push({
+  num: 46, part: 6, title: "Intractability: Recognizing What Cannot Be Done",
+  blurb: "Every technique in this course has been about finding a fast algorithm. This chapter is about knowing when to stop, a skill with a precise theory behind it and large practical value: the difference between an engineer who spends a week hunting for a polynomial algorithm that almost certainly does not exist and one who spends an hour and ships an approximation. It defines P and NP honestly, gets the direction of reduction right, walks the 3-SAT gadget, maps the line between each tractable problem in the course and its hard neighbour, and measures the four ways forward.",
+  sections: [
+
+    { title: "P and NP",
+      html:
+        "<p>Every chapter so far has been about finding a fast algorithm. This one is about knowing when to stop looking, which is a skill with a precise theory behind it. Chapter 2 showed the arithmetic that makes it matter: with sixty times the compute, an n<sup>2</sup> algorithm's reach grows from 31,622 to about 245,000 elements, and a 2<sup>n</sup> algorithm's grows from 29 to 35. Faster hardware does not rescue an exponential algorithm, so whether a problem needs one is a property of the problem, and it is worth knowing before you start.</p>" +
+        "<p>The theory is stated for <strong>decision problems</strong>, questions with a yes-or-no answer: is there a tour shorter than k, a subset summing to t, an assignment satisfying this formula? Optimisation problems are no harder than their decision versions by more than a binary search on k, so nothing is lost. <strong>P</strong> is the class of decision problems solvable in time polynomial in the input size, measured in bits, the distinction Chapter 20 used to show knapsack's O(nW) table is not polynomial. <strong>NP</strong> is the class whose yes-answers have a <strong>certificate</strong> that a polynomial-time verifier can check: a proposed tour, a proposed subset, a proposed assignment. Finding one may be hard; checking one is cheap.</p>" +
+        "<p>The gap between finding and checking is measurable. For a formula in 3-SAT, where every clause is an OR of three literals, checking an assignment for 100,000 variables and 426,000 clauses took 0.11 s. Finding one by trying all assignments on an unsatisfiable formula tried 2<sup>n</sup> of them: 0.18 s at n = 16, 0.74 s at 18, 3.08 s at 20, four times the time for two more variables, forever.</p>" +
+        "<p>Three things NP does not mean, each a common error. It does not mean \"not polynomial\": the N is for nondeterministic, every problem in P is also in NP, and sorting is in NP. It does not mean \"proved to need exponential time\": whether P equals NP is open, one of the Clay Institute's seven Millennium Prize Problems since 2000, and almost everyone expects them to differ without anyone having proved it. And it does not mean \"hard on every input\": the classification is about the worst case, and on random 3-SAT formulas with 100 variables, a simple backtracking solver needed a median of 26 search nodes at 3 clauses per variable and 375 at 6, but 1,265 at 4.26, where about half the formulas were satisfiable, and 1,645 at 4.5, where few were: the effort peaks in the narrow band where the answer changes from almost always yes to almost always no. Hardness is concentrated, which is why industrial SAT solvers routinely handle instances with millions of variables.</p>"
+    },
+
+    { title: "Reduction, in Both Directions",
+      viz: "dsaReduction", vizTitle: "Watch the instance transform. The answer to one problem reads off as the answer to the other",
+      html:
+        "<p>A <strong>reduction</strong> from problem A to problem B is a polynomial-time transformation that turns any instance of A into an instance of B with the same answer. If one exists, any algorithm for B solves A: transform, run it, return its answer. So A reduces to B means A is <em>no harder than</em> B, written A &#8804; B.</p>" +
+        "<p>The direction is where almost everyone slips, because \"reduces to\" sounds like making something smaller. To prove a new problem B hard, you reduce a known hard problem A <em>to</em> B: if B had a fast algorithm, so would A, and A is believed to have none. Reducing B to a hard problem proves nothing about B, since anything tractable also reduces to something hard. The mnemonic is that the arrow points at the problem being shown hard, and the reduction's job is to build B-instances cleverly enough that B's answer encodes A's.</p>" +
+        "<p>A two-line example shows the shape. To prove the travelling salesman problem hard, start from Hamiltonian cycle, known to be NP-complete, and build a TSP instance on the same vertices: distance 1 where the graph has an edge and 2 where it does not. A tour of total length n exists exactly when the tour uses only real edges, that is, exactly when the graph has a Hamiltonian cycle. A fast TSP solver would therefore decide Hamiltonian cycle, so TSP is at least as hard. On 300 random small graphs, the brute-force TSP optimum equalled n exactly when a Hamiltonian cycle existed. Reducing TSP to Hamiltonian cycle instead would show nothing useful at all.</p>" +
+        "<p>Small reductions are everywhere once you look. A set of vertices is independent, with no edge inside it, exactly when every edge has an endpoint outside it, so the complement of a maximum <strong>independent set</strong> is a minimum <strong>vertex cover</strong>. A clique in a graph is an independent set in its complement graph. Subset sum reduces to partition by adding one number: for a set with total S and target t, append |S &#8722; 2t|, and the new set splits into two equal halves exactly when the old one had a subset summing to t. I checked each of these against brute force: the cover and clique identities on 300 random graphs, the partition reduction on 1,000 random instances, with no mismatch.</p>" +
+        "<p>The same tool runs in the other direction, and there it is a design method rather than a proof technique. Robert Sedgewick's textbooks frame much of algorithm design as reducing a new problem to one you already know how to solve fast. Chapter 39 is the model: bipartite matching, disjoint paths, path covers and project selection were each reduced to maximum flow, so one algorithm solved them all. Chapter 37 reduced 2-SAT to strongly connected components. Chapter 45 reduced the farthest Manhattan pair to a one-pass scan by rotating the plane. When a new problem arrives, the first question is which known problem it reduces to, and the answer decides whether you ship an algorithm or an approximation.</p>"
+    },
+
+    { title: "NP-Completeness",
+      html:
+        "<p>A problem is <strong>NP-hard</strong> if every problem in NP reduces to it, and <strong>NP-complete</strong> if it is also in NP itself. An NP-complete problem is therefore as hard as anything in NP: a polynomial algorithm for any one of them would give one for all, and would prove P = NP. Stephen Cook proved in 1971 that satisfiability of Boolean formulas, <strong>SAT</strong>, is NP-complete, by showing that the run of any polynomial-time verifier can be written as a formula that is satisfiable exactly when some certificate is accepted; Leonid Levin found the same result independently. Once one problem is known to be hard, others follow by reduction from it, without repeating Cook's argument. Richard Karp did that for 21 problems in 1972, and Garey and Johnson's 1979 book catalogued about three hundred.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 420' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='11'>Reductions from SAT to problems met in this course: an arrow A to B means A reduces to B</text><line x1='380' y1='66' x2='257' y2='99' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='250,101 256,96 258,103' fill='#8fa3c4'/><line x1='380' y1='66' x2='553' y2='100' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='560,101 552,103 554,96' fill='#8fa3c4'/><line x1='250' y1='136' x2='117' y2='177' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='110,179 116,174 118,180' fill='#8fa3c4'/><line x1='250' y1='136' x2='295' y2='174' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='300,179 292,177 297,172' fill='#8fa3c4'/><line x1='250' y1='136' x2='463' y2='178' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='470,179 462,181 464,174' fill='#8fa3c4'/><line x1='110' y1='214' x2='65' y2='252' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='60,257 63,250 68,255' fill='#8fa3c4'/><line x1='110' y1='214' x2='174' y2='253' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='180,257 172,256 176,250' fill='#8fa3c4'/><line x1='60' y1='292' x2='60' y2='328' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='60,335 56,328 64,328' fill='#8fa3c4'/><line x1='118' y1='352' x2='135' y2='352' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='142,352 135,356 135,348' fill='#8fa3c4'/><line x1='470' y1='214' x2='425' y2='252' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='420,257 423,250 428,255' fill='#8fa3c4'/><line x1='470' y1='214' x2='554' y2='254' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='560,257 552,257 555,251' fill='#8fa3c4'/><line x1='250' y1='136' x2='683' y2='178' stroke='#8fa3c4' stroke-width='1.3'/><polygon points='690,179 683,182 683,175' fill='#8fa3c4'/><rect x='322' y='32' width='116' height='34' rx='6' fill='#182842' stroke='#ffd166' stroke-width='1.4'/><text x='380' y='48' text-anchor='middle' fill='#c9d6ea' font-size='11'>SAT</text><text x='380' y='60' text-anchor='middle' fill='#8fa3c4' font-size='9'>Cook 1971</text><rect x='192' y='102' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='250' y='118' text-anchor='middle' fill='#c9d6ea' font-size='11'>3-SAT</text><text x='250' y='130' text-anchor='middle' fill='#8fa3c4' font-size='9'>Karp 1972</text><rect x='490' y='102' width='140' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='560' y='118' text-anchor='middle' fill='#c9d6ea' font-size='11'>0-1 integer prog.</text><text x='560' y='130' text-anchor='middle' fill='#8fa3c4' font-size='9'>Chapter 45</text><rect x='52' y='180' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='110' y='201' text-anchor='middle' fill='#c9d6ea' font-size='11'>indep. set</text><rect x='242' y='180' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='300' y='196' text-anchor='middle' fill='#c9d6ea' font-size='11'>3-colouring</text><text x='300' y='208' text-anchor='middle' fill='#8fa3c4' font-size='9'>Chapter 37</text><rect x='412' y='180' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='470' y='196' text-anchor='middle' fill='#c9d6ea' font-size='11'>subset sum</text><text x='470' y='208' text-anchor='middle' fill='#8fa3c4' font-size='9'>Chapter 20</text><rect x='2' y='258' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='60' y='274' text-anchor='middle' fill='#c9d6ea' font-size='11'>vertex cover</text><text x='60' y='286' text-anchor='middle' fill='#8fa3c4' font-size='9'>Karp 1972</text><rect x='122' y='258' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='180' y='274' text-anchor='middle' fill='#c9d6ea' font-size='11'>clique</text><text x='180' y='286' text-anchor='middle' fill='#8fa3c4' font-size='9'>Karp 1972</text><rect x='2' y='336' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='60' y='352' text-anchor='middle' fill='#c9d6ea' font-size='11'>Ham. cycle</text><text x='60' y='364' text-anchor='middle' fill='#8fa3c4' font-size='9'>Chapter 34</text><rect x='142' y='336' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='200' y='352' text-anchor='middle' fill='#c9d6ea' font-size='11'>TSP</text><text x='200' y='364' text-anchor='middle' fill='#8fa3c4' font-size='9'>Chapter 22</text><rect x='362' y='258' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='420' y='274' text-anchor='middle' fill='#c9d6ea' font-size='11'>partition</text><text x='420' y='286' text-anchor='middle' fill='#8fa3c4' font-size='9'>Karp 1972</text><rect x='502' y='258' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='560' y='274' text-anchor='middle' fill='#c9d6ea' font-size='11'>knapsack</text><text x='560' y='286' text-anchor='middle' fill='#8fa3c4' font-size='9'>Karp 1972</text><rect x='632' y='180' width='116' height='34' rx='6' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='690' y='196' text-anchor='middle' fill='#c9d6ea' font-size='11'>Steiner tree</text><text x='690' y='208' text-anchor='middle' fill='#8fa3c4' font-size='9'>Chapter 36</text><text x='20' y='396' text-anchor='start' fill='#8fa3c4' font-size='10'>So B is at least as hard as A. All are NP-complete; SAT is the root because every problem in NP reduces to it</text><text x='20' y='412' text-anchor='start' fill='#8fa3c4' font-size='10'>Steiner tree's standard proof goes through exact cover; the arrow compresses a chain of reductions</text></svg></div>" +
+        "<p>The figure shows the reductions behind the hard problems this course has already met. The arrow from 3-SAT to independent set is worth seeing in full, because it is the template for how such proofs work. Given a formula with m clauses, build a graph with one triangle per clause, whose three vertices are the clause's literals, and add an edge between every literal and its negation anywhere in the graph. Then ask whether the graph has an independent set of size m.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 378' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='11'>3-SAT to independent set: one triangle per clause, and an edge between every literal and its negation</text><text x='380' y='38' text-anchor='middle' fill='#c9d6ea' font-size='12'>(x1 \u2228 \u00acx2 \u2228 x3) \u2227 (\u00acx1 \u2228 x2 \u2228 x3) \u2227 (\u00acx1 \u2228 \u00acx2 \u2228 \u00acx3)</text><line x1='140' y1='130' x2='80' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='140' y1='130' x2='200' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='80' y1='220' x2='200' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='380' y1='130' x2='320' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='380' y1='130' x2='440' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='320' y1='220' x2='440' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='620' y1='130' x2='560' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='620' y1='130' x2='680' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><line x1='560' y1='220' x2='680' y2='220' stroke='#8fa3c4' stroke-width='1.3'/><path d='M 140 114 Q 260 68 380 114' fill='none' stroke='#ff5d73' stroke-width='1.1' stroke-dasharray='4 3'/><path d='M 140 114 Q 380 56 620 114' fill='none' stroke='#ff5d73' stroke-width='1.1' stroke-dasharray='4 3'/><path d='M 80 236 Q 200 299 320 236' fill='none' stroke='#ff5d73' stroke-width='1.1' stroke-dasharray='4 3'/><path d='M 200 236 Q 440 318 680 236' fill='none' stroke='#ff5d73' stroke-width='1.1' stroke-dasharray='4 3'/><path d='M 320 236 Q 440 299 560 236' fill='none' stroke='#ff5d73' stroke-width='1.1' stroke-dasharray='4 3'/><path d='M 440 236 Q 560 299 680 236' fill='none' stroke='#ff5d73' stroke-width='1.1' stroke-dasharray='4 3'/><circle cx='140' cy='130' r='17' fill='#123a2c' stroke='#3ddc97' stroke-width='2'/><text x='140' y='134' text-anchor='middle' fill='#c9d6ea' font-size='11'>x1</text><circle cx='80' cy='220' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='80' y='224' text-anchor='middle' fill='#c9d6ea' font-size='11'>\u00acx2</text><circle cx='200' cy='220' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='200' y='224' text-anchor='middle' fill='#c9d6ea' font-size='11'>x3</text><circle cx='380' cy='130' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='380' y='134' text-anchor='middle' fill='#c9d6ea' font-size='11'>\u00acx1</text><circle cx='320' cy='220' r='17' fill='#123a2c' stroke='#3ddc97' stroke-width='2'/><text x='320' y='224' text-anchor='middle' fill='#c9d6ea' font-size='11'>x2</text><circle cx='440' cy='220' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='440' y='224' text-anchor='middle' fill='#c9d6ea' font-size='11'>x3</text><circle cx='620' cy='130' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='620' y='134' text-anchor='middle' fill='#c9d6ea' font-size='11'>\u00acx1</text><circle cx='560' cy='220' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='560' y='224' text-anchor='middle' fill='#c9d6ea' font-size='11'>\u00acx2</text><circle cx='680' cy='220' r='17' fill='#123a2c' stroke='#3ddc97' stroke-width='2'/><text x='680' y='224' text-anchor='middle' fill='#c9d6ea' font-size='11'>\u00acx3</text><text x='114' y='134' text-anchor='end' fill='#8fa3c4' font-size='10'>clause 1</text><text x='354' y='134' text-anchor='end' fill='#8fa3c4' font-size='10'>clause 2</text><text x='594' y='134' text-anchor='end' fill='#8fa3c4' font-size='10'>clause 3</text><text x='20' y='352' text-anchor='start' fill='#8fa3c4' font-size='10'>green: an independent set of size 3, one literal per clause and no literal with its negation, which reads off as</text><text x='20' y='368' text-anchor='start' fill='#8fa3c4' font-size='10'>x1 = true, x2 = true, x3 = false; a satisfying assignment gives such a set, and such a set gives an assignment</text></svg></div>" +
+        "<p>Both directions of the equivalence are short. If the formula has a satisfying assignment, pick one true literal from each clause: that is m vertices, one per triangle, and none is the negation of another because they are all true. Conversely, an independent set of size m has exactly one vertex in each triangle, never contains a literal and its negation, and so sets each chosen literal true consistently, satisfying every clause. The construction is polynomial, a few vertices and edges per clause. On 300 random formulas, the graph had an independent set of size m exactly when a SAT solver found the formula satisfiable.</p>" +
+        "<p>Choosing which known problem to reduce from is most of the craft, and the choice follows the shape of the new problem. Logical constraints with true-or-false choices reduce naturally from 3-SAT. Selecting vertices or items subject to pairwise conflicts comes from independent set, clique or vertex cover. Orderings that visit everything come from Hamiltonian cycle. Packing numbers into bins or splitting a total evenly comes from partition, or from 3-partition when the numbers are small and the hardness must survive that. Garey and Johnson organised their catalogue around exactly these six families, and most published hardness proofs are one gadget away from one of them.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def sat_to_independent_set(clauses):     # clauses: tuples of literals, -v meaning NOT v\n" +
+        "    vertices = [(i, lit) for i, c in enumerate(clauses) for lit in c]\n" +
+        "    edges = []\n" +
+        "    for a in range(len(vertices)):\n" +
+        "        for b in range(a + 1, len(vertices)):\n" +
+        "            (ci, x), (cj, y) = vertices[a], vertices[b]\n" +
+        "            if ci == cj or x == -y:          # same clause, or a literal and its negation\n" +
+        "                edges.append((a, b))\n" +
+        "    return vertices, edges, len(clauses)     # satisfiable &lt;=&gt; independent set of this size</code></pre>" +
+        "<pre data-lang='java' hidden><code>record Instance(List&lt;int[]&gt; vertices, List&lt;int[]&gt; edges, int k) {}\n" +
+        "static Instance satToIndependentSet(int[][] clauses) {   // literal -v means NOT v\n" +
+        "    List&lt;int[]&gt; vs = new ArrayList&lt;&gt;();\n" +
+        "    for (int i = 0; i &lt; clauses.length; i++) for (int lit : clauses[i]) vs.add(new int[]{i, lit});\n" +
+        "    List&lt;int[]&gt; es = new ArrayList&lt;&gt;();\n" +
+        "    for (int a = 0; a &lt; vs.size(); a++)\n" +
+        "        for (int b = a + 1; b &lt; vs.size(); b++)\n" +
+        "            if (vs.get(a)[0] == vs.get(b)[0] || vs.get(a)[1] == -vs.get(b)[1]) es.add(new int[]{a, b});\n" +
+        "    return new Instance(vs, es, clauses.length);\n" +
+        "}</code></pre></div>"
+    },
+
+    { title: "The Line Between Tractable and Hard",
+      html:
+        "<p>The hard problems do not sit in a separate part of the subject. Each one has a tractable neighbour that differs by what looks like a detail, and the course has met both sides of most of these pairs. Knowing the pairs is most of the practical skill, because a problem you meet will usually be a disguised version of one side or the other.</p>" +
+        "<p><strong>Two versus three.</strong> 2-SAT is linear, by Chapter 37's strongly connected components; 3-SAT is NP-complete. Two-colouring is a breadth-first search; three-colouring is NP-complete, and so is k-colouring for every k of at least 3. <strong>Short versus long.</strong> Shortest paths are Chapter 35's relaxation; the longest simple path is NP-hard, because a path of n &#8722; 1 edges is a <strong>Hamiltonian path</strong>, one through every vertex, and deciding whether one exists is NP-complete, as Chapter 34 promised to explain. On a DAG the longest path is linear again, because the acyclicity that makes it tractable is the structure the general problem lacks. <strong>Every edge versus every vertex.</strong> An Euler circuit, using each edge once, is Hierholzer's linear algorithm from Chapter 37; a Hamiltonian cycle, using each vertex once, is NP-complete.</p>" +
+        "<p><strong>Spanning versus connecting.</strong> The minimum spanning tree is greedy, by Chapter 36's cut property; connecting only a chosen subset of vertices, the <strong>Steiner tree</strong>, is NP-hard, because the independence structure stops being a matroid. <strong>Cut versus cut.</strong> The minimum cut is Chapter 38's max-flow dual; the maximum cut is NP-hard, on Karp's list. <strong>Fractions versus integers.</strong> Linear programming is polynomial, as Chapter 45 described; require the variables to be integers and <strong>integer programming</strong> is NP-hard, which is why it sits directly under SAT in the figure. <strong>One side versus two.</strong> Stable marriage is Gale-Shapley's quadratic algorithm; allow couples who must be placed together and it becomes NP-complete, Chapter 39's example of a small rule change crossing the line.</p>" +
+        "<p><strong>Small numbers versus large.</strong> Subset sum, partition and knapsack are NP-complete, which Chapter 20 promised to make formal, and yet the O(nW) table solves them. There is no contradiction: that table is <em>pseudopolynomial</em>, polynomial in the magnitude W but exponential in its number of bits, so the problems are hard only when the numbers are large. They are called <strong>weakly NP-complete</strong>. Problems that stay hard even with numbers bounded by a polynomial in n, such as 3-partition or TSP, are strongly NP-complete, and for them no pseudopolynomial algorithm exists unless P = NP. <strong>Small n versus large n.</strong> The travelling salesman problem is NP-hard, and Chapter 22's Held-Karp DP solves it in O(2<sup>n</sup>n<sup>2</sup>), exponential but far better than n!; for twenty stops that is exact and fast, and for a thousand it is hopeless.</p>"
+    },
+
+    { title: "Recognizing Hardness in the Room",
+      html:
+        "<p>In an interview or a design review, the useful skill is not proving NP-completeness but noticing it in time. Four questions, asked in order, catch most cases.</p>" +
+        "<p><strong>Does the problem choose a subset, an ordering or an assignment subject to a global constraint?</strong> Pick items under a budget, visit every place once, colour so that no neighbours clash, schedule so that no conflicts occur. Global constraints with no local structure are where the hard problems live. <strong>Is it a known hard problem renamed?</strong> \"Choose servers so every client is within one hop of a chosen one\" is dominating set; \"place the fewest guards so every corridor is watched\" is vertex cover; \"split the tasks between two machines to finish together\" is partition. Karp's list and the pairs in the previous section are the vocabulary. <strong>What are the constraints?</strong> An n of at most 20 is an invitation to a 2<sup>n</sup> bitmask algorithm, an n of 40 to meet in the middle from Chapter 12, and small numbers to a pseudopolynomial table. Problem setters bound inputs to fit the intended algorithm, so the bound is evidence. <strong>Is there structure the hard version lacks?</strong> Vertex cover is NP-hard in general and polynomial on bipartite graphs, where K&#246;nig's theorem from Chapter 39 makes it a matching; maximum independent set is NP-hard in general and linear on trees, by Chapter 25's tree DP; colouring is greedy on interval graphs. A restriction in the problem statement is often exactly the one that removes the hardness.</p>" +
+        "<p>Two problems that read alike make the point. Assigning meetings to the fewest rooms, where each meeting is a time interval, is Chapter 12's sweep: sort the endpoints and track the overlap, and the maximum overlap is the answer. Assigning exams to the fewest time slots so that no student has two at once sounds the same, but the conflicts come from shared students rather than from overlapping intervals, so it is colouring a general conflict graph, and NP-hard. The difference is the structure of the conflicts, not the wording of the question.</p>" +
+        "<p>When the answer is that the problem is hard, say so plainly, and say what comes next. \"This is NP-hard in general; it contains vertex cover. With n up to 20, I would use a 2<sup>n</sup> DP over subsets. If n were large, I would use the 2-approximation, or a local search if the constant matters more than the guarantee.\" That answer shows the three things an interviewer is listening for: that you recognised the problem, that you know the claim needs a reduction behind it, and that you have a plan that does not depend on resolving P versus NP in the next forty minutes.</p>"
+    },
+
+    { title: "What to Do Instead",
+      html:
+        "<p>NP-hardness closes one door, a polynomial algorithm that is exact on every input, and leaves four open.</p>" +
+        "<p><strong>Exact, but exponential with a good base.</strong> Held-Karp's 2<sup>n</sup>n<sup>2</sup> for TSP, meet in the middle's 2<sup>n/2</sup> for subset sum, and branch-and-bound searches that prune with a bound are all exact and all exponential, and they are the right answer when n is small. Modern SAT and integer-programming solvers belong here too: exponential in the worst case, and very fast on the structured instances that industry produces.</p>" +
+        "<p><strong>Exponential only in a parameter.</strong> A problem is <strong>fixed-parameter tractable</strong> if it is solvable in f(k)&#183;poly(n) for some parameter k, so the exponential cost attaches to k rather than to the input size. Vertex cover of size at most k is the standard example: some endpoint of any edge must be in the cover, so branch on the two endpoints, each branch removing one vertex and lowering k by one. The search tree has at most 2<sup>k</sup> leaves, each costing O(m). On a graph of 1,000 vertices with a planted cover, it found a cover of size 10 in 0.01 s, 15 in 2.9 s and 20 in 64 s, while trying all subsets of that size would mean 2.6 &#215; 10<sup>23</sup> candidates at k = 10.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def approx_vertex_cover(edges):                   # at most twice the minimum\n" +
+        "    cover = set()\n" +
+        "    for u, v in edges:\n" +
+        "        if u not in cover and v not in cover:     # edge still uncovered: take both ends\n" +
+        "            cover.update((u, v))\n" +
+        "    return cover\n" +
+        "\n" +
+        "def has_vertex_cover(edges, k):                   # exact, O(2^k * m)\n" +
+        "    if not edges:\n" +
+        "        return True\n" +
+        "    if k == 0:\n" +
+        "        return False\n" +
+        "    u, v = edges[0]                               # u or v must be in any cover\n" +
+        "    return (has_vertex_cover([e for e in edges if u not in e], k - 1) or\n" +
+        "            has_vertex_cover([e for e in edges if v not in e], k - 1))</code></pre>" +
+        "<pre data-lang='java' hidden><code>static Set&lt;Integer&gt; approxVertexCover(int[][] edges) {           // at most twice the minimum\n" +
+        "    Set&lt;Integer&gt; cover = new HashSet&lt;&gt;();\n" +
+        "    for (int[] e : edges)\n" +
+        "        if (!cover.contains(e[0]) &amp;&amp; !cover.contains(e[1])) { cover.add(e[0]); cover.add(e[1]); }\n" +
+        "    return cover;\n" +
+        "}\n" +
+        "static boolean hasVertexCover(List&lt;int[]&gt; edges, int k) {       // exact, O(2^k * m)\n" +
+        "    if (edges.isEmpty()) return true;\n" +
+        "    if (k == 0) return false;\n" +
+        "    for (int end : edges.get(0)) {\n" +
+        "        List&lt;int[]&gt; rest = new ArrayList&lt;&gt;();\n" +
+        "        for (int[] e : edges) if (e[0] != end &amp;&amp; e[1] != end) rest.add(e);\n" +
+        "        if (hasVertexCover(rest, k - 1)) return true;\n" +
+        "    }\n" +
+        "    return false;\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Approximate, with a proof.</strong> An <strong>approximation algorithm</strong> runs in polynomial time and guarantees a ratio to the optimum. The vertex-cover one above takes both ends of any uncovered edge. The edges it takes share no endpoints, so any cover, including the optimal one, must contain at least one end of each; it takes two. Hence at most twice the optimum. On 489 random small graphs its mean ratio was 1.67, never above 2, and it hit exactly 2 on both tight examples, a perfect matching and a complete bipartite graph. For TSP with distances obeying the triangle inequality, walking a minimum spanning tree gives ratio 2 and Christofides' 1976 algorithm 1.5; for general distances no constant ratio is possible unless P = NP. For vertex cover nothing better than 2 is known, and under the Unique Games Conjecture none exists.</p>" +
+        "<p><strong>Heuristics, with no guarantee.</strong> Nearest-neighbour tours and 2-opt, which reverses a segment whenever that shortens the tour, promise nothing and often beat the guaranteed algorithms. Against Held-Karp's optimum on 60 random 11-city instances, the MST tour averaged 16% above optimal, nearest neighbour 10%, and nearest neighbour followed by 2-opt 0.7%, optimal on 43 of the 60. At 1,000 cities, 2-opt shortened the nearest-neighbour tour by 14% in half a second. A guarantee bounds the worst case; it says little about the typical one. Integer programming offers a last bridge back to Chapter 45: relax a triangle's vertex cover to fractions and the linear program answers 1.5, a half on each vertex, while the true optimum is 2; rounding every value of at least one half up to 1 gives another 2-approximation.</p>"
+    },
+
+    { title: "Beyond NP",
+      html:
+        "<p>NP is not the top of the hierarchy, and a few classes above it are worth knowing by name. <strong>co-NP</strong> holds the problems whose no-answers have short certificates: a formula being unsatisfiable has no known short proof, which is why SAT solvers that report unsatisfiable produce proofs that can be very long. <strong>PSPACE</strong> holds problems solvable in polynomial memory, with no limit on time: deciding quantified Boolean formulas, where variables alternate between for-all and there-exists, is PSPACE-complete, as are many generalised two-player games, since a strategy must answer every opponent move. Above that, generalised chess on an n-by-n board is EXPTIME-complete, and by the time hierarchy theorem such problems provably have no polynomial algorithm, unlike NP-complete ones, whose hardness is only conjectured.</p>" +
+        "<p>And some problems have no algorithm at all. Alan Turing proved in 1936 that no program can decide, for every program and input, whether it halts; the argument feeds a supposed decider its own description and derives a contradiction. Every <em>undecidable</em> problem since, from deciding whether two context-free grammars generate the same language to many questions about what a program does, is shown by reduction from halting, the same technique as NP-completeness one level higher. Rice's theorem (1953) generalises it: every non-trivial property of what a program computes, as opposed to how it is written, is undecidable. Static analysers and type checkers live with this by being conservative: they answer \"maybe\" rather than wrongly.</p>" +
+        "<p>The map of complexity classes has hundreds of named regions, and Chapter 49 points to the ones worth following. For a working engineer the lesson of this chapter is shorter. Check whether the problem is one of the known hard ones before designing an exact algorithm, look for the structure that makes it tractable, and when there is none, pick deliberately among exponential-but-exact, parameterised, approximate and heuristic, knowing which guarantee you are giving up.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Find versus check.</strong> Time brute-force 3-SAT on unsatisfiable formulas for n = 12 to 20, and time verifying a satisfying assignment for 100,000 variables.</li>" +
+        "<li><strong>Watch the threshold.</strong> Run a backtracking SAT solver on random 3-SAT formulas with 100 variables at clause ratios from 3 to 6, recording the fraction satisfiable and the search nodes.</li>" +
+        "<li><strong>Build the gadget.</strong> Implement the 3-SAT to independent-set reduction and check on random small formulas that satisfiability and an independent set of size m coincide.</li>" +
+        "<li><strong>Three identities.</strong> Verify that minimum vertex cover is n minus maximum independent set, that a clique is an independent set in the complement, and that the subset-sum to partition reduction preserves the answer.</li>" +
+        "<li><strong>Name the pair.</strong> For each of 2-SAT, two-colouring, shortest path, Euler circuit, minimum spanning tree, minimum cut and linear programming, name its NP-hard neighbour and the detail that separates them.</li>" +
+        "<li><strong>Branch on an edge.</strong> Implement the O(2<sup>k</sup> m) vertex-cover search and time it on a 1,000-vertex graph with a planted cover of size 10, 15 and 20.</li>" +
+        "<li><strong>Measure the ratio.</strong> Run the vertex-cover 2-approximation against the exact minimum on random small graphs, and construct graphs where the ratio is exactly 2.</li>" +
+        "<li><strong>Tour quality.</strong> Compare the MST tour, nearest neighbour and nearest neighbour plus 2-opt against Held-Karp on random 11-city instances, then time 2-opt at 1,000 cities.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "decision problem", d: "A question with a yes-or-no answer; optimisation problems are no harder than their decision versions by more than a binary search." },
+    { t: "P", d: "Decision problems solvable in time polynomial in the input size in bits." },
+    { t: "NP", d: "Decision problems whose yes-answers have certificates checkable in polynomial time; not \"non-polynomial\"." },
+    { t: "certificate", d: "A proposed solution, such as an assignment or a tour, that a polynomial-time verifier checks." },
+    { t: "reduction", d: "A polynomial-time transformation of instances of A into instances of B with the same answers; A is then no harder than B." },
+    { t: "NP-hard", d: "At least as hard as every problem in NP: every problem in NP reduces to it." },
+    { t: "NP-complete", d: "NP-hard and in NP; a polynomial algorithm for any one would give P = NP." },
+    { t: "SAT", d: "Satisfiability of a Boolean formula; the first problem proved NP-complete, by Cook in 1971." },
+    { t: "independent set", d: "A set of vertices with no edge between any two; its complement is a vertex cover." },
+    { t: "vertex cover", d: "A set of vertices touching every edge; NP-hard in general, polynomial on bipartite graphs." },
+    { t: "Hamiltonian path", d: "A path visiting every vertex exactly once; deciding whether one exists is NP-complete." },
+    { t: "Steiner tree", d: "The cheapest tree connecting a chosen subset of vertices; NP-hard, unlike the minimum spanning tree." },
+    { t: "integer programming", d: "Linear programming with integer variables; NP-hard, while the fractional version is polynomial." },
+    { t: "weakly NP-complete", d: "NP-complete but solvable in pseudopolynomial time, hard only when the numbers are large; subset sum and knapsack." },
+    { t: "fixed-parameter tractable", d: "Solvable in f(k) times a polynomial in n, confining the exponential cost to a parameter k." },
+    { t: "approximation algorithm", d: "A polynomial-time algorithm with a proved ratio to the optimum, such as 2 for vertex cover." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Which statement about NP is correct?",
+      opts: [
+        "NP contains the problems whose yes-answers can be checked in polynomial time, so every problem in P is also in NP",
+        "NP stands for non-polynomial and contains exactly the problems that are proved to need exponential time",
+        "NP contains the problems that are hard on every input, which is why no heuristic can solve them in practice",
+        "NP contains the problems that have no algorithm at all, such as deciding whether a program halts"
+      ], a: 0,
+      why: "N is for nondeterministic, and a verifier-based definition includes all of P. Exponential lower bounds are unproved (P vs NP is open), hardness is worst case (random 3-SAT was fast away from ratio 4.26), and undecidable problems are outside NP entirely." },
+
+    { type: "mc",
+      q: "You want to prove that a new problem B is NP-hard. Which reduction do you build?",
+      opts: [
+        "A reduction from B to a known NP-hard problem A, which would show that B is no harder than A is known to be",
+        "A reduction from a known NP-hard problem A to B, so that a fast algorithm for B would give one for A",
+        "A reduction from B to SAT, since every NP-hard problem must reduce to SAT by Cook's theorem",
+        "A pair of reductions between B and some problem in P, showing B cannot be solved in polynomial time"
+      ], a: 1,
+      why: "A reduces to B means A is no harder than B, so reducing a hard A to B shows B hard. Reducing B to a hard problem proves nothing, since tractable problems reduce to hard ones; reductions to or from P cannot show hardness." },
+
+    { type: "mc",
+      q: "In the 3-SAT to independent-set reduction, why must an independent set of size m pick exactly one vertex per clause triangle?",
+      opts: [
+        "Because the reduction gives each literal a weight of one, and the weights in each triangle must sum to one",
+        "Because a satisfying assignment always makes exactly one literal true in each clause, and the set records that one literal",
+        "Because the three vertices of a triangle are mutually adjacent, so at most one fits, and m sets need all m triangles",
+        "Because negation edges connect every triangle to every other, forcing the set to spread across the clauses"
+      ], a: 2,
+      why: "A triangle allows at most one chosen vertex, so size m forces one in each; negation edges then keep the choices consistent. A satisfying assignment may make several literals true in a clause, and there are no weights." },
+
+    { type: "blank",
+      q: "A problem that is NP-complete but solvable in time polynomial in the magnitude of its numbers, such as subset sum, is called ____ NP-complete.",
+      a: ["weakly"],
+      why: "The O(nW) table is pseudopolynomial: polynomial in W, exponential in W's bit length, so the problem is hard only for large numbers. Strongly NP-complete problems such as 3-partition stay hard with small numbers." },
+
+    { type: "mc",
+      q: "Which pair shows a tractable problem next to an NP-hard one, as taught in this course?",
+      opts: [
+        "Minimum spanning tree and maximum spanning tree, since reversing the weights turns a greedy problem into an intractable one",
+        "Shortest path in a DAG and shortest path with negative edges, since negative weights make every path problem NP-hard",
+        "Bipartite matching and maximum flow, since matching needs integer answers that flow algorithms cannot guarantee",
+        "Euler circuit and Hamiltonian cycle: using every edge once is linear, using every vertex once is NP-complete"
+      ], a: 3,
+      why: "Hierholzer finds Euler circuits in linear time, while Hamiltonian cycle is NP-complete. Maximum spanning tree is greedy too; Bellman-Ford handles negative edges; flow's integrality theorem gives integer matchings." },
+
+    { type: "mc",
+      q: "Why is the vertex-cover algorithm that takes both endpoints of any uncovered edge never worse than twice the optimum?",
+      opts: [
+        "The edges it takes share no endpoints, so any cover needs one end of each, and it takes exactly two per edge",
+        "It takes the vertices of highest degree first, and each such vertex covers at least half of the remaining edges",
+        "It is the linear-programming relaxation rounded up, and rounding at most doubles each fractional value",
+        "It stops as soon as half the edges are covered, and the other half can each add at most one vertex"
+      ], a: 0,
+      why: "The chosen edges form a matching, so OPT is at least their number, and the algorithm takes twice that. It measured 1.67 on average and exactly 2 on a perfect matching. It ignores degrees; LP rounding is a different 2-approximation." },
+
+    { type: "mc",
+      q: "A vertex cover of size k in a 1,000-vertex graph took 0.01 s at k = 10 and 64 s at k = 20. What does that show?",
+      opts: [
+        "That the search is exponential in n, and the graph happened to be easier at smaller k",
+        "That the problem is fixed-parameter tractable: branching on an edge's ends costs O(2^k m), exponential in k, not n",
+        "That vertex cover is in P, since the running time stayed below a minute for a graph of 1,000 vertices",
+        "That the approximation algorithm was used for small k and the exact search only at k = 20"
+      ], a: 1,
+      why: "Every branch removes one endpoint and lowers k, so the tree has at most 2^k leaves regardless of n; C(1000, 10) is 2.6 x 10^23 subsets by comparison. Vertex cover remains NP-hard; the cost is confined to k." },
+
+    { type: "blank",
+      q: "The 1971 theorem that SAT is NP-complete is named for Stephen ____.",
+      a: ["Cook"],
+      why: "Cook showed any polynomial-time verifier's run can be encoded as a formula satisfiable exactly when some certificate is accepted; Levin found the same result independently, and Karp then reduced SAT to 21 problems in 1972." },
+
+    { type: "mc",
+      q: "On random 11-city tours, nearest neighbour plus 2-opt averaged 0.7% above optimal, while the MST tour, with a proved ratio of 2, averaged 16%. What is the lesson?",
+      opts: [
+        "That the MST tour's proof must be wrong, since an algorithm with a proved ratio can never lose to a heuristic",
+        "That 2-opt is secretly an approximation algorithm with ratio 1.05, which was the worst ratio it reached here",
+        "That a guarantee bounds the worst case and says little about typical quality, where heuristics often win",
+        "That random instances are never hard, so any algorithm at all is within a few percent of the optimum on them"
+      ], a: 2,
+      why: "The ratio 2 is a worst-case bound, satisfied here (worst MST ratio 1.35); 2-opt has no bound at all, and nearest neighbour alone reached 1.46 on one instance. Different algorithms differed by an order of magnitude on the same random inputs." },
+
+    { type: "order",
+      q: "Order these by the class of the problem, easiest first:",
+      items: [
+        "2-SAT: linear time",
+        "3-SAT: NP-complete",
+        "quantified Boolean formulas: PSPACE-complete",
+        "halting problem: undecidable"
+      ],
+      why: "Two literals per clause is solvable by SCCs; three is NP-complete; alternating quantifiers push it to PSPACE; and halting has no algorithm at all, by Turing's 1936 diagonal argument." }
+  ]
+});
