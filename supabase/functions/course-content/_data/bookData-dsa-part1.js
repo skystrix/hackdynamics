@@ -11984,3 +11984,319 @@ CHAPTERS.push({
       why: "Hopcroft-Karp's few phases make large unweighted matchings near-instant; the Hungarian method's O(n cubed) weighted work at n = 1,000 took seconds; Kuhn's one search per left vertex was slowest of the three; enumerating 2.4 &times; 10^18 permutations is not a real option, which is why Chapter 22's bitmask DP and this chapter's polynomial methods exist." }
   ]
 });
+
+/* ======================= CHAPTER 40 ======================= */
+CHAPTERS.push({
+  num: 40, part: 6, title: "Bit Manipulation",
+  blurb: "Bits are how the machine stores everything, and a handful of operations on them replace whole data structures: a set becomes an integer, a subset enumeration becomes a loop, and counting the ones in a word costs a few instructions. This chapter starts from two's complement and the shift and sign-extension bugs it causes in Java and Python, proves the standard tricks, measures popcount down to the compiled instructions, shows why the submask loop costs 3^n and not 4^n, collapses three XOR classics into one identity, builds the XOR basis over GF(2), and ends on Gray code.",
+  sections: [
+
+    { title: "Two's Complement",
+      html:
+        "<p>Every integer in this course has been a number. In this chapter it is also a row of bits, and the operations that act on the row directly are some of the cheapest in the word-RAM model of Chapter 2: one instruction for a whole w-bit word, whatever the bits mean. Before those operations make sense, you need to know what the bits mean for a negative number, because every language you will use stores one the same way and every surprising result in this chapter traces back to it.</p>" +
+        "<p>An unsigned w-bit pattern means the sum of its set bits' weights, 1, 2, 4, up to 2<sup>w&#8722;1</sup>. <strong>Two's complement</strong> changes one thing: the top bit's weight becomes negative, &#8722;2<sup>w&#8722;1</sup>. That top bit is the <strong>sign bit</strong>. In eight bits, 11111111 means &#8722;128 + 127 = &#8722;1, and 10000000 means &#8722;128, the most negative value, with no positive partner &mdash; the range is &#8722;128 to 127, one extra negative. The payoff is that addition does not care which reading you meant. Add 1 to 11111111 and the carry runs off the top, leaving 00000000: unsigned 255 + 1 wraps to 0, and signed &#8722;1 + 1 is 0, by the same circuit. That is why the representation won over sign-and-magnitude and ones' complement, both of which have two zeros and need separate adders.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 276' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Eight bits, two readings: the same patterns in unsigned order, with the signed value each one means</text><line x1='40' y1='120' x2='720' y2='120' stroke='#334a6a' stroke-width='2'/><line x1='60' y1='114' x2='60' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='60' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>00000000</text><text x='60' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>0</text><text x='60' y='162' text-anchor='middle' fill='#3ddc97' font-size='11'>0</text><line x1='140' y1='114' x2='140' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='140' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>00000001</text><text x='140' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>1</text><text x='140' y='162' text-anchor='middle' fill='#3ddc97' font-size='11'>1</text><line x1='220' y1='114' x2='220' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='220' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>00000010</text><text x='220' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>2</text><text x='220' y='162' text-anchor='middle' fill='#3ddc97' font-size='11'>2</text><line x1='300' y1='114' x2='300' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='300' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>01111110</text><text x='300' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>126</text><text x='300' y='162' text-anchor='middle' fill='#3ddc97' font-size='11'>126</text><line x1='380' y1='114' x2='380' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='380' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>01111111</text><text x='380' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>127</text><text x='380' y='162' text-anchor='middle' fill='#3ddc97' font-size='11'>127</text><line x1='460' y1='114' x2='460' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='460' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>10000000</text><text x='460' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>128</text><text x='460' y='162' text-anchor='middle' fill='#ff5d73' font-size='11'>&#8722;128</text><line x1='540' y1='114' x2='540' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='540' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>10000001</text><text x='540' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>129</text><text x='540' y='162' text-anchor='middle' fill='#ff5d73' font-size='11'>&#8722;127</text><line x1='620' y1='114' x2='620' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='620' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>11111110</text><text x='620' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>254</text><text x='620' y='162' text-anchor='middle' fill='#ff5d73' font-size='11'>&#8722;2</text><line x1='700' y1='114' x2='700' y2='126' stroke='#8fa3c4' stroke-width='1.4'/><text x='700' y='104' text-anchor='middle' fill='#c9d6ea' font-size='10'>11111111</text><text x='700' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>255</text><text x='700' y='162' text-anchor='middle' fill='#ff5d73' font-size='11'>&#8722;1</text><text x='260' y='104' text-anchor='middle' fill='#8fa3c4' font-size='12'>\u2026</text><text x='580' y='104' text-anchor='middle' fill='#8fa3c4' font-size='12'>\u2026</text><text x='24' y='142' text-anchor='start' fill='#8fa3c4' font-size='10'>u</text><text x='24' y='162' text-anchor='start' fill='#8fa3c4' font-size='10'>s</text><line x1='420' y1='80' x2='420' y2='172' stroke='#ff5d73' stroke-width='1.4' stroke-dasharray='4 3'/><text x='420' y='74' text-anchor='middle' fill='#ff5d73' font-size='10'>signed wrap: 127 + 1 = &#8722;128</text><path d='M 700 176 C 700 240, 60 240, 60 176' fill='none' stroke='#ffd166' stroke-width='1.4'/><polygon points='60,174 56,183 64,183' fill='#ffd166'/><text x='380' y='204' text-anchor='middle' fill='#ffd166' font-size='10'>unsigned wrap: 255 + 1 = 0, the same carry-out that takes signed &#8722;1 to 0</text><text x='20' y='248' text-anchor='start' fill='#8fa3c4' font-size='10'>green: the top bit is 0 and both readings agree; red: the top bit is 1 and the signed reading subtracts 256</text><text x='20' y='266' text-anchor='start' fill='#8fa3c4' font-size='10'>&#8722;1 is all ones because 11111111 + 1 carries out to 00000000; that carry is the whole of two&#8217;s complement</text></svg></div>" +
+        "<p>Negation follows from the same carry. A value plus its bitwise inverse is all ones, which is &#8722;1, so <code>-x == ~x + 1</code>: invert every bit and add one. The figure's two readings also explain overflow: signed 127 + 1 lands on &#8722;128, because the signed number line is cut between 01111111 and 10000000 rather than at the all-ones end.</p>" +
+        "<p>The two languages diverge here, and the divergences are bugs waiting to happen. Java's <code>int</code> is exactly 32 bits and wraps silently: <code>Integer.MAX_VALUE + 1</code> is <code>Integer.MIN_VALUE</code>, and <code>Math.abs(Integer.MIN_VALUE)</code> is still negative, both confirmed on this machine. Python's integers are unbounded and behave as though they had infinitely many sign bits: <code>~5</code> is &#8722;6, &#8722;1 is an endless row of ones, and <code>bin(-5)</code> prints <code>-0b101</code>, a sign-and-magnitude display of a two's complement value. To see the 32-bit pattern in Python, mask it: <code>-5 &amp; 0xFFFFFFFF</code> is 4294967291.</p>" +
+        "<p>Right shifts come in two kinds. An <strong>arithmetic shift</strong> copies the sign bit into the vacated top positions, so &#8722;8 &gt;&gt; 1 is &#8722;4 in both languages. A <strong>logical shift</strong> fills with zeros; Java spells it <code>&gt;&gt;&gt;</code>, and <code>-1 &gt;&gt;&gt; 1</code> is 2147483647. Python has no such operator, and the equivalent is <code>(x &amp; 0xFFFFFFFF) &gt;&gt; k</code>. An arithmetic shift rounds toward minus infinity, which matters when you replace division by two: in Java <code>-7 / 2</code> is &#8722;3 but <code>-7 &gt;&gt; 1</code> is &#8722;4, while Python's floor division agrees with the shift at &#8722;4. Java also masks the shift count to five bits, so <code>1 &lt;&lt; 32</code> is 1, not 2<sup>32</sup>; write <code>1L &lt;&lt; 32</code>.</p>" +
+        "<p>The last trap is <strong>sign extension</strong>: widening a narrow signed value copies its sign bit upward. Java's <code>byte</code> is signed, so the byte 0x80 read into an <code>int</code> becomes &#8722;128, and a checksum or hash computed over raw bytes silently goes wrong for every byte above 127. The fix is <code>b &amp; 0xFF</code>, which gives 128. Python's <code>bytes</code> index as 0 to 255, so a port between the languages is exactly where this bug appears.</p>"
+    },
+
+    { title: "The Core Operations and the Standard Tricks",
+      viz: "dsaBits", vizTitle: "Click bits to flip them. Apply an operation and watch what it does to the pattern, including negation",
+      html:
+        "<p>Six operators act on whole words: and (<code>&amp;</code>), or (<code>|</code>), xor (<code>^</code>), not (<code>~</code>), and the two shifts. Each costs one instruction. Their power comes from a <strong>mask</strong>, an integer whose set bits pick out positions: <code>1 &lt;&lt; k</code> is bit k alone, and <code>(1 &lt;&lt; k) - 1</code> is the low k bits. And with a mask keeps the chosen bits, or sets them, xor flips them, and and-with-not clears them. So bit k is tested by <code>(x &gt;&gt; k) &amp; 1</code>, set by <code>x | (1 &lt;&lt; k)</code>, cleared by <code>x &amp; ~(1 &lt;&lt; k)</code> and toggled by <code>x ^ (1 &lt;&lt; k)</code>.</p>" +
+        "<p>Two expressions do more than touch a named bit, and both come from how subtraction borrows. Subtracting 1 turns the <strong>lowest set bit</strong> into 0 and every 0 below it into 1, leaving everything above untouched. So <code>n &amp; (n-1)</code> clears the lowest set bit: 12 is 1100, 11 is 1011, and their and is 1000, which is 8. And because <code>-n</code> is <code>~n + 1</code>, the added one carries through the ones that were n's low zeros and stops exactly at n's lowest set bit; above it, <code>-n</code> is the inverse of n. So <code>n &amp; -n</code> isolates the lowest set bit: 12 &amp; &#8722;12 is 4. That is the lowbit that drives Chapter 30's Fenwick tree.</p>" +
+        "<p>The <strong>power-of-two test</strong> follows at once: a power of two has exactly one set bit, so clearing it leaves zero, and the test is <code>n &gt; 0 and n &amp; (n-1) == 0</code>. The guard is not decoration. Without it, 0 passes, and in Java so does <code>Integer.MIN_VALUE</code>, whose and with <code>MIN_VALUE - 1</code> is 0 because the subtraction wraps to <code>MAX_VALUE</code>. Its partner <code>n | (n+1)</code> sets the lowest zero bit instead, turning 12 into 13. I checked all four identities exhaustively against a direct bit-by-bit definition for every n from 1 to 65,535, not on a sample.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lowest_set_bit(n):   return n &amp; -n\n" +
+        "def clear_lowest(n):     return n &amp; (n - 1)\n" +
+        "def is_power_of_two(n):  return n &gt; 0 and n &amp; (n - 1) == 0\n" +
+        "def members(s):          # indices of the set bits, lowest first\n" +
+        "    while s:\n" +
+        "        low = s &amp; -s\n" +
+        "        yield low.bit_length() - 1\n" +
+        "        s ^= low</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int lowestSetBit(int n)    { return n &amp; -n; }          // Integer.lowestOneBit(n)\n" +
+        "static int clearLowest(int n)     { return n &amp; (n - 1); }\n" +
+        "static boolean isPowerOfTwo(int n){ return n &gt; 0 &amp;&amp; (n &amp; (n - 1)) == 0; }\n" +
+        "static void members(int s) {\n" +
+        "    while (s != 0) {\n" +
+        "        System.out.println(Integer.numberOfTrailingZeros(s));\n" +
+        "        s &amp;= s - 1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p>Both libraries name most of these, and the named versions are the ones to use in production code, because the reader does not have to re-derive them. Java has <code>Integer.lowestOneBit</code>, <code>highestOneBit</code>, <code>numberOfTrailingZeros</code> and <code>bitCount</code>; Python has <code>int.bit_length()</code> and, since 3.10, <code>int.bit_count()</code>. The identities matter for reading other people's code, for the places the library has no name, and for the next five sections, which are built out of them.</p>"
+    },
+
+    { title: "Popcount",
+      html:
+        "<p>The <strong>population count</strong> of a word is its number of set bits. It is the size of a set stored as a mask, the Hamming distance between a and b as <code>popcount(a ^ b)</code>, the number of jumps a binary-lifting query takes in Chapter 29, and the index of the next person in Chapter 22's assignment DP. Counting bit by bit costs w steps; there are three better ways, and a surprise about the best one.</p>" +
+        "<p><strong>Kernighan's loop</strong> repeats <code>x &amp;= x - 1</code> until x is zero, so it runs once per set bit rather than once per position: a word with three ones costs three iterations. Peter Wegner published it in 1960; it became known under Kernighan's name as an exercise in Kernighan and Ritchie's C book. It is fast on sparse words and no faster than the naive loop on dense ones.</p>" +
+        "<p>The <strong>parallel bit count</strong> treats the word as many small counters and adds neighbours in place. First every pair of bits is replaced by its own count, <code>x - ((x &gt;&gt; 1) &amp; 0x55555555)</code>; then pairs of pairs are added with the mask 0x33333333, giving a count per four bits; then per byte with 0x0F0F0F0F. A multiply by 0x01010101 adds the four byte counts into the top byte, and a shift by 24 reads it off. That is about a dozen operations whatever the input, and it is divide and conquer running inside one word, which is exactly what the word-RAM model allows.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def kernighan(x):\n" +
+        "    c = 0\n" +
+        "    while x:\n" +
+        "        x &amp;= x - 1\n" +
+        "        c += 1\n" +
+        "    return c\n" +
+        "\n" +
+        "def parallel_count(x):                     # 32-bit x\n" +
+        "    x = x - ((x &gt;&gt; 1) &amp; 0x55555555)\n" +
+        "    x = (x &amp; 0x33333333) + ((x &gt;&gt; 2) &amp; 0x33333333)\n" +
+        "    x = (x + (x &gt;&gt; 4)) &amp; 0x0F0F0F0F\n" +
+        "    return ((x * 0x01010101) &amp; 0xFFFFFFFF) &gt;&gt; 24</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int kernighan(int x) {\n" +
+        "    int c = 0;\n" +
+        "    while (x != 0) { x &amp;= x - 1; c++; }\n" +
+        "    return c;\n" +
+        "}\n" +
+        "static int parallelCount(int x) {\n" +
+        "    x = x - ((x &gt;&gt;&gt; 1) &amp; 0x55555555);\n" +
+        "    x = (x &amp; 0x33333333) + ((x &gt;&gt;&gt; 2) &amp; 0x33333333);\n" +
+        "    x = (x + (x &gt;&gt;&gt; 4)) &amp; 0x0F0F0F0F;\n" +
+        "    return (x * 0x01010101) &gt;&gt;&gt; 24;\n" +
+        "}</code></pre></div>" +
+        "<p>On 2<sup>20</sup> random 32-bit values, all four methods agreed, and the timings split cleanly. In Python, <code>int.bit_count</code> took 0.019 s, <code>bin(x).count('1')</code> 0.23 s, the parallel count 0.27 s, Kernighan's loop 0.76 s and a 32-step loop 2.06 s: the built-in wins by forty times because it runs in C. In Java, <code>Integer.bitCount</code> took 0.74 ms against Kernighan's 17.3 ms, twenty-three times faster, because the JIT replaces it with the hardware's own count.</p>" +
+        "<p>The usual claim is that <code>Integer.bitCount</code> and C's <code>__builtin_popcount</code> compile to one instruction. I read the compiler's output instead of repeating it. For baseline x86-64, clang at -O2 emits the parallel count above, masks and multiply included, because the POPCNT instruction is not in the baseline instruction set; only with <code>-mpopcnt</code> does it become one <code>popcntl</code>. On this machine's ARM processor it is four instructions: move the word to a vector register, count bits per byte, sum the bytes, move back. One instruction is a property of a target, not of a language, which is the word-RAM caveat of Chapter 2 in a new place.</p>"
+    },
+
+    { title: "Sets as Integers",
+      html:
+        "<p>Chapter 18 enumerated every subset of n elements as the integers 0 to 2<sup>n</sup>&#8722;1, and Chapter 22 used such integers as DP states. The same idea works as a data structure. For a universe of at most 64 elements, a set is a mask: union is <code>a | b</code>, intersection <code>a &amp; b</code>, difference <code>a &amp; ~b</code>, symmetric difference <code>a ^ b</code>, membership is a bit test, subset is <code>a &amp; b == a</code>, and size is a population count. Each is one or two instructions, against O(n) for the same operation on a hash set, and the whole set is one integer you can use as a dictionary key or array index.</p>" +
+        "<p>The question that comes up in subset DP is harder: given a mask m, visit every submask of it, every s with <code>s &amp; m == s</code>. Looping over all 2<sup>n</sup> integers and filtering wastes the steps that are not submasks. The <strong>submask enumeration</strong> loop visits only the real ones: start at <code>s = m</code>, and step with <code>s = (s - 1) &amp; m</code>, stopping after s reaches 0.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def submasks(m):\n" +
+        "    s = m\n" +
+        "    while True:\n" +
+        "        yield s\n" +
+        "        if s == 0:\n" +
+        "            break\n" +
+        "        s = (s - 1) &amp; m</code></pre>" +
+        "<pre data-lang='java' hidden><code>static void submasks(int m) {\n" +
+        "    for (int s = m; ; s = (s - 1) &amp; m) {\n" +
+        "        System.out.println(Integer.toBinaryString(s));\n" +
+        "        if (s == 0) break;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p>Why it works: read the set bits of m as the digits of a smaller number. Subtracting 1 from s borrows through the positions below its lowest set bit, and the and with m discards every borrowed 1 that falls outside m, so the result is the next smaller value in m's own digits. The loop is counting down in a compressed number system, and it visits the 2<sup>popcount(m)</sup> submasks in decreasing order with no wasted step. The figure traces it for 1011. Note the loop's shape: the common version <code>while s &gt; 0</code> silently drops the empty set.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 322' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Every submask of 1011, visited left to right by s = (s &#8722; 1) &amp; mask</text><line x1='380' y1='56' x2='210' y2='98' stroke='#3ddc97' stroke-width='1.3'/><text x='186' y='94' text-anchor='end' fill='#3ddc97' font-size='9'>+b3</text><line x1='380' y1='56' x2='550' y2='98' stroke='#8fa3c4' stroke-width='1.3'/><text x='574' y='94' text-anchor='start' fill='#8fa3c4' font-size='9'>\u2212b3</text><line x1='210' y1='120' x2='125' y2='162' stroke='#3ddc97' stroke-width='1.3'/><text x='101' y='158' text-anchor='end' fill='#3ddc97' font-size='9'>+b1</text><line x1='210' y1='120' x2='295' y2='162' stroke='#8fa3c4' stroke-width='1.3'/><text x='319' y='158' text-anchor='start' fill='#8fa3c4' font-size='9'>\u2212b1</text><line x1='550' y1='120' x2='465' y2='162' stroke='#3ddc97' stroke-width='1.3'/><text x='441' y='158' text-anchor='end' fill='#3ddc97' font-size='9'>+b1</text><line x1='550' y1='120' x2='635' y2='162' stroke='#8fa3c4' stroke-width='1.3'/><text x='659' y='158' text-anchor='start' fill='#8fa3c4' font-size='9'>\u2212b1</text><line x1='125' y1='184' x2='82' y2='226' stroke='#3ddc97' stroke-width='1.3'/><text x='68' y='222' text-anchor='end' fill='#3ddc97' font-size='9'>+b0</text><line x1='125' y1='184' x2='167' y2='226' stroke='#8fa3c4' stroke-width='1.3'/><text x='181' y='222' text-anchor='start' fill='#8fa3c4' font-size='9'>\u2212b0</text><line x1='295' y1='184' x2='252' y2='226' stroke='#3ddc97' stroke-width='1.3'/><text x='238' y='222' text-anchor='end' fill='#3ddc97' font-size='9'>+b0</text><line x1='295' y1='184' x2='337' y2='226' stroke='#8fa3c4' stroke-width='1.3'/><text x='351' y='222' text-anchor='start' fill='#8fa3c4' font-size='9'>\u2212b0</text><line x1='465' y1='184' x2='422' y2='226' stroke='#3ddc97' stroke-width='1.3'/><text x='408' y='222' text-anchor='end' fill='#3ddc97' font-size='9'>+b0</text><line x1='465' y1='184' x2='507' y2='226' stroke='#8fa3c4' stroke-width='1.3'/><text x='521' y='222' text-anchor='start' fill='#8fa3c4' font-size='9'>\u2212b0</text><line x1='635' y1='184' x2='592' y2='226' stroke='#3ddc97' stroke-width='1.3'/><text x='578' y='222' text-anchor='end' fill='#3ddc97' font-size='9'>+b0</text><line x1='635' y1='184' x2='677' y2='226' stroke='#8fa3c4' stroke-width='1.3'/><text x='691' y='222' text-anchor='start' fill='#8fa3c4' font-size='9'>\u2212b0</text><rect x='336' y='34' width='88' height='22' rx='5' fill='#182842' stroke='#2de2ff'/><text x='380' y='50' text-anchor='middle' fill='#c9d6ea' font-size='11'>mask 1011</text><rect x='186' y='99' width='48' height='20' rx='5' fill='#182842' stroke='#334a6a'/><text x='210' y='113' text-anchor='middle' fill='#8fa3c4' font-size='10'>1000</text><rect x='526' y='99' width='48' height='20' rx='5' fill='#182842' stroke='#334a6a'/><text x='550' y='113' text-anchor='middle' fill='#8fa3c4' font-size='10'>0000</text><rect x='101' y='163' width='48' height='20' rx='5' fill='#182842' stroke='#334a6a'/><text x='125' y='177' text-anchor='middle' fill='#8fa3c4' font-size='10'>1010</text><rect x='271' y='163' width='48' height='20' rx='5' fill='#182842' stroke='#334a6a'/><text x='295' y='177' text-anchor='middle' fill='#8fa3c4' font-size='10'>1000</text><rect x='441' y='163' width='48' height='20' rx='5' fill='#182842' stroke='#334a6a'/><text x='465' y='177' text-anchor='middle' fill='#8fa3c4' font-size='10'>0010</text><rect x='611' y='163' width='48' height='20' rx='5' fill='#182842' stroke='#334a6a'/><text x='635' y='177' text-anchor='middle' fill='#8fa3c4' font-size='10'>0000</text><rect x='52' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='82' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>1011</text><text x='82' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#1</text><rect x='137' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='167' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>1010</text><text x='167' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#2</text><rect x='222' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='252' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>1001</text><text x='252' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#3</text><rect x='307' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='337' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>1000</text><text x='337' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#4</text><rect x='392' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='422' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>0011</text><text x='422' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#5</text><rect x='477' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='507' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>0010</text><text x='507' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#6</text><rect x='562' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='592' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>0001</text><text x='592' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#7</text><rect x='647' y='226' width='60' height='22' rx='5' fill='#123a2c' stroke='#3ddc97'/><text x='677' y='242' text-anchor='middle' fill='#c9d6ea' font-size='11'>0000</text><text x='677' y='266' text-anchor='middle' fill='#ffd166' font-size='10'>#8</text><text x='20' y='294' text-anchor='start' fill='#8fa3c4' font-size='10'>From 1000: 1000 &#8722; 1 = 0111, &amp; 1011 = 0011, skipping four non-submasks (0111 to 0100)</text><text x='20' y='312' text-anchor='start' fill='#8fa3c4' font-size='10'>Over all n-bit masks each bit is out, in the mask only, or in both: 3&#8319; steps</text></svg></div>" +
+        "<p>Now the cost of the classic use, a DP that for every mask m tries every submask s, for instance to split a set of tasks into groups at the least total cost with <code>dp[m] = min over s of dp[m ^ s] + cost(s)</code>. There are 2<sup>n</sup> masks and up to 2<sup>n</sup> submasks each, so the obvious bound is 4<sup>n</sup>. It is wrong. Each element, independently, is in one of three states: outside m, inside m but not s, or inside both. The fourth combination, in s but not in m, cannot occur. So the total number of (mask, submask) pairs is exactly 3<sup>n</sup>, which the binomial theorem confirms as the sum over k of C(n, k)&#183;2<sup>k</sup>. I counted the loop's steps for every n from 1 to 16 and each total equalled 3<sup>n</sup> exactly; at n = 16 that is 43,046,721 steps against 4<sup>16</sup> = 4,294,967,296, about a hundred times fewer. At n = 16 the O(3<sup>n</sup>) DP is a second of work; the bound you would have written down says it is infeasible.</p>"
+    },
+
+    { title: "XOR",
+      html:
+        "<p>Exclusive or has four properties, and between them they solve a family of problems that look unrelated. It is commutative and associative, so the order of a long XOR does not matter. Zero is its identity, <code>x ^ 0 == x</code>. And every value is its own inverse, <code>x ^ x == 0</code>. Put together: the XOR of a list is the XOR of the values that occur an odd number of times, because every pair cancels wherever its two halves sit.</p>" +
+        "<p>The first face of that identity is the single-number problem. Every value in an array appears twice except one; find it. XOR the whole array and the pairs vanish, leaving the loner, in O(n) time and O(1) space, where a hash set would need O(n) space. The second face has two loners, a and b. XORing everything gives <code>x = a ^ b</code>, which is not zero because a differs from b, and any set bit of x is a position where they differ. Take the lowest, <code>x &amp; -x</code>, split the array by that bit, and XOR each half: the pairs still cancel inside each half, and a and b land in different ones. Both methods returned the planted answers on 500 of 500 random arrays.</p>" +
+        "<p>The third face is <strong>prefix XOR</strong>. Define P[0] = 0 and P[i+1] = P[i] ^ a[i]. Then the XOR of a[i..j] is <code>P[j+1] ^ P[i]</code>, because the shared prefix a[0..i&#8722;1] appears in both and cancels. That is the prefix-sum idea of Chapter 30, with XOR in place of addition and XOR itself as the subtraction. The counting version follows the same shape as counting subarrays that sum to k: walk the array keeping a count of every prefix value seen, and at each step add the count of <code>P ^ k</code>, since a subarray ending here has XOR k exactly when its starting prefix equals the current prefix XOR k. It matched a brute-force count over all subarrays on 300 of 300 random arrays.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "def count_xor_subarrays(a, k):\n" +
+        "    seen, pre, total = Counter({0: 1}), 0, 0\n" +
+        "    for v in a:\n" +
+        "        pre ^= v\n" +
+        "        total += seen[pre ^ k]\n" +
+        "        seen[pre] += 1\n" +
+        "    return total</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long countXorSubarrays(int[] a, int k) {\n" +
+        "    Map&lt;Integer, Integer&gt; seen = new HashMap&lt;&gt;();\n" +
+        "    seen.put(0, 1);\n" +
+        "    int pre = 0; long total = 0;\n" +
+        "    for (int v : a) {\n" +
+        "        pre ^= v;\n" +
+        "        total += seen.getOrDefault(pre ^ k, 0);\n" +
+        "        seen.merge(pre, 1, Integer::sum);\n" +
+        "    }\n" +
+        "    return total;\n" +
+        "}</code></pre></div>" +
+        "<p>One XOR trick is better known than it deserves. Swapping two variables with three XORs and no temporary works on distinct locations and destroys the value when both names refer to the same one: applied to an array slot swapped with itself, it left 0 where 7 had been. A temporary costs nothing on a modern compiler; the trick costs a bug.</p>"
+    },
+
+    { title: "The XOR Basis",
+      html:
+        "<p>Chapter 28 found the largest XOR of any <em>pair</em> from a list with a binary trie. Allow any <em>subset</em> instead and the trie no longer applies, because a subset can combine thirty numbers. The right tool comes from linear algebra, over the smallest field there is. <strong>GF(2)</strong> is the field with elements 0 and 1, where addition is XOR and multiplication is and. A w-bit integer is then a vector of w coordinates, the XOR of a subset is a linear combination, and the set of every subset XOR is a vector space: the span of the list. A span of rank r holds exactly 2<sup>r</sup> vectors.</p>" +
+        "<p>An <strong>XOR basis</strong> is a basis for that span, built by Gaussian elimination one number at a time. Keep a slot for each bit position, where slot b holds a vector whose highest set bit is b. To insert x, scan from the top bit down; whenever x has bit b set and slot b is full, XOR the slot into x, which clears bit b. If you reach an empty slot, store x there. If x becomes zero, it was already a combination of the basis, and the basis does not grow. That is the case worth watching: a number that adds nothing new is exactly one you could already make.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def insert(basis, x, w=32):          # basis = [0] * w\n" +
+        "    for b in range(w - 1, -1, -1):\n" +
+        "        if not (x &gt;&gt; b) &amp; 1:\n" +
+        "            continue\n" +
+        "        if basis[b] == 0:\n" +
+        "            basis[b] = x\n" +
+        "            return True              # a new direction\n" +
+        "        x ^= basis[b]\n" +
+        "    return False                     # already reachable\n" +
+        "\n" +
+        "def max_xor(basis):\n" +
+        "    r = 0\n" +
+        "    for v in reversed(basis):\n" +
+        "        r = max(r, r ^ v)\n" +
+        "    return r</code></pre>" +
+        "<pre data-lang='java' hidden><code>static boolean insert(int[] basis, int x) {     // basis = new int[32]\n" +
+        "    for (int b = 31; b &gt;= 0; b--) {\n" +
+        "        if (((x &gt;&gt;&gt; b) &amp; 1) == 0) continue;\n" +
+        "        if (basis[b] == 0) { basis[b] = x; return true; }\n" +
+        "        x ^= basis[b];\n" +
+        "    }\n" +
+        "    return false;\n" +
+        "}\n" +
+        "static long maxXor(int[] basis) {               // unsigned result\n" +
+        "    long r = 0;\n" +
+        "    for (int b = 31; b &gt;= 0; b--) r = Math.max(r, r ^ (basis[b] &amp; 0xFFFFFFFFL));\n" +
+        "    return r;\n" +
+        "}</code></pre></div>" +
+        "<p>Trace it on 5, 6, 3, 9. Five, 0101, goes into slot 2. Six, 0110, has bit 2, so it is XORed with 0101 to give 0011, which goes into slot 1. Three, 0011, has bit 1, is XORed with slot 1, and becomes zero: three is 5 ^ 6 and adds nothing. Nine, 1001, goes into slot 3. The rank is 3, so eight distinct subset XORs exist, though the list has sixteen subsets.</p>" +
+        "<p>The maximum subset XOR is then greedy from the top: start at 0, and for each slot from high to low, XOR it in if that makes the result larger. The greedy choice is safe because slot b's highest bit is b, so it alone decides bit b and nothing lower can undo that. On the example: 1001, then 1001 ^ 0101 = 1100, then 1100 ^ 0011 = 1111, which is 15. Against brute force over every subset of up to twelve numbers, the maximum matched on 500 of 500 lists, and the number of distinct subset XORs equalled 2<sup>rank</sup> on all 500.</p>" +
+        "<p>Insertion is O(w) per number, so the whole thing is O(n&#183;w) and the basis never holds more than w vectors however long the list is. In Python, 10<sup>5</sup> numbers took 0.18 s and 10<sup>6</sup> took 1.79 s. Random 32-bit numbers reach full rank within a few dozen insertions, so after that every insertion reduces to zero; the interesting inputs are structured ones, where the rank is the question the problem is asking.</p>"
+    },
+
+    { title: "Gray Code",
+      html:
+        "<p>Counting in binary changes many bits at once: going from 0111 1111 1111 1111 to 1000 0000 0000 0000 flips all sixteen. Counting from 0 to 2<sup>16</sup>&#8722;1 flips 131,054 bits in total. A mechanical or optical sensor that reads a position while several bits are changing can see any mixture of old and new bits and report a value nowhere near either. The <strong>Gray code</strong> fixes this: it orders all 2<sup>n</sup> patterns so that each differs from the next in exactly one bit, including the step from the last back to the first. Frank Gray at Bell Labs patented it as the reflected binary code, filed in 1947 and granted in 1953, for exactly this kind of misread.</p>" +
+        "<p>The name describes the construction. The n-bit Gray code is the (n&#8722;1)-bit code with a 0 in front, followed by the same code <em>reflected</em>, in reverse order, with a 1 in front. The seam is safe because the reflected half starts where the first half ended, differing only in the new top bit. For three bits: 000, 001, 011, 010, 110, 111, 101, 100.</p>" +
+        "<p>There is also a closed form: the i-th codeword is <code>i ^ (i &gt;&gt; 1)</code>, each bit set where i has a change between neighbouring bits. Decoding is a prefix XOR taken from the top bit down. The bit that flips between codewords i&#8722;1 and i is the lowest set bit of i, so the flip sequence is 0, 1, 0, 2, 0, 1, 0, 3, and so on. I checked the recursive construction against the formula for every n from 1 to 16, the one-bit property on every step including the wrap-around, and the decoder on every codeword; counting through 2<sup>16</sup> codewords flips 65,535 bits, one per step.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def gray(i):      return i ^ (i &gt;&gt; 1)\n" +
+        "def gray_decode(g):\n" +
+        "    i = 0\n" +
+        "    while g:\n" +
+        "        i ^= g\n" +
+        "        g &gt;&gt;= 1\n" +
+        "    return i</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int gray(int i) { return i ^ (i &gt;&gt;&gt; 1); }\n" +
+        "static int grayDecode(int g) {\n" +
+        "    int i = 0;\n" +
+        "    for (; g != 0; g &gt;&gt;&gt;= 1) i ^= g;\n" +
+        "    return i;\n" +
+        "}</code></pre></div>" +
+        "<p>This answers the ordering Chapter 18 mentioned for enumerating subsets. Walk the Gray code and each subset differs from the last by adding or removing one element, the one given by the lowest set bit of the step number. When updating a running value costs one operation per element change, a Gray-code walk visits all 2<sup>n</sup> subsets for 2<sup>n</sup> updates rather than recomputing each from scratch. It is also why rotary encoders, genetic-algorithm encodings and Karnaugh maps use it: in each, neighbouring states should differ in one place.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Read both readings.</strong> Print every 8-bit pattern with its unsigned and signed value, then confirm that negation equals invert-plus-one on all 256 and that exactly one value is its own negation besides zero.</li>" +
+        "<li><strong>Catch the Java traps.</strong> Write a Java program that shows MAX_VALUE + 1, Math.abs(MIN_VALUE), -7 / 2 against -7 &gt;&gt; 1, and 1 &lt;&lt; 32. For each, write the corrected line.</li>" +
+        "<li><strong>Prove the tricks.</strong> Check n &amp; (n-1), n &amp; -n, n | (n+1) and the power-of-two test against a bit-by-bit definition for every n below 2<sup>16</sup>, then find the inputs where the unguarded power-of-two test is wrong.</li>" +
+        "<li><strong>Time popcount.</strong> Time the built-in, Kernighan's loop, the parallel count and a 32-step loop on 2<sup>20</sup> random words in both languages, and read the assembly your C compiler emits for __builtin_popcount with and without -mpopcnt.</li>" +
+        "<li><strong>Count to three to the n.</strong> Total the submask loop's steps over every mask for n from 1 to 16 and compare with 3<sup>n</sup> and 4<sup>n</sup>. Then write the O(3<sup>n</sup>) DP that partitions n tasks into groups at least total cost.</li>" +
+        "<li><strong>Three faces of XOR.</strong> Solve single-number, two-numbers and count-subarrays-with-XOR-k, and check each against brute force on random inputs.</li>" +
+        "<li><strong>Build the basis.</strong> Implement the XOR basis, check the maximum subset XOR and the count of distinct subset XORs against brute force, then find the k-th smallest subset XOR.</li>" +
+        "<li><strong>Walk the Gray code.</strong> Generate the n-bit Gray code recursively and by formula, confirm they agree, and use the walk to evaluate every subset sum of n numbers with one addition or subtraction per step.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "two's complement", d: "The signed representation in which the top bit weighs -2^(w-1); addition works identically for signed and unsigned values, and -x equals ~x + 1." },
+    { t: "sign bit", d: "The top bit of a two's complement word; set exactly when the value is negative." },
+    { t: "arithmetic shift", d: "A right shift that copies the sign bit into the vacated positions, rounding toward minus infinity; >> in both Java and Python." },
+    { t: "logical shift", d: "A right shift that fills with zeros; Java's >>>, and in Python (x & mask) >> k." },
+    { t: "sign extension", d: "Copying a narrow signed value's sign bit upward when it is widened; why a Java byte 0x80 becomes -128 unless masked with 0xFF." },
+    { t: "mask", d: "An integer whose set bits select positions, used with and, or and xor to keep, set or flip them; also a set of up to w elements stored as one word." },
+    { t: "lowest set bit", d: "The least significant 1 in a word; n & -n isolates it and n & (n-1) clears it." },
+    { t: "power-of-two test", d: "n > 0 and n & (n-1) == 0; the guard rejects 0 and, in Java, Integer.MIN_VALUE." },
+    { t: "population count", d: "The number of set bits in a word; the size of a set stored as a mask, and a Hamming distance when applied to a ^ b." },
+    { t: "Kernighan's loop", d: "Counting set bits by repeating x &= x - 1, one iteration per set bit; published by Wegner in 1960." },
+    { t: "parallel bit count", d: "A popcount that adds neighbouring bit counts in place, pairs then nibbles then bytes, in a fixed dozen operations; what compilers emit when no popcount instruction is available." },
+    { t: "submask enumeration", d: "Visiting every submask of m by s = (s - 1) & m from s = m down to 0; over all masks of n bits it takes exactly 3^n steps." },
+    { t: "prefix XOR", d: "P[i+1] = P[i] ^ a[i]; the XOR of a[i..j] is P[j+1] ^ P[i], because the shared prefix cancels." },
+    { t: "GF(2)", d: "The field with elements 0 and 1, addition XOR and multiplication and; w-bit integers are vectors over it." },
+    { t: "XOR basis", d: "A basis of the span of a list's subset XORs, built by Gaussian elimination over GF(2) in O(w) per number; answers the maximum subset XOR greedily." },
+    { t: "Gray code", d: "An ordering of all n-bit patterns in which consecutive ones differ in exactly one bit; the i-th is i ^ (i >> 1)." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "In Java, -7 / 2 is -3 but -7 >> 1 is -4. Why do they differ?",
+      opts: [
+        "Division truncates toward zero, while an arithmetic shift rounds toward minus infinity",
+        "The shift is logical in Java, so it fills the top with zeros and produces a different negative value",
+        "Java masks the shift count to five bits, which changes the result whenever the left operand is negative",
+        "Division promotes both operands to long before dividing, and the shift keeps them as 32-bit int values"
+      ], a: 0,
+      why: "An arithmetic shift discards low bits, which is floor division for negative numbers too, while Java's / truncates toward zero. Python's // floors, so there -7 // 2 and -7 >> 1 agree at -4. >> is the arithmetic shift (>>> is logical), the count mask only matters at 32 or more, and no promotion occurs." },
+
+    { type: "mc",
+      q: "Why does the power-of-two test need n > 0 in front of n & (n-1) == 0?",
+      opts: [
+        "Because n & (n-1) is undefined behaviour for negative n in both Java and Python",
+        "Because without it 0 passes, and in Java Integer.MIN_VALUE passes too, since MIN_VALUE - 1 wraps around to MAX_VALUE and their and is 0",
+        "Because negative powers of two such as -4 are genuine powers of two and have to be excluded separately",
+        "Because the test is only correct for odd n, and the guard is how the code excludes the odd cases"
+      ], a: 1,
+      why: "0 & -1 is 0, and MIN_VALUE & MAX_VALUE is 0, so both pass the unguarded test without having exactly one set bit in a positive number. The expression is well defined for every int, -4 is not a power of two, and odd n above 1 fail the test correctly." },
+
+    { type: "mc",
+      q: "What did reading clang's -O2 output for __builtin_popcount show?",
+      opts: [
+        "A single popcount instruction on every target, confirming the usual claim that it always compiles to one instruction",
+        "A call into a library function, because the compiler never inlines builtins at the default optimisation level",
+        "The parallel bit count on baseline x86-64, one popcntl only with -mpopcnt, and four instructions on ARM",
+        "Kernighan's loop, because the compiler selects the method with the fewest iterations for typical inputs"
+      ], a: 2,
+      why: "Baseline x86-64 lacks POPCNT, so clang emits the 0x55555555 / 0x33333333 / 0x0F0F0F0F masks and the multiply by 0x01010101; -mpopcnt gives one popcntl; on the M1 it is fmov, cnt, addv, fmov. One instruction is a property of the target, not the language." },
+
+    { type: "blank",
+      q: "In submask enumeration summed over all masks, each element is in one of ____ states, which is why the total is 3^n and not 4^n.",
+      a: ["three", "3"],
+      why: "An element is outside the mask, in the mask but not the submask, or in both; being in the submask but not the mask is impossible. Counting the loop's steps gave exactly 3^n for every n from 1 to 16." },
+
+    { type: "mc",
+      q: "In the two-numbers-appear-once problem, why does splitting the array by the lowest set bit of a ^ b work?",
+      opts: [
+        "Because the lowest set bit is always bit 0, so the split separates the odd values from the even values",
+        "Because a ^ b equals a + b whenever the two values share no set bits, so the split balances the two halves",
+        "Because every value that appears twice must have that bit clear, so only a and b end up in the second half",
+        "Because a and b differ at that bit, so they fall in different halves, while each pair falls whole into one half and cancels"
+      ], a: 3,
+      why: "A set bit of a ^ b is a position where a and b differ, and both copies of a repeated value land in the same half, so XORing each half leaves one loner in each. This returned the planted pair on 500 of 500 arrays. The bit need not be bit 0, and repeated values can have it set." },
+
+    { type: "mc",
+      q: "Inserting 3 into an XOR basis that already holds 0101 and 0011 reduces it to 0. What does that mean?",
+      opts: [
+        "3 is already the XOR of a subset of the inserted numbers, so the span and the rank do not change",
+        "The insertion failed because two vectors in the basis share bit 0, and the basis must be rebuilt from the start",
+        "3 cancels a vector already in the basis, so that vector is removed and the rank falls from two to one",
+        "The maximum subset XOR is now 0, because the last inserted value reduced to zero"
+      ], a: 0,
+      why: "Reducing to zero means x was a combination of basis vectors, here 5 ^ 6 = 3, so nothing is added; the count of distinct subset XORs stays 2^rank, which held on 500 of 500 lists. Nothing is removed or rebuilt, and the maximum is unaffected." },
+
+    { type: "mc",
+      q: "Why is the XOR of a[i..j] equal to P[j+1] ^ P[i] for the prefix XOR array P?",
+      opts: [
+        "Because XOR distributes over addition, so each prefix can be subtracted from the other in the ordinary way",
+        "Because both prefixes contain a[0..i-1], and every value XORed with itself cancels, leaving exactly a[i..j]",
+        "Because P is sorted in increasing order, so the difference between two entries is the XOR of the range between them",
+        "Because the XOR of a range equals the XOR of its two endpoints, and P stores endpoints"
+      ], a: 1,
+      why: "x ^ x = 0 makes XOR its own inverse, so the shared prefix cancels, which is Chapter 30's prefix sum with XOR as both the addition and the subtraction; it matched brute force on 300 of 300 arrays. XOR does not distribute over addition, and P is not sorted." },
+
+    { type: "blank",
+      q: "The i-th Gray codeword is i ^ (i >> ____).",
+      a: ["1"],
+      why: "Each bit of i ^ (i >> 1) is set where i changes between neighbouring bits; it matched the recursive reflected construction for every n from 1 to 16, with exactly one bit changing on each step." },
+
+    { type: "mc",
+      q: "A Java checksum over a byte array is wrong for every byte above 127. What is the fix, and why?",
+      opts: [
+        "Cast each byte to char, because char is the only unsigned type Java has and it is large enough to hold any byte value",
+        "Use >>> instead of >> wherever the loop shifts the running checksum, so its top bits are filled with zeros",
+        "Mask each byte with & 0xFF, because widening a signed byte copies its sign bit and turns 0x80 into -128",
+        "Declare the running sum as long, so that the bytes stop overflowing the 32-bit int during the loop"
+      ], a: 2,
+      why: "Sign extension widens byte 0x80 to int -128; b & 0xFF gives 128. A char cast of a negative byte also sign-extends first, >>> changes the shift and not the widening, and a long still receives -128." },
+
+    { type: "order",
+      q: "Order these Python popcount methods by measured time on 2^20 random 32-bit values, fastest first:",
+      items: [
+        "int.bit_count: 0.019 s",
+        "bin(x).count('1'): 0.23 s",
+        "Kernighan's loop: 0.76 s",
+        "a loop over all 32 bit positions: 2.06 s"
+      ],
+      why: "The built-in runs in C, the string count is C over a Python-built string, Kernighan's loop runs one Python iteration per set bit (about 16 on random words), and the naive loop always runs 32. The parallel count sat at 0.27 s, between the string and Kernighan." }
+  ]
+});
