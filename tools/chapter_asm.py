@@ -2,11 +2,11 @@
 # strings), then build(...) emits a CHAPTERS.push({...}) block to append to a bookData file.
 # Each section is dict(title=..., blocks=[...], viz=..., vizTitle=...); EX is [(bold lead, text)], terms [(t, d)].
 # Check the output with tools/chapcheck.js on a copy of the bookData before appending.
-import json, re
+import html, json, re
 
 def code(py, java):
     def pre(lang, src, hidden):
-        lines = src.strip('\n').split('\n')
+        lines = html.escape(src.strip('\n'), quote=False).split('\n')   # List<Integer> must not parse as a tag
         out = f"<pre data-lang='{lang}'{' hidden' if hidden else ''}><code>"
         parts = [json.dumps(out + lines[0] + ('\n' if len(lines) > 1 else ''))]
         for k, l in enumerate(lines[1:], 1):

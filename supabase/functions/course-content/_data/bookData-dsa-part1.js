@@ -8435,8 +8435,8 @@ CHAPTERS.push({
         "void siftDown(int[] a, int i, int n) {\n" +
         "    while (true) {\n" +
         "        int l=2*i+1, r=2*i+2, small=i;\n" +
-        "        if (l<n && a[l]<a[small]) small=l;\n" +
-        "        if (r<n && a[r]<a[small]) small=r;\n" +
+        "        if (l&lt;n && a[l]&lt;a[small]) small=l;\n" +
+        "        if (r&lt;n && a[r]&lt;a[small]) small=r;\n" +
         "        if (small==i) break;\n" +
         "        int t=a[i]; a[i]=a[small]; a[small]=t; i=small;\n" +
         "    }\n" +
@@ -9693,7 +9693,7 @@ CHAPTERS.push({
         "    int R = g.length, C = g[0].length, count = 0;\n" +
         "    boolean[][] seen = new boolean[R][C];\n" +
         "    int[][] dirs = {{1,0},{-1,0},{0,1},{0,-1}};\n" +
-        "    ArrayDeque<int[]> q = new ArrayDeque<>();\n" +
+        "    ArrayDeque&lt;int[]> q = new ArrayDeque<>();\n" +
         "    for (int r = 0; r < R; r++) for (int c = 0; c < C; c++) {\n" +
         "        if (!g[r][c] || seen[r][c]) continue;\n" +
         "        count++; seen[r][c] = true; q.add(new int[]{r, c});\n" +
@@ -9896,11 +9896,11 @@ CHAPTERS.push({
         "    while t != -1:\n" +
         "        out.append(t); t = parent[t]\n" +
         "    return out[::-1]</code></pre>" +
-        "<pre data-lang='java' hidden><code>int[] bfs(List<List<Integer>> adj, int s, int[] parent) {\n" +
+        "<pre data-lang='java' hidden><code>int[] bfs(List&lt;List&lt;Integer>> adj, int s, int[] parent) {\n" +
         "    int[] dist = new int[adj.size()];\n" +
         "    Arrays.fill(dist, -1); Arrays.fill(parent, -1);\n" +
         "    dist[s] = 0;\n" +
-        "    ArrayDeque<Integer> q = new ArrayDeque<>(List.of(s));\n" +
+        "    ArrayDeque&lt;Integer> q = new ArrayDeque<>(List.of(s));\n" +
         "    while (!q.isEmpty()) {\n" +
         "        int u = q.poll();\n" +
         "        for (int v : adj.get(u))\n" +
@@ -9931,9 +9931,9 @@ CHAPTERS.push({
         "                dist[v] = dist[u] + 1\n" +
         "                q.append(v)\n" +
         "    return dist</code></pre>" +
-        "<pre data-lang='java' hidden><code>int[] nearestSource(List<List<Integer>> adj, int[] sources) {\n" +
+        "<pre data-lang='java' hidden><code>int[] nearestSource(List&lt;List&lt;Integer>> adj, int[] sources) {\n" +
         "    int[] dist = new int[adj.size()]; Arrays.fill(dist, -1);\n" +
-        "    ArrayDeque<Integer> q = new ArrayDeque<>();\n" +
+        "    ArrayDeque&lt;Integer> q = new ArrayDeque<>();\n" +
         "    for (int s : sources) { dist[s] = 0; q.add(s); }\n" +
         "    while (!q.isEmpty()) {\n" +
         "        int u = q.poll();\n" +
@@ -9967,10 +9967,10 @@ CHAPTERS.push({
         "                if w == 0: dq.appendleft((dist[v], v))\n" +
         "                else:      dq.append((dist[v], v))\n" +
         "    return dist</code></pre>" +
-        "<pre data-lang='java' hidden><code>long[] zeroOneBfs(List<List<int[]>> adj, int s) {      // edge = {v, w}, w in {0,1}\n" +
+        "<pre data-lang='java' hidden><code>long[] zeroOneBfs(List&lt;List&lt;int[]>> adj, int s) {      // edge = {v, w}, w in {0,1}\n" +
         "    long[] dist = new long[adj.size()]; Arrays.fill(dist, Long.MAX_VALUE);\n" +
         "    dist[s] = 0;\n" +
-        "    ArrayDeque<long[]> dq = new ArrayDeque<>(); dq.add(new long[]{0, s});\n" +
+        "    ArrayDeque&lt;long[]> dq = new ArrayDeque<>(); dq.add(new long[]{0, s});\n" +
         "    while (!dq.isEmpty()) {\n" +
         "        long[] top = dq.poll(); int u = (int) top[1];\n" +
         "        if (top[0] > dist[u]) continue;                 // stale\n" +
@@ -10238,12 +10238,12 @@ CHAPTERS.push({
         "    if len(order) < n:\n" +
         "        return None                    # stalled: the leftovers contain a cycle\n" +
         "    return order</code></pre>" +
-        "<pre data-lang='java' hidden><code>List<Integer> kahn(List<List<Integer>> adj) {\n" +
+        "<pre data-lang='java' hidden><code>List&lt;Integer> kahn(List&lt;List&lt;Integer>> adj) {\n" +
         "    int n = adj.size(); int[] indeg = new int[n];\n" +
-        "    for (List<Integer> out : adj) for (int v : out) indeg[v]++;\n" +
-        "    ArrayDeque<Integer> ready = new ArrayDeque<>();\n" +
+        "    for (List&lt;Integer> out : adj) for (int v : out) indeg[v]++;\n" +
+        "    ArrayDeque&lt;Integer> ready = new ArrayDeque<>();\n" +
         "    for (int v = 0; v < n; v++) if (indeg[v] == 0) ready.add(v);\n" +
-        "    List<Integer> order = new ArrayList<>();\n" +
+        "    List&lt;Integer> order = new ArrayList<>();\n" +
         "    while (!ready.isEmpty()) {\n" +
         "        int u = ready.poll(); order.add(u);\n" +
         "        for (int v : adj.get(u)) if (--indeg[v] == 0) ready.add(v);\n" +
@@ -10310,12 +10310,12 @@ CHAPTERS.push({
         "            indeg[v] -= 1\n" +
         "            if indeg[v] == 0: heapq.heappush(heap, v)\n" +
         "    return order if len(order) == len(adj) else None</code></pre>" +
-        "<pre data-lang='java' hidden><code>List<Integer> smallestTopo(List<List<Integer>> adj) {\n" +
+        "<pre data-lang='java' hidden><code>List&lt;Integer> smallestTopo(List&lt;List&lt;Integer>> adj) {\n" +
         "    int n = adj.size(); int[] indeg = new int[n];\n" +
-        "    for (List<Integer> out : adj) for (int v : out) indeg[v]++;\n" +
-        "    PriorityQueue<Integer> heap = new PriorityQueue<>();\n" +
+        "    for (List&lt;Integer> out : adj) for (int v : out) indeg[v]++;\n" +
+        "    PriorityQueue&lt;Integer> heap = new PriorityQueue<>();\n" +
         "    for (int v = 0; v < n; v++) if (indeg[v] == 0) heap.add(v);\n" +
-        "    List<Integer> order = new ArrayList<>();\n" +
+        "    List&lt;Integer> order = new ArrayList<>();\n" +
         "    while (!heap.isEmpty()) {\n" +
         "        int u = heap.poll(); order.add(u);\n" +
         "        for (int v : adj.get(u)) if (--indeg[v] == 0) heap.add(v);\n" +
@@ -10340,7 +10340,7 @@ CHAPTERS.push({
         "            best[v] = max(best[v], best[u] + w[u, v])\n" +
         "            paths[v] += paths[u]\n" +
         "    return max(best), sum(paths)</code></pre>" +
-        "<pre data-lang='java' hidden><code>long[] dagDP(List<List<int[]>> adj, List<Integer> order) {   // edge = {v, w}\n" +
+        "<pre data-lang='java' hidden><code>long[] dagDP(List&lt;List&lt;int[]>> adj, List&lt;Integer> order) {   // edge = {v, w}\n" +
         "    long[] best = new long[adj.size()];\n" +
         "    for (int u : order)\n" +
         "        for (int[] e : adj.get(u)) best[e[0]] = Math.max(best[e[0]], best[u] + e[1]);\n" +
@@ -10545,9 +10545,9 @@ CHAPTERS.push({
         "                dist[v] = d + w\n" +
         "                heapq.heappush(heap, (dist[v], v))\n" +
         "    return dist</code></pre>" +
-        "<pre data-lang='java' hidden><code>long[] dijkstra(List<List<long[]>> adj, int s) {       // edge = {v, w}\n" +
+        "<pre data-lang='java' hidden><code>long[] dijkstra(List&lt;List&lt;long[]>> adj, int s) {       // edge = {v, w}\n" +
         "    long[] dist = new long[adj.size()]; Arrays.fill(dist, Long.MAX_VALUE); dist[s] = 0;\n" +
-        "    PriorityQueue<long[]> pq = new PriorityQueue<>(Comparator.comparingLong(a -> a[0]));\n" +
+        "    PriorityQueue&lt;long[]> pq = new PriorityQueue<>(Comparator.comparingLong(a -> a[0]));\n" +
         "    pq.add(new long[]{0, s});\n" +
         "    while (!pq.isEmpty()) {\n" +
         "        long[] top = pq.poll(); int u = (int) top[1];\n" +
@@ -10855,9 +10855,9 @@ CHAPTERS.push({
         "            if len(tree) == n - 1:\n" +
         "                break\n" +
         "    return tree</code></pre>" +
-        "<pre data-lang='java' hidden><code>List<int[]> kruskal(int n, int[][] edges) {          // edge = {w, u, v}\n" +
+        "<pre data-lang='java' hidden><code>List&lt;int[]> kruskal(int n, int[][] edges) {          // edge = {w, u, v}\n" +
         "    Arrays.sort(edges, Comparator.comparingInt(e -> e[0]));\n" +
-        "    DSU dsu = new DSU(n); List<int[]> tree = new ArrayList<>();\n" +
+        "    DSU dsu = new DSU(n); List&lt;int[]> tree = new ArrayList<>();\n" +
         "    for (int[] e : edges)\n" +
         "        if (dsu.union(e[1], e[2])) { tree.add(e); if (tree.size() == n - 1) break; }\n" +
         "    return tree;\n" +
@@ -11234,11 +11234,11 @@ CHAPTERS.push({
         "                elif colour[v] == colour[u]:\n" +
         "                    return None                 # same colour on both ends: odd cycle\n" +
         "    return colour</code></pre>" +
-        "<pre data-lang='java' hidden><code>int[] twoColour(List<List<Integer>> adj) {\n" +
+        "<pre data-lang='java' hidden><code>int[] twoColour(List&lt;List&lt;Integer>> adj) {\n" +
         "    int[] col = new int[adj.size()]; Arrays.fill(col, -1);\n" +
         "    for (int s = 0; s < adj.size(); s++) {\n" +
         "        if (col[s] >= 0) continue;\n" +
-        "        col[s] = 0; ArrayDeque<Integer> q = new ArrayDeque<>(List.of(s));\n" +
+        "        col[s] = 0; ArrayDeque&lt;Integer> q = new ArrayDeque<>(List.of(s));\n" +
         "        while (!q.isEmpty()) {\n" +
         "            int u = q.poll();\n" +
         "            for (int v : adj.get(u)) {\n" +
@@ -11269,9 +11269,9 @@ CHAPTERS.push({
         "        else:\n" +
         "            walk.append(stack.pop())        # stuck: emit, back up\n" +
         "    return walk[::-1]</code></pre>" +
-        "<pre data-lang='java' hidden><code>List<Integer> eulerCircuit(List<List<Integer>> adj, int start) {\n" +
-        "    int[] nxt = new int[adj.size()]; Deque<Integer> st = new ArrayDeque<>(List.of(start));\n" +
-        "    LinkedList<Integer> walk = new LinkedList<>();\n" +
+        "<pre data-lang='java' hidden><code>List&lt;Integer> eulerCircuit(List&lt;List&lt;Integer>> adj, int start) {\n" +
+        "    int[] nxt = new int[adj.size()]; Deque&lt;Integer> st = new ArrayDeque<>(List.of(start));\n" +
+        "    LinkedList&lt;Integer> walk = new LinkedList<>();\n" +
         "    while (!st.isEmpty()) {\n" +
         "        int u = st.peek();\n" +
         "        if (nxt[u] < adj.get(u).size()) st.push(adj.get(u).get(nxt[u]++));\n" +
@@ -11798,7 +11798,7 @@ CHAPTERS.push({
         "    matched, _ = max_matching(adj, n)         # Kuhn or Hopcroft-Karp from the section above\n" +
         "    return n - matched                         # each matched edge joins two paths into one</code></pre>" +
         "<pre data-lang='java' hidden><code>int minPathCover(int n, int[][] dagEdges) {\n" +
-        "    List<List<Integer>> adj = new ArrayList<>();\n" +
+        "    List&lt;List&lt;Integer>> adj = new ArrayList<>();\n" +
         "    for (int i = 0; i < n; i++) adj.add(new ArrayList<>());\n" +
         "    for (int[] e : dagEdges) adj.get(e[0]).add(e[1]);\n" +
         "    return n - maxMatching(adj, n);\n" +
@@ -11842,7 +11842,7 @@ CHAPTERS.push({
         "    return held                                         # held[r] = proposer matched to r</code></pre>" +
         "<pre data-lang='java' hidden><code>int[] galeShapley(int[][] propPref, int[][] recvRank) {   // recvRank[r][p] = r's rank of p\n" +
         "    int n = propPref.length; int[] next = new int[n], held = new int[n];\n" +
-        "    Arrays.fill(held, -1); ArrayDeque<Integer> free = new ArrayDeque<>();\n" +
+        "    Arrays.fill(held, -1); ArrayDeque&lt;Integer> free = new ArrayDeque<>();\n" +
         "    for (int p = 0; p < n; p++) free.add(p);\n" +
         "    while (!free.isEmpty()) {\n" +
         "        int p = free.poll(), r = propPref[p][next[p]++];\n" +
