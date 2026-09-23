@@ -6973,7 +6973,7 @@ CHAPTERS.push({
 
         "<p>One detail the centre count hides: a palindrome can have even length, centred between two characters rather than on one, so there are 2n&#8722;1 centres &#8212; n single characters and n&#8722;1 gaps &#8212; not n. An implementation that expands only from characters silently misses every even-length palindrome, reporting <code>bb</code> as two separate single-character palindromes. Handling both centre kinds is the one place the O(1)-space method needs care, and it is the bug the interval table cannot have, because it indexes the intervals directly and never has to guess a centre.</p>" +
 
-        "<p>The centre method is also the doorway to the one genuinely cleverer algorithm in this territory: Manacher's, which shares work between overlapping centres to find the longest palindromic substring in O(n) time. It is worth knowing it exists and rarely worth writing &#8212; the O(n&#178;) centre expansion is fast enough for any string you will hold in memory, and the linear algorithm's bookkeeping is the kind of cleverness Chapter 13 warned takes years to get right. The lesson the two palindrome problems leave is the chapter's thesis in miniature: know which known problem you are looking at &#8212; a common subsequence, an interval table, a set of centres &#8212; and the algorithm is already written.</p>"
+        "<p>The centre method is also the doorway to the one genuinely cleverer algorithm in this territory: Manacher's, which shares work between overlapping centres to find the longest palindromic substring in O(n) time. It is worth knowing it exists and rarely worth writing &#8212; the O(n&#178;) centre expansion is fast enough for typical text, though not for long repetitive input, as Chapter 42 measures, and the linear algorithm's bookkeeping is the kind of cleverness Chapter 13 warned takes years to get right. The lesson the two palindrome problems leave is the chapter's thesis in miniature: know which known problem you are looking at &#8212; a common subsequence, an interval table, a set of centres &#8212; and the algorithm is already written.</p>"
     },
 
     { title: "Exercises",
@@ -12654,5 +12654,344 @@ CHAPTERS.push({
         "KMP, any m: 1.04"
       ],
       why: "Skips grow with m on a large alphabet, because a character absent from the pattern allows a jump of m; KMP reads every character, and on random text it is barely above one comparison each." }
+  ]
+});
+
+/* ======================= CHAPTER 42 ======================= */
+CHAPTERS.push({
+  num: 42, part: 6, title: "Automata and Palindromes: Aho-Corasick and Manacher",
+  blurb: "Chapter 41 found one pattern. This one finds a thousand at once, in a single pass, by building the trie from Chapter 28 and adding KMP's border idea to it: that is Aho-Corasick, the algorithm behind fgrep and network intrusion detection. Then Manacher's algorithm finds every palindrome in linear time with the same already-computed-information trick, measured against the quadratic method on the input that breaks it. The chapter closes on regular expressions as automata, the exponential blowup of backtracking engines that has taken real services down, and compression as a question of what repeats.",
+  sections: [
+
+    { title: "Many Patterns, One Trie",
+      html:
+        "<p>Chapter 41 found one pattern in a text. The next problem, <strong>multi-pattern matching</strong>, is finding k of them at once: every banned word in a message, every attack signature in a packet stream, every gene fragment in a genome. The obvious approach runs KMP once per pattern, which costs O(k&#183;n) for a text of length n; the text is read k times, and nothing learned while looking for one pattern helps with another. On 200,000 random letters, one KMP pass took 0.017 s in Python, so a thousand patterns would take about 17 s. The right shape reads the text once, whatever k is.</p>" +
+        "<p>Python's regular expressions offer an apparent shortcut: join the patterns with <code>|</code> and call <code>finditer</code>. It is shorter to write, and it has the wrong shape too. The engine tries the alternatives one after another at each text position, so its cost grows with k: 0.003 s for 10 patterns, 0.05 s for 100 and 0.53 s for 1,000 on the same text. It also reports only non-overlapping, leftmost matches, so a pattern hidden inside another's match is silently missed.</p>" +
+        "<p>The structure that reads the text once starts from Chapter 28. Insert every pattern into a <strong>trie</strong>, and each node now stands for a string: the path of characters from the root. Two patterns that share a prefix share the nodes for it, so the trie has at most as many nodes as the patterns have characters in total, and the nodes where a pattern ends are marked. Read this way the trie is the skeleton of an automaton. Each node is a state meaning \"the text read so far ends with this string\", a trie edge is a transition on its character, and a marked node is a state in which a pattern has been found at the current position.</p>" +
+        "<p>Walking the trie along the text works while the text keeps extending some pattern. The question the rest of the construction answers is what to do when it does not: the current node has no child for the next character. Chapter 28's trie has no answer, because it only ever looks up one word from the root. Restarting from the root at the next text position is the naive algorithm again, quadratic in the worst case. Restarting from the root without moving back loses matches that began partway through the current node's string. The answer is the border idea from Chapter 41, generalized from one pattern to a tree of them.</p>" +
+        "<p>The result is the algorithm Alfred Aho and Margaret Corasick published in 1975, built for a bibliographic search program at Bell Labs; Aho used it to write the original Unix <code>fgrep</code>. It runs in O(n + L + z) time, for total pattern length L and z reported matches, which is optimal, since every character has to be read and every match written: the <strong>total-output bound</strong>. Intrusion detection systems such as Snort use it to match thousands of attack signatures against network traffic in a single pass.</p>"
+    },
+
+    { title: "Failure Links",
+      html:
+        "<p>In KMP, a mismatch after matching the prefix u sends the pattern to the longest border of u: the longest proper suffix of what was read that is still a prefix of the pattern. With many patterns, the same question becomes: what is the longest proper suffix of the current node's string that is a prefix of <em>any</em> pattern, that is, that is some node of the trie? The pointer from each node to that node is its <strong>failure link</strong>. For the root it is undefined, and for a node at depth one it is the root, since the only proper suffix of a single character is empty.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 318' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Aho-Corasick automaton for he, she, his, hers: trie edges solid, failure links dashed</text><path d='M 76 142 Q 115 122 149 106' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='154,103 149,109 146,103' fill='#5d7aa5'/><text x='110.08065044950047' y='116.66130089900092' text-anchor='middle' fill='#8fa3c4' font-size='10'>h</text><path d='M 187 90 Q 225 78 257 67' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='263,65 257,71 255,64' fill='#5d7aa5'/><text x='221.66475976995358' y='71.01781641985411' text-anchor='middle' fill='#8fa3c4' font-size='10'>e</text><path d='M 298 60 Q 335 60 366 60' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='372,60 365,64 365,56' fill='#5d7aa5'/><text x='335.0' y='53.0' text-anchor='middle' fill='#8fa3c4' font-size='10'>r</text><path d='M 408 60 Q 445 60 476 60' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='482,60 475,64 475,56' fill='#5d7aa5'/><text x='445.0' y='53.0' text-anchor='middle' fill='#8fa3c4' font-size='10'>s</text><path d='M 187 100 Q 225 112 257 123' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='263,125 255,126 257,119' fill='#5d7aa5'/><text x='228.33524023004642' y='106.01781641985411' text-anchor='middle' fill='#8fa3c4' font-size='10'>i</text><path d='M 298 130 Q 335 130 366 130' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='372,130 365,134 365,126' fill='#5d7aa5'/><text x='335.0' y='123.0' text-anchor='middle' fill='#8fa3c4' font-size='10'>s</text><path d='M 74 161 Q 115 192 151 220' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='156,224 148,222 152,217' fill='#5d7aa5'/><text x='121.72592251183342' y='187.79586498468615' text-anchor='middle' fill='#8fa3c4' font-size='10'>s</text><path d='M 188 235 Q 225 235 256 235' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='262,235 255,238 255,232' fill='#5d7aa5'/><text x='225.0' y='250.0' text-anchor='middle' fill='#8fa3c4' font-size='10'>h</text><path d='M 298 235 Q 335 235 366 235' fill='none' stroke='#5d7aa5' stroke-width='1.4'/><polygon points='372,235 365,238 365,232' fill='#5d7aa5'/><text x='335.0' y='228.0' text-anchor='middle' fill='#8fa3c4' font-size='10'>e</text><path d='M 269 221 Q 201 184 183 115' fill='none' stroke='#ff5d73' stroke-width='1.4' stroke-dasharray='5 3'/><polygon points='181,109 186,115 180,117' fill='#ff5d73'/><path d='M 380 220 Q 386 116 295 78' fill='none' stroke='#ffd166' stroke-width='1.8' stroke-dasharray='5 3'/><polygon points='290,75 297,75 295,81' fill='#ffd166'/><path d='M 374 138 Q 289 201 192 226' fill='none' stroke='#ff5d73' stroke-width='1.4' stroke-dasharray='5 3'/><polygon points='186,227 192,222 194,229' fill='#ff5d73'/><path d='M 484 68 Q 377 227 192 227' fill='none' stroke='#ff5d73' stroke-width='1.4' stroke-dasharray='5 3'/><polygon points='186,227 193,223 193,230' fill='#ff5d73'/><circle cx='60' cy='150' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='60' y='154' text-anchor='middle' fill='#c9d6ea' font-size='10'>root</text><circle cx='170' cy='95' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='170' y='99' text-anchor='middle' fill='#c9d6ea' font-size='10'>h</text><circle cx='280' cy='60' r='18' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><circle cx='280' cy='60' r='14' fill='none' stroke='#3ddc97' stroke-width='1'/><text x='280' y='64' text-anchor='middle' fill='#c9d6ea' font-size='10'>he</text><circle cx='390' cy='60' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='390' y='64' text-anchor='middle' fill='#c9d6ea' font-size='10'>her</text><circle cx='500' cy='60' r='18' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><circle cx='500' cy='60' r='14' fill='none' stroke='#3ddc97' stroke-width='1'/><text x='500' y='64' text-anchor='middle' fill='#c9d6ea' font-size='9'>hers</text><circle cx='280' cy='130' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='280' y='134' text-anchor='middle' fill='#c9d6ea' font-size='10'>hi</text><circle cx='390' cy='130' r='18' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><circle cx='390' cy='130' r='14' fill='none' stroke='#3ddc97' stroke-width='1'/><text x='390' y='134' text-anchor='middle' fill='#c9d6ea' font-size='10'>his</text><circle cx='170' cy='235' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='170' y='239' text-anchor='middle' fill='#c9d6ea' font-size='10'>s</text><circle cx='280' cy='235' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='280' y='239' text-anchor='middle' fill='#c9d6ea' font-size='10'>sh</text><circle cx='390' cy='235' r='18' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><circle cx='390' cy='235' r='14' fill='none' stroke='#3ddc97' stroke-width='1'/><text x='390' y='239' text-anchor='middle' fill='#c9d6ea' font-size='10'>she</text><text x='560' y='160' text-anchor='start' fill='#ffd166' font-size='10'>yellow: she &#8594; he is also</text><text x='560' y='176' text-anchor='start' fill='#ffd166' font-size='10'>an output link, so reaching</text><text x='560' y='192' text-anchor='start' fill='#ffd166' font-size='10'>she reports he too</text><text x='20' y='290' text-anchor='start' fill='#8fa3c4' font-size='10'>scan ushers: root, s, sh, she (report she, he), then r fails she &#8594; he &#8594; her, s &#8594; hers (report hers)</text><text x='20' y='308' text-anchor='start' fill='#8fa3c4' font-size='10'>green double circles end a pattern; failure links to the root are omitted</text></svg></div>" +
+        "<p>The figure uses the four patterns from Aho and Corasick's own paper: he, she, his, hers. The node sh has failure link h, because h is the longest proper suffix of sh that begins a pattern. The node she links to he, his to s and hers to s. Every other node links to the root, and those links are left out of the drawing.</p>" +
+        "<p>Failure links are computed by breadth-first search from the root, because a node's link always points to a shallower node, so every link it depends on is ready when the node is reached. Suppose node v has child u along character c. The candidates for u's link are the nodes reached by extending a suffix of v's string by c, and the suffixes of v's string that are nodes are exactly v's failure chain: fail(v), fail(fail(v)), down to the root. So walk v's failure chain until reaching a node w that has a child along c, and set fail(u) to that child; if even the root has no such child, fail(u) is the root. This is the prefix function's fallback loop from Chapter 41 running on a tree, and the same potential argument bounds it: along any one pattern's path, the depth of the failure link rises by at most one per character and falls with every fallback step, so building all links costs O(L).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "def build(patterns):\n" +
+        "    goto, fail, out = [{}], [0], [[]]\n" +
+        "    for idx, p in enumerate(patterns):             # the trie of Chapter 28\n" +
+        "        v = 0\n" +
+        "        for c in p:\n" +
+        "            if c not in goto[v]:\n" +
+        "                goto.append({}); fail.append(0); out.append([])\n" +
+        "                goto[v][c] = len(goto) - 1\n" +
+        "            v = goto[v][c]\n" +
+        "        out[v].append(idx)\n" +
+        "    q = deque(goto[0].values())                    # depth-1 nodes fail to the root\n" +
+        "    while q:\n" +
+        "        v = q.popleft()\n" +
+        "        for c, u in goto[v].items():\n" +
+        "            w = fail[v]\n" +
+        "            while w and c not in goto[w]:\n" +
+        "                w = fail[w]                        # walk v's failure chain\n" +
+        "            fail[u] = goto[w][c] if c in goto[w] and goto[w][c] != u else 0\n" +
+        "            q.append(u)\n" +
+        "    return goto, fail, out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[][] go; static int[] fail; static List&lt;List&lt;Integer&gt;&gt; out;\n" +
+        "static void build(String[] patterns) {             // lowercase a-z\n" +
+        "    int total = 1; for (String p : patterns) total += p.length();\n" +
+        "    go = new int[total][26]; fail = new int[total]; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int[] row : go) Arrays.fill(row, -1);\n" +
+        "    out.add(new ArrayList&lt;&gt;()); int nodes = 1;\n" +
+        "    for (int idx = 0; idx &lt; patterns.length; idx++) {\n" +
+        "        int v = 0;\n" +
+        "        for (char ch : patterns[idx].toCharArray()) {\n" +
+        "            int c = ch - 'a';\n" +
+        "            if (go[v][c] &lt; 0) { go[v][c] = nodes++; out.add(new ArrayList&lt;&gt;()); }\n" +
+        "            v = go[v][c];\n" +
+        "        }\n" +
+        "        out.get(v).add(idx);\n" +
+        "    }\n" +
+        "    ArrayDeque&lt;Integer&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "    for (int c = 0; c &lt; 26; c++) {\n" +
+        "        if (go[0][c] &lt; 0) go[0][c] = 0; else { fail[go[0][c]] = 0; q.add(go[0][c]); }\n" +
+        "    }\n" +
+        "    while (!q.isEmpty()) {                          // complete the automaton: every state\n" +
+        "        int v = q.poll();                           // gets a transition on every character\n" +
+        "        for (int c = 0; c &lt; 26; c++) {\n" +
+        "            int u = go[v][c];\n" +
+        "            if (u &lt; 0) { go[v][c] = go[fail[v]][c]; continue; }\n" +
+        "            fail[u] = go[fail[v]][c];\n" +
+        "            q.add(u);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p>The Java version goes one step further and fills in every missing transition as it goes: a missing edge from v on c becomes the edge that v's failure node takes on c. That turns the trie into a complete automaton with no fallback loop at matching time, one table lookup per text character, at the price of a table of size L times the alphabet. It is the multi-pattern form of the KMP automaton at the end of Chapter 41.</p>"
+    },
+
+    { title: "Output Links and the Matching Pass",
+      viz: "dsaAhoCorasick", vizTitle: "Add patterns, then scan the text once. Every match is found without ever backing up",
+      html:
+        "<p>Matching is KMP's loop with the trie in place of the pattern. Keep the current node v. For each text character c, follow failure links from v until some node has a child along c or the root is reached, then take that child. Whatever node you land on, its string is the longest suffix of the text read so far that is a prefix of some pattern. The text pointer only moves forward, and the same potential argument as KMP bounds the fallbacks by n, so the scan is O(n) plus the cost of reporting.</p>" +
+        "<p>Reporting has a trap. Arriving at node v means v's string ends here, but other patterns may end here too: every pattern that is a suffix of v's string. Scanning ushers, the automaton reaches she and must report both she and he, although he is not on the path to she. Those patterns are exactly the marked nodes on v's failure chain. Walking the whole chain at every text position finds them, and it is correct, but it can cost the chain's length at every step even when there is nothing to report. With the patterns a<sup>k</sup> and b on a text of 20,000 a's, walking the chain took 976 steps per character at k = 1,000, while the true output was one match per position.</p>" +
+        "<p>The fix is an <strong>output link</strong> (also called a dictionary suffix link) from each node to the nearest marked node on its failure chain, skipping the unmarked ones. It is computed in the same breadth-first pass: if fail(u) is marked, u's output link is fail(u); otherwise it is fail(u)'s output link. Reporting at v then visits v if it is marked and follows output links, and every step of that walk reports at least one pattern. On the same input the output links cost two steps per character, one per match and one to stop. In the figure, the yellow link from she to he is both a failure link and an output link.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def search(text, patterns, goto, fail, out):\n" +
+        "    link = [-1] * len(goto)                        # output links, by BFS order\n" +
+        "    order = []\n" +
+        "    q = deque(goto[0].values())\n" +
+        "    while q:\n" +
+        "        v = q.popleft(); order.append(v)\n" +
+        "        q.extend(goto[v].values())\n" +
+        "    for u in order:\n" +
+        "        f = fail[u]\n" +
+        "        link[u] = f if out[f] else link[f]\n" +
+        "    v, found = 0, []\n" +
+        "    for i, c in enumerate(text):\n" +
+        "        while v and c not in goto[v]:\n" +
+        "            v = fail[v]\n" +
+        "        v = goto[v].get(c, 0)\n" +
+        "        u = v if out[v] else link[v]\n" +
+        "        while u &gt; 0:                               # each step reports something\n" +
+        "            for idx in out[u]:\n" +
+        "                found.append((i - len(patterns[idx]) + 1, idx))\n" +
+        "            u = link[u]\n" +
+        "    return found</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;int[]&gt; search(String text, String[] patterns) {\n" +
+        "    int[] link = new int[go.length];               // output links, by BFS order\n" +
+        "    ArrayDeque&lt;Integer&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "    boolean[] seen = new boolean[go.length]; seen[0] = true;\n" +
+        "    for (int c = 0; c &lt; 26; c++) if (go[0][c] &gt; 0 &amp;&amp; !seen[go[0][c]]) { seen[go[0][c]] = true; q.add(go[0][c]); }\n" +
+        "    while (!q.isEmpty()) {\n" +
+        "        int u = q.poll(), f = fail[u];\n" +
+        "        link[u] = out.get(f).isEmpty() ? link[f] : f;\n" +
+        "        for (int c = 0; c &lt; 26; c++) { int w = go[u][c]; if (!seen[w]) { seen[w] = true; q.add(w); } }\n" +
+        "    }\n" +
+        "    List&lt;int[]&gt; found = new ArrayList&lt;&gt;();\n" +
+        "    for (int i = 0, v = 0; i &lt; text.length(); i++) {\n" +
+        "        v = go[v][text.charAt(i) - 'a'];           // complete automaton: no fallback loop\n" +
+        "        for (int u = out.get(v).isEmpty() ? link[v] : v; u &gt; 0; u = link[u])\n" +
+        "            for (int idx : out.get(u)) found.add(new int[]{i - patterns[idx].length() + 1, idx});\n" +
+        "    }\n" +
+        "    return found;\n" +
+        "}</code></pre></div>" +
+        "<p>The output term z is real and can dominate. With the hundred patterns a, aa, up to a<sup>100</sup>, a text of 10,000 a's contains 995,050 matches, and no algorithm can list them in less time than that; the bound O(n + L + z) is the honest one. When only counts are needed, each node can accumulate a count along its output links once, and z disappears from the running time. Against brute force on 1,500 random pattern sets and texts, the automaton reported exactly the right matches, with and without output links. With 1,000 patterns it built in 0.004 s and scanned the 200,000 letters in 0.05 s, against the 17 s of running KMP a thousand times.</p>"
+    },
+
+    { title: "Palindromes, the Quadratic Way",
+      html:
+        "<p>Chapter 21 found the longest palindromic substring by <strong>expand around centre</strong>: every palindrome has a centre, either a character or the gap between two, so try all 2n &#8722; 1 centres and grow each palindrome outward while the mirror characters match. It uses O(1) space, and that chapter judged its O(n<sup>2</sup>) worst case fast enough in practice. Here is the measurement behind that judgement, and where it stops holding.</p>" +
+        "<p>On typical strings palindromes are short, so most centres stop after a comparison or two. On 40,000 random letters, expansion made 3.1 comparisons per character in total and finished in 0.02 s; over a two-letter alphabet, where short palindromes are common, it made 5.0. That is linear in practice, and it is why the centre method is the right default for text you did not choose. The worst case is a string whose palindromes are long everywhere, and the simplest such string is a single repeated letter. On a<sup>n</sup>, every centre expands to the nearer end of the string, the total is about n<sup>2</sup>/2, and the measured times were 7 s at n = 10,000, 28 s at 20,000 and 113 s at 40,000 in Python: four times the time for twice the length. Long runs of one character are not exotic. They occur in padded fields, in low-complexity regions of DNA, and in any input an adversary writes.</p>" +
+        "<p>The quadratic cost comes from recomputation. When a long palindrome has been found, its left half and right half are mirror images, so every palindrome centred inside the right half has already been seen, reflected, in the left half. The expansion method ignores this and compares the same characters again and again. That is the same kind of waste KMP removed from naive matching, and the fix is the same kind of fix: remember the rightmost thing already proved, and copy instead of recompute.</p>"
+    },
+
+    { title: "Manacher's Algorithm",
+      html:
+        "<p><strong>Manacher's algorithm</strong> computes, for every centre, the radius of the longest palindrome centred there, in O(n) total. Glenn Manacher published it in 1975 as an online algorithm for a narrower question, the shortest palindromic prefix; the all-centres form taught today is the same idea applied to every position. Two devices make it work: a padding that removes the odd and even cases, and a mirror that reuses earlier radii.</p>" +
+        "<p>The <strong>sentinel padding</strong> inserts a separator # between every pair of characters and at both ends, so abba becomes #a#b#b#a#. Every palindrome in the original, odd or even, is now an odd-length palindrome in the padded string, centred on a character or on a #. One loop handles both kinds, and the radius at padded position i, measured in padded characters on one side, equals the length of the original palindrome centred there. Two more distinct sentinels at the very ends, such as ^ and $, stop the expansion without bounds checks.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 236' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Manacher's mirror on xabacdcabax, padded with #: inside the box, a radius is copied from the mirror</text><rect x='35' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='49' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='49' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='65' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='79' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>x</text><text x='79' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='95' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='109' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='109' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='125' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='139' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='139' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='155' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='169' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='169' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='185' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='199' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><text x='199' y='118' text-anchor='middle' fill='#ffd166' font-size='10'>3</text><rect x='215' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='229' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='229' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='245' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='259' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='259' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='275' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='289' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='289' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='305' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='319' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><text x='319' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='335' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='349' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='349' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='365' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='379' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><text x='379' y='118' text-anchor='middle' fill='#2de2ff' font-size='10'>11</text><rect x='395' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='409' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='409' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='425' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='439' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><text x='439' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='455' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='469' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='469' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='485' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='499' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='499' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='515' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='529' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='529' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='545' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='559' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><text x='559' y='118' text-anchor='middle' fill='#ffd166' font-size='10'>3</text><rect x='575' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='589' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='589' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='605' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='619' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='619' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='635' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='649' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='649' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><rect x='665' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='679' y='95' text-anchor='middle' fill='#c9d6ea' font-size='12'>x</text><text x='679' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>1</text><rect x='695' y='78' width='28' height='24' rx='3' fill='#1c2c46' stroke='#334a6a'/><text x='709' y='95' text-anchor='middle' fill='#8fa3c4' font-size='12'>#</text><text x='709' y='118' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><path d='M 49 70 L 49 62 L 709 62 L 709 70' fill='none' stroke='#2de2ff' stroke-width='1.4'/><text x='379' y='56' text-anchor='middle' fill='#2de2ff' font-size='10'>box around centre c = 11, radius 11, right boundary r = 22</text><path d='M 109 136 L 109 142 L 289 142 L 289 136' fill='none' stroke='#ffd166' stroke-width='1.4'/><text x='199' y='158' text-anchor='middle' fill='#ffd166' font-size='10'>mirror 5</text><path d='M 469 136 L 469 142 L 649 142 L 649 136' fill='none' stroke='#3ddc97' stroke-width='1.4'/><text x='559' y='158' text-anchor='middle' fill='#3ddc97' font-size='10'>i = 17</text><path d='M 203 166 Q 379 188 549 167' fill='none' stroke='#ffd166' stroke-width='1.4'/><polygon points='555,166 548,170 548,163' fill='#ffd166'/><text x='20' y='208' text-anchor='start' fill='#8fa3c4' font-size='10'>The palindrome at the mirror has radius 3 and ends inside the box, so the one at i is its reflection: radius 3, copied</text><text x='20' y='226' text-anchor='start' fill='#8fa3c4' font-size='10'>When the mirror's palindrome reaches the box edge, the copy is only a lower bound and i expands past r</text></svg></div>" +
+        "<p>The mirror is the idea. Keep the palindrome found so far that reaches furthest right: centre c, right boundary r = c + radius[c]. For a new position i left of r, its mirror i' = 2c &#8722; i sits the same distance left of c, and the text around i is the reflection of the text around i'. If the palindrome at i' ends strictly inside the box, the palindrome at i is its reflection and has exactly the same radius, with no comparison needed. In the figure, the right aba copies radius 3 from the left one. If the mirror's palindrome reaches the box edge, the copy is only a lower bound, min(r &#8722; i, radius[i']), because what lies beyond r has not been seen; the algorithm expands from there by comparing characters, and whenever it passes r, i becomes the new c.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def manacher(s):\n" +
+        "    t = '^#' + '#'.join(s) + '#$'\n" +
+        "    rad = [0] * len(t)\n" +
+        "    c = r = 0\n" +
+        "    for i in range(1, len(t) - 1):\n" +
+        "        if i &lt; r:\n" +
+        "            rad[i] = min(r - i, rad[2 * c - i])   # copy from the mirror\n" +
+        "        while t[i + rad[i] + 1] == t[i - rad[i] - 1]:\n" +
+        "            rad[i] += 1                           # expand past what is known\n" +
+        "        if i + rad[i] &gt; r:\n" +
+        "            c, r = i, i + rad[i]\n" +
+        "    return rad                                    # rad[i] = palindrome length in s</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] manacher(String s) {\n" +
+        "    StringBuilder b = new StringBuilder(\"^#\");\n" +
+        "    for (char ch : s.toCharArray()) b.append(ch).append('#');\n" +
+        "    char[] t = b.append('$').toString().toCharArray();\n" +
+        "    int[] rad = new int[t.length];\n" +
+        "    for (int i = 1, c = 0, r = 0; i &lt; t.length - 1; i++) {\n" +
+        "        if (i &lt; r) rad[i] = Math.min(r - i, rad[2 * c - i]);\n" +
+        "        while (t[i + rad[i] + 1] == t[i - rad[i] - 1]) rad[i]++;\n" +
+        "        if (i + rad[i] &gt; r) { c = i; r = i + rad[i]; }\n" +
+        "    }\n" +
+        "    return rad;\n" +
+        "}</code></pre></div>" +
+        "<p>The linear bound is the Z-box argument of Chapter 41 again. Every successful comparison moves r to the right, r never moves left and never passes the end, so successful comparisons total at most the padded length, and each position makes at most one failed comparison. On a<sup>n</sup> with n = 40,000, Manacher made exactly two comparisons per padded position and finished in 0.03 s, against expansion's 113 s. On random binary strings, 65% of positions took their radius straight from the mirror. The radii answer more than the longest palindrome: the number of palindromic substrings is the sum over positions of (radius + 1) / 2, rounded down. Both the longest palindrome and that count matched brute force on 2,000 random strings.</p>" +
+        "<p>Chapter 21 said Manacher's algorithm is rarely worth writing, and for text you control that remains fair. The case for it is the one this section measured: when the input can be long and repetitive, or chosen by someone else, the difference between quadratic and linear is the difference between two minutes and three hundredths of a second.</p>"
+    },
+
+    { title: "Regular Expressions",
+      html:
+        "<p>A regular expression describes a set of strings with three operations, concatenation, alternation (|) and repetition (*), and it is a finite automaton in disguise. Ken Thompson's 1968 paper showed how to compile one into a nondeterministic finite automaton, an NFA, with at most about two states per symbol, and how to run it by <strong>NFA simulation</strong>, keeping the <em>set</em> of states it could be in. Each text character moves every state in the set at once, so the cost is O(n&#183;m) for text length n and expression size m, with no dependence on how the matching could go wrong.</p>" +
+        "<p>Most language libraries do not do this. Python's <code>re</code>, like the engines of Perl, JavaScript and Java, is a <em>backtracking</em> engine: it tries one way to match, and on failure backs up and tries the next. That supports features no automaton can, such as backreferences, but it explores the ways to match one at a time, and a regex can have exponentially many. <code>(a+)+b</code> against a string of a's with no b is the standard example: the a's can be divided among the inner and outer repetition in 2<sup>n&#8722;1</sup> ways, and the engine tries every division before concluding there is no match. Python took 0.008 s at n = 18, 0.54 s at 24 and 2.18 s at 26, doubling with every added character. The same doubling appeared with four other classic patterns, including <code>^(a|a?)+$</code> at 4.7 s for 24 characters.</p>" +
+        "<p>Java is an instructive variation. OpenJDK 21 returned instantly on all eleven classic patterns I tried, those five among them, because its engine has added defences against their shapes. Add a backreference, which rules those defences out, and the doubling returns: <code>(a+)+\\1b</code> took 0.5 s at 24 characters and 7.9 s at 28. Defences inside a backtracking engine cover known shapes; they do not change what the algorithm is.</p>" +
+        "<p>I wrote a Thompson NFA simulator for the core operators and checked it against Python's <code>fullmatch</code> on 10,000 random regexes and strings, with no disagreement. On <code>(a+)+b</code> it visited six states per character at every length: 100,000 a's took 0.11 s. The system <code>grep</code> on this machine, whose POSIX engine is automaton-based, took 0.01 s on a million a's. That gap is <strong>ReDoS</strong>, regular-expression denial of service, and it has caused real outages. On 20 July 2016 Stack Overflow was down for 34 minutes because a whitespace-trimming regex met a post with about 20,000 consecutive whitespace characters, a quadratic rather than exponential blowup. On 2 July 2019 a single regex in Cloudflare's firewall rules, with nested <code>.*</code> patterns, exhausted CPU across its network for 27 minutes.</p>" +
+        "<p>The defences are known. Use an automaton-based engine for any regex that meets untrusted input: Google's RE2 guarantees time linear in the input by refusing backreferences. Bound input length before matching. And read nested quantifiers such as <code>(x+)+</code> or <code>(a|a)*</code> in a code review the way you would read an unbounded loop.</p>"
+    },
+
+    { title: "Compression",
+      html:
+        "<p>Compression belongs in a chapter on string structure because every compressor is a claim about what repeats. Three families cover almost everything in use. <strong>Run-length encoding</strong> replaces a run of one character by the character and a count, which is ideal for a<sup>n</sup> and useless for text: 200,000 random letters formed 192,276 runs. Huffman coding, built greedily in Chapter 23, gives frequent characters short codes, and it can do no better than the zero-order entropy, &#8722;&#8721; p log<sub>2</sub> p bits per character. The Lempel-Ziv family, from Abraham Lempel and Jacob Ziv in 1977 and 1978, replaces a repeated substring with a reference to its earlier occurrence, which is string matching run over the input's own past.</p>" +
+        "<p><strong>LZW</strong>, Terry Welch's 1984 variant, makes the dictionary implicit. Start with every single character as an entry. Read the longest string already in the dictionary, output its code, and add that string extended by the next character as a new entry. The decoder rebuilds the same dictionary from the codes it receives, so nothing but codes is sent. The dictionary is a trie, and the greedy longest match is a walk down it, so this chapter's first structure is also the compressor's.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lzw_encode(s):\n" +
+        "    table = {chr(i): i for i in range(256)}\n" +
+        "    w, codes = '', []\n" +
+        "    for c in s:\n" +
+        "        if w + c in table:\n" +
+        "            w += c                                 # extend the longest known string\n" +
+        "        else:\n" +
+        "            codes.append(table[w])\n" +
+        "            table[w + c] = len(table)              # learn one longer string\n" +
+        "            w = c\n" +
+        "    if w:\n" +
+        "        codes.append(table[w])\n" +
+        "    return codes</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; lzwEncode(String s) {\n" +
+        "    Map&lt;String, Integer&gt; table = new HashMap&lt;&gt;();\n" +
+        "    for (int i = 0; i &lt; 256; i++) table.put(String.valueOf((char) i), i);\n" +
+        "    String w = \"\"; List&lt;Integer&gt; codes = new ArrayList&lt;&gt;();\n" +
+        "    for (char c : s.toCharArray()) {\n" +
+        "        String wc = w + c;\n" +
+        "        if (table.containsKey(wc)) { w = wc; continue; }\n" +
+        "        codes.add(table.get(w));\n" +
+        "        table.put(wc, table.size());\n" +
+        "        w = String.valueOf(c);\n" +
+        "    }\n" +
+        "    if (!w.isEmpty()) codes.add(table.get(w));\n" +
+        "    return codes;\n" +
+        "}</code></pre></div>" +
+        "<p>The measurements show what each family can see. On 200,000 random bytes, the entropy is 8 bits per byte and nothing compressed: zlib, which is DEFLATE, Lempel-Ziv followed by Huffman, stored them at 8.00. On random letters the entropy is log<sub>2</sub> 26 = 4.70 bits; Huffman reached 4.77, and zlib 5.08, because there were no repeats for Lempel-Ziv to find. On text built from a 160-word vocabulary, the character entropy is 3.94 bits and Huffman reached 3.97, but zlib reached 2.36 and LZW 2.65: below what any per-character code can achieve, because whole words repeat. Every round trip through my LZW decoder reproduced the input exactly.</p>" +
+        "<p>So a character-frequency code is bounded by entropy, and beating that bound needs structure longer than one character, which is what this Part is about: borders, repeats, and later the suffix structures of Chapter 43. Random data is incompressible, and no algorithm changes that.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>One pass or k.</strong> Time KMP once per pattern, a regex alternation, and your Aho-Corasick automaton for 10, 100 and 1,000 random patterns on 200,000 random letters, and explain each trend.</li>" +
+        "<li><strong>Draw the automaton.</strong> Build the trie and failure links for he, she, his, hers by hand, then trace the scan of ushers and list every match and the state after each character.</li>" +
+        "<li><strong>Why output links.</strong> Count failure-chain steps with and without output links for the patterns a<sup>k</sup> and b on a text of a's, for k = 10, 100, 1,000.</li>" +
+        "<li><strong>Count, do not list.</strong> Change the automaton to count occurrences of each pattern with one accumulation pass over the output links, so the running time no longer depends on z.</li>" +
+        "<li><strong>Break the centre method.</strong> Time expand-around-centre and Manacher's algorithm on random text and on a<sup>n</sup> for n = 10,000, 20,000, 40,000.</li>" +
+        "<li><strong>Read the radii.</strong> From Manacher's radius array, return the longest palindromic substring, the number of palindromic substrings, and the longest palindromic prefix. Check each against brute force.</li>" +
+        "<li><strong>Find the cliff.</strong> Time (a+)+b and ^(a|a?)+$ in Python's re as the input grows one character at a time, then write a Thompson NFA simulator and compare its step counts.</li>" +
+        "<li><strong>Measure entropy.</strong> Compute the zero-order entropy, Huffman's average code length and zlib's bits per character for random bytes, random letters and ordinary English, and explain the gaps.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "multi-pattern matching", d: "Finding every occurrence of any of k patterns in one text; Aho-Corasick does it in one pass, O(n + L + z)." },
+    { t: "trie", d: "A tree of patterns in which each node spells the string on its path from the root; the states of the Aho-Corasick automaton." },
+    { t: "Aho-Corasick", d: "Aho and Corasick 1975: a trie of the patterns plus failure and output links, scanning the text once without backing up." },
+    { t: "failure link", d: "From a trie node to the node spelling the longest proper suffix of its string that is also a trie node; KMP's border on a tree." },
+    { t: "output link", d: "From a node to the nearest pattern-ending node on its failure chain, so reporting visits only nodes that report something." },
+    { t: "total-output bound", d: "O(n + L + z) for text length n, pattern length L and match count z; optimal, since every match must be written." },
+    { t: "expand around centre", d: "Finding palindromes by growing outward from each of the 2n - 1 centres; linear on typical text, quadratic on a^n." },
+    { t: "Manacher's algorithm", d: "Manacher 1975: all palindromic radii in O(n), copying each radius from its mirror inside the rightmost known palindrome." },
+    { t: "sentinel padding", d: "Inserting # between characters so every palindrome has odd length, and distinct end markers so expansion needs no bounds checks." },
+    { t: "regular expression", d: "A pattern built from characters with concatenation, alternation and repetition; equivalent to a finite automaton." },
+    { t: "NFA simulation", d: "Thompson 1968: running a regex's nondeterministic automaton by tracking the set of possible states, O(nm) time." },
+    { t: "backtracking engine", d: "A regex engine that tries one way to match at a time and backs up on failure; supports backreferences, but can take exponential time." },
+    { t: "ReDoS", d: "Regular-expression denial of service: input that drives a backtracking engine into exponential or quadratic time." },
+    { t: "run-length encoding", d: "Replacing each run of one character by the character and its count." },
+    { t: "LZW", d: "Welch 1984: Lempel-Ziv compression with an implicit dictionary trie, extended by one string per output code." },
+    { t: "entropy", d: "The zero-order bound -sum p log2 p bits per character that any per-character code, including Huffman's, cannot beat." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Why is running KMP once per pattern the wrong shape for 1,000 patterns?",
+      opts: [
+        "It reads the text once per pattern, O(k\u00b7n), and nothing learned for one pattern helps another; about 17 s here against 0.05 s",
+        "It cannot find overlapping occurrences of the same pattern, which Aho-Corasick finds by keeping failure links",
+        "Its prefix function needs O(m squared) time per pattern, so building the tables dominates once k is large",
+        "It stops at the first occurrence of each pattern, so a second pass is needed per pattern to list the rest"
+      ], a: 0,
+      why: "Each pass costs O(n), so k passes cost O(k\u00b7n): 0.017 s per pass, about 17 s for 1,000, against one Aho-Corasick scan of 0.05 s. KMP finds overlaps, builds its table in O(m), and reports every occurrence." },
+
+    { type: "mc",
+      q: "In the automaton for he, she, his, hers, where does the failure link of the node she point, and why?",
+      opts: [
+        "To the root, because she ends a pattern and a node that ends a pattern never needs to fall back",
+        "To he, because he is the longest proper suffix of she that is also a node of the trie",
+        "To sh, its parent, because a mismatch always returns to the previous character's state",
+        "To hers, because hers is the longest pattern in the set that begins with a suffix of she"
+      ], a: 1,
+      why: "The failure link names the longest proper suffix that is a prefix of some pattern: e and he are suffixes of she, and he is a trie node. Pattern-ending nodes still fall back, parents are not suffixes, and hers is not a suffix of she." },
+
+    { type: "mc",
+      q: "Why are failure links computed in breadth-first order?",
+      opts: [
+        "Because depth-first order would visit some nodes twice, and a node's failure link can only be written once",
+        "Because breadth-first search finds the shortest path from the root, and the failure link is a shortest path",
+        "Because a node's failure link points to a shallower node, so the links it depends on are already computed",
+        "Because the queue holds the text characters in order, so the links are built while the text itself is being scanned"
+      ], a: 2,
+      why: "fail(u) is found by walking fail(v) for u's parent v, and every node on that chain is shallower than u, so level order guarantees they are ready. Nothing is written twice in DFS, links are not shortest paths, and the build never reads the text." },
+
+    { type: "blank",
+      q: "The pointer from a trie node to the nearest pattern-ending node on its failure chain is called its ____ link.",
+      a: ["output", "dictionary", "dictionary suffix"],
+      why: "Output links skip failure-chain nodes that report nothing, so every step of the reporting walk reports a match; with patterns a^1000 and b they cut 976 steps per character to 2." },
+
+    { type: "mc",
+      q: "Expand-around-centre took 0.02 s on 40,000 random letters and 113 s on 40,000 copies of one letter. Why?",
+      opts: [
+        "Random text has fewer centres to try, since repeated characters create extra gap centres between them",
+        "Python caches comparisons of distinct characters, so random text avoids most of the comparison cost",
+        "On a single repeated letter the centres cannot share work, whereas random text lets each centre copy its neighbour's result",
+        "Palindromes in random text are short, so centres stop almost at once; on a^n every centre expands to the nearer end, about n\u00b2/2 comparisons"
+      ], a: 3,
+      why: "The method is O(n squared) only when palindromes are long everywhere: 3.1 comparisons per character on random letters, n\u00b2/2 on a^n. Both strings have 2n - 1 centres, nothing is cached, and the centre method never copies anything; Manacher does." },
+
+    { type: "mc",
+      q: "In Manacher's algorithm, when is a position's radius copied from its mirror with no comparison?",
+      opts: [
+        "When the mirror's palindrome ends strictly inside the rightmost known palindrome, so its reflection is exactly the palindrome at i",
+        "Whenever the position lies to the left of the current centre, since the left half of every palindrome found so far is already fully known",
+        "Whenever the mirror's radius is zero, because a zero radius can be copied without any risk of being wrong",
+        "When the position is a # separator, because separators always have the same radius as the character beside them"
+      ], a: 0,
+      why: "Inside the box the text around i reflects the text around i' = 2c - i, so a mirror palindrome ending inside the box has the same radius at i. At the edge it is only a lower bound. Positions scanned are right of c, and separators' radii vary." },
+
+    { type: "mc",
+      q: "Python took 2.18 s to reject a^26 with (a+)+b, while a Thompson NFA took 0.11 s for 100,000 a's. What explains the difference?",
+      opts: [
+        "Python compiles regexes lazily on first use, and the compile step for nested quantifiers is what grows exponentially with the length of the input",
+        "The backtracking engine tries each of the 2^(n-1) ways to split the a's between the repetitions; the NFA tracks all states at once",
+        "The NFA skips to the end of the input when it sees there is no b, while Python's engine must read every character first",
+        "Python's engine counts characters in Unicode code points, and the conversion per character dominates for long inputs"
+      ], a: 1,
+      why: "Backtracking explores match attempts one at a time and there are exponentially many, doubling per added character; the NFA's set of states moves as one, six state visits per character. The regex compiles once, the NFA reads every character, and encoding is not the cost." },
+
+    { type: "blank",
+      q: "Regular-expression denial of service, where input drives a backtracking engine into exponential or quadratic time, is abbreviated ____.",
+      a: ["ReDoS", "redos"],
+      why: "It caused Stack Overflow's 34-minute outage in 2016 (quadratic, 20,000 whitespace characters) and Cloudflare's 27-minute outage in 2019 (nested .* in a firewall rule)." },
+
+    { type: "mc",
+      q: "On text built from a 160-word vocabulary, zlib reached 2.36 bits per character while Huffman reached 3.97. How can zlib beat Huffman?",
+      opts: [
+        "zlib uses a larger alphabet of bytes, so its codes are shorter than Huffman's for the same characters",
+        "Huffman's codes are rounded up to whole bytes in practice, while zlib's codes are not, and the rounding accounts for the gap",
+        "zlib's Lempel-Ziv stage replaces repeated words with references, which a per-character code like Huffman cannot see",
+        "The Huffman tree was built on a sample of the text, and a full-text tree would have matched zlib's result"
+      ], a: 2,
+      why: "Huffman is bounded by the zero-order entropy, 3.94 bits here, because it codes characters independently. Lempel-Ziv exploits repeats longer than one character. On random letters, with no repeats, zlib did worse (5.08) than Huffman (4.77)." },
+
+    { type: "order",
+      q: "Order these by measured time, fastest first:",
+      items: [
+        "grep on a million a's with (a+)+b: 0.01 s",
+        "Manacher on 40,000 a's: 0.03 s",
+        "Python re, (a+)+b on 26 a's: 2.18 s",
+        "expand around centre on 40,000 a's: 113 s"
+      ],
+      why: "Automata and Manacher are linear, so large inputs finish in hundredths of a second; the backtracking engine is exponential, so 26 characters take seconds; the centre method is quadratic, n\u00b2/2 comparisons at 40,000." }
   ]
 });
