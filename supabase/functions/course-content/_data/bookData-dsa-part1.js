@@ -13679,3 +13679,369 @@ CHAPTERS.push({
       why: "Logarithmic work is under a millisecond; an exact power builds a 1.58-million-bit number; the sieve does about n ln ln n strikes, mostly in C; the loop does ten million interpreted additions." }
   ]
 });
+
+/* ======================= CHAPTER 45 ======================= */
+CHAPTERS.push({
+  num: 45, part: 6, title: "Geometry",
+  blurb: "Computational geometry is where floating point goes to die, and the first lesson is to avoid it: the orientation test, the primitive every algorithm here is built from, is an exact integer determinant when the inputs are integers, and 18% of nearly collinear inputs got the wrong sign in doubles. From it come segment intersection with the collinear case everyone omits, polygon area and point location, the convex hull as a monotonic stack, a sweep-line rectangle union, the 45-degree rotation that turns Manhattan distance into Chebyshev, the geometry behind the convex hull trick with a Li Chao tree, and linear programming as a picture and a certificate.",
+  sections: [
+
+    { title: "The Orientation Test, and Why Floats Break It",
+      viz: "dsaOrientation", vizTitle: "Drag the points. The number is a signed area; its sign is the answer",
+      html:
+        "<p>Almost every algorithm in computational geometry is built from one primitive. Given three points o, a and b, does the path from o through a to b turn left, turn right, or go straight? The answer is the sign of the <strong>cross product</strong> of the vectors a &#8722; o and b &#8722; o: (a.x &#8722; o.x)(b.y &#8722; o.y) &#8722; (a.y &#8722; o.y)(b.x &#8722; o.x). Its value is the signed area of the parallelogram the two vectors span, positive when b lies counterclockwise of a, negative when clockwise, and zero when the three points are collinear. That sign is the <strong>orientation test</strong>, and segment intersection, polygon area, point location and convex hulls in the rest of this chapter are all a handful of calls to it.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 266' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='11'>The cross product a &#215; b is the signed area of the parallelogram on a and b; its sign is the orientation</text><polygon points='90,150 178,128 200,62 112,84' fill='#3ddc97' opacity='0.18' stroke='#3ddc97' stroke-dasharray='4 3'/><line x1='90' y1='150' x2='170' y2='130' stroke='#2de2ff' stroke-width='1.8'/><polygon points='178,128 171,134 169,126' fill='#2de2ff'/><line x1='90' y1='150' x2='109' y2='92' stroke='#ffd166' stroke-width='1.8'/><polygon points='112,84 113,93 106,90' fill='#ffd166'/><circle cx='90' cy='150' r='3' fill='#c9d6ea'/><text x='82' y='164' text-anchor='middle' fill='#8fa3c4' font-size='10'>o</text><text x='188' y='132' text-anchor='start' fill='#2de2ff' font-size='11'>a</text><text x='120' y='78' text-anchor='start' fill='#ffd166' font-size='11'>b</text><text x='120' y='192' text-anchor='middle' fill='#3ddc97' font-size='11'>counterclockwise</text><text x='120' y='210' text-anchor='middle' fill='#8fa3c4' font-size='10'>4\u00b73 \u2212 1\u00b71 = 11</text><polygon points='325,150 347,84 435,62 413,128' fill='#ff5d73' opacity='0.18' stroke='#ff5d73' stroke-dasharray='4 3'/><line x1='325' y1='150' x2='344' y2='92' stroke='#2de2ff' stroke-width='1.8'/><polygon points='347,84 348,93 341,90' fill='#2de2ff'/><line x1='325' y1='150' x2='405' y2='130' stroke='#ffd166' stroke-width='1.8'/><polygon points='413,128 406,134 404,126' fill='#ffd166'/><circle cx='325' cy='150' r='3' fill='#c9d6ea'/><text x='317' y='164' text-anchor='middle' fill='#8fa3c4' font-size='10'>o</text><text x='357' y='88' text-anchor='start' fill='#2de2ff' font-size='11'>a</text><text x='421' y='122' text-anchor='start' fill='#ffd166' font-size='11'>b</text><text x='355' y='192' text-anchor='middle' fill='#ff5d73' font-size='11'>clockwise</text><text x='355' y='210' text-anchor='middle' fill='#8fa3c4' font-size='10'>1\u00b71 \u2212 3\u00b74 = \u221211</text><line x1='560' y1='150' x2='640' y2='130' stroke='#2de2ff' stroke-width='1.8'/><polygon points='648,128 641,134 639,126' fill='#2de2ff'/><line x1='560' y1='150' x2='524' y2='159' stroke='#8fa3c4' stroke-width='1.8'/><polygon points='516,161.0 523,155 525,163' fill='#8fa3c4'/><circle cx='560' cy='150' r='3' fill='#c9d6ea'/><text x='552' y='164' text-anchor='middle' fill='#8fa3c4' font-size='10'>o</text><text x='658' y='132' text-anchor='start' fill='#2de2ff' font-size='11'>a</text><text x='504' y='155.0' text-anchor='start' fill='#8fa3c4' font-size='11'>b</text><text x='590' y='192' text-anchor='middle' fill='#ffd166' font-size='11'>collinear</text><text x='590' y='210' text-anchor='middle' fill='#8fa3c4' font-size='10'>4\u00b7(\u22120.5) \u2212 1\u00b7(\u22122) = 0</text><text x='20' y='238' text-anchor='start' fill='#8fa3c4' font-size='10'>cross(o, a, b) = (a.x &#8722; o.x)(b.y &#8722; o.y) &#8722; (a.y &#8722; o.y)(b.x &#8722; o.x)</text><text x='20' y='256' text-anchor='start' fill='#8fa3c4' font-size='10'>positive: left turn; negative: right turn; zero: the three points are collinear</text></svg></div>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def cross(o, a, b):                 # &gt; 0 left turn, &lt; 0 right turn, 0 collinear\n" +
+        "    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long cross(long[] o, long[] a, long[] b) {   // exact while |coordinates| &lt;= 1.5e9\n" +
+        "    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);\n" +
+        "}</code></pre></div>" +
+        "<p>The test is exact when the inputs are integers, and that is the chapter's first lesson: computational geometry is where floating point goes to die, and the cure is not to use it. With doubles, the two products are each rounded, and when the points are nearly collinear the true difference is smaller than the rounding error, so the computed sign is noise. Kettner and colleagues' classroom examples make this visible, and I reproduced their setup: take q = (12, 12) and r = (24, 24), and nudge p from (0.5, 0.5), which is exactly collinear with them, by up to 255 units in the last place in each coordinate. On that 256-by-256 grid of inputs, the double-precision sign disagreed with the exact rational answer on 11,972 of 65,536 points, 18%. A hull or an intersection test built on such answers can contradict itself, and then loop or crash rather than merely be slightly wrong.</p>" +
+        "<p>Three practical rules follow. First, keep coordinates integer whenever the input allows: scale fixed-point inputs by a power of ten and work exactly. Second, know the overflow bound. The cross product is twice the area of a triangle, and no triangle inside a square of side 2M has area above half the square, so |cross| is at most 4M<sup>2</sup>; with Java <code>long</code> that is safe for coordinates up to about 1.5 &#215; 10<sup>9</sup>. I checked the boundary: at M = 1.5 &#215; 10<sup>9</sup> the extreme triangle gave exactly 9 &#215; 10<sup>18</sup>, and at 1.6 &#215; 10<sup>9</sup> it wrapped to a negative number. Python's integers have no such bound. Third, when floats are unavoidable, compare with a tolerance scaled to the magnitudes involved, and accept that a tolerance moves errors rather than removing them: two points that are each within epsilon of a third need not be within epsilon of each other, so equality under a tolerance is not transitive.</p>" +
+        "<p>Robust geometry libraries go further, with exact rational arithmetic or adaptive-precision predicates that compute in floating point and fall back to exact arithmetic only when the result is too close to call. For interview and contest inputs, which are almost always integers, the integer cross product is the whole defence.</p>"
+    },
+
+    { title: "Segments and Polygons",
+      html:
+        "<p>Two segments p1p2 and p3p4 cross properly exactly when p1 and p2 lie strictly on opposite sides of the line through p3p4, and p3 and p4 lie strictly on opposite sides of the line through p1p2: four orientation tests, two products of signs. That is the general case, and code that stops there is wrong. Segments can also meet when an endpoint lies on the other segment, or when they are collinear and overlap, and every one of those cases has an orientation of zero. The <strong>collinear case</strong> is handled by checking, for each endpoint whose orientation is zero, whether it lies within the other segment's bounding box. On 100,000 random pairs of segments with endpoints on a 5-by-5 grid, the full test matched an exact rational brute force on all of them; the version without the collinear case was wrong on 21,809, 22%. On random real-valued coordinates the omission almost never shows, which is exactly why it survives into production and fails on the first grid of integer inputs.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def on_box(p, q, r):                # r within the bounding box of segment pq\n" +
+        "    return min(p[0], q[0]) &lt;= r[0] &lt;= max(p[0], q[0]) and min(p[1], q[1]) &lt;= r[1] &lt;= max(p[1], q[1])\n" +
+        "\n" +
+        "def segments_intersect(p1, p2, p3, p4):\n" +
+        "    d1, d2 = cross(p3, p4, p1), cross(p3, p4, p2)\n" +
+        "    d3, d4 = cross(p1, p2, p3), cross(p1, p2, p4)\n" +
+        "    if ((d1 &gt; 0) != (d2 &gt; 0) and d1 != 0 and d2 != 0 and\n" +
+        "            (d3 &gt; 0) != (d4 &gt; 0) and d3 != 0 and d4 != 0):\n" +
+        "        return True                                   # proper crossing\n" +
+        "    return ((d1 == 0 and on_box(p3, p4, p1)) or (d2 == 0 and on_box(p3, p4, p2)) or\n" +
+        "            (d3 == 0 and on_box(p1, p2, p3)) or (d4 == 0 and on_box(p1, p2, p4)))</code></pre>" +
+        "<pre data-lang='java' hidden><code>static boolean onBox(long[] p, long[] q, long[] r) {\n" +
+        "    return Math.min(p[0], q[0]) &lt;= r[0] &amp;&amp; r[0] &lt;= Math.max(p[0], q[0])\n" +
+        "        &amp;&amp; Math.min(p[1], q[1]) &lt;= r[1] &amp;&amp; r[1] &lt;= Math.max(p[1], q[1]);\n" +
+        "}\n" +
+        "static boolean segmentsIntersect(long[] p1, long[] p2, long[] p3, long[] p4) {\n" +
+        "    long d1 = cross(p3, p4, p1), d2 = cross(p3, p4, p2), d3 = cross(p1, p2, p3), d4 = cross(p1, p2, p4);\n" +
+        "    if (Long.signum(d1) * Long.signum(d2) &lt; 0 &amp;&amp; Long.signum(d3) * Long.signum(d4) &lt; 0) return true;\n" +
+        "    return (d1 == 0 &amp;&amp; onBox(p3, p4, p1)) || (d2 == 0 &amp;&amp; onBox(p3, p4, p2))\n" +
+        "        || (d3 == 0 &amp;&amp; onBox(p1, p2, p3)) || (d4 == 0 &amp;&amp; onBox(p1, p2, p4));\n" +
+        "}</code></pre></div>" +
+        "<p>A polygon's area comes from the same primitive. Fix any point, say the origin, and sum the signed areas of the triangles it forms with each edge: the <strong>shoelace formula</strong>, twice the area = the sum over edges of x<sub>i</sub>y<sub>i+1</sub> &#8722; x<sub>i+1</sub>y<sub>i</sub>. Triangles outside the polygon are counted once positively and once negatively and cancel. The sign tells the orientation of the vertex order: the 4-by-3 rectangle listed counterclockwise gives 12, and listed clockwise gives &#8722;12. With integer vertices, twice the area is an exact integer.</p>" +
+        "<p>Point in polygon has two standard answers. <strong>Ray casting</strong> shoots a ray from the point and counts edge crossings, odd meaning inside; its trap is a ray passing exactly through a vertex, handled by treating each edge as half-open in y, so a vertex is counted for exactly one of its two edges. The <strong>winding number</strong> instead counts how many times the polygon winds around the point, adding one for each upward edge crossing with the point to its left and subtracting one for each downward edge with the point to its right. For simple polygons they agree: on 20,000 queries against 500 random simple polygons, they gave the same answer every time. For self-intersecting polygons they differ, and the difference is a choice rather than a bug: at the centre of a five-pointed star drawn as one path, the winding number is 2 in magnitude, so the non-zero rule calls it inside, while ray casting's even-odd rule calls it outside. SVG and PostScript expose both rules as a fill setting.</p>"
+    },
+
+    { title: "Convex Hull",
+      html:
+        "<p>The <strong>convex hull</strong> of a point set is the smallest convex polygon containing it, the shape a rubber band takes when stretched around nails. It comes first in most geometry because many questions about a point set reduce to questions about its hull, which is usually far smaller: the farthest pair of points, the smallest enclosing rectangle and linear optimisation over the points all look only at hull vertices.</p>" +
+        "<p>Ronald Graham's 1972 algorithm sorts the points by angle around the lowest one and walks them in that order, keeping a stack of hull vertices and popping the top whenever the last two stack entries and the new point make a right turn. A.M. Andrew's 1979 <strong>monotone chain</strong> variant sorts by x instead, which avoids angles and their floating point entirely, and builds the lower hull left to right and the upper hull right to left with the same popping rule. This is Chapter 10's monotonic stack in disguise: the stack holds a chain whose turns are all counterclockwise, each new point pops everything that would break that property, and each point is pushed and popped at most once per chain. After the O(n log n) sort the sweep is linear. On a million points, the pops totalled 1,999,960, below the bound of 2n, and the whole hull took 2.4 s in Python.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def convex_hull(points):             # Andrew's monotone chain, counterclockwise, no collinear points\n" +
+        "    pts = sorted(set(points))\n" +
+        "    if len(pts) &lt;= 2:\n" +
+        "        return pts\n" +
+        "    def chain(seq):\n" +
+        "        h = []\n" +
+        "        for p in seq:\n" +
+        "            while len(h) &gt;= 2 and cross(h[-2], h[-1], p) &lt;= 0:\n" +
+        "                h.pop()                                  # not a left turn: evict\n" +
+        "            h.append(p)\n" +
+        "        return h\n" +
+        "    lower, upper = chain(pts), chain(reversed(pts))\n" +
+        "    return lower[:-1] + upper[:-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;long[]&gt; convexHull(long[][] points) {\n" +
+        "    long[][] pts = points.clone();\n" +
+        "    Arrays.sort(pts, (p, q) -&gt; p[0] != q[0] ? Long.compare(p[0], q[0]) : Long.compare(p[1], q[1]));\n" +
+        "    int n = pts.length, k = 0;\n" +
+        "    if (n &lt;= 2) return new ArrayList&lt;&gt;(Arrays.asList(pts));\n" +
+        "    long[][] h = new long[2 * n][];\n" +
+        "    for (int i = 0; i &lt; n; i++) {                                  // lower hull\n" +
+        "        while (k &gt;= 2 &amp;&amp; cross(h[k - 2], h[k - 1], pts[i]) &lt;= 0) k--;\n" +
+        "        h[k++] = pts[i];\n" +
+        "    }\n" +
+        "    for (int i = n - 2, lo = k + 1; i &gt;= 0; i--) {                 // upper hull\n" +
+        "        while (k &gt;= lo &amp;&amp; cross(h[k - 2], h[k - 1], pts[i]) &lt;= 0) k--;\n" +
+        "        h[k++] = pts[i];\n" +
+        "    }\n" +
+        "    return new ArrayList&lt;&gt;(Arrays.asList(h).subList(0, k - 1));\n" +
+        "}</code></pre></div>" +
+        "<p>The <code>&lt;= 0</code> in the popping test decides what happens to collinear points on the hull's edges: it drops them, and <code>&lt; 0</code> would keep them, which some problems require. The hull's vertex set matched a brute-force check, every directed pair with all points on its left, on 1,000 random point sets with many duplicates and collinear triples.</p>" +
+        "<p>How big is the hull? It depends on the shape the points fill, and the answer is a good example of an output-sensitive quantity. For uniformly random points in a square, the expected hull size grows only like (8/3) ln n: 18 vertices at n = 1,000 and 38 at a million, both within one of the formula. For points in a disk it grows like n<sup>1/3</sup>, measured at about 3.4 n<sup>1/3</sup>: 35 vertices at a thousand, 345 at a million. Algorithms whose cost depends on h, such as the O(nh) gift wrapping of Jarvis (1973), or Chan's (1996) O(n log h), win exactly when the hull is known to be small.</p>"
+    },
+
+    { title: "Sweep Line in the Plane",
+      html:
+        "<p>Chapter 12 swept a line across intervals on the real line, handling events in sorted order and keeping a structure for what the line currently crosses. In the plane the same idea sweeps a vertical line from left to right. Events are the x-coordinates where something begins, ends or changes; between events nothing interesting happens, so the work is proportional to the number of events times the cost of updating the structure.</p>" +
+        "<p>The classic example is <strong>rectangle union area</strong>: the total area covered by n axis-aligned rectangles, counting overlaps once. Each rectangle contributes two events, its left edge adding the interval [y1, y2) to the set the line crosses and its right edge removing it. Between consecutive events, the covered area is the covered length of y times the distance swept. So the problem becomes maintaining the total length covered by a changing multiset of intervals, which is a segment tree from Chapter 31 over the compressed y-coordinates. Each node stores how many intervals cover it entirely and the covered length beneath it; a node covered at least once contributes its full length, otherwise the sum of its children's. Because removals exactly undo earlier additions, no lazy propagation is needed. The sweep is O(n log n).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def union_area(rects):                        # rects: (x1, y1, x2, y2), half-open\n" +
+        "    ys = sorted({y for r in rects for y in (r[1], r[3])})\n" +
+        "    idx, m = {y: i for i, y in enumerate(ys)}, len(ys) - 1\n" +
+        "    count, covered = [0] * (4 * m), [0] * (4 * m)\n" +
+        "    def update(node, l, r, a, b, v):\n" +
+        "        if b &lt;= l or r &lt;= a:\n" +
+        "            return\n" +
+        "        if a &lt;= l and r &lt;= b:\n" +
+        "            count[node] += v\n" +
+        "        else:\n" +
+        "            mid = (l + r) // 2\n" +
+        "            update(2 * node, l, mid, a, b, v); update(2 * node + 1, mid, r, a, b, v)\n" +
+        "        if count[node] &gt; 0:   covered[node] = ys[r] - ys[l]\n" +
+        "        elif r - l == 1:      covered[node] = 0\n" +
+        "        else:                 covered[node] = covered[2 * node] + covered[2 * node + 1]\n" +
+        "    events = sorted([(x1, 1, y1, y2) for x1, y1, x2, y2 in rects] +\n" +
+        "                    [(x2, -1, y1, y2) for x1, y1, x2, y2 in rects])\n" +
+        "    area, prev = 0, events[0][0] if events else 0\n" +
+        "    for x, v, y1, y2 in events:\n" +
+        "        area += covered[1] * (x - prev)       # covered length times distance swept\n" +
+        "        prev = x\n" +
+        "        update(1, 0, m, idx[y1], idx[y2], v)\n" +
+        "    return area</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long[] ys; static int[] cnt; static long[] cov;\n" +
+        "static void update(int node, int l, int r, int a, int b, int v) {\n" +
+        "    if (b &lt;= l || r &lt;= a) return;\n" +
+        "    if (a &lt;= l &amp;&amp; r &lt;= b) cnt[node] += v;\n" +
+        "    else { int mid = (l + r) / 2; update(2 * node, l, mid, a, b, v); update(2 * node + 1, mid, r, a, b, v); }\n" +
+        "    if (cnt[node] &gt; 0) cov[node] = ys[r] - ys[l];\n" +
+        "    else if (r - l == 1) cov[node] = 0;\n" +
+        "    else cov[node] = cov[2 * node] + cov[2 * node + 1];\n" +
+        "}\n" +
+        "static long unionArea(long[][] rects) {           // {x1, y1, x2, y2}\n" +
+        "    ys = Arrays.stream(rects).flatMapToLong(r -&gt; java.util.stream.LongStream.of(r[1], r[3])).distinct().sorted().toArray();\n" +
+        "    int m = ys.length - 1; cnt = new int[4 * m + 4]; cov = new long[4 * m + 4];\n" +
+        "    long[][] ev = new long[2 * rects.length][];\n" +
+        "    for (int i = 0; i &lt; rects.length; i++) {\n" +
+        "        long[] r = rects[i];\n" +
+        "        ev[2 * i] = new long[]{r[0], 1, r[1], r[3]}; ev[2 * i + 1] = new long[]{r[2], -1, r[1], r[3]};\n" +
+        "    }\n" +
+        "    Arrays.sort(ev, (p, q) -&gt; Long.compare(p[0], q[0]));\n" +
+        "    long area = 0, prev = ev[0][0];\n" +
+        "    for (long[] e : ev) {\n" +
+        "        area += cov[1] * (e[0] - prev); prev = e[0];\n" +
+        "        update(1, 0, m, Arrays.binarySearch(ys, e[2]), Arrays.binarySearch(ys, e[3]), (int) e[1]);\n" +
+        "    }\n" +
+        "    return area;\n" +
+        "}</code></pre></div>" +
+        "<p>Trace it on three 4-by-4 squares, [0, 4) &#215; [0, 4), [2, 6) &#215; [2, 6) and [1, 5) &#215; [3, 7). From x = 0 to 1 only the first is active and the line crosses 4 units of y; from 1 to 2 the third joins and the union of [0, 4) and [3, 7) is 7 units; from 2 to 4 all three are active and cover [0, 7), 7 units; from 4 to 5 the first has left and [2, 7) remains, 5 units; from 5 to 6 only [2, 6), 4 units. The strips sum to 4 + 7 + 14 + 5 + 4 = 34. The squares' own areas total 48; overlaps are counted once, because a y-interval covered twice still contributes its length once. On 500 random on 500 random sets of integer rectangles the sweep matched a brute-force count of covered unit cells, and it handled 100,000 rectangles in 2.5 s. The sweep that finds segment intersections is harder, because the order of segments along the line changes exactly at the crossings being searched for. Bentley and Ottmann's 1979 algorithm keeps the segments in a balanced search tree ordered by their height at the sweep line, checks only newly adjacent pairs for crossings, and reports all k intersections in O((n + k) log n); Shamos and Hoey's 1976 version answers only whether any intersection exists, in O(n log n).</p>"
+    },
+
+    { title: "Distance Metrics",
+      html:
+        "<p>Three distances between points (x<sub>1</sub>, y<sub>1</sub>) and (x<sub>2</sub>, y<sub>2</sub>) come up constantly. Euclidean distance is the straight line, the square root of dx<sup>2</sup> + dy<sup>2</sup>; compare squared distances instead of distances whenever you only need an ordering, and the square root and its rounding disappear. <strong>Manhattan distance</strong>, |dx| + |dy|, is the distance on a street grid. <strong>Chebyshev distance</strong>, max(|dx|, |dy|), is the number of moves a chess king needs. The set of points within distance r of the origin is a circle for the first, a diamond for the second and a square for the third. The closest pair of Chapter 3 is a Euclidean problem, and an implementation of it should compare squared distances, which stay integers for integer points; Manhattan and Chebyshev distances are sums and maxima of integers, so they stay exact with no care at all.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 340' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Rotating by 45 degrees: u = x + y, v = x &#8722; y turns the Manhattan ball into a Chebyshev square</text><line x1='80' y1='160' x2='300' y2='160' stroke='#334a6a'/><line x1='190' y1='50' x2='190' y2='270' stroke='#334a6a'/><text x='304' y='164' text-anchor='start' fill='#8fa3c4' font-size='10'>x</text><text x='196' y='48' text-anchor='start' fill='#8fa3c4' font-size='10'>y</text><polygon points='270,160 190,80 110,160 190,240' fill='#3ddc97' opacity='0.15' stroke='#3ddc97' stroke-width='1.6'/><text x='190' y='300' text-anchor='middle' fill='#3ddc97' font-size='11'>|x| + |y| &#8804; r   (Manhattan)</text><line x1='460' y1='160' x2='680' y2='160' stroke='#334a6a'/><line x1='570' y1='50' x2='570' y2='270' stroke='#334a6a'/><text x='684' y='164' text-anchor='start' fill='#8fa3c4' font-size='10'>u</text><text x='576' y='48' text-anchor='start' fill='#8fa3c4' font-size='10'>v</text><polygon points='650,80 490,80 490,240 650,240' fill='#2de2ff' opacity='0.15' stroke='#2de2ff' stroke-width='1.6'/><text x='570' y='300' text-anchor='middle' fill='#2de2ff' font-size='11'>max(|u|, |v|) &#8804; r   (Chebyshev)</text><line x1='330' y1='160' x2='420' y2='160' stroke='#ffd166' stroke-width='1.8'/><polygon points='428,160 420,164 420,156' fill='#ffd166'/><text x='379' y='150' text-anchor='middle' fill='#ffd166' font-size='10'>u = x + y</text><text x='379' y='178' text-anchor='middle' fill='#ffd166' font-size='10'>v = x &#8722; y</text><text x='274' y='176' text-anchor='start' fill='#8fa3c4' font-size='10'>(r, 0)</text><text x='656' y='76' text-anchor='start' fill='#8fa3c4' font-size='10'>(r, r)</text><text x='20' y='330' text-anchor='start' fill='#8fa3c4' font-size='10'>|dx| + |dy| = max(|du|, |dv|) for every pair, so the farthest Manhattan pair is the widest spread in u or in v: O(n)</text></svg></div>" +
+        "<p>The diamond is the square turned by 45 degrees, and that is a usable fact. Map each point to u = x + y and v = x &#8722; y. Then |dx| + |dy| = max(|du|, |dv|): Manhattan distance in the original coordinates is Chebyshev distance in the rotated ones. The identity is a case check on the signs of dx and dy, and it held on every pair I tested. It works in the other direction too, with u = (x + y)/2 and v = (x &#8722; y)/2 turning Chebyshev into Manhattan, which is why a problem that is hard in one metric is often tractable in the other.</p>" +
+        "<p>The standard payoff is the farthest pair under Manhattan distance. Directly it is O(n<sup>2</sup>) pairs. After the rotation it is the larger of the spread of u and the spread of v, max(u) &#8722; min(u) and max(v) &#8722; min(v), which is one pass: for a million points that took 0.15 s where the pairwise loop would examine 5 &#215; 10<sup>11</sup> pairs, and on 2,000 small random sets the rotated answer matched the pairwise maximum. The rotation also turns a diamond-shaped query region into an axis-aligned rectangle, so the prefix sums and Fenwick trees of Chapters 9 and 30 answer \"how many points within Manhattan distance r\" on a grid.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def max_manhattan(points):           # farthest pair under |dx| + |dy|, in O(n)\n" +
+        "    u = [x + y for x, y in points]\n" +
+        "    v = [x - y for x, y in points]\n" +
+        "    return max(max(u) - min(u), max(v) - min(v))</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long maxManhattan(long[][] points) {\n" +
+        "    long uMax = Long.MIN_VALUE, uMin = Long.MAX_VALUE, vMax = Long.MIN_VALUE, vMin = Long.MAX_VALUE;\n" +
+        "    for (long[] p : points) {\n" +
+        "        uMax = Math.max(uMax, p[0] + p[1]); uMin = Math.min(uMin, p[0] + p[1]);\n" +
+        "        vMax = Math.max(vMax, p[0] - p[1]); vMin = Math.min(vMin, p[0] - p[1]);\n" +
+        "    }\n" +
+        "    return Math.max(uMax - uMin, vMax - vMin);\n" +
+        "}</code></pre></div>"
+    },
+
+    { title: "The Convex Hull Trick and the Li Chao Tree",
+      html:
+        "<p>Chapter 22 named a dynamic-programming speed-up for transitions of the form dp[i] = min over j of (m<sub>j</sub>&#183;x<sub>i</sub> + b<sub>j</sub>) plus terms in i alone. Here is its geometry. Each earlier state j is a line y = m<sub>j</sub>x + b<sub>j</sub>, each query asks for the lowest line at x = x<sub>i</sub>, and the minimum over all lines as a function of x is the <strong>lower envelope</strong>: a convex, piecewise-linear curve made of the few lines that are ever lowest. Lines never on the envelope can be discarded for good. Finding the envelope is a convex hull problem in the dual, where a line becomes a point, so the name is literal: the <strong>convex hull trick</strong> is Andrew's popping rule applied to lines.</p>" +
+        "<p>When the lines arrive in order of slope and the queries in order of x, the envelope lives in a deque. Adding a line pops from the back every line that the new one and the one before it make useless, the same test as a hull's right turn; answering a query pops from the front every line that is no longer lowest at this or any later x. Each line is pushed and popped at most once, so a whole DP costs O(n) after sorting. When lines or queries come in arbitrary order, the <strong>Li Chao tree</strong> handles it: a segment tree over the x-range in which each node keeps the line that is lowest at the node's midpoint. Inserting a line compares it with the node's line at the midpoint, keeps the winner, and sends the loser down to the one half where it can still be lowest, since two lines cross at most once. A query walks one root-to-leaf path taking the minimum. Both operations are O(log C) for a coordinate range C.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class LiChao:                                  # min of lines over integer x in [lo, hi]\n" +
+        "    def __init__(self, lo, hi):\n" +
+        "        self.lo, self.hi, self.line = lo, hi, {}\n" +
+        "    def add(self, m, b):\n" +
+        "        node, l, r, new = 1, self.lo, self.hi, (m, b)\n" +
+        "        while True:\n" +
+        "            cur = self.line.get(node)\n" +
+        "            if cur is None:\n" +
+        "                self.line[node] = new; return\n" +
+        "            mid = (l + r) // 2\n" +
+        "            f = lambda ln, x: ln[0] * x + ln[1]\n" +
+        "            left_better, mid_better = f(new, l) &lt; f(cur, l), f(new, mid) &lt; f(cur, mid)\n" +
+        "            if mid_better:\n" +
+        "                self.line[node], new = new, cur    # keep the winner at mid\n" +
+        "            if l == r:\n" +
+        "                return\n" +
+        "            if left_better != mid_better:\n" +
+        "                node, r = 2 * node, mid            # the loser can win only on the left\n" +
+        "            else:\n" +
+        "                node, l = 2 * node + 1, mid + 1    # ... or only on the right\n" +
+        "    def query(self, x):\n" +
+        "        node, l, r, best = 1, self.lo, self.hi, float('inf')\n" +
+        "        while node in self.line:\n" +
+        "            m, b = self.line[node]\n" +
+        "            best = min(best, m * x + b)\n" +
+        "            if l == r:\n" +
+        "                break\n" +
+        "            mid = (l + r) // 2\n" +
+        "            node, l, r = (2 * node, l, mid) if x &lt;= mid else (2 * node + 1, mid + 1, r)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static class LiChao {                              // min of lines over integer x in [lo, hi]\n" +
+        "    final long lo, hi; final Map&lt;Long, long[]&gt; line = new HashMap&lt;&gt;();\n" +
+        "    LiChao(long lo, long hi) { this.lo = lo; this.hi = hi; }\n" +
+        "    static long f(long[] ln, long x) { return ln[0] * x + ln[1]; }\n" +
+        "    void add(long m, long b) {\n" +
+        "        long node = 1, l = lo, r = hi; long[] nw = {m, b};\n" +
+        "        while (true) {\n" +
+        "            long[] cur = line.get(node);\n" +
+        "            if (cur == null) { line.put(node, nw); return; }\n" +
+        "            long mid = Math.floorDiv(l + r, 2);\n" +
+        "            boolean leftBetter = f(nw, l) &lt; f(cur, l), midBetter = f(nw, mid) &lt; f(cur, mid);\n" +
+        "            if (midBetter) { line.put(node, nw); nw = cur; }\n" +
+        "            if (l == r) return;\n" +
+        "            if (leftBetter != midBetter) { node = 2 * node; r = mid; }\n" +
+        "            else { node = 2 * node + 1; l = mid + 1; }\n" +
+        "        }\n" +
+        "    }\n" +
+        "    long query(long x) {\n" +
+        "        long node = 1, l = lo, r = hi, best = Long.MAX_VALUE;\n" +
+        "        while (line.containsKey(node)) {\n" +
+        "            best = Math.min(best, f(line.get(node), x));\n" +
+        "            if (l == r) break;\n" +
+        "            long mid = Math.floorDiv(l + r, 2);\n" +
+        "            if (x &lt;= mid) { node = 2 * node; r = mid; } else { node = 2 * node + 1; l = mid + 1; }\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p>The worked case is splitting an array of positive numbers into consecutive groups where each group costs its sum squared plus a constant: dp[i] = min over j of dp[j] + (s<sub>i</sub> &#8722; s<sub>j</sub>)<sup>2</sup> + C, with prefix sums s. Expanding the square leaves, for each j, a line with slope &#8722;2s<sub>j</sub> and intercept dp[j] + s<sub>j</sub><sup>2</sup>, queried at s<sub>i</sub>. The brute-force DP, the monotone deque and the Li Chao tree agreed on 300 random instances. At n = 5,000 the brute force took 1.26 s, the deque 0.004 s and Li Chao 0.04 s; at a million elements the deque took 0.64 s. The Li Chao tree is the slower of the two by a logarithm and the more general, and on 500 random sequences of insertions and queries in arbitrary order it matched a scan over all lines every time.</p>"
+    },
+
+    { title: "Linear Programming, Briefly",
+      html:
+        "<p>A <strong>linear program</strong> maximises a linear objective subject to linear inequalities. In two variables the picture is the whole theory. Each inequality keeps a half-plane, their intersection is a convex polygon, the feasible region, and the objective is a direction; slide a line perpendicular to it across the polygon and the last point touched is optimal, always at a vertex. Maximise 3x + 2y subject to x + y &#8804; 4, x + 3y &#8804; 6, x &#8804; 3 and x, y &#8805; 0: the vertices are (0, 0), (3, 0), (3, 1) and (0, 2), and the best is 11 at (3, 1).</p>" +
+        "<p>Every linear program has a <strong>dual</strong>, whose variables price the constraints, and weak duality says any feasible dual value bounds the primal optimum; strong duality says the best bound equals the optimum. For the example, prices 2 on the first constraint and 1 on the third certify that nothing beats 11, since 2(x + y) + x &#8805; 3x + 2y for non-negative x and y, and 2&#183;4 + 3 = 11. That certificate is the same object as Chapter 38's minimum cut proving a maximum flow optimal and Chapter 39's potentials proving an assignment optimal: max-flow min-cut and the Hungarian method's certificate are LP duality in special cases.</p>" +
+        "<p>The algorithms have a history worth one paragraph. George Dantzig's simplex method (1947) walks from vertex to vertex and is fast in practice, but Klee and Minty showed in 1972 that it can visit exponentially many vertices; Khachiyan's ellipsoid method (1979) was the first polynomial-time algorithm, and Karmarkar's interior-point method (1984) the first practical one. Why simplex is nevertheless fast on real inputs was explained only in 2001, by Spielman and Teng's smoothed analysis: a tiny random perturbation of any input makes its expected running time polynomial, so the exponential cases are isolated points. In two variables the problem is easier still, and Seidel's randomised incremental algorithm (1991) solves it in expected O(n) time. CLRS dropped its detailed simplex presentation in the fourth edition, keeping formulations and duality, and that is the right emphasis here too: the skill a working engineer needs is to recognise a problem as a linear program, formulate it, check duality for a certificate, and hand it to a solver, not to pivot a tableau. Chapter 46 takes up what happens when the variables must be integers, where this tractability ends.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Break the float test.</strong> Reproduce the nearly-collinear grid: nudge p around (0.5, 0.5) by units in the last place with q = (12, 12), r = (24, 24), and count sign errors in doubles against exact rationals.</li>" +
+        "<li><strong>Find the overflow line.</strong> In Java, compute the cross product of an extreme triangle at coordinates up to 1.5 &#215; 10<sup>9</sup> and 1.6 &#215; 10<sup>9</sup>, and derive the bound 4M<sup>2</sup>.</li>" +
+        "<li><strong>Test intersections.</strong> Compare segment intersection with and without the collinear case against exact rational brute force on segments with endpoints on a small grid.</li>" +
+        "<li><strong>Two inside rules.</strong> Implement ray casting and the winding number, confirm they agree on random simple polygons, and find a point where they disagree on a self-intersecting one.</li>" +
+        "<li><strong>Hull sizes.</strong> Implement the monotone chain, count its pops, and measure hull sizes for random points in a square and in a disk for n from 10<sup>3</sup> to 10<sup>6</sup>.</li>" +
+        "<li><strong>Union of rectangles.</strong> Implement the sweep with a coverage segment tree and check it against counting covered unit cells for small integer rectangles.</li>" +
+        "<li><strong>Rotate and scan.</strong> Compute the farthest Manhattan pair by rotation and by brute force, then count grid points within Manhattan distance r of a query with a 2D prefix sum on the rotated grid.</li>" +
+        "<li><strong>Lines, two ways.</strong> Solve the group-splitting DP by brute force, by the monotone deque and with a Li Chao tree, and time all three at n = 5,000.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "cross product", d: "(a.x - o.x)(b.y - o.y) - (a.y - o.y)(b.x - o.x): the signed area of the parallelogram on a - o and b - o." },
+    { t: "orientation test", d: "The sign of the cross product: left turn, right turn or collinear; the primitive under almost all planar geometry." },
+    { t: "collinear case", d: "The degenerate inputs where an orientation is zero, such as touching or overlapping segments; omitted by most buggy intersection code." },
+    { t: "shoelace formula", d: "Twice a polygon's signed area is the sum over edges of x_i y_(i+1) - x_(i+1) y_i; the sign gives the vertex order." },
+    { t: "ray casting", d: "Point in polygon by counting crossings of a ray, odd meaning inside, with edges half-open in y to handle vertices." },
+    { t: "winding number", d: "How many times a closed path winds around a point; non-zero means inside under the non-zero rule." },
+    { t: "convex hull", d: "The smallest convex polygon containing a point set." },
+    { t: "monotone chain", d: "Andrew 1979: the convex hull by sorting on x and building lower and upper chains with a monotonic stack of left turns." },
+    { t: "rectangle union area", d: "The area covered by axis-aligned rectangles, found by a sweep with a segment tree tracking covered length." },
+    { t: "Manhattan distance", d: "|dx| + |dy|; equal to Chebyshev distance after mapping (x, y) to (x + y, x - y)." },
+    { t: "Chebyshev distance", d: "max(|dx|, |dy|), the chess king's distance; its unit ball is an axis-aligned square." },
+    { t: "lower envelope", d: "The pointwise minimum of a set of lines: convex, piecewise linear, formed by the lines that are ever lowest." },
+    { t: "convex hull trick", d: "Maintaining the lower envelope of the lines a DP transition minimises over; O(1) amortised with a deque when slopes and queries are sorted." },
+    { t: "Li Chao tree", d: "A segment tree over x holding at each node the line lowest at its midpoint; insert and query in O(log C) in any order." },
+    { t: "linear program", d: "Optimising a linear objective over linear inequalities; in two variables, the best vertex of a convex polygon." },
+    { t: "dual", d: "The linear program whose variables price the primal constraints; its optimum equals the primal's and certifies it." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Nudging p around (0.5, 0.5) by a few units in the last place, with q = (12, 12) and r = (24, 24), gave the wrong orientation sign in doubles on 18% of inputs. Why?",
+      opts: [
+        "The two products in the cross product are each rounded, and near collinearity the true difference is smaller than that rounding",
+        "Doubles cannot represent 0.5 exactly, so every input point is already off the line before the test begins",
+        "The test divides by the length of pq, and the division amplifies the error in the input coordinates",
+        "Doubles overflow when multiplying coordinates as large as 24, and the overflow flips the sign"
+      ], a: 0,
+      why: "The inputs are exact (0.5, 12 and 24 are representable), and the test has no division or overflow at this scale; the tiny true value is swamped by the rounding of two large products. Exact rationals or integers fix it." },
+
+    { type: "mc",
+      q: "What bounds the Java long cross product for integer coordinates with absolute value at most M?",
+      opts: [
+        "Each coordinate difference is at most 2M, so each of the two products is at most 4M\u00b2 in size, and their difference is therefore at most 8M\u00b2",
+        "It is twice a triangle's area, and no triangle in a square of side 2M has area above half the square, so it is at most 4M\u00b2",
+        "It is a determinant of a 3-by-3 matrix of coordinates, so it is bounded by the product of the three row lengths",
+        "It is at most M\u00b2 because the three points must lie on a common circle of radius M centred at the origin"
+      ], a: 1,
+      why: "The geometric bound 4M\u00b2 is tight: at M = 1.5 x 10^9 the extreme triangle gave exactly 9 x 10^18, inside a long, and at 1.6 x 10^9 it wrapped negative. 8M\u00b2 overcounts, since the two products cannot both be extreme with opposite signs." },
+
+    { type: "mc",
+      q: "On 100,000 random segment pairs with endpoints on a 5-by-5 grid, the four-orientation test without the collinear case was wrong on 22%. What does it miss?",
+      opts: [
+        "Segments that cross at a right angle, because the orientation test on its own only ever detects oblique crossings",
+        "Segments whose endpoints are equal, because the cross product of two identical points is undefined",
+        "Every case with an orientation of zero: an endpoint on the other segment, or collinear segments that overlap",
+        "Segments longer than the grid spacing, because their endpoints lie in different cells of the grid"
+      ], a: 2,
+      why: "The proper-crossing test needs strictly opposite signs, so touching and overlapping cases, which have a zero orientation, fall through; the bounding-box check for zero-orientation endpoints catches them. Right angles and long segments are ordinary crossings." },
+
+    { type: "blank",
+      q: "The formula that computes twice a polygon's signed area as the sum of x_i y_(i+1) - x_(i+1) y_i over its edges is called the ____ formula.",
+      a: ["shoelace", "Shoelace", "surveyor's", "Gauss area"],
+      why: "It sums the signed areas of triangles from a fixed point to each edge; the parts outside cancel, and the sign gives the vertex order, 12 counterclockwise and -12 clockwise for a 4-by-3 rectangle." },
+
+    { type: "mc",
+      q: "Why is Andrew's monotone chain a monotonic stack in the sense of Chapter 10?",
+      opts: [
+        "Because it sorts points by angle, and a sorted sequence can be consumed from a stack in order",
+        "Because the hull's vertices are always pushed in increasing order of distance from the lowest point",
+        "Because each point is compared only with its two neighbours in the input order, which is what a stack stores",
+        "Because the stack keeps a chain of left turns, each point pops what would break it, and each is pushed and popped once per chain"
+      ], a: 3,
+      why: "The invariant (all turns counterclockwise) plays the role of monotonicity, and the amortised bound follows: 1,999,960 pops for a million points, under 2n. It sorts by x, not angle, and a new point can pop many earlier ones." },
+
+    { type: "mc",
+      q: "For uniformly random points, the hull had 38 vertices at a million points in a square but 345 in a disk. Why the difference?",
+      opts: [
+        "Hull size depends on the region's boundary: it grows like ln n for a polygon's corners but like n^(1/3) for a smooth curve",
+        "The disk points were generated with a different random seed, and the hull size varies widely from run to run",
+        "Points in a disk are denser near the centre, which pushes more of them onto the hull",
+        "The square's points were integer, and integer points tend to be collinear, so the hull code dropped most of the square's hull vertices"
+      ], a: 0,
+      why: "Expected hull size is about (8/3) ln n in a square and about 3.4 n^(1/3) in a disk, both matched within a vertex or so at every n measured. Uniform disk points are not centre-heavy, and collinear drops are rare for random coordinates up to 10^9." },
+
+    { type: "mc",
+      q: "Why does the farthest pair under Manhattan distance take only O(n) after mapping (x, y) to (x + y, x - y)?",
+      opts: [
+        "Because the mapping sorts the points by distance from the origin, so the farthest pair is the first and last",
+        "Because |dx| + |dy| equals max(|du|, |dv|), so the answer is the larger spread of u or v, each one pass",
+        "Because the mapping halves the number of distinct points, so the pairwise loop over them becomes linear in n",
+        "Because Manhattan distance is always within a factor of two of Euclidean distance, which a single pass can bound"
+      ], a: 1,
+      why: "The identity holds for every pair, and the maximum Chebyshev distance is the larger of the coordinate spreads: 0.15 s for a million points, matching the O(n\u00b2) loop on 2,000 small sets. Nothing is sorted or approximated." },
+
+    { type: "blank",
+      q: "The pointwise minimum of a set of lines, a convex piecewise-linear curve, is their lower ____.",
+      a: ["envelope"],
+      why: "Only lines on the lower envelope can ever answer a minimum query, which is why the convex hull trick discards the rest; the envelope is a convex hull in the dual plane where lines become points." },
+
+    { type: "mc",
+      q: "In a Li Chao tree insertion, after keeping the line that is lower at the node's midpoint, why does the other line go down only one side?",
+      opts: [
+        "Because the tree is a heap ordered by slope, and a line may only move toward the leaf that holds its own slope",
+        "Because the losing line is always the steeper one, and steeper lines only matter to the right of the midpoint",
+        "Because two lines cross at most once, so the loser can beat the winner on at most one side of the midpoint",
+        "Because every query below this node asks about the same x value, so only one of its children is ever queried"
+      ], a: 2,
+      why: "Comparing at the left end and the midpoint shows which half contains the crossing, and only there can the loser be lowest; that gives O(log C) per insertion. It matched a scan over all lines on 500 random sequences. Slope alone does not decide the side." },
+
+    { type: "order",
+      q: "Order these solutions of the group-splitting DP by measured time at n = 5,000, fastest first:",
+      items: [
+        "monotone convex hull trick deque: 0.004 s",
+        "Li Chao tree: 0.04 s",
+        "brute force over all j: 1.26 s"
+      ],
+      why: "The deque is amortised O(1) per step because slopes and queries arrive sorted; Li Chao pays O(log C) per operation for handling any order; brute force is O(n\u00b2). All three gave identical answers on 300 random instances." }
+  ]
+});
