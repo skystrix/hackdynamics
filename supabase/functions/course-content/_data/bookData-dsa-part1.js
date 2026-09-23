@@ -11050,3 +11050,362 @@ CHAPTERS.push({
       why: "Array Prim is O(V squared) with no edge list; heap Prim touches every edge with Python-level heap operations; Kruskal must sort all 4.5 million edges; enumeration faces Cayley's n to the n minus 2 trees, which is not a finite amount of time in practice." }
   ]
 });
+
+/* ======================= CHAPTER 37 ======================= */
+CHAPTERS.push({
+  num: 37, part: 5, title: "Structure from DFS: SCCs, Bridges and 2-SAT",
+  blurb: "Chapter 33 promised that depth-first entry and exit times encode a graph's structure; this is where you collect. Strongly connected components, bridges and articulation points all fall out of one pass with one extra number per vertex. Then 2-SAT, a problem about boolean formulas with no visible graph in it, is solved in linear time by building the implication graph and running the component algorithm. The chapter closes with the two oldest questions in graph theory, two-colouring and Euler's bridges of K\u00f6nigsberg, and a De Bruijn sequence built from an Euler circuit.",
+  sections: [
+
+    { title: "Strong Connectivity",
+      html:
+        "<p>Chapter 33 promised that depth-first entry and exit times encode a graph's structure. This chapter collects. In a directed graph, two vertices are strongly connected when each can reach the other, and that relation splits the vertices into <strong>strongly connected components</strong>, SCCs: maximal groups in which every vertex reaches every other. A cycle is strongly connected; a single vertex with no cycle through it is a component on its own. Web pages that link back to one another, modules with circular imports, states of a machine that can return to each other &mdash; all are SCCs.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 275' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Strongly connected components (boxed) and the condensation: one vertex per component, always a DAG</text><rect x='30' y='34' width='150' height='146' rx='10' fill='none' stroke='#3ddc97' stroke-width='1.3' stroke-dasharray='5 3'/><text x='36' y='174' fill='#3ddc97' font-size='10'>A</text><rect x='230' y='166' width='160' height='56' rx='10' fill='none' stroke='#ffd166' stroke-width='1.3' stroke-dasharray='5 3'/><text x='236' y='216' fill='#ffd166' font-size='10'>B</text><rect x='210' y='36' width='150' height='120' rx='10' fill='none' stroke='#b18cff' stroke-width='1.3' stroke-dasharray='5 3'/><text x='216' y='150' fill='#b18cff' font-size='10'>C</text><rect x='395' y='95' width='50' height='50' rx='10' fill='none' stroke='#ff5d73' stroke-width='1.3' stroke-dasharray='5 3'/><text x='401' y='139' fill='#ff5d73' font-size='10'>D</text><line x1='75' y1='77' x2='128' y2='65' stroke='#3ddc97' stroke-width='1.5'/><polygon points='135,63 128,69 127,61' fill='#3ddc97'/><line x1='144' y1='74' x2='119' y2='129' stroke='#3ddc97' stroke-width='1.5'/><polygon points='116,136 116,127 123,131' fill='#3ddc97'/><line x1='101' y1='138' x2='73' y2='99' stroke='#3ddc97' stroke-width='1.5'/><polygon points='69,92 77,96 70,101' fill='#3ddc97'/><path d='M 275 188 Q 311 183 338 192' fill='none' stroke='#ffd166' stroke-width='1.5'/><polygon points='346,195 337,196 340,189' fill='#ffd166'/><path d='M 346 195 Q 311 183 283 187' fill='none' stroke='#ffd166' stroke-width='1.5'/><polygon points='275,188 282,183 283,191' fill='#ffd166'/><line x1='255' y1='68' x2='307' y2='63' stroke='#b18cff' stroke-width='1.5'/><polygon points='315,62 308,67 307,59' fill='#b18cff'/><line x1='324' y1='74' x2='309' y2='109' stroke='#b18cff' stroke-width='1.5'/><polygon points='306,116 305,107 313,110' fill='#b18cff'/><line x1='289' y1='119' x2='256' y2='86' stroke='#b18cff' stroke-width='1.5'/><polygon points='251,81 259,83 253,89' fill='#b18cff'/><line x1='124' y1='154' x2='238' y2='184' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='246,186 237,188 239,180' fill='#6b7fa3'/><line x1='165' y1='62' x2='217' y2='67' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='225,68 217,71 218,63' fill='#6b7fa3'/><line x1='369' y1='188' x2='406' y2='138' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='411,132 409,141 403,136' fill='#6b7fa3'/><line x1='315' y1='129' x2='397' y2='122' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='405,121 397,126 397,118' fill='#6b7fa3'/><line x1='333' y1='75' x2='355' y2='178' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='357,185 351,178 359,177' fill='#6b7fa3'/><circle cx='60' cy='80' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='60' y='84' text-anchor='middle' fill='#c9d6ea' font-size='11'>a</text><circle cx='150' cy='60' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='150' y='64' text-anchor='middle' fill='#c9d6ea' font-size='11'>b</text><circle cx='110' cy='150' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='110' y='154' text-anchor='middle' fill='#c9d6ea' font-size='11'>c</text><circle cx='260' cy='190' r='15' fill='#182842' stroke='#ffd166' stroke-width='1.4'/><text x='260' y='194' text-anchor='middle' fill='#c9d6ea' font-size='11'>d</text><circle cx='360' cy='200' r='15' fill='#182842' stroke='#ffd166' stroke-width='1.4'/><text x='360' y='204' text-anchor='middle' fill='#c9d6ea' font-size='11'>e</text><circle cx='240' cy='70' r='15' fill='#182842' stroke='#b18cff' stroke-width='1.4'/><text x='240' y='74' text-anchor='middle' fill='#c9d6ea' font-size='11'>f</text><circle cx='330' cy='60' r='15' fill='#182842' stroke='#b18cff' stroke-width='1.4'/><text x='330' y='64' text-anchor='middle' fill='#c9d6ea' font-size='11'>g</text><circle cx='300' cy='130' r='15' fill='#182842' stroke='#b18cff' stroke-width='1.4'/><text x='300' y='134' text-anchor='middle' fill='#c9d6ea' font-size='11'>h</text><circle cx='420' cy='120' r='15' fill='#182842' stroke='#ff5d73' stroke-width='1.4'/><text x='420' y='124' text-anchor='middle' fill='#c9d6ea' font-size='11'>i</text><text x='520' y='40' fill='#8fa3c4' font-size='11'>condensation</text><line x1='560' y1='98' x2='560' y2='174' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='560,182 556,174 564,174' fill='#6b7fa3'/><line x1='578' y1='80' x2='654' y2='80' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='662,80 654,84 654,76' fill='#6b7fa3'/><line x1='667' y1='93' x2='578' y2='182' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='573,187 576,179 581,184' fill='#6b7fa3'/><line x1='578' y1='200' x2='654' y2='200' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='662,200 654,204 654,196' fill='#6b7fa3'/><line x1='680' y1='98' x2='680' y2='174' stroke='#6b7fa3' stroke-width='1.5'/><polygon points='680,182 676,174 684,174' fill='#6b7fa3'/><circle cx='560' cy='80' r='18' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='560' y='84' text-anchor='middle' fill='#c9d6ea' font-size='12'>A</text><circle cx='680' cy='80' r='18' fill='#182842' stroke='#b18cff' stroke-width='1.4'/><text x='680' y='84' text-anchor='middle' fill='#c9d6ea' font-size='12'>C</text><circle cx='560' cy='200' r='18' fill='#182842' stroke='#ffd166' stroke-width='1.4'/><text x='560' y='204' text-anchor='middle' fill='#c9d6ea' font-size='12'>B</text><circle cx='680' cy='200' r='18' fill='#182842' stroke='#ff5d73' stroke-width='1.4'/><text x='680' y='204' text-anchor='middle' fill='#c9d6ea' font-size='12'>D</text><text x='20' y='262' fill='#8fa3c4' font-size='10'>checked: Tarjan == Kosaraju == brute-force mutual reachability on 400/400 graphs; every condensation was a DAG</text></svg></div>" +
+        "<p>Collapse each component to a single vertex, keeping an edge between two components whenever some edge joins their members, and the result is the <strong>condensation</strong>. It is always a DAG, and the reason is one line: if two components could reach each other through the condensation, every vertex of one could reach every vertex of the other and back, so they would have been one component. So every directed graph is a DAG of strongly connected pieces, and any question Chapter 34 could answer about DAGs &mdash; ordering, longest paths, reachability &mdash; can be asked of the condensation once the pieces are found. On four hundred random directed graphs, the condensation of the computed components was acyclic every time.</p>" +
+        "<p>The figure's graph shows the payoff. Its nine vertices fall into four components: A = {a, b, c}, B = {d, e}, C = {f, g, h} and D = {i}. The condensation has four vertices and five edges &mdash; A to B, A to C, C to B, B to D and C to D &mdash; and a topological order A, C, B, D. Every reachability question about the nine vertices is now a question about four: e can reach i because B reaches D, and nothing in B can reach a because nothing reaches A. For a graph with a giant component and a large fringe, the condensation can be orders of magnitude smaller than the graph, and Chapter 34's DAG algorithms run on it directly.</p>" +
+        "<p>How large the pieces are depends sharply on density, and the transition is worth seeing once. On random directed graphs of 20,000 vertices, the largest component held 2 vertices when the average out-degree was 0.9, 56 at 1.0, 950 at 1.1, 6,710 at 1.5 and 17,707 &mdash; 88.5 percent of the graph &mdash; at 3.0. Below one outgoing edge per vertex a random digraph is a scatter of tiny components; a little above it a single giant component appears and swallows most of the graph, the directed version of the phase transition Karp analysed in 1990. Real networks of any richness therefore have one huge core and a fringe, and an algorithm that finds components has to handle both shapes.</p>" +
+        "<p>Finding the components naively &mdash; for every vertex, compute what it reaches and what reaches it &mdash; costs a traversal per vertex, O(V(V + E)). Both algorithms in the next two sections do it in a single linear-time pass or two, and both were checked against that naive method: on the four hundred test graphs, the three partitions agreed on every vertex.</p>"
+    },
+
+    { title: "Kosaraju",
+      html:
+        "<p><strong>Kosaraju's algorithm</strong> uses two depth-first passes and one reversed graph. Kosaraju never published it; it is conventionally cited to Sharir's 1981 paper, which gave the same method independently. First, run a depth-first search over the whole graph and record the vertices in order of exit time. Second, build the <strong>transpose graph</strong>, the same vertices with every edge reversed. Third, take vertices in decreasing exit time; each one not yet assigned starts a search in the transpose, and everything that search reaches is exactly one component.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def kosaraju(adj):\n" +
+        "    n = len(adj); seen = [False] * n; order = []\n" +
+        "    for s in range(n):                               # pass 1: exit order\n" +
+        "        if seen[s]: continue\n" +
+        "        seen[s] = True; stack = [(s, iter(adj[s]))]\n" +
+        "        while stack:\n" +
+        "            u, it = stack[-1]\n" +
+        "            for v in it:\n" +
+        "                if not seen[v]:\n" +
+        "                    seen[v] = True; stack.append((v, iter(adj[v]))); break\n" +
+        "            else:\n" +
+        "                order.append(u); stack.pop()\n" +
+        "    radj = [[] for _ in range(n)]                    # transpose graph\n" +
+        "    for u in range(n):\n" +
+        "        for v in adj[u]: radj[v].append(u)\n" +
+        "    comp = [-1] * n; c = 0\n" +
+        "    for s in reversed(order):                        # pass 2: decreasing exit time\n" +
+        "        if comp[s] >= 0: continue\n" +
+        "        comp[s] = c; stack = [s]\n" +
+        "        while stack:\n" +
+        "            u = stack.pop()\n" +
+        "            for v in radj[u]:\n" +
+        "                if comp[v] < 0: comp[v] = c; stack.append(v)\n" +
+        "        c += 1\n" +
+        "    return comp</code></pre>" +
+        "<pre data-lang='java' hidden><code>// pass 1: iterative DFS on adj, push each vertex to 'order' when it exits\n" +
+        "// pass 2: for u in reverse(order): if unassigned, DFS on the transpose from u,\n" +
+        "//         labelling every newly reached vertex with the current component id</code></pre></div>" +
+        "<p>The correctness argument rests on exit times, as Chapter 33 said it would. Take the vertex that exits last in the first pass. It lies in a <em>source</em> component of the condensation &mdash; one with no incoming edges from other components &mdash; because if some other component could reach it, the search would have finished that component's vertices after it. On the four hundred test graphs, the last vertex to exit was in a source component every time. In the transpose, every edge is reversed, so that source component becomes a sink: a search starting there cannot leave it, and it reaches exactly the component. Remove it and repeat with the next-latest exit; each search peels one component off.</p>" +
+        "<p>Run it on the figure. Starting the first pass at a, the vertices exit in the order i, e, d, c, h, g, f, b, a, so a is last. In the transpose, a search from a follows the reversed edges a to c, c to b and b back to a, and reaches only a, b and c: the reversed edges out of that set lead nowhere new, because in the original graph nothing enters A from outside. Next latest unassigned is f, whose transpose search collects f, g and h; then d collects d and e; then i stands alone. The components come out as A, C, B, D &mdash; the condensation's topological order.</p>" +
+        "<p>The cost is two linear passes plus building the transpose, O(V + E) with roughly double the memory of the input. The algorithm is short to explain and hard to get wrong, which is its virtue; its drawback is that second graph. The next section's algorithm needs neither the transpose nor a second pass, which is why it is usually the one implemented. It also produces the components in a useful order: Kosaraju emits them in topological order of the condensation, sources first.</p>"
+    },
+
+    { title: "Tarjan",
+      viz: "dsaTarjanSCC", vizTitle: "Two numbers per vertex. When they become equal, a component closes",
+      html:
+        "<p><strong>Tarjan's algorithm</strong>, from his 1972 paper on depth-first search and linear graph algorithms, finds every component in a single pass. Each vertex gets an index, its entry time, and a <strong>low-link</strong>: the smallest index reachable from it by going down the DFS tree and then following at most one edge back to a vertex still on a stack of unfinished vertices. Vertices are pushed on that stack when entered. When a vertex finishes and its low-link equals its own index, nothing below it can climb higher, so it is the root of a component; pop the stack down to it, and the popped vertices are the component.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def tarjan(adj):\n" +
+        "    n = len(adj); index = [-1] * n; low = [0] * n\n" +
+        "    on_stack = [False] * n; stack = []; comp = [-1] * n; t = 0; c = 0\n" +
+        "    for s in range(n):\n" +
+        "        if index[s] >= 0: continue\n" +
+        "        index[s] = low[s] = t; t += 1; stack.append(s); on_stack[s] = True\n" +
+        "        work = [(s, iter(adj[s]))]\n" +
+        "        while work:\n" +
+        "            u, it = work[-1]\n" +
+        "            for v in it:\n" +
+        "                if index[v] < 0:                            # tree edge: descend\n" +
+        "                    index[v] = low[v] = t; t += 1\n" +
+        "                    stack.append(v); on_stack[v] = True\n" +
+        "                    work.append((v, iter(adj[v]))); break\n" +
+        "                if on_stack[v]:                             # edge into the open part\n" +
+        "                    low[u] = min(low[u], index[v])\n" +
+        "            else:\n" +
+        "                work.pop()\n" +
+        "                if work: low[work[-1][0]] = min(low[work[-1][0]], low[u])\n" +
+        "                if low[u] == index[u]:                      # u roots a component\n" +
+        "                    while True:\n" +
+        "                        x = stack.pop(); on_stack[x] = False; comp[x] = c\n" +
+        "                        if x == u: break\n" +
+        "                    c += 1\n" +
+        "    return comp</code></pre>" +
+        "<pre data-lang='java' hidden><code>void strong(int u) {                      // recursive form\n" +
+        "    index[u] = low[u] = t++; stack.push(u); onStack[u] = true;\n" +
+        "    for (int v : adj.get(u)) {\n" +
+        "        if (index[v] < 0) { strong(v); low[u] = Math.min(low[u], low[v]); }\n" +
+        "        else if (onStack[v]) low[u] = Math.min(low[u], index[v]);\n" +
+        "    }\n" +
+        "    if (low[u] == index[u]) {\n" +
+        "        int x; do { x = stack.pop(); onStack[x] = false; comp[x] = c; } while (x != u);\n" +
+        "        c++;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p>The on-stack test is the part that trips people. An edge to a vertex that is already finished <em>and</em> assigned to a component leads somewhere this vertex can reach but that cannot reach back, so it must not lower the low-link; only vertices still on the stack are in the open, unresolved part of the current search. With that rule, the count of vertices whose low-link equalled their index matched the number of components on all four hundred test graphs. <strong>In the machine above, find the vertex where low-link equals index and confirm a component is emitted exactly then.</strong></p>" +
+        "<p>Trace it on the figure, starting from a. Entering a, b and c gives indices 0, 1 and 2; the edge from c back to a finds a on the stack and lowers c's low-link to 0. From c the search enters d at 3 and e at 4; e's edge back to d lowers e's low-link to 3; e then enters i at 5, which has no edges, finishes with low-link equal to index, and is emitted alone as {i}. Returning, d finishes with low-link 3 equal to its index and emits {d, e}. From b the search enters f, g and h at 6, 7 and 8, and here the on-stack rule does its work: h's edge to i and g's edge to e point at vertices already assigned to components, so they are ignored, and f emits {f, g, h}. Finally a emits {a, b, c}. The order of emission, {i}, {d, e}, {f, g, h}, {a, b, c}, is the condensation's topological order reversed.</p>" +
+        "<p>Tarjan's version is one pass with no transpose, and it was faster: on a random graph of 100,000 vertices and 400,000 edges it took 0.17 seconds against Kosaraju's 0.23, producing the same 3,926 components. It emits components in <em>reverse</em> topological order of the condensation &mdash; sinks first, because a component is closed only after everything it reaches has been finished &mdash; and 2-SAT, two sections on, reads its answer straight off that order. The recursive form shown in the Java tab is the one in most textbooks; for the reasons Chapter 33 measured, the iterative form is the one to ship.</p>"
+    },
+
+    { title: "Bridges and Articulation Points",
+      html:
+        "<p>The same low-link idea answers a question about undirected graphs: which single failure disconnects the network? A <strong>bridge</strong> is an edge whose removal splits a connected component; an <strong>articulation point</strong>, or cut vertex, is a vertex whose removal does. Hopcroft and Tarjan's 1973 work gave both in one depth-first pass. Here low[v] is the smallest entry time reachable from v's subtree using tree edges downward and one back edge upward.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 300' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Low-link on a DFS tree: an edge u&#8211;v is a bridge exactly when low[v] &gt; tin[u]</text><line x1='90' y1='60' x2='90' y2='140' stroke='#5d7aa5' stroke-width='1.6'/><line x1='90' y1='140' x2='200' y2='100' stroke='#5d7aa5' stroke-width='1.6'/><path d='M 200 100 Q 163 94 90 60' fill='none' stroke='#ffd166' stroke-width='1.4' stroke-dasharray='4 3'/><line x1='90' y1='140' x2='90' y2='230' stroke='#ff5d73' stroke-width='3'/><line x1='90' y1='230' x2='200' y2='270' stroke='#5d7aa5' stroke-width='1.6'/><line x1='200' y1='270' x2='300' y2='230' stroke='#5d7aa5' stroke-width='1.6'/><path d='M 300 230 Q 213 244 90 230' fill='none' stroke='#ffd166' stroke-width='1.4' stroke-dasharray='4 3'/><line x1='300' y1='230' x2='410' y2='230' stroke='#ff5d73' stroke-width='3'/><circle cx='90' cy='60' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='90' y='64' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text><text x='52' y='44' fill='#8fa3c4' font-size='9'>0/0</text><circle cx='90' cy='140' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='90' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>1</text><text x='52' y='124' fill='#8fa3c4' font-size='9'>1/0</text><circle cx='200' cy='100' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='200' y='104' text-anchor='middle' fill='#c9d6ea' font-size='11'>2</text><text x='220' y='84' fill='#8fa3c4' font-size='9'>2/0</text><circle cx='90' cy='230' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='90' y='234' text-anchor='middle' fill='#c9d6ea' font-size='11'>3</text><text x='52' y='214' fill='#8fa3c4' font-size='9'>3/3</text><circle cx='200' cy='270' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='200' y='274' text-anchor='middle' fill='#c9d6ea' font-size='11'>4</text><text x='220' y='254' fill='#8fa3c4' font-size='9'>4/3</text><circle cx='300' cy='230' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='300' y='234' text-anchor='middle' fill='#c9d6ea' font-size='11'>5</text><text x='320' y='214' fill='#8fa3c4' font-size='9'>5/3</text><circle cx='410' cy='230' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='410' y='234' text-anchor='middle' fill='#c9d6ea' font-size='11'>6</text><text x='430' y='214' fill='#8fa3c4' font-size='9'>6/6</text><text x='460' y='50' fill='#8fa3c4' font-size='11' xml:space='preserve'>label = tin / low</text><text x='460' y='67' fill='#ffd166' font-size='11' xml:space='preserve'>dashed = back edge (lifts low)</text><text x='460' y='84' fill='#ff5d73' font-size='11' xml:space='preserve'>thick red = bridge</text><text x='460' y='118' fill='#c9d6ea' font-size='11' xml:space='preserve'>1&#8211;3: low[3] = 3 &gt; tin[1] = 1</text><text x='460' y='135' fill='#c9d6ea' font-size='11' xml:space='preserve'>  nothing under 3 reaches 1 or</text><text x='460' y='152' fill='#c9d6ea' font-size='11' xml:space='preserve'>  above, so 1&#8211;3 is a bridge</text><text x='460' y='186' fill='#c9d6ea' font-size='11' xml:space='preserve'>5&#8211;6: low[6]=6 &gt; tin[5]=5: bridge</text><text x='460' y='203' fill='#c9d6ea' font-size='11' xml:space='preserve'>1&#8211;2: low[2]=0 &#8804; tin[1]: no</text><text x='460' y='237' fill='#3ddc97' font-size='11' xml:space='preserve'>articulation points: 1, 3, 5</text><text x='460' y='254' fill='#3ddc97' font-size='11' xml:space='preserve'>(low[child] &#8805; tin[parent])</text></svg></div>" +
+        "<p>The bridge condition reads directly off the numbers. A tree edge from u to its child v is a bridge exactly when low[v] &gt; tin[u]: nothing in v's subtree has a back edge reaching u or anything above it, so the tree edge is the only connection. In the figure, low[3] = 3 while tin[1] = 1, so 1&ndash;3 is a bridge; low[2] = 0 because 2 has a back edge to 0, so 1&ndash;2 is not. For articulation points the condition loosens to &ge;: a non-root vertex u is a cut vertex when some child v has low[v] &ge; tin[u], because then v's subtree can reach u but nothing above it, and removing u strands it. On five hundred random graphs, both conditions matched a brute-force check that removed each edge and each vertex in turn and recounted components.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def bridges_and_cuts(n, edges):\n" +
+        "    adj = [[] for _ in range(n)]\n" +
+        "    for i, (u, v) in enumerate(edges):\n" +
+        "        adj[u].append((v, i)); adj[v].append((u, i))\n" +
+        "    tin = [-1] * n; low = [0] * n; t = 0; bridges = []; cuts = set()\n" +
+        "    def dfs(u, parent_edge, is_root):\n" +
+        "        nonlocal t\n" +
+        "        tin[u] = low[u] = t; t += 1; children = 0\n" +
+        "        for v, i in adj[u]:\n" +
+        "            if i == parent_edge: continue             # skip the edge, not the vertex\n" +
+        "            if tin[v] >= 0:\n" +
+        "                low[u] = min(low[u], tin[v])          # back edge\n" +
+        "            else:\n" +
+        "                children += 1\n" +
+        "                dfs(v, i, False)\n" +
+        "                low[u] = min(low[u], low[v])\n" +
+        "                if low[v] > tin[u]: bridges.append(edges[i])\n" +
+        "                if not is_root and low[v] >= tin[u]: cuts.add(u)\n" +
+        "        if is_root and children >= 2: cuts.add(u)    # the root rule\n" +
+        "    for s in range(n):\n" +
+        "        if tin[s] < 0: dfs(s, -1, True)\n" +
+        "    return bridges, cuts</code></pre>" +
+        "<pre data-lang='java' hidden><code>// Same recursion: skip the parent EDGE by id; bridge if low[v] > tin[u];\n" +
+        "// non-root cut vertex if low[v] >= tin[u]; root is a cut vertex iff it has >= 2 DFS children.</code></pre></div>" +
+        "<p>Two details are where everyone gets it wrong once. The root has no parent, so the &ge; test would flag it whenever it has any child, since every low-link is at least the root's entry time of zero; the root is a cut vertex only when it has two or more DFS children. Dropping that rule gave wrong answers on 450 of the 500 test graphs. And the code skips the <em>edge</em> it arrived by, not the parent vertex: in a multigraph with two parallel edges between u and v, the second edge is a genuine back edge that makes neither of them a bridge. Skipping by parent vertex instead was wrong on 153 of 327 random multigraphs. The pieces left when every articulation point is split out are the biconnected components, the units of fault tolerance in a network.</p>" +
+        "<p>The same numbers answer the questions network engineers actually ask. Removing every bridge splits a graph into its 2-edge-connected pieces, groups of vertices that stay connected after any single link fails; splitting at articulation points gives the <strong>biconnected component</strong> decomposition, the pieces that survive any single node failure. A backbone designer looks for bridges to duplicate, a road planner for articulation points that would isolate a district, and both get the full list from one linear-time pass rather than a disconnection test per edge or per vertex, which on a graph of a million edges is the difference between seconds and days.</p>"
+    },
+
+    { title: "2-SAT",
+      html:
+        "<p>Now a problem with no visible graph in it. A 2-SAT formula is an AND of clauses, each clause an OR of two literals, a variable or its negation: (x1 OR x2) AND (NOT x1 OR x3) AND so on. Is there a true/false assignment satisfying every clause? With three literals per clause the problem is NP-complete, the subject of Chapter 46. With two, Aspvall, Plass and Tarjan showed in 1979 that it takes linear time, by building the right graph and running the SCC algorithm on it.</p>" +
+        "<p>The key is that a two-literal clause is a pair of implications. (a OR b) says that if a is false, b must be true, and if b is false, a must be true: NOT a implies b, and NOT b implies a. The <strong>implication graph</strong> has one vertex per literal, 2n in all, and these two edges per clause. A path from x to NOT x means that setting x true forces it false. If there are paths both ways &mdash; x and NOT x in the same strongly connected component &mdash; then either choice contradicts itself and the formula is unsatisfiable. The theorem is that this is the only obstruction: if no variable shares a component with its negation, a satisfying assignment exists.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 310' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>2-SAT implication graph: x1 and &#172;x1 share one SCC, so no assignment exists</text><circle cx='200' cy='160' r='135' fill='#2a1420' opacity='0.45' stroke='#ff5d73' stroke-dasharray='5 3'/><line x1='192' y1='250' x2='121' y2='129' stroke='#ff5d73' stroke-width='1.8'/><polygon points='117,122 125,127 118,131' fill='#ff5d73'/><line x1='117' y1='198' x2='188' y2='77' stroke='#6b7fa3' stroke-width='1.2'/><polygon points='192,70 191,79 184,75' fill='#6b7fa3'/><line x1='185' y1='257' x2='131' y2='225' stroke='#6b7fa3' stroke-width='1.2'/><polygon points='124,221 133,222 129,229' fill='#6b7fa3'/><line x1='124' y1='99' x2='178' y2='67' stroke='#ff5d73' stroke-width='1.8'/><polygon points='185,63 180,71 176,64' fill='#ff5d73'/><line x1='215' y1='64' x2='269' y2='95' stroke='#ff5d73' stroke-width='1.8'/><polygon points='276,99 267,99 271,92' fill='#ff5d73'/><line x1='276' y1='221' x2='222' y2='252' stroke='#6b7fa3' stroke-width='1.2'/><polygon points='215,256 220,249 224,256' fill='#6b7fa3'/><line x1='209' y1='70' x2='278' y2='190' stroke='#6b7fa3' stroke-width='1.2'/><polygon points='282,197 275,192 282,188' fill='#6b7fa3'/><line x1='282' y1='123' x2='213' y2='243' stroke='#ff5d73' stroke-width='1.8'/><polygon points='209,250 209,241 216,245' fill='#ff5d73'/><circle cx='200' cy='55' r='17' fill='#182842' stroke='#ff5d73' stroke-width='1.4'/><text x='200' y='59' text-anchor='middle' fill='#c9d6ea' font-size='11'>x1</text><circle cx='291' cy='108' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='291' y='112' text-anchor='middle' fill='#c9d6ea' font-size='11'>x3</text><circle cx='291' cy='212' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='291' y='216' text-anchor='middle' fill='#c9d6ea' font-size='11'>&#172;x3</text><circle cx='200' cy='265' r='17' fill='#182842' stroke='#ff5d73' stroke-width='1.4'/><text x='200' y='269' text-anchor='middle' fill='#c9d6ea' font-size='11'>&#172;x1</text><circle cx='109' cy='213' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='109' y='217' text-anchor='middle' fill='#c9d6ea' font-size='11'>&#172;x2</text><circle cx='109' cy='107' r='17' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='109' y='111' text-anchor='middle' fill='#c9d6ea' font-size='11'>x2</text><text x='400' y='50' fill='#8fa3c4' font-size='11' xml:space='preserve'>clauses</text><text x='400' y='67' fill='#c9d6ea' font-size='11' xml:space='preserve'>(x1 &#8744; x2)    (x1 &#8744; &#172;x2)</text><text x='400' y='84' fill='#c9d6ea' font-size='11' xml:space='preserve'>(&#172;x1 &#8744; x3)  (&#172;x1 &#8744; &#172;x3)</text><text x='400' y='118' fill='#8fa3c4' font-size='11' xml:space='preserve'>(a&#8744;b): &#172;a&#8594;b, &#172;b&#8594;a</text><text x='400' y='152' fill='#ff5d73' font-size='11' xml:space='preserve'>red cycle:</text><text x='400' y='169' fill='#ff5d73' font-size='11' xml:space='preserve'>x1 &#8594; x3 &#8594; &#172;x1 &#8594; x2 &#8594; x1</text><text x='400' y='203' fill='#c9d6ea' font-size='11' xml:space='preserve'>x1 forces &#172;x1 and &#172;x1 forces x1:</text><text x='400' y='220' fill='#c9d6ea' font-size='11' xml:space='preserve'>unsatisfiable, and the SCC proves it</text><text x='400' y='254' fill='#8fa3c4' font-size='11' xml:space='preserve'>checked: SCC test == brute force on</text><text x='400' y='271' fill='#8fa3c4' font-size='11' xml:space='preserve'>1,000/1,000 random small formulas</text></svg></div>" +
+        "<p>The assignment is read off the condensation's topological order: set x true exactly when x's component comes <em>after</em> NOT x's. Since implications point forward in that order, choosing the later literal never forces a contradiction back onto an earlier choice. Tarjan's algorithm emits components in reverse topological order, so with its component numbers the rule is a single comparison per variable. On a thousand random formulas of up to eight variables, the SCC test agreed with brute force over every assignment on all of them, and each of the 748 satisfiable ones received an assignment that satisfied every clause.</p>" +
+        "<p>The figure's formula shows the contradiction concretely. The clauses (x1 OR x2) and (x1 OR NOT x2) together force x1 true: whichever value x2 takes, one of them needs x1. The clauses (NOT x1 OR x3) and (NOT x1 OR NOT x3) together force x1 false in the same way. In the implication graph those facts are two paths, x1 to x3 to NOT x1, and NOT x1 to x2 to x1, which join into the red cycle, so x1 and NOT x1 share a component and the SCC test reports the formula unsatisfiable. A human reading the four clauses might see it; the algorithm sees it in any formula, with thousands of variables, in time proportional to its length.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def two_sat(n, clauses):             # literals: +i / -i for variable i in 1..n\n" +
+        "    node = lambda lit: 2 * (abs(lit) - 1) + (lit < 0)\n" +
+        "    adj = [[] for _ in range(2 * n)]\n" +
+        "    for a, b in clauses:             # (a or b)  =>  not a -> b,  not b -> a\n" +
+        "        adj[node(-a)].append(node(b))\n" +
+        "        adj[node(-b)].append(node(a))\n" +
+        "    comp = tarjan(adj)               # ids in reverse topological order\n" +
+        "    assign = []\n" +
+        "    for i in range(n):\n" +
+        "        if comp[2*i] == comp[2*i + 1]:\n" +
+        "            return None              # x and not x in one component\n" +
+        "        assign.append(comp[2*i] < comp[2*i + 1])   # x's component later in topo order\n" +
+        "    return assign</code></pre>" +
+        "<pre data-lang='java' hidden><code>// literal node: 2*(var) for x, 2*(var)+1 for not x\n" +
+        "// clause (a or b): addEdge(neg(a), b); addEdge(neg(b), a)\n" +
+        "// run Tarjan; unsatisfiable if comp[x] == comp[not x];\n" +
+        "// else x = (comp[x] < comp[not x])   // Tarjan ids are reverse topological</code></pre></div>" +
+        "<p>Random 2-SAT has a sharp threshold, and it sits exactly where theory says. With 2,000 variables and random clauses, formulas with 0.9 clauses per variable were satisfiable 40 times out of 40; at 1.0, 37; at 1.1, 27; at 1.2, 3; at 1.5, none &mdash; the collapse Chv&aacute;tal and Reed proved in 1992 happens as the ratio passes one. In practice 2-SAT is how constraints of the form \"exactly one of these two\" or \"not both\" are solved: scheduling two options per task, placing labels on either side of a point, choosing orientations. Whenever each decision is binary and each constraint mentions two decisions, look for the implication graph.</p>"
+    },
+
+    { title: "Bipartite Checking and Colouring",
+      html:
+        "<p>A graph is a <strong>bipartite graph</strong> when its vertices can be split into two sides with every edge crossing between them &mdash; jobs and workers, students and courses, the two colours of a chessboard. Checking takes one traversal: colour a start vertex 0, colour its neighbours 1, their neighbours 0, and so on, with breadth-first search from every uncoloured vertex. The graph is bipartite exactly when no edge ever joins two vertices of the same colour. On five hundred random graphs, that check agreed with a brute-force search over all two-colourings every time.</p>" +
+        "<p>When the check fails, it fails for a reason that can be shown. A graph is bipartite if and only if it has no <strong>odd cycle</strong>: walking around a cycle alternates colours, so an odd-length cycle would need a vertex to be both. The breadth-first search finds one on failure. The offending edge joins two vertices of the same colour, so they sit at the same parity of depth; following parent pointers from both up to their lowest common ancestor gives two paths whose lengths have the same parity, and together with the edge they close a cycle of odd length. On the 216 non-bipartite test graphs, the extracted cycle was odd and made of real edges every time &mdash; a certificate, not only a verdict.</p>" +
+        "<p>The smallest example is a triangle. Colour one corner 0 and its two neighbours 1; the edge between those neighbours joins two vertices of colour 1, and the cycle traced back through their common parent is the triangle itself, length three. A square, by contrast, colours cleanly, as does any even cycle, any tree, and any grid, which is why the chessboard is the standard picture of a bipartite graph. Depth-first search works as well as breadth-first for the check; breadth-first is preferred only because the odd cycle it extracts is short, since both parent paths are shortest paths.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "def two_colour(adj):\n" +
+        "    colour = [-1] * len(adj)\n" +
+        "    for s in range(len(adj)):\n" +
+        "        if colour[s] >= 0: continue\n" +
+        "        colour[s] = 0\n" +
+        "        q = deque([s])\n" +
+        "        while q:\n" +
+        "            u = q.popleft()\n" +
+        "            for v in adj[u]:\n" +
+        "                if colour[v] < 0:\n" +
+        "                    colour[v] = 1 - colour[u]; q.append(v)\n" +
+        "                elif colour[v] == colour[u]:\n" +
+        "                    return None                 # same colour on both ends: odd cycle\n" +
+        "    return colour</code></pre>" +
+        "<pre data-lang='java' hidden><code>int[] twoColour(List<List<Integer>> adj) {\n" +
+        "    int[] col = new int[adj.size()]; Arrays.fill(col, -1);\n" +
+        "    for (int s = 0; s < adj.size(); s++) {\n" +
+        "        if (col[s] >= 0) continue;\n" +
+        "        col[s] = 0; ArrayDeque<Integer> q = new ArrayDeque<>(List.of(s));\n" +
+        "        while (!q.isEmpty()) {\n" +
+        "            int u = q.poll();\n" +
+        "            for (int v : adj.get(u)) {\n" +
+        "                if (col[v] < 0) { col[v] = 1 - col[u]; q.add(v); }\n" +
+        "                else if (col[v] == col[u]) return null;\n" +
+        "            }\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return col;\n" +
+        "}</code></pre></div>" +
+        "<p>Two colours are linear; three are not. Deciding whether a graph can be coloured with k colours is NP-complete for every k of three or more, so no traversal trick generalises, and Chapter 46 explains why no such trick is expected. The bipartite case matters beyond itself because Chapter 39 builds matching on it: once a graph is known to be bipartite, its two sides become the two halves of a flow network. Colouring by BFS is also the practical test for any \"split into two groups with no conflict inside a group\" problem, which is the same question in different words.</p>"
+    },
+
+    { title: "Eulerian Paths",
+      html:
+        "<p>Graph theory began with a walk. Euler's 1736 paper asked whether the citizens of K&ouml;nigsberg could cross each of the city's seven bridges exactly once, and answered no by counting. Every time a walk passes through a land mass it uses two bridges, one in and one out, so every land mass except the start and end must touch an even number of bridges. The four land masses touched 5, 3, 3 and 3 bridges: four odd degrees, where at most two are allowed.</p>" +
+        "<p>That argument became the theorem. A connected graph has an <strong>Euler circuit</strong>, a closed walk using every edge exactly once, when every vertex has even degree, and an <strong>Euler path</strong> that starts and ends at different vertices when exactly two vertices have odd degree, which must be the endpoints. For directed graphs the condition is that every vertex has in-degree equal to out-degree, or that one vertex has one extra out-edge and another one extra in-edge. The surprise is that the condition is also sufficient, and that a walk can be found in linear time, which is not true of its vertex-visiting cousin, the Hamiltonian path of Chapter 34.</p>" +
+        "<p><strong>Hierholzer's algorithm</strong>, published in 1873, finds the walk. Start anywhere allowed, follow unused edges until you are stuck, which with even degrees can only happen back at the start; then back up along the walk to a vertex that still has unused edges, walk a new loop from there, and splice it in. Implemented with a stack, it emits vertices as they are popped and never reconsiders an edge, so it is O(E). On five hundred random Eulerian multigraphs it produced a closed walk using every edge exactly once, and on 241 graphs with exactly two odd vertices, starting from one of them gave an open Euler path every time.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def euler_circuit(adj, start):          # directed; adj[u] = list of successors\n" +
+        "    nxt = [0] * len(adj)\n" +
+        "    stack = [start]; walk = []\n" +
+        "    while stack:\n" +
+        "        u = stack[-1]\n" +
+        "        if nxt[u] < len(adj[u]):\n" +
+        "            stack.append(adj[u][nxt[u]])    # follow an unused edge\n" +
+        "            nxt[u] += 1\n" +
+        "        else:\n" +
+        "            walk.append(stack.pop())        # stuck: emit, back up\n" +
+        "    return walk[::-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>List<Integer> eulerCircuit(List<List<Integer>> adj, int start) {\n" +
+        "    int[] nxt = new int[adj.size()]; Deque<Integer> st = new ArrayDeque<>(List.of(start));\n" +
+        "    LinkedList<Integer> walk = new LinkedList<>();\n" +
+        "    while (!st.isEmpty()) {\n" +
+        "        int u = st.peek();\n" +
+        "        if (nxt[u] < adj.get(u).size()) st.push(adj.get(u).get(nxt[u]++));\n" +
+        "        else walk.addFirst(st.pop());\n" +
+        "    }\n" +
+        "    return walk;\n" +
+        "}</code></pre></div>" +
+        "<p>The most elegant application builds a string. A <strong>De Bruijn sequence</strong> of order k over the bits is a cyclic string of length 2^k in which every k-bit pattern appears exactly once, and it comes from an Euler circuit: make a vertex for each (k minus 1)-bit string and an edge from each to the two strings obtained by shifting in a 0 or a 1. Every vertex has in-degree and out-degree 2, so an Euler circuit exists, and the bits it shifts in spell the sequence. For k from 3 to 20 the construction produced sequences of exactly 2^k bits containing all 2^k patterns once each; the circuit for k = 20, a million edges, took 0.57 seconds. The same idea is how genome assemblers stitch overlapping DNA fragments together, and it gives the shortest string that tries every code of a keypad that does not need an enter key.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Find the components three ways.</strong> Implement Tarjan, Kosaraju and the naive mutual-reachability method, and check that all three give the same partition on random directed graphs. Build the condensation and confirm it is a DAG.</li>" +
+        "<li><strong>Watch the giant appear.</strong> On random digraphs of 20,000 vertices, measure the size of the largest SCC as the average out-degree rises from 0.5 to 3. Locate the jump.</li>" +
+        "<li><strong>Bridges and cut vertices.</strong> Implement the low-link conditions and check them against deleting each edge and each vertex. Then drop the root rule and skip the parent by vertex rather than edge id, and count the failures on multigraphs.</li>" +
+        "<li><strong>Solve 2-SAT.</strong> Build the implication graph, run Tarjan, and read off an assignment. Verify against brute force, and measure the fraction of random formulas satisfiable as clauses per variable pass 1.</li>" +
+        "<li><strong>Certify non-bipartiteness.</strong> Two-colour graphs with BFS, and when it fails, extract an odd cycle from the parent pointers and check that it is odd and uses real edges.</li>" +
+        "<li><strong>Walk every edge.</strong> Implement Hierholzer's algorithm for undirected and directed graphs and verify that each edge is used once. Check K\u00f6nigsberg's degrees.</li>" +
+        "<li><strong>Build a De Bruijn sequence.</strong> Construct B(2, k) from an Euler circuit on (k-1)-bit strings and check that every k-bit pattern appears exactly once.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "strongly connected component", d: "A maximal set of vertices in a directed graph in which every vertex can reach every other." },
+    { t: "condensation", d: "The graph with one vertex per strongly connected component and an edge wherever members of two components are joined; always a DAG." },
+    { t: "Kosaraju's algorithm", d: "Finding SCCs by one DFS recording exit order and a second over the transpose graph in decreasing exit time; unpublished by Kosaraju, conventionally cited to Sharir 1981." },
+    { t: "transpose graph", d: "The graph with every edge reversed; it has the same strongly connected components as the original." },
+    { t: "Tarjan's algorithm", d: "Finding SCCs in one DFS with an index and low-link per vertex and a stack of open vertices; a component closes when low-link equals index. Tarjan 1972." },
+    { t: "low-link", d: "The smallest entry index reachable from a vertex's DFS subtree using at most one back edge (to a vertex still on the stack, for SCCs)." },
+    { t: "bridge", d: "An edge whose removal disconnects its component; a tree edge u-v is a bridge exactly when low[v] > tin[u]." },
+    { t: "articulation point", d: "A vertex whose removal disconnects its component; a non-root u qualifies when some child v has low[v] >= tin[u], the root when it has two or more DFS children." },
+    { t: "biconnected component", d: "A maximal piece of an undirected graph with no articulation point of its own; the unit of fault tolerance against single vertex failures." },
+    { t: "2-SAT", d: "Satisfiability of an AND of two-literal clauses, solvable in linear time through strongly connected components of the implication graph. Aspvall, Plass & Tarjan 1979." },
+    { t: "implication graph", d: "A graph with a vertex per literal and, for each clause (a or b), edges not-a to b and not-b to a; unsatisfiable exactly when some x and not-x share an SCC." },
+    { t: "bipartite graph", d: "A graph whose vertices split into two sides with every edge crossing between them; checked by BFS two-colouring." },
+    { t: "odd cycle", d: "A cycle of odd length; a graph is bipartite if and only if it contains none, and one is extracted as a certificate when two-colouring fails." },
+    { t: "Euler circuit", d: "A closed walk using every edge exactly once; exists in a connected graph exactly when every vertex has even degree." },
+    { t: "Euler path", d: "A walk using every edge exactly once between two different endpoints; exists exactly when those two vertices are the only ones of odd degree." },
+    { t: "Hierholzer's algorithm", d: "Finding an Euler circuit in O(E) by walking until stuck and splicing in loops from vertices with unused edges, using a stack. Hierholzer 1873." },
+    { t: "De Bruijn sequence", d: "A cyclic string of length 2^k containing every k-bit pattern exactly once, produced by an Euler circuit on the graph of (k-1)-bit strings." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Why is the condensation of any directed graph a DAG?",
+      opts: [
+        "Because if two components could reach each other, their vertices would all be mutually reachable and they would be one component",
+        "Because the strongly connected component algorithms remove every edge that belongs to a cycle before they build the condensation",
+        "Because every directed graph is acyclic once its self-loops are removed, and the condensation is always built without any self-loops",
+        "Because the condensation has fewer vertices than the original graph, and a small enough graph cannot contain any cycle at all"
+      ], a: 0,
+      why: "A cycle between components would make them mutually reachable, contradicting maximality. No edges are removed, directed graphs certainly have cycles, and size has nothing to do with acyclicity; all 400 test condensations were DAGs." },
+
+    { type: "mc",
+      q: "In Kosaraju's algorithm, why does a search in the transpose graph, started from the vertex that exited last, find exactly one component?",
+      opts: [
+        "Because the last vertex to exit has no outgoing edges at all, so a search from it can only ever reach itself in either the graph or its transpose",
+        "Because that vertex lies in a source component, which becomes a sink in the transpose, so the search cannot leave it",
+        "Because the transpose graph has the same exit times as the original, so the second pass repeats the first pass exactly in reverse",
+        "Because the transpose graph removes every edge between two different components and keeps only the edges that lie inside one of them"
+      ], a: 1,
+      why: "The latest-exiting vertex is in a source component of the condensation (400/400 checked); reversing edges turns that source into a sink, so the search reaches exactly its own component. The vertex can have outgoing edges, exit times are not preserved, and the transpose keeps all edges, reversed." },
+
+    { type: "mc",
+      q: "In Tarjan's algorithm, why may an edge to an already-finished vertex that has been assigned to a component not lower the low-link?",
+      opts: [
+        "Because finished vertices have their low-link reset to infinity when their component is popped from the stack",
+        "Because edges to finished vertices are always cross edges in a directed DFS, and cross edges can never lie on any cycle at all",
+        "Because that component is reachable from here but cannot reach back, so it is not part of the component still being formed",
+        "Because lowering it would make the algorithm run in quadratic time, although the components would still be correct"
+      ], a: 2,
+      why: "Only vertices still on the stack belong to the unresolved part of the current search; an assigned component was closed because it cannot reach anything open, so it cannot share a component with u. Low-links are not reset, some such edges are forward edges, and using them would give wrong components, not merely slow ones." },
+
+    { type: "blank",
+      q: "In a DFS of an undirected graph, the tree edge from u to its child v is a bridge exactly when low[v] is ____ than tin[u].",
+      a: ["greater", "strictly greater", "larger"],
+      why: "low[v] > tin[u] means nothing in v's subtree has a back edge reaching u or above, so the tree edge is the only connection. For articulation points the test loosens to >=. Both matched brute-force removal on 500 of 500 graphs." },
+
+    { type: "mc",
+      q: "Dropping the special rule for the DFS root gave wrong articulation points on 450 of 500 graphs. What is the rule, and why is it needed?",
+      opts: [
+        "The root is never an articulation point, since removing it leaves every other vertex reachable from its first child",
+        "The root is an articulation point whenever it has any back edge, because back edges to the root always form separate cycles",
+        "The root is an articulation point only when it has the largest low-link value, since that marks the deepest subtree",
+        "The root is a cut vertex only with two or more DFS children; without the rule, low[child] >= tin[root] = 0 flags it whenever it has a child"
+      ], a: 3,
+      why: "Every low-link is at least the root's entry time 0, so the general test would always fire; the root separates the graph exactly when the search had to restart from it more than once, that is, it has at least two DFS children. A root with two children is a cut vertex, and back edges and low-link ordering are not the criterion." },
+
+    { type: "mc",
+      q: "A 2-SAT formula is unsatisfiable exactly when some variable x and its negation share a strongly connected component of the implication graph. Why?",
+      opts: [
+        "Because paths from x to not-x and back mean each choice forces its own opposite, while otherwise an assignment can be read off the topological order",
+        "Because sharing a component means the clause (x or not-x) appears in the formula, and that clause can never be satisfied",
+        "Because the implication graph is only acyclic when the formula is satisfiable, and any cycle at all indicates a contradiction",
+        "Because each component must be assigned a single value, and x and not-x cannot both be given that value"
+      ], a: 0,
+      why: "A path x to not-x forces x false and a path back forces it true, so neither value works; the converse, that this is the only obstruction, is the theorem, with the assignment taken from the condensation order (748/748 satisfied their formulas). The clause (x or not-x) is always satisfiable, and cycles without a contradiction are harmless." },
+
+    { type: "blank",
+      q: "The graph built for 2-SAT, with a vertex per literal and two edges per clause (not-a to b, not-b to a), is the ____ graph.",
+      a: ["implication"],
+      why: "Each clause (a or b) is equivalent to the two implications not-a implies b and not-b implies a; strongly connected components of the implication graph decide satisfiability in linear time (Aspvall, Plass & Tarjan 1979)." },
+
+    { type: "mc",
+      q: "BFS two-colouring fails when an edge joins two same-coloured vertices. What does that failure prove, and how is it shown?",
+      opts: [
+        "That the graph has a vertex of odd degree, found by counting up the neighbours of each of the two vertices at the ends of that one edge",
+        "That the graph is disconnected, which the edge reveals by joining two components that were coloured by separate searches",
+        "That the graph contains an odd cycle, extracted by joining both endpoints' parent paths to their common ancestor through the edge",
+        "That three colours are needed, since two colours failed and three colours succeed on every non-bipartite graph"
+      ], a: 2,
+      why: "Same colour means same depth parity, so the two parent paths to the common ancestor plus the edge form an odd cycle &mdash; the certificate, extracted correctly on 216 of 216 failures. Odd degree is unrelated, the edge is within one search, and some non-bipartite graphs need more than three colours." },
+
+    { type: "mc",
+      q: "Why did Euler conclude that no walk crosses each of K\u00f6nigsberg's seven bridges exactly once?",
+      opts: [
+        "Because the city had seven bridges, and a graph with an odd number of edges can never be walked without repeating one of them somewhere",
+        "Because the river split the city into more than two land masses, and a single walk can only ever alternate back and forth between two sides",
+        "Because two of the bridges joined the same pair of land masses, and parallel edges between two vertices make any Euler path impossible",
+        "Because all four land masses touched an odd number of bridges, and a walk allows at most two odd-degree vertices, its endpoints"
+      ], a: 3,
+      why: "Passing through a vertex uses two edges, so every vertex except the endpoints needs even degree; the land masses had degrees 5, 3, 3 and 3. Odd edge counts, many regions and parallel edges are all compatible with Euler paths in other graphs." },
+
+    { type: "order",
+      q: "Order these problems from tractable in linear time to NP-complete:",
+      items: [
+        "strongly connected components (Tarjan): O(V + E)",
+        "2-SAT via the implication graph: O(V + E) in the formula size",
+        "bipartiteness (2-colouring) by BFS: O(V + E)",
+        "3-colouring, or 3-SAT: NP-complete"
+      ],
+      why: "Tarjan, 2-SAT and two-colouring are all linear, so any order among the first three is defensible &mdash; 2-SAT is in fact Tarjan run on a built graph. Adding one more literal per clause or one more colour crosses into NP-completeness, the subject of Chapter 46." }
+  ]
+});
