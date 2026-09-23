@@ -9326,3 +9326,300 @@ CHAPTERS.push({
       why: "A plain array writes one cell. A Fenwick tree climbs one chain of O(log n) cells. A prefix-sum array must shift every prefix to the right of the change, O(n). A sparse table has no update and must be rebuilt, O(n log n). The query costs run in almost the opposite order, which is the trade-off curve." }
   ]
 });
+
+/* ======================= CHAPTER 31 ======================= */
+CHAPTERS.push({
+  num: 31, part: 4, title: "Segment Trees and Lazy Propagation",
+  blurb: "The segment tree answers any associative range question: build it once over a monoid rather than over sum, and minimum, gcd, matrix products and the maximum subarray all come free. This chapter proves why a query touches O(log n) nodes, then builds lazy propagation &mdash; updating whole ranges by leaving a note at a node that says everyone below still owes this &mdash; and the composition rule that makes those notes correct. It covers the iterative, dynamic and persistent variants, the square-root methods including Mo's offline reordering, and closes by running the structure over trees and over time.",
+  sections: [
+
+    { title: "The Structure and Its Logarithmic Query",
+      viz: "dsaSegTree", vizTitle: "Drag a range. The highlighted nodes are the ones that answer it &mdash; count them per level",
+      html:
+        "<p>Chapter 30 ended with three properties and three structures. The sparse table needs an idempotent operation and forbids updates; the Fenwick tree needs an invertible one. The <strong>segment tree</strong> asks for less than either &mdash; only that the operation be associative &mdash; and in return it answers range queries and absorbs point updates in O(log n) for sums, minima, maxima, gcds, matrix products and summaries far stranger. It is the general answer to the range question, and this chapter is about why it works, how to make it absorb whole-range updates, and the handful of variants that stretch it further.</p>" +
+        "<p>The structure is a binary tree over ranges. The root stores the answer for the whole array, positions 0 to n minus 1. Each node covering [l, r] splits at the midpoint m and has two children covering [l, m] and [m+1, r], down to leaves that each cover one element. Every node stores the combined value of its range, computed from its two children, so building the tree is one bottom-up pass, O(n), and the tree has about 2n nodes. Stored in an array with the root at index 1 and the children of node v at 2v and 2v plus 1, a safe allocation is 4n cells.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class SegTree:\n" +
+        "    def __init__(self, a, op, e):            # op associative, e its identity\n" +
+        "        self.n, self.op, self.e = len(a), op, e\n" +
+        "        self.t = [e] * (4 * self.n)\n" +
+        "        self._build(1, 0, self.n - 1, a)\n" +
+        "\n" +
+        "    def _build(self, v, l, r, a):\n" +
+        "        if l == r: self.t[v] = a[l]; return\n" +
+        "        m = (l + r) // 2\n" +
+        "        self._build(2*v, l, m, a); self._build(2*v+1, m+1, r, a)\n" +
+        "        self.t[v] = self.op(self.t[2*v], self.t[2*v+1])\n" +
+        "\n" +
+        "    def query(self, ql, qr, v=1, l=0, r=None):\n" +
+        "        if r is None: r = self.n - 1\n" +
+        "        if qr < l or r < ql: return self.e           # disjoint: contributes nothing\n" +
+        "        if ql <= l and r <= qr: return self.t[v]     # covered: stop here\n" +
+        "        m = (l + r) // 2                             # partial: ask both children\n" +
+        "        return self.op(self.query(ql, qr, 2*v, l, m),\n" +
+        "                       self.query(ql, qr, 2*v+1, m+1, r))\n" +
+        "\n" +
+        "    def update(self, i, x, v=1, l=0, r=None):\n" +
+        "        if r is None: r = self.n - 1\n" +
+        "        if l == r: self.t[v] = x; return\n" +
+        "        m = (l + r) // 2\n" +
+        "        if i <= m: self.update(i, x, 2*v, l, m)\n" +
+        "        else:      self.update(i, x, 2*v+1, m+1, r)\n" +
+        "        self.t[v] = self.op(self.t[2*v], self.t[2*v+1])</code></pre>" +
+        "<pre data-lang='java' hidden><code>long query(int v, int l, int r, int ql, int qr) {   // sum version\n" +
+        "    if (qr < l || r < ql) return 0;                  // identity\n" +
+        "    if (ql <= l && r <= qr) return t[v];\n" +
+        "    int m = (l + r) / 2;\n" +
+        "    return query(2*v, l, m, ql, qr) + query(2*v+1, m+1, r, ql, qr);\n" +
+        "}\n" +
+        "void update(int v, int l, int r, int i, long x) {\n" +
+        "    if (l == r) { t[v] = x; return; }\n" +
+        "    int m = (l + r) / 2;\n" +
+        "    if (i <= m) update(2*v, l, m, i, x); else update(2*v+1, m+1, r, i, x);\n" +
+        "    t[v] = t[2*v] + t[2*v+1];\n" +
+        "}</code></pre></div>" +
+        "<p>The query has three cases, and they are the whole algorithm. A node whose range is disjoint from the query contributes the identity and stops. A node whose range lies wholly inside the query contributes its stored value and stops &mdash; this is a <strong>covering node</strong>. Only a <strong>partial node</strong>, one that overlaps the query without being inside it, recurses into both children. The answer is the combination, left to right, of the covering nodes, and together they are a <strong>range decomposition</strong> of the query: disjoint pieces whose union is exactly [l, r]. A point update walks one root-to-leaf path and recomputes each node on it from its children, O(log n).</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 290' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Sum query over [1, 6] on 8 elements: 4 covering nodes (green), at most 2 partial per level (gold)</text><rect x='153' y='40' width='570' height='30' rx='3' fill='#3a3212' stroke='#ffd166' stroke-width='1.2'/><text x='438' y='59' text-anchor='middle' fill='#ffd166' font-size='11'>[0,7] 36</text><text x='20' y='59' fill='#8fa3c4' font-size='10'>level 0: 1 partial</text><rect x='153' y='92' width='282' height='30' rx='3' fill='#3a3212' stroke='#ffd166' stroke-width='1.2'/><text x='294' y='111' text-anchor='middle' fill='#ffd166' font-size='11'>[0,3] 22</text><rect x='441' y='92' width='282' height='30' rx='3' fill='#3a3212' stroke='#ffd166' stroke-width='1.2'/><text x='582' y='111' text-anchor='middle' fill='#ffd166' font-size='11'>[4,7] 14</text><text x='20' y='111' fill='#8fa3c4' font-size='10'>level 1: 2 partial</text><rect x='153' y='144' width='138' height='30' rx='3' fill='#3a3212' stroke='#ffd166' stroke-width='1.2'/><text x='222' y='163' text-anchor='middle' fill='#ffd166' font-size='11'>[0,1] 8</text><rect x='297' y='144' width='138' height='30' rx='3' fill='#123a2c' stroke='#3ddc97' stroke-width='1.2'/><text x='366' y='163' text-anchor='middle' fill='#3ddc97' font-size='11'>[2,3] 14</text><rect x='441' y='144' width='138' height='30' rx='3' fill='#123a2c' stroke='#3ddc97' stroke-width='1.2'/><text x='510' y='163' text-anchor='middle' fill='#3ddc97' font-size='11'>[4,5] 5</text><rect x='585' y='144' width='138' height='30' rx='3' fill='#3a3212' stroke='#ffd166' stroke-width='1.2'/><text x='654' y='163' text-anchor='middle' fill='#ffd166' font-size='11'>[6,7] 9</text><text x='20' y='163' fill='#8fa3c4' font-size='10'>level 2: 2 partial</text><rect x='153' y='196' width='66' height='30' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1.2'/><text x='186' y='215' text-anchor='middle' fill='#5d6f8f' font-size='11'>5</text><rect x='225' y='196' width='66' height='30' rx='3' fill='#123a2c' stroke='#3ddc97' stroke-width='1.2'/><text x='258' y='215' text-anchor='middle' fill='#3ddc97' font-size='11'>3</text><rect x='297' y='196' width='66' height='30' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1.2'/><text x='330' y='215' text-anchor='middle' fill='#5d6f8f' font-size='11'>8</text><rect x='369' y='196' width='66' height='30' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1.2'/><text x='402' y='215' text-anchor='middle' fill='#5d6f8f' font-size='11'>6</text><rect x='441' y='196' width='66' height='30' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1.2'/><text x='474' y='215' text-anchor='middle' fill='#5d6f8f' font-size='11'>1</text><rect x='513' y='196' width='66' height='30' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1.2'/><text x='546' y='215' text-anchor='middle' fill='#5d6f8f' font-size='11'>4</text><rect x='585' y='196' width='66' height='30' rx='3' fill='#123a2c' stroke='#3ddc97' stroke-width='1.2'/><text x='618' y='215' text-anchor='middle' fill='#3ddc97' font-size='11'>7</text><rect x='657' y='196' width='66' height='30' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1.2'/><text x='690' y='215' text-anchor='middle' fill='#5d6f8f' font-size='11'>2</text><text x='20' y='215' fill='#8fa3c4' font-size='10'>level 3: 0 partial</text><text x='150' y='252' fill='#8fa3c4' font-size='10'>index</text><text x='186' y='252' text-anchor='middle' fill='#8fa3c4' font-size='10'>0</text><text x='258' y='252' text-anchor='middle' fill='#ff5d73' font-size='10'>1</text><text x='330' y='252' text-anchor='middle' fill='#ff5d73' font-size='10'>2</text><text x='402' y='252' text-anchor='middle' fill='#ff5d73' font-size='10'>3</text><text x='474' y='252' text-anchor='middle' fill='#ff5d73' font-size='10'>4</text><text x='546' y='252' text-anchor='middle' fill='#ff5d73' font-size='10'>5</text><text x='618' y='252' text-anchor='middle' fill='#ff5d73' font-size='10'>6</text><text x='690' y='252' text-anchor='middle' fill='#8fa3c4' font-size='10'>7</text><text x='20' y='274' fill='#3ddc97' font-size='11'>answer = 3 + 14 + 5 + 7 = 29, read from nodes [1,1], [2,3], [4,5], [6,6]</text></svg></div>" +
+        "<p>Why the query is O(log n) is a short argument worth owning. A partial node overlaps the query but is not inside it, so its range must straddle one of the query's two boundaries &mdash; it contains position l and something left of l, or position r and something right of r. The nodes on one level of the tree have disjoint ranges, so at most one of them can straddle the left boundary and at most one the right. Hence <strong>at most two partial nodes per level</strong>. Every node the query visits is either the root or a child of a partial node, since covering and disjoint nodes never recurse; two partial nodes have four children, so at most four nodes are visited per level, and there are about log n levels.</p>" +
+        "<p>Measured, the bound is tight and never exceeded. Over every one of the 36 possible ranges on eight elements, and all 32,896 ranges on 256, and twenty thousand random ranges on 65,536, the most partial nodes on any single level was exactly two. The most nodes visited was 11, 31 and 63 &mdash; four times the depth, minus one &mdash; and the most covering nodes in one decomposition was 4 on eight elements and 14 on 256, which is 2 log n minus 2. The figure shows the eight-element case: the query [1, 6] decomposes into four covering nodes, and no level has more than two gold ones. <strong>Drag a range in the machine above and count the partial nodes per level; you will not find three.</strong></p>" +
+        "<p>Trace the figure's query to see the three cases at work. The root [0, 7] is partial, so it asks both halves; [0, 3] and [4, 7] are both partial. Under [0, 3], the node [2, 3] lies inside the query and returns its stored 14 at once, while [0, 1] is partial and splits into [0, 0], disjoint, which returns the identity 0, and [1, 1], covering, which returns 3. Under [4, 7], [4, 5] is covering and returns 5, and [6, 7] splits into the covering [6, 6] and the disjoint [7, 7]. Eleven nodes are visited in all &mdash; the maximum for eight elements &mdash; and the answer is assembled from four of them, 3 plus 14 plus 5 plus 7, which is 29, without reading the leaves of the two middle blocks at all.</p>" +
+        "<p>One naming note prevents confusion when you read further. Computational geometry has an older structure also called a segment tree, which stores a set of intervals so that a query can report every interval containing a given point. It shares the recursive halving but answers a different question. The structure in this chapter, the one competitive programmers and most library code mean by the name, is the range-aggregate tree over an array.</p>"
+    },
+
+    { title: "Over a Monoid",
+      html:
+        "<p>Look at what the code in the last section actually required of the operation. It combined two children's values and trusted that the grouping did not matter, since the tree groups the elements in whatever shape the midpoints dictate: that is associativity. And it needed a value to return for a disjoint node that leaves any combination unchanged: that is an identity element. An associative operation with an identity is a <strong>monoid</strong>, and the segment tree is written once, over a monoid, rather than once per operation.</p>" +
+        "<p>The instances are everywhere. Sum with identity 0; minimum with identity positive infinity; maximum with identity negative infinity; gcd with identity 0, since gcd(0, x) is x; bitwise OR with 0 and AND with all-ones. One class, passed each of these in turn, was checked on three hundred random sequences of point updates and range queries per operation against a direct fold of the subarray, and it agreed on every query for all four of sum, minimum, maximum and gcd. Nothing in the tree changed but the two arguments.</p>" +
+        "<p>The monoid view pays off when the operation is not commutative. A product of 2-by-2 matrices is associative but depends on order, and matrix chains are how linear recurrences, path counts and many DP transitions are expressed. The segment tree handles them unchanged, provided every combination keeps left before right &mdash; which the recursive query does, because it always combines the left child's answer with the right child's in that order. The check makes the point: with matrices modulo a large prime, the tree matched the left-to-right product on 300 of 300 random ranges, and a copy with its combination order swapped was wrong on 234 of them. Commutative operations hide that bug; a non-commutative monoid finds it at once.</p>" +
+        "<p>The most useful monoids are summaries built for the problem. Chapter 1's maximum subarray, for example, becomes a range query over an array that changes: let each node store four numbers &mdash; its total, its best prefix sum, its best suffix sum, and its best subarray sum. Two adjacent ranges combine by rules you can derive in a minute: the total adds, the best prefix is the left prefix or the whole left plus the right prefix, the best suffix mirrors it, and the best subarray is the better of the two halves' bests or the left suffix joined to the right prefix. That four-tuple combination is associative, so the tree answers \"maximum subarray sum within [l, r]\" with point updates in O(log n), and it matched a brute-force scan on 500 of 500 random update-and-query sequences. It has no natural identity, so the implementation adjoins one &mdash; a sentinel meaning \"empty\" that the combine function passes through &mdash; which is a trick that works for any semigroup.</p>" +
+        "<p>A worked combination makes the rules concrete. The left range [2, &minus;5, 4] has total 1, best prefix 2, best suffix 4 and best subarray 4; the right range [&minus;1, 3, &minus;2] has total 0, best prefix 2, best suffix 1 and best 3. Joined, the total is 1; the best prefix is the larger of the left prefix 2 and the left total plus the right prefix, 3; the best suffix is the larger of the right suffix 1 and the right total plus the left suffix, 4; and the best subarray is the largest of 4, 3 and the left suffix plus the right prefix, 4 plus 2, which is 6. The subarray 4, &minus;1, 3 does sum to 6, and it is exactly the one that crosses the join &mdash; the case Chapter 1's divide and conquer handled with a linear scan, and the case the four-tuple handles in constant time.</p>" +
+        "<p>The design discipline this gives you is to ask, for any range problem, what small summary of a range lets two adjacent ranges be combined into the summary of their union. If such a summary exists and is associative, the segment tree solves the problem, and the only code you write is the combine function and the leaf value. If no fixed-size summary exists &mdash; the number of distinct values in a range is the standard example &mdash; the segment tree is the wrong tool, and the offline methods at the end of this chapter take over.</p>"
+    },
+
+    { title: "Lazy Propagation",
+      viz: "dsaLazyProp", vizTitle: "An update leaves notes instead of doing the work. Query into one and watch it get paid",
+      html:
+        "<p>Point updates are logarithmic, but a <strong>range update</strong> &mdash; add 5 to every element from l to r, or set them all to 7 &mdash; done one element at a time is O(n log n), worse than a plain array. <strong>Lazy propagation</strong> fixes this with one idea. Run the update like a query, decomposing [l, r] into the same O(log n) covering nodes; at each covering node, update the node's own stored value as if the whole range below it had been changed, and leave a note, the <strong>lazy tag</strong>, saying that its children still owe the change. Then stop. The update touches O(log n) nodes and the work below them is deferred.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 262' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Lazy propagation: add +5 to [0,3] on a = [1,2,3,4], then push the note down</text><text x='190' y='44' text-anchor='middle' fill='#2de2ff' font-size='11'>after the update, before push-down</text><line x1='190' y1='98' x2='100' y2='140' stroke='#334a6a' stroke-width='1.4'/><line x1='190' y1='98' x2='280' y2='140' stroke='#334a6a' stroke-width='1.4'/><rect x='120' y='58' width='140' height='40' rx='4' fill='#12233f' stroke='#ffd166' stroke-width='1.4'/><text x='190' y='75' text-anchor='middle' fill='#c9d6ea' font-size='11'>[0,3] sum 30</text><text x='190' y='91' text-anchor='middle' fill='#ffd166' font-size='10'>lazy +5</text><rect x='30' y='140' width='140' height='40' rx='4' fill='#12233f' stroke='#ff5d73' stroke-width='1.4'/><text x='100' y='157' text-anchor='middle' fill='#ff5d73' font-size='11'>[0,1] sum 3</text><text x='100' y='173' text-anchor='middle' fill='#8fa3c4' font-size='10'>lazy &#8212;</text><rect x='210' y='140' width='140' height='40' rx='4' fill='#12233f' stroke='#ff5d73' stroke-width='1.4'/><text x='280' y='157' text-anchor='middle' fill='#ff5d73' font-size='11'>[2,3] sum 7</text><text x='280' y='173' text-anchor='middle' fill='#8fa3c4' font-size='10'>lazy &#8212;</text><text x='570' y='44' text-anchor='middle' fill='#2de2ff' font-size='11'>after push-down</text><line x1='570' y1='98' x2='480' y2='140' stroke='#334a6a' stroke-width='1.4'/><line x1='570' y1='98' x2='660' y2='140' stroke='#334a6a' stroke-width='1.4'/><rect x='500' y='58' width='140' height='40' rx='4' fill='#12233f' stroke='#24344f' stroke-width='1.4'/><text x='570' y='75' text-anchor='middle' fill='#c9d6ea' font-size='11'>[0,3] sum 30</text><text x='570' y='91' text-anchor='middle' fill='#8fa3c4' font-size='10'>lazy &#8212;</text><rect x='410' y='140' width='140' height='40' rx='4' fill='#12233f' stroke='#ffd166' stroke-width='1.4'/><text x='480' y='157' text-anchor='middle' fill='#c9d6ea' font-size='11'>[0,1] sum 13</text><text x='480' y='173' text-anchor='middle' fill='#ffd166' font-size='10'>lazy +5</text><rect x='590' y='140' width='140' height='40' rx='4' fill='#12233f' stroke='#ffd166' stroke-width='1.4'/><text x='660' y='157' text-anchor='middle' fill='#c9d6ea' font-size='11'>[2,3] sum 17</text><text x='660' y='173' text-anchor='middle' fill='#ffd166' font-size='10'>lazy +5</text><text x='20' y='212' fill='#ff5d73' font-size='10'>red: children stale &#8212; their sums omit the +5 the parent owes them</text><text x='20' y='230' fill='#8fa3c4' font-size='10'>invariant: a node's own value is always correct; its children's may not be, until the note is pushed</text><text x='20' y='248' fill='#ffd166' font-size='10'>gold: a pending note. Push-down applies it to both children and passes it on to them</text></svg></div>" +
+        "<p>The deferred work is paid on demand. Whenever a later update or query needs to go below a node that carries a tag, it first performs a <strong>push-down</strong>: apply the tag to both children, updating their stored values and merging the tag into theirs, then clear it from the parent. The whole design rests on one invariant, and it is worth saying exactly: <em>a node's own stored value is always correct; its children's values may be stale by precisely the tags held at their ancestors.</em> A query that stops at a covering node reads a correct value; a query that goes deeper pushes the notes down on its way, so it never reads a stale one.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def _apply(self, v, l, r, tag):      # tag = (assign or None, add)\n" +
+        "    asg, add = tag\n" +
+        "    if asg is not None:\n" +
+        "        self.sm[v] = asg * (r - l + 1); self.mn[v] = asg\n" +
+        "    self.sm[v] += add * (r - l + 1);  self.mn[v] += add\n" +
+        "    old_asg, old_add = self.lz[v]\n" +
+        "    if asg is not None: self.lz[v] = (asg, add)            # assign erases what was pending\n" +
+        "    else:               self.lz[v] = (old_asg, old_add + add)  # add stacks on top\n" +
+        "\n" +
+        "def _push(self, v, l, r):\n" +
+        "    if self.lz[v] != (None, 0):\n" +
+        "        m = (l + r) // 2\n" +
+        "        self._apply(2*v, l, m, self.lz[v]); self._apply(2*v+1, m+1, r, self.lz[v])\n" +
+        "        self.lz[v] = (None, 0)</code></pre>" +
+        "<pre data-lang='java' hidden><code>void apply(int v, int l, int r, Long asg, long add) {\n" +
+        "    if (asg != null) { sm[v] = asg * (r - l + 1); mn[v] = asg; }\n" +
+        "    sm[v] += add * (r - l + 1); mn[v] += add;\n" +
+        "    if (asg != null) { lzAsg[v] = asg; lzAdd[v] = add; }   // assign erases pending\n" +
+        "    else             { lzAdd[v] += add; }                   // add stacks on top\n" +
+        "}</code></pre></div>" +
+        "<p>The measured effect is large. An add over the whole of a hundred-thousand-element array touches one node, the root, and over two thousand random ranges the most nodes any single update touched was 67 &mdash; about four times log n. Ten thousand range adds interleaved with ten thousand range sums took 24.1 seconds done element by element and 0.68 seconds with lazy propagation, the same answers thirty-five times faster.</p>" +
+        "<p>The hard part is not the push-down; it is <strong>tag composition</strong>. When a node already holds a pending tag and a second update lands on it, the two must merge into one tag that means \"apply the old, then the new\". For two adds, that is the sum. For add then assign, the assign wipes the add out. For assign then add, the result is an assign followed by an add, which the (assign, add) pair above records &mdash; and dropping that trailing add is the classic bug. A version that made exactly that mistake passed 118 of 400 random sequences of mixed adds, assigns and queries and failed the other 282, while the correct composition passed all 400. The rule to carry is that tags are functions applied to a range's value, merging two tags is function composition, and function composition is associative but not commutative: the order must be \"old first, new second\" every time. The general form is an affine tag, x maps to a times x plus b, which composes into another affine map and covers add, assign and multiply at once.</p>" +
+        "<p>Written out, the affine rule is short enough to memorise. If the pending tag is x maps to a1 x plus b1 and the new one is x maps to a2 x plus b2, applying the old and then the new gives a2 a1 x plus a2 b1 plus b2 &mdash; a single affine tag with multiplier a2 a1 and offset a2 b1 plus b2. An add of c is the tag (1, c), an assign of v is (0, v), and a multiply by m is (m, 0); a node's range sum under the tag becomes a times the sum plus b times the range length. Checking any one case against the formula is the fastest way to find a composition bug before it ships: assign 7 then add 3 is (0, 7) followed by (1, 3), which composes to (0, 10), assign 10, as it should.</p>" +
+        "<p>Follow the figure through one query to see the note cashed in. The array [1, 2, 3, 4] has range sum 10; adding 5 to all of it stops at the root, which becomes 30 and holds the tag +5, while its children still store 3 and 7. Now ask for the sum of [0, 1]. The root is partial, so before descending it pushes: each child gets +5 times its length of two, so [0, 1] becomes 13 and [2, 3] becomes 17, each now holding its own +5 note for its leaves, and the root's tag is cleared. The query then stops at [0, 1], a covering node, and returns 13 &mdash; which is 6 plus 7, correct &mdash; without ever touching a leaf. The leaves are still 1 and 2; they will be corrected only if something ever asks for them.</p>"
+    },
+
+    { title: "Iterative Segment Trees",
+      html:
+        "<p>The recursive tree is the clearest and the one to reach for when lazy tags are involved, but for point update and range query there is a version with no recursion, half the memory and a faster constant. The <strong>iterative segment tree</strong> stores 2n cells: the leaves occupy positions n through 2n minus 1 in order, and every internal node i at position 1 to n minus 1 has children 2i and 2i plus 1. Building is one loop from n minus 1 down to 1. An update writes the leaf and climbs by halving the index, recomputing each parent. It works for any n, not only powers of two: some internal nodes then combine ranges that are not contiguous in the usual picture, but every query only ever reads nodes whose ranges are.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class IterSeg:\n" +
+        "    def __init__(self, a, op, e):\n" +
+        "        self.n, self.op, self.e = len(a), op, e\n" +
+        "        self.t = [e] * self.n + list(a)             # leaves at n..2n-1\n" +
+        "        for i in range(self.n - 1, 0, -1):\n" +
+        "            self.t[i] = op(self.t[2*i], self.t[2*i+1])\n" +
+        "\n" +
+        "    def update(self, i, x):\n" +
+        "        i += self.n; self.t[i] = x\n" +
+        "        while i > 1:\n" +
+        "            i //= 2; self.t[i] = self.op(self.t[2*i], self.t[2*i+1])\n" +
+        "\n" +
+        "    def query(self, l, r):                         # inclusive l..r\n" +
+        "        resl, resr = self.e, self.e\n" +
+        "        l += self.n; r += self.n + 1               # half-open [l, r)\n" +
+        "        while l < r:\n" +
+        "            if l & 1: resl = self.op(resl, self.t[l]); l += 1\n" +
+        "            if r & 1: r -= 1; resr = self.op(self.t[r], resr)\n" +
+        "            l //= 2; r //= 2\n" +
+        "        return self.op(resl, resr)</code></pre>" +
+        "<pre data-lang='java' hidden><code>long query(int l, int r) {                         // inclusive, sum\n" +
+        "    long res = 0;\n" +
+        "    for (l += n, r += n + 1; l < r; l >>= 1, r >>= 1) {\n" +
+        "        if ((l & 1) == 1) res += t[l++];\n" +
+        "        if ((r & 1) == 1) res += t[--r];\n" +
+        "    }\n" +
+        "    return res;\n" +
+        "}</code></pre></div>" +
+        "<p>The query climbs from both ends at once. The half-open window [l, r) starts at the leaves; if l is a right child, its parent would include an element left of the range, so l's node is taken into the answer and l steps right; if r is a right child, the node left of it is inside the range and is taken, stepping r left. Then both move to their parents. The indices are doing the range decomposition of the recursive version from the outside in, and the same two-per-level argument bounds it. For a non-commutative monoid the answer must be kept as two accumulators, one growing rightward from the left end and one leftward from the right, joined at the end; the code above does this, and with random 2-by-2 matrices on arrays of every length from 1 to 100 it matched the ordered product on 500 of 500 random sequences.</p>" +
+        "<p>Trace the same [1, 6] query on eight elements to see the correspondence. The half-open window becomes positions 9 to 15. Position 9 is odd, a right child, so leaf 9 (element 1) is taken and l moves to 10; 15 is odd, so r steps to 14 and leaf 14 (element 6) is taken. Halving gives 5 and 7: node 5 is odd, so it is taken &mdash; it covers elements 2 and 3 &mdash; and l moves to 6; 7 is odd, so r steps to 6 and node 6, covering elements 4 and 5, is taken. Halving gives 3 and 3, and the loop ends. The four nodes taken are the four covering nodes the recursive version found, reached from the outside in with no calls and no stack.</p>" +
+        "<p>The measured gain is real. On a hundred thousand elements with a hundred thousand mixed operations, the recursive tree took 0.70 seconds and the iterative one 0.26 &mdash; 2.7 times faster in CPython, where the recursion's function calls dominate &mdash; with 200,000 cells against 400,000. In a compiled language the gap narrows but the memory halving remains. The iterative form can be extended to lazy propagation, but the push-down order then has to be managed by hand along both boundary paths, and most people are better served by the recursive lazy tree plus the iterative one for everything else.</p>"
+    },
+
+    { title: "Dynamic, Implicit and Persistent",
+      html:
+        "<p>Everything so far allocates a node for every range of an array that exists up front. Two situations break that. In the first, the positions come from a huge space &mdash; timestamps, coordinates up to a billion &mdash; and only a few are ever used. If the queries are known in advance, compress the coordinates to the ones that occur and build an ordinary tree over them. If they are not, build a <strong>dynamic segment tree</strong>, sometimes called an implicit one: the root covers the whole space, and a child node is created only when an update first needs to descend into it. Absent children stand for ranges of identity values.</p>" +
+        "<p>Each update then allocates at most one node per level, about log of the space. Ten thousand random point updates over positions up to a billion allocated 177,661 nodes, 17.8 per update rather than the 30 or so the depth allows, because the upper levels are shared; a full array for the same space would need about two billion cells. Range queries against a dictionary of the inserted points matched on every one of two hundred random ranges. The cost is pointers and a constant factor over the array layout, which is why compression is preferred whenever the coordinates are known ahead of time.</p>" +
+        "<p>The second situation is history. A <strong>persistent segment tree</strong> keeps every version of the array, each queryable, after every update. The technique is <strong>path copying</strong>, from Driscoll, Sarnak, Sleator and Tarjan's 1989 work on making data structures persistent: an update copies only the root-to-leaf path it changes, about log n plus one nodes, and each copied node points to the unchanged children of the old version. The old root still describes the old array in full, because nothing it points to was modified. Measured over a hundred thousand insertions, the tree allocated 17.7 new nodes per version, against a depth of 16.6 &mdash; one path each, as predicted.</p>" +
+        "<p>Persistence enables range-of-versions queries, and the standard one is striking. To find the k-th smallest value in a subarray a[l..r], build a persistent tree over the sorted values, where version i counts how many of the first i array elements fall into each value range. The counts for exactly the elements in positions l to r are version r plus 1 minus version l, node by node, and a walk down both versions at once &mdash; go left if the left subtree's count difference is at least k, otherwise subtract it and go right &mdash; finds the answer in O(log n) with no sorting at query time. Checked on three hundred random arrays against sorting each subarray, it was right every time. The subtraction of versions is the Fenwick-style prefix difference of Chapter 30, applied to entire trees.</p>" +
+        "<p>A small case shows the walk. Take a = [5, 1, 4, 2, 3] and ask for the second smallest of positions 1 to 3, the values 1, 4 and 2. The value domain 1 to 5 splits into [1, 3] and [4, 5]; the difference of the two versions counts two of the subarray's values in [1, 3], which is at least k = 2, so the walk goes left. [1, 3] splits into [1, 2] and [3, 3]; two values fall in [1, 2], still at least 2, so it goes left again. [1, 2] splits into [1] and [2]; only one value is in [1], fewer than 2, so the walk subtracts it, leaving k = 1, and goes right to [2]. The answer is 2, found in three steps from two roots that were built once and never modified.</p>"
+    },
+
+    { title: "Sqrt Decomposition and Mo's Algorithm",
+      viz: "dsaMosAlgorithm", vizTitle: "Same queries, different order. The counter is total pointer movement",
+      html:
+        "<p>Before the segment tree there is a simpler structure that is often enough. <strong>Sqrt decomposition</strong> cuts the array into blocks of about &#8730;n elements and stores one summary per block. A point update changes one element and one block summary, O(1); a range query reads the whole blocks inside the range from their summaries and the partial blocks at each end element by element, O(&#8730;n). On a million elements that is a thousand steps a query rather than twenty, but the code is ten lines, it tolerates operations that are awkward to express as a monoid, and checked on three hundred random sequences it matched a direct sum on every query.</p>" +
+        "<p>The same square root powers a technique for problems the segment tree cannot touch. Counting the <strong>distinct values</strong> in a range has no fixed-size summary that combines, as the monoid section noted. But if all the queries are known in advance and the answer can be maintained as a window grows or shrinks by one element &mdash; a count per value and a running total of values whose count is positive &mdash; then two pointers can slide from one query's range to the next, adding and removing one element at a time. The cost is the total distance the pointers move, and that depends entirely on the order in which the queries are answered.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 320' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Mo's order: sort queries by (block of left end, right end) and walk the path</text><rect x='70' y='52' width='64' height='240' fill='#16243d' opacity='0.8'/><rect x='198' y='52' width='64' height='240' fill='#16243d' opacity='0.8'/><rect x='326' y='52' width='64' height='240' fill='#16243d' opacity='0.8'/><line x1='70' y1='292' x2='454' y2='292' stroke='#334a6a' stroke-width='1.4'/><line x1='70' y1='292' x2='70' y2='52' stroke='#334a6a' stroke-width='1.4'/><text x='262' y='310' text-anchor='middle' fill='#8fa3c4' font-size='10'>left end l (bands = blocks of 8) &#8594;</text><text x='20' y='40' fill='#8fa3c4' font-size='10'>right end r &#8593;</text><polyline points='94,242 70,217 126,177 78,147 118,112 190,142 190,87 174,62 206,162 198,97 246,57 262,122 334,87 422,57' fill='none' stroke='#3ddc97' stroke-width='1.4'/><circle cx='94' cy='242' r='4' fill='#ffd166'/><circle cx='70' cy='217' r='4' fill='#ffd166'/><circle cx='126' cy='177' r='4' fill='#ffd166'/><circle cx='78' cy='147' r='4' fill='#ffd166'/><circle cx='118' cy='112' r='4' fill='#ffd166'/><circle cx='190' cy='142' r='4' fill='#ffd166'/><circle cx='190' cy='87' r='4' fill='#ffd166'/><circle cx='174' cy='62' r='4' fill='#ffd166'/><circle cx='206' cy='162' r='4' fill='#ffd166'/><circle cx='198' cy='97' r='4' fill='#ffd166'/><circle cx='246' cy='57' r='4' fill='#ffd166'/><circle cx='262' cy='122' r='4' fill='#ffd166'/><circle cx='334' cy='87' r='4' fill='#ffd166'/><circle cx='422' cy='57' r='4' fill='#ffd166'/><text x='480' y='80' fill='#c9d6ea' font-size='11'>14 queries, n = 48, block 8</text><text x='480' y='104' fill='#8fa3c4' font-size='11'>pointer moves, arrival order: 382</text><text x='480' y='124' fill='#3ddc97' font-size='11'>pointer moves, Mo's order:   194</text><text x='480' y='160' fill='#8fa3c4' font-size='10'>inside a band, r only climbs;</text><text x='480' y='176' fill='#8fa3c4' font-size='10'>l wanders at most one block.</text><text x='480' y='204' fill='#8fa3c4' font-size='10'>n = Q = 100,000 measured:</text><text x='480' y='220' fill='#c9d6ea' font-size='10'>5.35e9 moves vs 4.2e7 (128x)</text></svg></div>" +
+        "<p><strong>Mo's algorithm</strong> chooses the order. Sort the queries by the block of their left endpoint, and within a block by their right endpoint. Within one block the right pointer only climbs, at most n steps for the whole block, and the left pointer wanders by at most one block's width per query. With block size B the total is about Q times B for the left pointer and n squared over B for the right, minimised near B equal to n over the square root of Q, for O((n + Q)&#8730;n) moves in all. It is offline &mdash; it needs every query before answering any &mdash; and it carries the name of a competitive programmer but has no canonical paper; it is folklore, and it is described here without a citation for that reason.</p>" +
+        "<p>The measurement makes the reordering vivid. With a hundred thousand elements and a hundred thousand random queries, answering in arrival order would move the pointers 5.35 billion steps; Mo's order moved them 42 million, 128 times fewer, and the answers matched a direct count on every sampled query. Sweeping the block size, the total fell from 313 million moves at B = 30 to 42 million at 316, the predicted optimum, and 37 million at 500, then rose again to 323 million at 10,000 &mdash; a broad valley whose floor sits a little right of the simple formula, because a left pointer moving within a block travels about a third of the block on average, not all of it. One refinement is worth its line of code: sort the right endpoints ascending in even blocks and descending in odd ones, so the right pointer sweeps back instead of returning to the start; at B = 316 that cut the total from 42 million to 26 million. <strong>In the machine above, switch between arrival order and Mo's order and slide the block size to find the minimum.</strong></p>"
+    },
+
+    { title: "Beyond Arrays",
+      html:
+        "<p>The segment tree is an array structure, and Chapter 29 already built the adapter that turns trees into arrays. The Euler tour gives every node an entry time and makes its subtree the contiguous range [tin, tout); lay node values out by entry time and build a segment tree over them, and \"maximum value in this subtree\" with point updates is one range query and one point update. Checked on three hundred random trees against a direct traversal of each subtree, the combination agreed on every query. With heavy-light decomposition from the same chapter, a path splits into O(log n) chain segments, each a contiguous range, and path queries with updates cost O(log squared n); lazy tags extend both to subtree and path range updates.</p>" +
+        "<p>The second extension is stranger and more powerful: a segment tree whose positions are moments in time. The problem is <strong>dynamic connectivity</strong> &mdash; edges are added and removed from a graph, and between changes you are asked whether two vertices are connected. Union-find from Chapter 7 handles additions but cannot delete. Offline, though, every edge has a lifetime, the interval of moments between its addition and removal. Insert each lifetime into a segment tree over time the way a range update would, into O(log T) covering nodes, where T is the number of events. Then walk the tree depth-first: on entering a node, union the endpoints of every edge stored there; at a leaf, answer that moment's query; on leaving, undo the unions made on entry.</p>" +
+        "<p>Undoing is what union-find usually cannot do, and the fix is to give something up. <strong>Rollback</strong> needs every union to be reversible, so drop path compression and keep union by size, which still bounds find at O(log n); each union then changes exactly one parent pointer and one size, which a stack records and a pop restores. Every edge is united and undone once per covering node, so the total is O((T + E) log T log n). Checked against a fresh breadth-first search at every query on three hundred random event sequences, the offline method answered every connectivity query correctly.</p>" +
+        "<p>Picture one edge to see why each is handled only O(log T) times. Suppose it is added at event 2 and removed at event 9, so it is present at moments 2 through 8. That interval decomposes, exactly like a range update, into a handful of covering nodes of the time tree &mdash; perhaps [2, 3], [4, 7] and [8, 8] &mdash; and the edge is stored at those three and nowhere else. When the depth-first walk is inside [4, 7], the edge is united once and serves all four moments beneath it; when the walk leaves, it is undone, and moments outside its lifetime never see it. The segment tree has turned deletion, the one operation union-find cannot do, into a nesting of intervals it never has to undo out of order.</p>" +
+        "<p>That completes the range-query toolkit, and the lesson of this part is how far a single idea stretches. A range is split into O(log n) canonical pieces; each piece stores a summary under an associative combine; updates are either paid on the spot or left as composable notes; and the positions being ranged over can be array indices, entry times, chain positions, versions or moments. The graphs of Part 5 open with representation, and several of their harder problems will come back to this structure in one of those disguises.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Build it over a monoid.</strong> Write one segment tree that takes an operation and its identity, and verify it for sum, min, max and gcd against a direct fold. Instrument the query and confirm no level ever has more than two partial nodes.</li>" +
+        "<li><strong>Order matters.</strong> Run the tree over 2-by-2 matrices modulo a prime and check range products against the left-to-right product. Swap the combine order and find a range where it fails.</li>" +
+        "<li><strong>Maximum subarray in a range.</strong> Implement the four-tuple node (total, best prefix, best suffix, best) with an adjoined empty identity, and check range queries with point updates against brute force.</li>" +
+        "<li><strong>Lazy add and assign.</strong> Implement range add, range assign, range sum and range min with (assign, add) tags. Test against a plain array, then deliberately drop the trailing add in the composition and measure how often it fails.</li>" +
+        "<li><strong>Go iterative.</strong> Write the bottom-up tree with two accumulators, verify it on a non-commutative monoid for every n from 1 to 100, and time it against the recursive tree.</li>" +
+        "<li><strong>Persistent k-th smallest.</strong> Build a persistent tree over compressed values and answer k-th smallest in a[l..r] by walking versions r+1 and l together. Count the nodes allocated per version.</li>" +
+        "<li><strong>Mo's algorithm.</strong> Answer distinct-count queries in Mo's order, verify against brute force, and sweep the block size to find the minimum pointer movement. Add the odd-even ordering and measure its gain.</li>" +
+        "<li><strong>Connectivity over time.</strong> Implement offline dynamic connectivity with a segment tree over time and union-find with rollback, and verify every query against a breadth-first search.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "segment tree", d: "A binary tree over ranges in which each node stores the combined value of its range, giving O(log n) range queries and point updates for any associative operation." },
+    { t: "covering node", d: "A node whose range lies wholly inside the query; the query takes its stored value and does not descend further." },
+    { t: "partial node", d: "A node that overlaps the query without being contained in it; only these recurse, and there are at most two per level." },
+    { t: "range decomposition", d: "The set of covering nodes whose disjoint ranges exactly tile a query range; at most about 2 log n nodes." },
+    { t: "monoid", d: "An associative operation with an identity element, such as sum with 0 or min with infinity; the exact requirement for a segment tree." },
+    { t: "identity element", d: "A value that leaves any other unchanged under the operation, returned by disjoint nodes; adjoined as a sentinel when the operation has none." },
+    { t: "lazy propagation", d: "Updating a range by changing only its O(log n) covering nodes and leaving pending notes for their descendants, paid when something descends." },
+    { t: "lazy tag", d: "The pending-update note stored at a node, meaning its own value is correct but its children still owe the change." },
+    { t: "push-down", d: "Applying a node's lazy tag to its two children and merging it into their tags, then clearing it, before descending." },
+    { t: "tag composition", d: "Merging a new pending update into an existing one as function composition, old first and new second; associative but not commutative." },
+    { t: "iterative segment tree", d: "A bottom-up segment tree in 2n cells with leaves at n..2n-1, updated and queried by index arithmetic without recursion." },
+    { t: "dynamic segment tree", d: "A segment tree over a huge coordinate space that creates nodes only when an update first descends into them." },
+    { t: "persistent segment tree", d: "A segment tree that keeps every past version queryable by copying only the O(log n) path each update changes." },
+    { t: "path copying", d: "Making a structure persistent by copying the nodes on the path an update modifies and sharing all others; Driscoll, Sarnak, Sleator and Tarjan 1989." },
+    { t: "sqrt decomposition", d: "Splitting an array into blocks of about &#8730;n with one summary each, giving O(1) point updates and O(&#8730;n) range queries." },
+    { t: "Mo's algorithm", d: "An offline method that orders range queries by (block of left end, right end) so two sliding pointers move O((n+Q)&#8730;n) in total; folklore, with no canonical paper." },
+    { t: "dynamic connectivity", d: "Answering whether two vertices are connected while edges are added and removed; solved offline with a segment tree over time and rollback." },
+    { t: "rollback", d: "Undoing union-find operations in reverse order, possible when path compression is dropped so each union changes one parent and one size." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "A segment-tree query recurses only into partial nodes. Why can there be at most two partial nodes on any one level?",
+      opts: [
+        "Because a balanced tree has only two nodes per level below the root, so at most two of them can be partial at any one time",
+        "Because a partial node must straddle one of the query's two boundaries, and nodes on one level are disjoint, so each boundary lies in at most one of them",
+        "Because the query always descends into the left child first and prunes the right, so only the leftmost two nodes of each level are ever examined",
+        "Because every covering node has a partial sibling, and the number of covering nodes per level is at most one"
+      ], a: 1,
+      why: "A node that overlaps the query without being inside it must contain l and something left of it, or r and something right of it. Nodes on a level are disjoint, so at most one straddles each boundary. Measured, the maximum was exactly two on every size tested. Levels hold many nodes, both children are examined, and covering nodes per level can be two." },
+
+    { type: "mc",
+      q: "What is the minimal property an operation needs for a segment tree to answer range queries over it?",
+      opts: [
+        "It must be invertible, so a range can be recovered by subtracting two prefixes",
+        "It must be idempotent, so that the overlapping node ranges at each level of the tree do not double-count any element that two of them happen to share",
+        "It must be commutative, so that the covering nodes can be combined in whichever order the recursion returns them",
+        "It must be associative with an identity element &mdash; a monoid &mdash; and even the identity can be adjoined if missing"
+      ], a: 3,
+      why: "The tree groups elements in whatever shape its midpoints dictate, which needs associativity, and disjoint nodes return the identity; that is a monoid, and a sentinel can be adjoined when no identity exists. Invertibility is the Fenwick tree's requirement, idempotence the sparse table's, and commutativity is not needed as long as the order is kept left to right." },
+
+    { type: "mc",
+      q: "A segment tree over 2-by-2 matrix products has its combine order swapped to right-then-left. What happens?",
+      opts: [
+        "Nothing changes, because matrix multiplication is associative and the tree relies only on associativity",
+        "The build step fails with a dimension error, since the matrices are no longer multiplied in a compatible order",
+        "Range products come out wrong on most ranges, because matrix product is not commutative and the order must stay left to right",
+        "Only single-element ranges come out wrong, since longer ranges combine enough nodes for the order errors to cancel out in pairs"
+      ], a: 2,
+      why: "Associativity lets the tree regroup, but it never licenses reordering; matrix product depends on order. Measured, the swapped version was wrong on 234 of 300 random ranges. 2-by-2 matrices always multiply, and single-element ranges are the ones that stay correct." },
+
+    { type: "blank",
+      q: "In lazy propagation, the step that applies a node's pending tag to both children and clears it before descending is called the ____.",
+      a: ["push-down", "push down", "pushdown"],
+      why: "The push-down pays deferred work on demand: a query or update that needs to go below a tagged node first applies the tag to the children and merges it into theirs, preserving the invariant that every node it then reads is correct." },
+
+    { type: "mc",
+      q: "A node holds a pending 'assign 7' tag and then receives 'add 3'. What single tag must it hold afterward?",
+      opts: [
+        "Assign 7 followed by add 3 &mdash; effectively assign 10 &mdash; because tags compose as functions, old first and new second",
+        "Add 3 alone, because a newer tag always replaces an older one at the same node, and the assignment was already reflected in the node&apos;s stored value",
+        "Assign 7 alone, because an assignment overrides every other kind of update that reaches the node, whether it arrived before the assignment or after it",
+        "Add 3 followed by assign 7, because tags are applied in the order in which they are later pushed down, and the newest note is always pushed first"
+      ], a: 0,
+      why: "Tag composition is function composition with the old tag first: set to 7, then add 3, which is assign 10. Dropping the trailing add is the classic bug, and a version that did so failed 282 of 400 random sequences. A later add does not replace or get swallowed by an earlier assign, and reversing the order computes a different function." },
+
+    { type: "mc",
+      q: "The iterative segment tree answers a query for a non-commutative monoid with two accumulators. Why two?",
+      opts: [
+        "Because the left and right halves of the array are stored in two separate arrays in the iterative layout",
+        "Because nodes are collected from both ends moving inward, so the left end's pieces must be appended rightward and the right end's prepended leftward to keep the order",
+        "Because the iterative tree stores each value twice, once as a leaf and once in its parent, and the two copies must be combined separately",
+        "Because one accumulator holds the value and the other the identity, and they are swapped at every level of the climb"
+      ], a: 1,
+      why: "The loop takes nodes from the left boundary moving right and from the right boundary moving left; for order to survive, the left pieces accumulate as resl = op(resl, node) and the right as resr = op(node, resr), joined at the end. There is one array, values are not stored twice for this purpose, and nothing is swapped." },
+
+    { type: "mc",
+      q: "A persistent segment tree answers the k-th smallest value in a[l..r]. What makes that possible without sorting at query time?",
+      opts: [
+        "Each version stores the fully sorted array of all elements seen so far, so the query indexes position k of the version for r directly and reads the value",
+        "The tree keeps only the newest version but records undo logs, replaying them backward to position l before each query",
+        "Version i counts the first i elements per value range, so version r+1 minus version l counts exactly a[l..r], walked down both together",
+        "The array is re-sorted once per query inside the persistent nodes, which is cheap because path copying shares most of them"
+      ], a: 2,
+      why: "Each version is a count tree over the value domain for a prefix of the array; subtracting version l from version r+1 node by node gives counts for the subarray, and walking both roots down by comparing left-subtree count differences with k finds the answer in O(log n). No version stores a sorted copy, no replay is needed, and nothing is re-sorted." },
+
+    { type: "blank",
+      q: "The offline technique that sorts range queries by (block of left endpoint, right endpoint) so that two sliding pointers move only O((n+Q)&#8730;n) in total is ____ algorithm.",
+      a: ["Mo's", "Mo", "mo's", "mo"],
+      why: "Mo's algorithm reorders known queries so the right pointer only climbs within each block and the left moves at most a block per query; measured at n = Q = 100,000, it cut pointer movement 128-fold. It has no canonical paper." },
+
+    { type: "mc",
+      q: "Offline dynamic connectivity uses union-find with rollback. Why must path compression be dropped?",
+      opts: [
+        "Because path compression only works on trees that are balanced, and the unions performed at the covering nodes of the time tree create sets that are badly unbalanced",
+        "Because path compression makes find slower once rollback is in use, which erases the benefit it gives in the ordinary insert-only setting where nothing is undone",
+        "Because path compression requires knowing all of the edges in advance, which the segment tree over time does not provide at any point during its depth-first walk",
+        "Because compression rewrites many parent pointers during a find, which cannot be undone cheaply; without it each union changes one pointer and one size"
+      ], a: 3,
+      why: "Rollback needs every change recorded and reversible; a union by size changes one parent and one size, a stack entry each, but path compression rewrites arbitrarily many pointers during finds. Union by size alone still bounds find at O(log n). It has nothing to do with balance, speed with rollback, or advance knowledge of edges." },
+
+    { type: "order",
+      q: "Order these operations by cost per operation, cheapest first:",
+      items: [
+        "iterative segment tree point update: O(log n) with a small constant",
+        "recursive lazy segment tree range add: O(log n), about four nodes per level",
+        "sqrt decomposition range query: O(&#8730;n)",
+        "range add done element by element with a point-update segment tree: O(n log n)"
+      ],
+      why: "The iterative point update walks one leaf-to-root path. A lazy range add touches O(log n) nodes, up to about four per level. Sqrt decomposition pays O(&#8730;n) per query, a thousand steps at a million elements. Updating each element of a range separately costs O(log n) per element, O(n log n) in all, the case lazy propagation exists to avoid." }
+  ]
+});
