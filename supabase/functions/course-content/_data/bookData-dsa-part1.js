@@ -10507,3 +10507,306 @@ CHAPTERS.push({
       why: "Kahn's algorithm is linear; the DAG longest path adds one more linear pass over the same order, so either order between the first two is defensible. The lexicographic version pays a log factor for its heap. The general longest simple path has no known polynomial algorithm, and brute force grew about tenfold per two added vertices." }
   ]
 });
+
+/* ======================= CHAPTER 35 ======================= */
+CHAPTERS.push({
+  num: 35, part: 5, title: "Shortest Paths as One Relaxation",
+  blurb: "There are half a dozen famous shortest-path algorithms and exactly one idea: relax an edge, meaning check whether going through it improves the best known distance. Everything that distinguishes BFS, Dijkstra, Bellman&ndash;Ford, Floyd&ndash;Warshall, Johnson and A* is the order in which they relax. This chapter measures each ordering on the same graphs, shows the exact step where a negative edge breaks Dijkstra, detects negative cycles and currency arbitrage, and ends with the questions that choose an order for the graph in front of you.",
+  sections: [
+
+    { title: "Relaxation, and BFS in Its Vocabulary",
+      html:
+        "<p>There are half a dozen famous shortest-path algorithms and exactly one idea. Keep a <strong>tentative distance</strong> d[v] for every vertex, infinity except at the source, where it is zero. To <strong>relax</strong> an edge from u to v is to ask whether going through it improves the best known distance: if d[u] plus the edge's weight is less than d[v], lower d[v] to that sum and remember u as v's predecessor. Every algorithm in this chapter does nothing to the distances except relax edges. What distinguishes Dijkstra from Bellman&ndash;Ford from Floyd&ndash;Warshall is the <em>order</em> in which they relax them, and choosing an algorithm is choosing an order that suits the graph.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 318' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Six algorithms, one operation: each is relax() applied in a different order</text><rect x='20' y='30' width='720' height='34' rx='4' fill='#12233f' stroke='#ffd166' stroke-width='1.2'/><text x='36' y='52' fill='#ffd166' font-size='12' xml:space='preserve'>relax(u, v):  if d[u] + w(u,v) &lt; d[v]:  d[v] = d[u] + w(u,v)</text><text x='24' y='90' fill='#2de2ff' font-size='11'>algorithm</text><text x='148' y='90' fill='#2de2ff' font-size='11'>relaxes edges in the order of</text><text x='472' y='90' fill='#2de2ff' font-size='11'>weights</text><text x='610' y='90' fill='#2de2ff' font-size='11'>cost</text><rect x='20' y='97' width='720' height='22' rx='3' fill='#12233f'/><text x='24' y='112' fill='#3ddc97' font-size='11'>BFS</text><text x='148' y='112' fill='#c9d6ea' font-size='11'>layers: all of distance k before k+1</text><text x='472' y='112' fill='#8fa3c4' font-size='11'>unit</text><text x='610' y='112' fill='#c9d6ea' font-size='11'>O(V + E)</text><rect x='20' y='123' width='720' height='22' rx='3' fill='#0f1d33'/><text x='24' y='138' fill='#3ddc97' font-size='11'>Dijkstra</text><text x='148' y='138' fill='#c9d6ea' font-size='11'>increasing tentative distance (heap)</text><text x='472' y='138' fill='#8fa3c4' font-size='11'>&#8805; 0</text><text x='610' y='138' fill='#c9d6ea' font-size='11'>O(E log V)</text><rect x='20' y='149' width='720' height='22' rx='3' fill='#12233f'/><text x='24' y='164' fill='#3ddc97' font-size='11'>Bellman-Ford</text><text x='148' y='164' fill='#c9d6ea' font-size='11'>every edge, round after round</text><text x='472' y='164' fill='#8fa3c4' font-size='11'>any</text><text x='610' y='164' fill='#c9d6ea' font-size='11'>O(VE)</text><rect x='20' y='175' width='720' height='22' rx='3' fill='#0f1d33'/><text x='24' y='190' fill='#3ddc97' font-size='11'>Floyd-Warshall</text><text x='148' y='190' fill='#c9d6ea' font-size='11'>each pair, via intermediate k = 1..n</text><text x='472' y='190' fill='#8fa3c4' font-size='11'>no neg cycle</text><text x='610' y='190' fill='#c9d6ea' font-size='11'>O(V&#179;)</text><rect x='20' y='201' width='720' height='22' rx='3' fill='#12233f'/><text x='24' y='216' fill='#3ddc97' font-size='11'>Johnson</text><text x='148' y='216' fill='#c9d6ea' font-size='11'>BF potentials, then Dijkstra per source</text><text x='472' y='216' fill='#8fa3c4' font-size='11'>no neg cycle</text><text x='610' y='216' fill='#c9d6ea' font-size='11'>O(VE log V)</text><rect x='20' y='227' width='720' height='22' rx='3' fill='#0f1d33'/><text x='24' y='242' fill='#3ddc97' font-size='11'>A*</text><text x='148' y='242' fill='#c9d6ea' font-size='11'>increasing d(v) + h(v) toward a target</text><text x='472' y='242' fill='#8fa3c4' font-size='11'>&#8805; 0</text><text x='610' y='242' fill='#c9d6ea' font-size='11'>&#8804; Dijkstra</text><text x='24' y='288' fill='#8fa3c4' font-size='10'>n = 1,000, m = 5,000, one source: Dijkstra 4,975 relaxations, SPFA 7,231, Bellman-Ford 35,370 (8 rounds)</text><text x='24' y='304' fill='#8fa3c4' font-size='10'>Floyd-Warshall: n&#179; = 10&#8313; checks for all pairs. Dijkstra, BF, SPFA, Floyd, Johnson agreed on 200/200</text></svg></div>" +
+        "<p><strong>Relaxation</strong> has an invariant that makes the whole family safe. At every moment, d[v] is either infinity or the length of some real path from the source to v &mdash; a relaxation only ever replaces it with the length of a path that goes through u and then the edge &mdash; so d[v] is never below the true distance. Relaxing can never make an answer wrong, only less wrong. And there is a completeness guarantee, the <strong>path-relaxation property</strong>: if the edges of a shortest path are relaxed in order along the path, first edge first, then d at the end of the path is exact, whatever other relaxations happen in between. An algorithm is correct when its order guarantees that every shortest path's edges get relaxed in sequence; it is fast when it wastes few relaxations doing so.</p>" +
+        "<p>A two-edge example shows why order is everything. Let s reach a with weight 1 and a reach b with weight 1, so the shortest route to b is 2. Relax a to b first and nothing happens, because d[a] is still infinite; relax s to a and d[a] becomes 1; relax a to b again and d[b] becomes 2, exact. The same two relaxations in the wrong order wasted one, and in the right order needed exactly two. Every successful relaxation also records u as v's predecessor, and those predecessors form a <strong>shortest-path tree</strong> rooted at the source: follow them back from any vertex and you recover a shortest route, the weighted version of Chapter 33's parent array.</p>" +
+        "<p>The figure lines the algorithms up by that one rule. On the same graph of a thousand vertices and five thousand edges, Dijkstra performed 4,975 relaxations, the queue-based Bellman&ndash;Ford variant 7,231, and plain Bellman&ndash;Ford 35,370 over 8 rounds, all reaching identical distances; Floyd&ndash;Warshall, which answers every pair at once, makes n cubed checks, a billion. On two hundred random graphs with non-negative weights, Dijkstra, Bellman&ndash;Ford, its queue variant, Floyd&ndash;Warshall and Johnson's algorithm agreed on every distance.</p>" +
+        "<p>Breadth-first search, from Chapter 33, is the first member of the family, and in this vocabulary it is relaxation in layer order. With every edge of weight one, the first-in, first-out queue relaxes all edges out of layer k before any out of layer k plus 1, so each shortest path's edges are relaxed in sequence and a vertex's first improvement is its last. That is why breadth-first search can mark a vertex on discovery and never revisit it. Run Dijkstra on the same unit-weight graphs and it computes the same distances &mdash; it did on 200 of 200 &mdash; because with equal weights its heap order and the queue's layer order coincide; it merely pays a logarithm for a heap it did not need.</p>" +
+        "<p>So the chapter's plan is a sequence of orders. Dijkstra relaxes out of vertices in increasing distance, which is optimal when no weight is negative. Bellman&ndash;Ford relaxes every edge repeatedly, which is slow but indifferent to sign. Floyd&ndash;Warshall orders all-pairs relaxations by the set of vertices allowed in the middle. Johnson's algorithm buys Dijkstra's order for graphs with negative edges by reweighting them first. A* adds a guess about the remaining distance to Dijkstra's order, so the search leans toward a target. Each is a different answer to the same question: which relaxation next?</p>"
+    },
+
+    { title: "Dijkstra, and Why Negative Edges Break It",
+      viz: "dsaRelaxation", vizTitle: "Every algorithm here relaxes edges. Only the order changes &mdash; watch the order panel",
+      html:
+        "<p><strong>Dijkstra's algorithm</strong>, from his 1959 note, relaxes edges out of vertices in increasing order of tentative distance. A priority queue holds the vertices by d; repeatedly take the smallest, declare it <strong>settled</strong>, and relax its outgoing edges. The claim that makes it work is greedy: when a vertex is taken out with distance d[u], no path to u can be shorter. Any other path from the source to u must leave the set of settled vertices somewhere, through an unsettled vertex x; x was not taken out first, so d[x] is at least d[u], and with non-negative weights the rest of the path from x to u can only add. So d[u] is final, each vertex is settled once, and with a binary heap the cost is O(E log V).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "def dijkstra(adj, s):                       # adj[u] = [(v, w)], all w >= 0\n" +
+        "    dist = [float('inf')] * len(adj)\n" +
+        "    dist[s] = 0\n" +
+        "    heap = [(0, s)]\n" +
+        "    while heap:\n" +
+        "        d, u = heapq.heappop(heap)\n" +
+        "        if d > dist[u]:\n" +
+        "            continue                        # stale entry: lazy deletion\n" +
+        "        for v, w in adj[u]:\n" +
+        "            if d + w < dist[v]:             # relax\n" +
+        "                dist[v] = d + w\n" +
+        "                heapq.heappush(heap, (dist[v], v))\n" +
+        "    return dist</code></pre>" +
+        "<pre data-lang='java' hidden><code>long[] dijkstra(List<List<long[]>> adj, int s) {       // edge = {v, w}\n" +
+        "    long[] dist = new long[adj.size()]; Arrays.fill(dist, Long.MAX_VALUE); dist[s] = 0;\n" +
+        "    PriorityQueue<long[]> pq = new PriorityQueue<>(Comparator.comparingLong(a -> a[0]));\n" +
+        "    pq.add(new long[]{0, s});\n" +
+        "    while (!pq.isEmpty()) {\n" +
+        "        long[] top = pq.poll(); int u = (int) top[1];\n" +
+        "        if (top[0] > dist[u]) continue;                  // stale\n" +
+        "        for (long[] e : adj.get(u)) {\n" +
+        "            int v = (int) e[0];\n" +
+        "            if (top[0] + e[1] < dist[v]) { dist[v] = top[0] + e[1]; pq.add(new long[]{dist[v], v}); }\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return dist;\n" +
+        "}</code></pre></div>" +
+        "<p>Python's heapq has no decrease-key, so the code pushes a new entry whenever a distance improves and skips the older ones when they surface &mdash; <strong>lazy deletion</strong>, the stale-entry rule of Chapter 33's 0-1 BFS. On the thousand-vertex graph the heap served 1,375 pops, of which 379 were stale. Java's PriorityQueue is used the same way; the decrease-key alternative that Chapter 27 discussed keeps the heap at one entry per vertex, at the price of an index map from vertices to heap positions. Many sources at once, as Chapter 33 promised, cost nothing extra: push every source at distance zero, which is a search from a virtual super-source.</p>" +
+        "<p>The choice of heap moves the constant, not the idea. A binary heap gives O(E log V); a d-ary heap with d around four, as Chapter 27 measured, makes the many pushes cheaper; Fredman and Tarjan's 1987 Fibonacci heap brings the bound to O(E + V log V) by making decrease-key constant time amortized, a theoretical improvement that rarely wins in practice because its constants are large. When only one target matters, stop the moment the target is taken out of the heap: its distance is final then, and on a large graph most of the work is never done. That early exit is the seed of A*, two sections on.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 300' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Dijkstra on a negative edge: a is settled at 2, one step before b reveals a path of cost 1</text><line x1='89' y1='141' x2='221' y2='83' stroke='#5d7aa5' stroke-width='1.8'/><polygon points='229,79 223,88 219,78' fill='#5d7aa5'/><text x='140' y='96' fill='#5d7aa5' font-size='12'>2</text><line x1='89' y1='159' x2='221' y2='217' stroke='#5d7aa5' stroke-width='1.8'/><polygon points='229,221 219,222 223,212' fill='#5d7aa5'/><text x='140' y='212' fill='#5d7aa5' font-size='12'>3</text><line x1='250' y1='209' x2='250' y2='102' stroke='#ff5d73' stroke-width='1.8'/><polygon points='250,93 255,102 245,102' fill='#ff5d73'/><text x='262' y='154' fill='#ff5d73' font-size='12'>&#8722;2</text><circle cx='70' cy='150' r='20' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='70' y='155' text-anchor='middle' fill='#c9d6ea' font-size='13'>s</text><circle cx='250' cy='70' r='20' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='250' y='75' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><circle cx='250' cy='230' r='20' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='250' y='235' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><text x='22' y='186' fill='#3ddc97' font-size='11'>d = 0</text><text x='222' y='38' fill='#ff5d73' font-size='11'>d = 2, final</text><text x='222' y='276' fill='#c9d6ea' font-size='11'>d = 3</text><text x='340' y='60' fill='#2de2ff' font-size='11' xml:space='preserve'>step  pop   action</text><text x='340' y='79' fill='#c9d6ea' font-size='11' xml:space='preserve'>1     s:0   relax s&#8594;a: d[a]=2; s&#8594;b: d[b]=3</text><text x='340' y='98' fill='#c9d6ea' font-size='11' xml:space='preserve'>2     a:2   smallest in heap &#8594; declared final</text><text x='340' y='117' fill='#c9d6ea' font-size='11' xml:space='preserve'>3     b:3   relax b&#8594;a: 3 + (&#8722;2) = 1 &lt; 2 ...</text><text x='340' y='136' fill='#ff5d73' font-size='11' xml:space='preserve'>            ... but a is final: update refused</text><text x='340' y='174' fill='#ff5d73' font-size='11' xml:space='preserve'>answer d[a] = 2;  true shortest s&#8594;b&#8594;a = 1</text><text x='340' y='212' fill='#8fa3c4' font-size='11' xml:space='preserve'>the proof assumed a path through an unpopped</text><text x='340' y='231' fill='#8fa3c4' font-size='11' xml:space='preserve'>vertex can only cost more. A negative edge</text><text x='340' y='250' fill='#8fa3c4' font-size='11' xml:space='preserve'>lets it cost less, and step 2 is where the</text><text x='340' y='269' fill='#8fa3c4' font-size='11' xml:space='preserve'>finality claim becomes false.</text></svg></div>" +
+        "<p>A negative edge breaks the greedy claim, and the figure shows exactly where. With s to a of weight 2, s to b of weight 3 and b to a of weight minus 2, Dijkstra takes a out at distance 2 and settles it, because 2 is the smallest tentative distance. The proof said an unsettled vertex such as b could only lead to a longer path, and that is the step that fails: b costs 3, but b to a subtracts 2, so the true distance to a is 1. An implementation that refuses to update settled vertices returns 2. On 376 random graphs with some negative edges but no negative cycle, that version was wrong on 60. <strong>Add a negative edge in the machine above, run Dijkstra, and find the vertex whose distance is finalised too early.</strong></p>" +
+        "<p>The lazy-deletion code above behaves differently, which confuses people. It never marks vertices as settled; it re-pushes a whenever a's distance improves and re-relaxes from it. On all 376 of those graphs it returned correct distances. But it is no longer Dijkstra's algorithm in any useful sense: a vertex can be taken out many times, the O(E log V) bound is gone, and Johnson showed in 1973 that constructed inputs make it exponential. Correct on random tests and exponential on adversarial ones is the worst combination a library can have, so negative edges go to the algorithms built for them.</p>"
+    },
+
+    { title: "Bellman-Ford and Negative Cycles",
+      html:
+        "<p><strong>Bellman&ndash;Ford</strong>, from Ford's 1956 and Bellman's 1958 work on routing, uses the bluntest possible order: relax every edge, then do it again, V minus 1 times. It needs no priority and no sign assumption. The argument for V minus 1 is the path-relaxation property of the first section. With no negative cycle, some shortest path to every vertex is simple and so has at most V minus 1 edges. Round one relaxes every edge, including the first edge of each such path; round two relaxes the second edge after the first; after round i, every vertex whose shortest path has at most i edges has its exact distance. V minus 1 rounds cover every simple path, for O(VE) in all.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def bellman_ford(n, edges, s):              # edges = [(u, v, w)]\n" +
+        "    dist = [float('inf')] * n\n" +
+        "    dist[s] = 0\n" +
+        "    for _ in range(n - 1):\n" +
+        "        changed = False\n" +
+        "        for u, v, w in edges:\n" +
+        "            if dist[u] + w < dist[v]:\n" +
+        "                dist[v] = dist[u] + w\n" +
+        "                changed = True\n" +
+        "        if not changed:\n" +
+        "            break                           # early exit: already exact\n" +
+        "    for u, v, w in edges:                   # round n: anything still improving?\n" +
+        "        if dist[u] + w < dist[v]:\n" +
+        "            return None                     # negative cycle reachable from s\n" +
+        "    return dist</code></pre>" +
+        "<pre data-lang='java' hidden><code>long[] bellmanFord(int n, int[][] edges, int s) {     // edge = {u, v, w}\n" +
+        "    long INF = Long.MAX_VALUE / 4; long[] dist = new long[n]; Arrays.fill(dist, INF); dist[s] = 0;\n" +
+        "    for (int i = 0; i < n - 1; i++) {\n" +
+        "        boolean changed = false;\n" +
+        "        for (int[] e : edges)\n" +
+        "            if (dist[e[0]] < INF && dist[e[0]] + e[2] < dist[e[1]]) { dist[e[1]] = dist[e[0]] + e[2]; changed = true; }\n" +
+        "        if (!changed) break;\n" +
+        "    }\n" +
+        "    for (int[] e : edges) if (dist[e[0]] < INF && dist[e[0]] + e[2] < dist[e[1]]) return null;\n" +
+        "    return dist;\n" +
+        "}</code></pre></div>" +
+        "<p>The bound is a worst case, and the early exit makes the typical case much cheaper. On the thousand-vertex graph the distances stopped changing after 8 rounds, not 999, because the rounds needed equal the largest number of edges on any shortest path plus one; across two hundred random graphs no run needed more than 8. The V-th round is the famous part. If some relaxation still succeeds after V minus 1 rounds, a shortest path would need V or more edges, which means it repeats a vertex around a <strong>negative cycle</strong>, and distances along it can be driven down forever. On four hundred random graphs with negative edges, 183 of them containing a negative cycle, the V-th round flagged exactly the graphs whose Floyd&ndash;Warshall matrix had a negative diagonal entry.</p>" +
+        "<p>This is the check Chapter 32's currency problem needed. With an edge of weight minus log(rate) for each exchange rate, a loop whose rates multiply to more than one has a negative total weight. On a small table of illustrative rates among five currencies, Bellman&ndash;Ford from a virtual source reported a negative cycle, and a brute-force search found the loop behind it: dollars to pounds to euros to yen and back returned 1.0245 of what went in &mdash; <strong>arbitrage</strong>. Real markets close such loops in milliseconds, which is why trading systems run this detection continuously. Note also what the cycle does to the question: once a negative cycle is reachable, \"shortest path\" has no finite answer, and \"shortest simple path\" becomes as hard as the longest path of Chapter 34.</p>" +
+        "<p>A common optimisation relaxes only out of vertices whose distance changed in the previous pass, keeping them in a queue. Known in competitive programming as <strong>SPFA</strong>, it is Bellman&ndash;Ford with the wasted relaxations removed. On a random graph of ten thousand vertices it did 1.8 times as many relaxations as Dijkstra; on grid graphs, where many alternative routes keep improving the same vertices, it did 4.7 to 5.5 times as many. Its worst case is still O(VE), and adversarial inputs reach it, so it is a good choice when negative edges force Bellman&ndash;Ford and a poor substitute for Dijkstra when they do not.</p>" +
+        "<p>Detecting the cycle is half the job; showing it is the other half. Record predecessors as usual and note any vertex whose distance improves in the V-th round. That vertex is on a negative cycle or downstream of one, so follow its predecessor pointer V times, which is enough to be certain of landing on the cycle itself, and then follow predecessors from there until the walk returns to the same vertex. The vertices visited, reversed, are the cycle &mdash; for the currency table, the four exchanges of the profitable loop, in the order to perform them. The same walk underlies every system that reports why an arbitrage or a scheduling contradiction exists rather than only that it does.</p>"
+    },
+
+    { title: "Floyd-Warshall",
+      viz: "dsaFloydWarshall", vizTitle: "One vertex at a time is allowed in the middle. Watch which cells improve at each k",
+      html:
+        "<p>When the question is every pair, <strong>all-pairs shortest paths</strong>, Floyd&ndash;Warshall orders its relaxations by a different principle: the set of vertices a path may pass through. Number the vertices 1 to n. Let D_k[i][j] be the length of the shortest path from i to j whose <strong>intermediate vertices</strong> all lie in {1, ..., k}. With k = 0 no intermediates are allowed, so D_0 is the edge-weight matrix. Allowing vertex k either does not help, or the best path goes through k exactly once, splitting into a best path from i to k and from k to j, each using only vertices below k. So D_k[i][j] = min(D_(k-1)[i][j], D_(k-1)[i][k] + D_(k-1)[k][j]), and D_n is the answer. Floyd published it in 1962, the same year as Warshall's version for transitive closure.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def floyd_warshall(D):                      # D: n x n, D[i][i] = 0, inf where no edge\n" +
+        "    n = len(D)\n" +
+        "    for k in range(n):                      # k OUTERMOST: allow vertex k in the middle\n" +
+        "        Dk = D[k]\n" +
+        "        for i in range(n):\n" +
+        "            dik = D[i][k]\n" +
+        "            if dik == float('inf'):\n" +
+        "                continue\n" +
+        "            Di = D[i]\n" +
+        "            for j in range(n):\n" +
+        "                if dik + Dk[j] < Di[j]:     # relax i -> k -> j\n" +
+        "                    Di[j] = dik + Dk[j]\n" +
+        "    return D                                # D[i][i] < 0 means a negative cycle through i</code></pre>" +
+        "<pre data-lang='java' hidden><code>void floydWarshall(long[][] d) {            // INF = Long.MAX_VALUE / 4\n" +
+        "    int n = d.length;\n" +
+        "    for (int k = 0; k < n; k++)\n" +
+        "        for (int i = 0; i < n; i++)\n" +
+        "            for (int j = 0; j < n; j++)\n" +
+        "                if (d[i][k] + d[k][j] < d[i][j]) d[i][j] = d[i][k] + d[k][j];\n" +
+        "}</code></pre></div>" +
+        "<p>Read through SRTBOT, the triple loop is a textbook dynamic program. The subproblems are the triples (i, j, k); the relation is the recurrence above; the topological order is increasing k, which is why k must be the outer loop; the base case is the edge matrix; the original problem is k = n; the time is O(n cubed). Two details make the three-line version work. It updates the matrix in place rather than keeping n + 1 copies, which is safe because during round k neither row k nor column k can improve &mdash; a path from i to k through k gains nothing. And it detects negative cycles for free: after the loops, a negative diagonal entry D[i][i] means a cycle of negative weight through i.</p>" +
+        "<p>The loop order is not a style choice, and it is the classic bug. Put k innermost, as i, j, k, and the code looks equivalent but computes something else: it fixes each pair (i, j) before the intermediate vertices it needs have been fully processed. On three hundred random graphs, that version gave wrong distances on 246. <strong>In the machine above, find a cell that improves only when k reaches one particular vertex, and name the path it has now discovered.</strong></p>" +
+        "<p>The cost comparison is the reason to know both approaches. On a complete directed graph of 400 vertices, the triple loop took 1.95 seconds against 5.40 for running Dijkstra from each of the 400 vertices, with identical matrices; on a sparse graph of 200 vertices and 1,000 edges the Dijkstra runs took 0.02 seconds against Floyd&ndash;Warshall's 0.15. Dense graphs favour the loop, whose n cubed does not care about the edge count and whose inner loop is a tight scan of two rows; sparse graphs favour repeated Dijkstra at O(VE log V). This is the algorithm Chapter 32 had in mind when it said the adjacency matrix earns its memory when every pair is read anyway. To recover paths rather than lengths, keep a next[i][j] matrix updated alongside D, recording the first step of the current best route.</p>" +
+        "<p>The same triple loop with booleans in place of numbers is Warshall's original algorithm for <strong>transitive closure</strong>: reach[i][j] becomes true if reach[i][k] and reach[k][j] are. On a dense graph it is the direct way to answer every reachability question at once; on a DAG, Chapter 34's bitset pass over the topological order is faster. Either way it is the same DP, allowing one more vertex in the middle per round, with or and and in place of min and plus &mdash; an instance of the general fact that any closed semiring can replace the arithmetic without changing the loops.</p>"
+    },
+
+    { title: "Johnson's Algorithm",
+      html:
+        "<p>Repeated Dijkstra is the fast way to get all pairs on a sparse graph, but it needs non-negative weights, and Floyd&ndash;Warshall's n cubed is slow on a sparse graph with negative edges. <strong>Johnson's algorithm</strong>, from his 1977 paper on sparse networks, gets both: it changes the weights so that every edge becomes non-negative without changing which paths are shortest, then runs Dijkstra from every vertex. The change is called <strong>reweighting</strong>, and the numbers it uses are called potentials.</p>" +
+        "<p>Give each vertex a potential h(v) and replace each weight w(u, v) with w(u, v) + h(u) &minus; h(v). Along any path from s to t the potentials telescope: every intermediate vertex's potential is added once and subtracted once, so the path's new length is its old length plus h(s) &minus; h(t). That shift is the same for every s-to-t path, so the shortest ones stay shortest, and the original distance is recovered by subtracting it back. The only question is how to choose h so that no reweighted edge is negative. Add a virtual vertex q with a zero-weight edge to every vertex and let h(v) be the shortest distance from q, computed by Bellman&ndash;Ford. The triangle inequality for shortest distances says h(v) is at most h(u) + w(u, v), which rearranges to exactly the statement that the new weight is non-negative.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def johnson(adj):                            # adj[u] = [(v, w)], negative w allowed\n" +
+        "    n = len(adj)\n" +
+        "    edges = [(u, v, w) for u in range(n) for v, w in adj[u]]\n" +
+        "    edges += [(n, v, 0) for v in range(n)]   # virtual source q = n\n" +
+        "    h = bellman_ford(n + 1, edges, n)\n" +
+        "    if h is None:\n" +
+        "        return None                          # negative cycle: no answer\n" +
+        "    rw = [[(v, w + h[u] - h[v]) for v, w in adj[u]] for u in range(n)]   # all >= 0\n" +
+        "    out = []\n" +
+        "    for s in range(n):\n" +
+        "        d = dijkstra(rw, s)\n" +
+        "        out.append([d[t] - h[s] + h[t] if d[t] < float('inf') else d[t] for t in range(n)])\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>// 1. h = bellmanFord over the graph plus a virtual source with 0-weight edges to all\n" +
+        "// 2. w'(u,v) = w(u,v) + h[u] - h[v]   (never negative)\n" +
+        "// 3. for each s: d' = dijkstra(reweighted, s); dist[s][t] = d'[t] - h[s] + h[t]</code></pre></div>" +
+        "<p>The measurements confirm each claim separately. On 223 random graphs with negative edges and no negative cycle, every reweighted edge was non-negative, and Johnson's all-pairs matrix equalled Floyd&ndash;Warshall's on every graph. The total cost is one Bellman&ndash;Ford, O(VE), plus V runs of Dijkstra, O(VE log V), which beats n cubed whenever E is well below n squared. If Bellman&ndash;Ford reports a negative cycle, there is nothing to reweight, because shortest paths through the cycle do not exist, and the algorithm stops with that report.</p>" +
+        "<p>Run the chapter's counterexample through it. With s to a of weight 2, s to b of weight 3 and b to a of weight minus 2, the virtual source gives potentials h(s) = 0, h(b) = 0 and h(a) = minus 2, the last through b. Reweighted, s to a becomes 2 + 0 + 2 = 4, s to b stays 3, and b to a becomes minus 2 + 0 + 2 = 0 &mdash; no negative edge left. Dijkstra from s now reaches a at 3 through b rather than 4 directly, and converting back, 3 &minus; h(s) + h(a) = 3 &minus; 0 &minus; 2 = 1, the true distance Dijkstra alone got wrong. The reweighting changed every number but not which route is shortest.</p>" +
+        "<p>The timing shows where it pays. The test graphs were built by running the trick backwards &mdash; take non-negative weights and shift each edge by a random potential difference, which creates negative edges but leaves every cycle's total unchanged, so no negative cycle can appear. On 300 vertices and 1,500 edges, 307 of them negative, Johnson's algorithm took 0.07 seconds and Floyd&ndash;Warshall 0.54, with identical matrices: 7.7 times faster where the graph is sparse. With 60,000 edges, two-thirds of all possible pairs, the gap closed to 0.80 seconds against 0.99, as the V E log V term caught up with V cubed.</p>" +
+        "<p>Potentials are worth remembering as an idea beyond this algorithm. The reweighting trick reappears in minimum-cost flow, where each round of Dijkstra runs on reduced costs computed from the previous round's distances, and it explains the next section: a consistent A* heuristic is a potential, and A* is Dijkstra on the reweighted graph. Chapter 36 turns from paths to trees, and the potentials come back when Chapter 38 adds costs to flows.</p>"
+    },
+
+    { title: "A*",
+      viz: "dsaAStar", vizTitle: "Two searches, one grid. Watch how many cells each one opens",
+      html:
+        "<p>Dijkstra explores outward in every direction equally, because it knows nothing about where the target is. When there is one target and a cheap guess of the remaining distance, <strong>A* search</strong>, from Hart, Nilsson and Raphael's 1968 paper, adds the guess to Dijkstra's order. The <strong>heuristic</strong> h(v) estimates the distance from v to the target, and the priority queue orders vertices by d(v) + h(v) &mdash; the length of the best known path through v to the target, if the guess is right. With h equal to zero everywhere, A* is exactly Dijkstra.</p>" +
+        "<p>Two properties of the guess decide what A* guarantees. An <strong>admissible heuristic</strong> never overestimates: h(v) is at most the true remaining distance. Then the first time the target is taken out of the queue, its distance is optimal. A <strong>consistent heuristic</strong> satisfies a triangle inequality along every edge, h(u) at most w(u, v) + h(v), and is automatically admissible when h is zero at the target. Consistency is what the previous section called a potential: A* with a consistent heuristic is Dijkstra on the reweighted graph w(u, v) &minus; h(u) + h(v), which has no negative edges, so every vertex is settled once and the finality proof carries over unchanged.</p>" +
+        "<p>The optimality argument for an admissible heuristic is short. Suppose A* takes the target t out with some distance d(t) that is longer than the optimum. Some vertex x on an optimal path is still in the queue, with d(x) exact because its predecessors on that path were settled first; its priority is d(x) + h(x), and admissibility says h(x) is at most the true remaining distance, so its priority is at most the optimal total &mdash; less than d(t) + h(t) = d(t). The queue would have taken x out before t, a contradiction. The argument uses nothing but the underestimate, which is why overestimating breaks it.</p>" +
+        "<p>On a 4-connected grid, the Manhattan distance to the target is consistent: one step changes it by at most one, the cost of the step. The measurement shows what it buys. On 32 solvable 200-by-200 grids with a quarter of the cells walled, Dijkstra expanded 29,782 cells on average before reaching the far corner; A* with the Manhattan heuristic expanded 11,600, about 2.6 times fewer, and found a path of the same, optimal length on every grid. The Euclidean distance is also admissible there but weaker, because it underestimates grid distance more, and it saved almost nothing: 27,062 cells.</p>" +
+        "<p>Then the heuristic was made to lie. Three times the Manhattan distance overestimates, so it is not admissible. The search it drives is aggressive &mdash; 652 cells expanded, forty-six times fewer than Dijkstra &mdash; and it returned a longer path than the optimum on all 32 grids, by 60.8 steps on average. That trade is sometimes wanted: weighted A* deliberately inflates the heuristic to get a fast answer within a known factor of optimal, which is common in games and robotics. But it is a trade, and an inadmissible heuristic chosen by accident produces a silently suboptimal route. <strong>Set the heuristic to inadmissible in the machine above and find the shorter path A* misses.</strong></p>" +
+        "<p>The practical rule is to use the strongest heuristic that is still admissible, and consistent if possible: exact straight-line distance on a road network, Manhattan distance on a 4-connected grid, octile distance with diagonal moves. A* matters most for single-target queries on large graphs, such as route planning; for single-source questions it has nothing to aim at and reduces to Dijkstra.</p>"
+    },
+
+    { title: "Choosing",
+      html:
+        "<p>The decision is a short sequence of questions about the graph and the query, and each answer eliminates part of the family. <em>Are there weights at all?</em> If every edge costs the same, breadth-first search is exact in O(V + E), and if weights are only 0 and 1, the deque of Chapter 33's 0-1 BFS keeps linear time. <em>Are any weights negative?</em> If not, Dijkstra is the default for one source, O(E log V). If they are, Bellman&ndash;Ford handles one source in O(VE), and its V-th round tells you whether the question has an answer at all.</p>" +
+        "<p><em>One source or all pairs?</em> For all pairs on a dense graph, Floyd&ndash;Warshall's three loops are hard to beat &mdash; they won by a factor of 2.8 on a complete graph of 400 vertices. For all pairs on a sparse graph, run Dijkstra from every vertex when weights are non-negative and Johnson's algorithm when they are not. <em>Is there a single target with a good estimate of the remaining distance?</em> Then A* with an admissible heuristic reaches it expanding a fraction of the cells Dijkstra would. <em>Is the graph a DAG?</em> Then Chapter 34's single topological pass is shortest and longest paths at once, in linear time, negative weights and all.</p>" +
+        "<p>Two further questions separate textbook complexity from real running time. <em>How dense is the graph, in the language you are using?</em> Dijkstra with an array instead of a heap is O(V squared), in theory better on a complete graph than O(E log V), but in CPython the heap version won even on a complete graph of 2,000 vertices, 0.58 seconds against 0.91, because on random weights few relaxations succeed and the heap stays small. Measure before trusting the asymptotic comparison. <em>Does the answer need the path or only its length?</em> Every algorithm here records a predecessor on each successful relaxation, and following predecessors back from the target recovers the route at no extra cost.</p>" +
+        "<p>One more case deserves a line because it is common and often missed. When weights are small non-negative integers, at most some bound C, Dial's 1969 bucket method replaces the heap with an array of C + 1 buckets indexed by distance modulo C + 1, taking vertices out bucket by bucket in O(E + VC). It is the general form of 0-1 BFS, which is the case C = 1, and it is the natural choice for grid costs of one to nine or road segments measured in whole minutes.</p>" +
+        "<p>Interviews test this sequence rather than the algorithms' code, and so do real systems: a road router is A* or a bidirectional variant with precomputed potentials, a network routing protocol is distributed Bellman&ndash;Ford, and a build-time dependency cost is a DAG pass. The mechanism is always relaxation. What you choose is the order, and the order is chosen by what the weights are allowed to be and what the query asks.</p>" +
+        "<p>The shortest-path chapter also closes a loop that began in Part 3. Dynamic programming was introduced as computation over a DAG of subproblems in topological order; Bellman&ndash;Ford is that DP over the subproblems \"shortest path using at most i edges\", Floyd&ndash;Warshall is the DP over \"shortest path using intermediates up to k\", and Dijkstra is what a DP becomes when the order can be discovered greedily as the computation runs. Chapter 36 turns from paths to spanning trees, where a different greedy order has a different proof.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>One operation.</strong> Implement relax() once and build BFS, Dijkstra, Bellman-Ford and its queue variant on top of it. Count relaxations for each on the same graph and check that all distances agree.</li>" +
+        "<li><strong>Break Dijkstra.</strong> Run a finalising Dijkstra on the three-vertex graph s-a 2, s-b 3, b-a minus 2, and on random graphs with negative edges, and count the wrong answers. Then run the lazy re-pushing version and count how often each vertex is popped.</li>" +
+        "<li><strong>Rounds and cycles.</strong> Run Bellman-Ford with early exit and compare the rounds used with the largest hop count of any shortest path. Plant negative cycles and confirm the V-th round finds exactly them.</li>" +
+        "<li><strong>Find the arbitrage.</strong> Build a currency graph with weights minus log(rate), detect a negative cycle, and recover the loop by following predecessors from a vertex updated in the V-th round.</li>" +
+        "<li><strong>Order the loops.</strong> Implement Floyd-Warshall with k outermost and with k innermost, and compare both with repeated Dijkstra on random graphs. Time Floyd-Warshall against repeated Dijkstra on dense and sparse graphs.</li>" +
+        "<li><strong>Reweight.</strong> Implement Johnson's algorithm, check that every reweighted edge is non-negative, and compare its matrix with Floyd-Warshall on graphs with negative edges.</li>" +
+        "<li><strong>Heuristics on a grid.</strong> Run A* on walled grids with zero, Manhattan, Euclidean and three-times-Manhattan heuristics, recording cells expanded and path length. Explain each result in terms of admissibility.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "relaxation", d: "Checking whether a path through edge u to v improves v's tentative distance and lowering it if so; the single operation every shortest-path algorithm performs, differing only in order." },
+    { t: "tentative distance", d: "The best known distance d[v] to a vertex during a search; always the length of some real path, so never below the true distance." },
+    { t: "Dijkstra's algorithm", d: "Single-source shortest paths for non-negative weights, relaxing out of vertices in increasing tentative distance with a priority queue; O(E log V). Dijkstra 1959." },
+    { t: "settled", d: "Describes a vertex taken out of Dijkstra's priority queue, whose distance is final when all weights are non-negative; the claim a negative edge breaks." },
+    { t: "lazy deletion", d: "Pushing a new heap entry on every improvement and skipping outdated entries when they are popped, in place of a decrease-key operation." },
+    { t: "Bellman-Ford", d: "Single-source shortest paths with any weights by relaxing every edge V minus 1 times; O(VE), with a V-th round that detects negative cycles." },
+    { t: "negative cycle", d: "A cycle whose edge weights sum to less than zero; if reachable, shortest distances through it are unbounded below and have no finite answer." },
+    { t: "arbitrage", d: "A loop of exchanges whose rates multiply to more than one; with weights minus log(rate), a negative cycle that Bellman-Ford detects." },
+    { t: "SPFA", d: "The queue-based Bellman-Ford variant that relaxes only out of vertices whose distance changed in the last pass; often far faster, but still O(VE) in the worst case." },
+    { t: "all-pairs shortest paths", d: "The shortest distance between every ordered pair of vertices, computed by Floyd-Warshall, repeated Dijkstra, or Johnson's algorithm." },
+    { t: "Floyd-Warshall", d: "All-pairs shortest paths by a DP over the set of allowed intermediate vertices, a three-line triple loop with k outermost; O(V cubed)." },
+    { t: "intermediate vertices", d: "The vertices strictly inside a path; Floyd-Warshall's subproblem allows only those numbered 1 to k." },
+    { t: "Johnson's algorithm", d: "All-pairs shortest paths on sparse graphs with negative edges: reweight with Bellman-Ford potentials so all weights are non-negative, then run Dijkstra from every vertex. Johnson 1977." },
+    { t: "reweighting", d: "Replacing w(u,v) with w(u,v) + h(u) - h(v) for vertex potentials h; every s-t path shifts by h(s) - h(t), so shortest paths are unchanged." },
+    { t: "A* search", d: "Dijkstra ordered by d(v) + h(v), where h estimates the remaining distance to a target; expands fewer vertices when h is informative. Hart, Nilsson & Raphael 1968." },
+    { t: "heuristic", d: "An estimate h(v) of the remaining distance from v to the target, used by A* to bias the search toward the target." },
+    { t: "admissible heuristic", d: "A heuristic that never overestimates the true remaining distance, which guarantees A* returns an optimal path." },
+    { t: "consistent heuristic", d: "A heuristic satisfying h(u) <= w(u,v) + h(v) on every edge; a potential under which A* is Dijkstra on non-negative reweighted edges." },
+    { t: "path-relaxation property", d: "If the edges of a shortest path are relaxed in order along the path, the distance at its end becomes exact, whatever other relaxations happen in between." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Every algorithm in the chapter only relaxes edges. What distinguishes them?",
+      opts: [
+        "The order in which the relaxations are performed, chosen to suit the weights and the query",
+        "The definition of relaxation, which each algorithm adapts to the kind of weights it is designed to handle",
+        "The data they store per vertex, since only Dijkstra keeps a tentative distance while the others keep complete paths",
+        "Whether they use the adjacency list or the adjacency matrix, which determines how each edge is relaxed"
+      ], a: 0,
+      why: "Relaxation is identical everywhere &mdash; lower d[v] if d[u] + w improves it. BFS relaxes in layer order, Dijkstra by increasing distance, Bellman-Ford every edge in rounds, Floyd-Warshall by allowed intermediate vertex. All keep tentative distances, and representation is secondary." },
+
+    { type: "mc",
+      q: "Dijkstra takes a vertex out of the heap and declares its distance final. What assumption does that step rely on?",
+      opts: [
+        "That the graph is acyclic, so the vertex cannot be reached again later by a different route through a cycle",
+        "That the heap is a binary heap, since other heap shapes would pop vertices in a different order and break the claim",
+        "That every edge weight is non-negative, so any path through a vertex still in the heap can only cost at least as much",
+        "That every vertex has been discovered before the first pop, so all candidate paths are already in the heap"
+      ], a: 2,
+      why: "Any other path to u leaves the settled set through a vertex x with d[x] >= d[u], and non-negative weights mean the remainder only adds. A negative edge breaks exactly that step. Cycles are fine, heap shape is irrelevant, and vertices are discovered during the run." },
+
+    { type: "mc",
+      q: "On random graphs with negative edges but no negative cycle, a Dijkstra that never updates settled vertices was wrong on 60 of 376, while the lazy re-pushing version was right on all 376. Why is the second still not recommended?",
+      opts: [
+        "Because it returns wrong answers on graphs where every edge weight is non-negative, which the first version handles correctly",
+        "Because it can pop a vertex many times, losing the O(E log V) bound; constructed inputs make it exponential",
+        "Because Python's heapq cannot hold entries with negative priorities, so the version fails as soon as it meets one",
+        "Because it needs a decrease-key operation, which is unavailable in both Python and Java priority queues"
+      ], a: 1,
+      why: "Re-pushing on every improvement keeps it correct without negative cycles, but vertices are re-processed without bound, and Johnson (1973) built inputs forcing exponential time. It is fine on non-negative weights, heapq handles negative priorities, and lazy deletion is precisely what avoids needing decrease-key." },
+
+    { type: "mc",
+      q: "Why does Bellman-Ford need at most V minus 1 rounds when there is no negative cycle?",
+      opts: [
+        "Because each round settles exactly one vertex permanently, and there are V minus 1 vertices other than the source still left to settle",
+        "Because the edges are sorted by weight before each round, so the lightest remaining edge is always fixed next",
+        "Because each round halves the largest remaining error, and log V halvings suffice, which is well below V minus 1",
+        "Because some shortest path to each vertex is simple, with at most V minus 1 edges, and round i fixes paths of up to i edges"
+      ], a: 3,
+      why: "Round i relaxes the i-th edge of every shortest path after the earlier ones, so paths of up to i edges are exact; simple paths have at most V-1 edges. Rounds do not settle one vertex each, no sorting occurs, and there is no halving. With early exit, 8 rounds sufficed on a 1,000-vertex graph." },
+
+    { type: "blank",
+      q: "A cycle whose edge weights sum to less than zero, which makes shortest distances through it unbounded and which Bellman-Ford's V-th round detects, is a ____ cycle.",
+      a: ["negative"],
+      why: "If a relaxation still succeeds after V-1 rounds, a shortest path would need at least V edges and so repeat a vertex around a negative cycle. The V-th round matched Floyd-Warshall's negative diagonal on 400 of 400 graphs; with minus-log exchange rates the same cycle is arbitrage." },
+
+    { type: "mc",
+      q: "Floyd-Warshall written with k as the innermost loop gave wrong distances on 246 of 300 random graphs. Why must k be outermost?",
+      opts: [
+        "Because D[i][j] for vertices up to k needs D[i][k] and D[k][j] complete for vertices up to k minus 1, so increasing k is the topological order",
+        "Because the innermost loop must run over rows for cache efficiency, and putting k there makes the code too slow to converge",
+        "Because with k innermost the algorithm silently skips the diagonal entries, so negative cycles go undetected",
+        "Because k indexes the edge weights rather than the vertices, and edges have to be scanned once per pair"
+      ], a: 0,
+      why: "The subproblem is 'shortest i-to-j path using intermediates 1..k'; it depends on the k-1 layer of every pair, so all pairs must finish layer k-1 before layer k begins, which only the outer loop guarantees. Cache effects change speed, not correctness; diagonals are not skipped; k is a vertex, not an edge." },
+
+    { type: "mc",
+      q: "Johnson's algorithm replaces each weight with w(u,v) + h(u) - h(v). Why are shortest paths unchanged?",
+      opts: [
+        "Because h is zero at every vertex that lies on a shortest path, so those edges keep their original weights",
+        "Because the potentials cancel along every path except its endpoints, shifting every s-to-t path by the same h(s) - h(t)",
+        "Because Dijkstra ignores edge weights that are below zero, and reweighting only affects the negative ones",
+        "Because Bellman-Ford rounds every weight to its nearest non-negative value, and the rounding preserves the order of path lengths"
+      ], a: 1,
+      why: "Each intermediate vertex's potential is added on the edge into it and subtracted on the edge out, so the path length changes by h(s) - h(t) regardless of route; the ranking of s-to-t paths is preserved. Potentials are not zero on paths, Dijkstra does not ignore weights, and nothing is rounded." },
+
+    { type: "blank",
+      q: "An A* heuristic that never overestimates the true remaining distance, guaranteeing an optimal path, is called ____.",
+      a: ["admissible"],
+      why: "With an admissible heuristic the target's first removal from the queue is optimal. Manhattan distance on a 4-connected grid is admissible (and consistent): it cut expansions from 29,782 to 11,600 with optimal paths on 32 of 32 grids, while three times Manhattan, which overestimates, returned longer paths on all 32." },
+
+    { type: "mc",
+      q: "On a complete graph of 400 vertices Floyd-Warshall beat 400 Dijkstra runs, 1.95 s to 5.40 s, while on a sparse 200-vertex graph Dijkstra won, 0.02 s to 0.15 s. What explains the crossover?",
+      opts: [
+        "Floyd-Warshall has a lower asymptotic complexity than repeated Dijkstra on every graph, but it pays a large fixed startup cost that always dominates on the small inputs",
+        "Dijkstra becomes incorrect on dense graphs, so the dense timing measures a different and heavier computation that also happens to be much slower than the three loops",
+        "Floyd-Warshall's n cubed ignores the edge count, while repeated Dijkstra costs about V E log V, which is small when E is small and large when E nears V squared",
+        "Floyd-Warshall only works on complete graphs, so on the sparse graph it was first padded out to a complete one, and that padding step wasted almost all of the time"
+      ], a: 2,
+      why: "Repeated Dijkstra scales with the edge count, Floyd-Warshall does not; at E near V squared, VE log V exceeds V cubed, and at small E the reverse holds. Both are correct on both graphs, Floyd-Warshall has no special startup cost, and it works on any graph through infinite entries." },
+
+    { type: "order",
+      q: "Order these single-source shortest-path methods by the relaxations they performed on the same 1,000-vertex, 5,000-edge graph, fewest first:",
+      items: [
+        "Dijkstra: 4,975 relaxations",
+        "SPFA (queue-based Bellman-Ford): 7,231",
+        "Bellman-Ford with early exit: 35,370 over 8 rounds",
+        "Bellman-Ford without early exit: 999 rounds of every edge"
+      ],
+      why: "Dijkstra relaxes each reachable vertex's edges once. SPFA re-relaxes only vertices whose distance changed, a few thousand extra. Bellman-Ford with early exit relaxes every edge each round until nothing changes, 8 rounds here; without early exit it performs all V-1 = 999 rounds, about five million relaxations." }
+  ]
+});
