@@ -9851,3 +9851,348 @@ CHAPTERS.push({
       why: "A grid cell has at most four candidate neighbours, a constant. An adjacency list costs the vertex's degree, which in a large sparse graph is far below n; either order between these two is defensible when degrees are tiny. A matrix row reads all n cells. Comparing a word with every dictionary word costs n comparisons of L letters each, the reason the lazy substitution generator won by 140 times." }
   ]
 });
+
+/* ======================= CHAPTER 33 ======================= */
+CHAPTERS.push({
+  num: 33, part: 5, title: "BFS and DFS",
+  blurb: "One traversal, two containers, and an enormous difference in what they tell you. Breadth-first search, with a queue, gives shortest paths in unweighted graphs by a layer argument, extends to many sources at once and to 0/1 weights with a deque. Depth-first search, with a stack, gives a tree whose entry and exit times classify every edge and detect every cycle &mdash; the basis of Chapter 37. The chapter closes by measuring where recursion actually breaks in Python and Java, and why the iterative version is the one to write.",
+  sections: [
+
+    { title: "One Algorithm, Two Containers",
+      viz: "dsaBfsDfs", vizTitle: "Same graph, same start. One uses a queue, one a stack &mdash; watch the frontier",
+      html:
+        "<p>Every graph traversal is the same loop. Keep a <strong>frontier</strong> of vertices that have been discovered but not yet explored; take one out, look at its neighbours, and add each undiscovered neighbour to the frontier, marking it so it is never added twice. Stop when the frontier is empty. Every vertex reachable from the start is visited exactly once and every edge is examined at most twice, so the loop is O(n + E) whatever order it uses. The order is the only thing left to choose, and it is chosen by the container that holds the frontier.</p>" +
+        "<p>With a first-in, first-out queue the loop is <strong>breadth-first search</strong>: it finishes everything one step from the start before anything two steps away, so it spreads out in rings. With a last-in, first-out stack it plunges along one path as far as it can before backing up, which is the shape of <strong>depth-first search</strong>. Those two orders answer completely different questions. Breadth-first order yields shortest paths in unweighted graphs and essentially nothing else; depth-first order yields a tree whose entry and exit times encode the graph's structure, which is why Chapter 37 gets strongly connected components and bridges out of a single depth-first pass.</p>" +
+        "<p>The difference is visible in one measurement. On a random graph of a thousand vertices and three thousand edges, the farthest vertex from the start was 6 steps away by breadth-first search, while the depth-first tree from the same start reached depth 735; one vertex three steps from the start sat at depth 735 in that tree. Depth in a depth-first tree is not distance, and treating it as distance is the most common way a traversal gives a wrong answer that still looks plausible. <strong>Run both from the same start in the machine above and find a vertex that breadth-first search reaches in two steps and depth-first search reaches far deeper.</strong></p>" +
+        "<p>The containers also differ in how large they grow, which matters on big inputs. From a corner of an open 500-by-500 grid, the breadth-first queue never held more than 500 cells &mdash; one diagonal wavefront &mdash; while a depth-first stack snaked through the whole grid and held all 250,000 at its peak. On the random graph the peaks were 522 and 736. Neither is always smaller: breadth-first search stores a whole layer, which is wide on bushy graphs, and depth-first search stores a whole path, which is long on stringy ones.</p>" +
+        "<p>One warning belongs at the start rather than the end. Replacing the queue with a stack in the simple loop above &mdash; push every undiscovered neighbour, mark on push &mdash; produces a traversal that visits every reachable vertex, but it is not a true depth-first search. On 500 random connected graphs its tree had an edge joining two vertices that were not ancestor and descendant in 491 of them, which a genuine depth-first tree of an undirected graph never has. A true depth-first search must finish one neighbour's entire exploration before starting the next, which the recursive version does naturally and the iterative version does by keeping a position in each vertex's neighbour list on the stack. Section 5 builds it that way.</p>" +
+        "<p>Where the mark goes matters as much as which container holds the frontier. Mark a vertex when it is added to the frontier, and it can be added only once, so the container never holds more than n entries. Mark it only when it is taken out, and a vertex with many already-discovered neighbours can be added once per neighbour before its first removal &mdash; the traversal still visits it once, because later removals find it marked, but the container can grow to the number of edges and the breadth-first distances can be recorded from the wrong copy. Marking on insertion is the default for breadth-first search and for the frontier-loop version of every traversal in this part; the exception is the weighted case of Section 4 and Chapter 35, where a vertex's best distance can still improve after it has been queued, so it is finalised on removal instead.</p>"
+    },
+
+    { title: "BFS and Shortest Paths",
+      html:
+        "<p>Breadth-first search is the shortest-path algorithm for unweighted graphs, and the proof is a statement about layers. Call the set of vertices at distance k from the source its <strong>layer</strong> k. Because the queue is first-in, first-out, every vertex of layer k is taken out before any vertex of layer k plus 1, and a vertex is placed in layer k plus 1 exactly when it is first reached from some vertex of layer k. So the first time breadth-first search reaches a vertex is along a shortest path, and the distance it records is correct. The technique is usually traced to Moore's 1959 work on shortest paths through a maze.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 365' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>BFS from s explores in layers: layer k holds exactly the vertices at distance k</text><circle cx='190' cy='185' r='172' fill='#0f2138' opacity='0.55' stroke='#334a6a' stroke-width='1'/><circle cx='190' cy='185' r='127' fill='#132842' opacity='0.55' stroke='#334a6a' stroke-width='1'/><circle cx='190' cy='185' r='77' fill='#18304d' opacity='0.55' stroke='#334a6a' stroke-width='1'/><line x1='190' y1='185' x2='232' y2='150' stroke='#5d7aa5' stroke-width='1.3'/><line x1='190' y1='185' x2='200' y2='239' stroke='#5d7aa5' stroke-width='1.3'/><line x1='190' y1='185' x2='138' y2='166' stroke='#5d7aa5' stroke-width='1.3'/><line x1='232' y1='150' x2='289' y2='149' stroke='#5d7aa5' stroke-width='1.3'/><line x1='232' y1='150' x2='257' y2='265' stroke='#5d7aa5' stroke-width='1.3'/><line x1='200' y1='239' x2='257' y2='265' stroke='#5d7aa5' stroke-width='1.3'/><line x1='200' y1='239' x2='154' y2='284' stroke='#5d7aa5' stroke-width='1.3'/><line x1='138' y1='166' x2='87' y2='167' stroke='#5d7aa5' stroke-width='1.3'/><line x1='200' y1='239' x2='138' y2='166' stroke='#ffd166' stroke-width='1.8' stroke-dasharray=\"4 3\"/><line x1='289' y1='149' x2='331' y2='236' stroke='#5d7aa5' stroke-width='1.3'/><line x1='257' y1='265' x2='241' y2='326' stroke='#5d7aa5' stroke-width='1.3'/><line x1='154' y1='284' x2='241' y2='326' stroke='#5d7aa5' stroke-width='1.3'/><line x1='87' y1='167' x2='49' y2='134' stroke='#5d7aa5' stroke-width='1.3'/><line x1='154' y1='284' x2='87' y2='167' stroke='#ffd166' stroke-width='1.8' stroke-dasharray=\"4 3\"/><line x1='331' y1='236' x2='241' y2='326' stroke='#ffd166' stroke-width='1.8' stroke-dasharray=\"4 3\"/><circle cx='190' cy='185' r='12' fill='#182842' stroke='#ff5d73' stroke-width='1.4'/><text x='190' y='189' text-anchor='middle' fill='#c9d6ea' font-size='10'>s</text><circle cx='232' cy='150' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='232' y='154' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><circle cx='200' cy='239' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='200' y='243' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><circle cx='138' cy='166' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='138' y='170' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><circle cx='289' cy='149' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='289' y='153' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><circle cx='257' cy='265' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='257' y='269' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><circle cx='154' cy='284' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='154' y='288' text-anchor='middle' fill='#c9d6ea' font-size='10'>6</text><circle cx='87' cy='167' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='87' y='171' text-anchor='middle' fill='#c9d6ea' font-size='10'>7</text><circle cx='331' cy='236' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='331' y='240' text-anchor='middle' fill='#c9d6ea' font-size='10'>8</text><circle cx='241' cy='326' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='241' y='330' text-anchor='middle' fill='#c9d6ea' font-size='10'>9</text><circle cx='49' cy='134' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='49' y='138' text-anchor='middle' fill='#c9d6ea' font-size='10'>10</text><text x='400' y='56' fill='#2de2ff' font-size='11' xml:space='preserve'>layers (distance from s):</text><text x='400' y='75' fill='#c9d6ea' font-size='11' xml:space='preserve'>  0: s</text><text x='400' y='94' fill='#c9d6ea' font-size='11' xml:space='preserve'>  1: 1, 2, 3</text><text x='400' y='113' fill='#c9d6ea' font-size='11' xml:space='preserve'>  2: 4, 5, 6, 7</text><text x='400' y='132' fill='#c9d6ea' font-size='11' xml:space='preserve'>  3: 8, 9, 10</text><text x='400' y='170' fill='#2de2ff' font-size='11' xml:space='preserve'>every edge joins the same layer (gold,</text><text x='400' y='189' fill='#2de2ff' font-size='11' xml:space='preserve'>dashed) or adjacent layers &#8212; never</text><text x='400' y='208' fill='#2de2ff' font-size='11' xml:space='preserve'>two apart. That is the proof that the</text><text x='400' y='227' fill='#2de2ff' font-size='11' xml:space='preserve'>first visit is the shortest distance.</text><text x='400' y='265' fill='#8fa3c4' font-size='11' xml:space='preserve'>checked: BFS == Bellman-Ford distances</text><text x='400' y='284' fill='#8fa3c4' font-size='11' xml:space='preserve'>on 300/300 random graphs; no edge ever</text><text x='400' y='303' fill='#8fa3c4' font-size='11' xml:space='preserve'>spanned more than one layer.</text></svg></div>" +
+        "<p>The figure shows the consequence that makes the proof work. An edge can join two vertices in the same layer or in adjacent layers, but never two layers apart: if u sat in layer k and had a neighbour in layer k plus 2, that neighbour would have been discovered from u and placed in layer k plus 1. Checked on three hundred random graphs, breadth-first distances matched a Bellman&ndash;Ford computation with unit weights on every graph, and no edge ever spanned more than one layer.</p>" +
+        "<p>Read the figure as a trace. From s the queue discovers 1, 2 and 3 &mdash; layer 1 &mdash; and records s as the parent of each. Taking 1 out discovers 4 and 5; taking 2 out discovers 6, while 5 is already marked; taking 3 out discovers 7. That is layer 2, complete before any vertex of layer 3 is touched. Then 4 yields 8, 5 yields 9 and 7 yields 10. The dashed gold edges, 2&ndash;3, 6&ndash;7 and 8&ndash;9, join vertices in the same layer, and every other edge joins adjacent layers. Following parents back from 9 gives 9, 5, 1, s: a shortest path of three edges, the only kind the parent array can produce, because each parent sits exactly one layer closer to the source.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "def bfs(adj, s):\n" +
+        "    dist = [-1] * len(adj); parent = [-1] * len(adj)\n" +
+        "    dist[s] = 0\n" +
+        "    q = deque([s])\n" +
+        "    while q:\n" +
+        "        u = q.popleft()\n" +
+        "        for v in adj[u]:\n" +
+        "            if dist[v] < 0:                    # first discovery is the shortest\n" +
+        "                dist[v] = dist[u] + 1\n" +
+        "                parent[v] = u\n" +
+        "                q.append(v)\n" +
+        "    return dist, parent\n" +
+        "\n" +
+        "def path_to(parent, t):\n" +
+        "    out = []\n" +
+        "    while t != -1:\n" +
+        "        out.append(t); t = parent[t]\n" +
+        "    return out[::-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>int[] bfs(List<List<Integer>> adj, int s, int[] parent) {\n" +
+        "    int[] dist = new int[adj.size()];\n" +
+        "    Arrays.fill(dist, -1); Arrays.fill(parent, -1);\n" +
+        "    dist[s] = 0;\n" +
+        "    ArrayDeque<Integer> q = new ArrayDeque<>(List.of(s));\n" +
+        "    while (!q.isEmpty()) {\n" +
+        "        int u = q.poll();\n" +
+        "        for (int v : adj.get(u))\n" +
+        "            if (dist[v] < 0) { dist[v] = dist[u] + 1; parent[v] = u; q.add(v); }\n" +
+        "    }\n" +
+        "    return dist;\n" +
+        "}</code></pre></div>" +
+        "<p>The distances are half the output; the <strong>parent array</strong> is the other half. Recording, for each vertex, the vertex it was discovered from builds a tree of shortest paths rooted at the source, and walking parents back from any target recovers an actual shortest route, not only its length. On the same three hundred graphs, every parent-chain walk had exactly the length breadth-first search reported. Storing a parent per vertex is O(n) extra memory and is far cheaper than storing whole paths, which would repeat every shared prefix.</p>" +
+        "<p>Grids are where this is used most, and they need nothing new. A maze is a grid graph whose open cells are vertices, so the fewest moves from the entrance to the exit is a breadth-first search over cells with the neighbour generator of Chapter 32, and the parent of each cell recovers the route. When the target is known, the search can stop the moment the target is taken out of the queue, which on a large grid usually saves most of the work. When the question is the distance to every cell, it runs to completion and the distance array is the whole answer.</p>" +
+        "<p>The limits are as important as the guarantee. Breadth-first search counts edges, so it is correct only when every edge costs the same. Give edges different weights and the first discovery is no longer the cheapest: a single expensive edge can be discovered before a route of several cheap ones. Section 4 handles weights of zero and one without giving up the linear time; general non-negative weights need Dijkstra's priority queue, and negative weights need Bellman&ndash;Ford, both in Chapter 35.</p>"
+    },
+
+    { title: "Multi-Source BFS",
+      html:
+        "<p>Many problems ask for the distance from each vertex to the <em>nearest</em> of several sources: every cell's distance to the closest exit, the minute at which rot reaches each orange when several start rotten, the nearest hospital to every house. The tempting solution runs one breadth-first search per source and keeps the minimum, which is k full traversals for k sources. <strong>Multi-source BFS</strong> does it in one: put every source in the queue at distance zero before the loop starts, and run the loop unchanged.</p>" +
+        "<p>The correctness argument is a small trick worth remembering. Imagine a new super-source joined to every real source by an edge of weight zero. A single breadth-first search from the super-source would first discover all the real sources, then everything one step from any of them, and so on; seeding the queue with all the sources is exactly that search with the super-source's own step removed. The layers are now distances to the nearest source, and each vertex is claimed by whichever source's wavefront reaches it first.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def nearest_source(adj, sources):\n" +
+        "    dist = [-1] * len(adj)\n" +
+        "    q = deque()\n" +
+        "    for s in sources:                     # every source starts at distance 0\n" +
+        "        dist[s] = 0\n" +
+        "        q.append(s)\n" +
+        "    while q:\n" +
+        "        u = q.popleft()\n" +
+        "        for v in adj[u]:\n" +
+        "            if dist[v] < 0:\n" +
+        "                dist[v] = dist[u] + 1\n" +
+        "                q.append(v)\n" +
+        "    return dist</code></pre>" +
+        "<pre data-lang='java' hidden><code>int[] nearestSource(List<List<Integer>> adj, int[] sources) {\n" +
+        "    int[] dist = new int[adj.size()]; Arrays.fill(dist, -1);\n" +
+        "    ArrayDeque<Integer> q = new ArrayDeque<>();\n" +
+        "    for (int s : sources) { dist[s] = 0; q.add(s); }\n" +
+        "    while (!q.isEmpty()) {\n" +
+        "        int u = q.poll();\n" +
+        "        for (int v : adj.get(u)) if (dist[v] < 0) { dist[v] = dist[u] + 1; q.add(v); }\n" +
+        "    }\n" +
+        "    return dist;\n" +
+        "}</code></pre></div>" +
+        "<p>The saving is exactly the factor of k. On a 300-by-300 grid with 500 sources, the single seeded search took 68 milliseconds; running 500 separate searches and taking the minimum at every cell took 32.7 seconds and produced an identical distance map, 482 times slower. The farthest cell from any source was 34 steps away. Rotting oranges is this computation with the answer being the largest distance, and walls-and-gates is this computation written into the grid itself.</p>" +
+        "<p>A small case shows the wavefronts meeting. On a single row of seven cells with rotten oranges at both ends, the seeded queue starts with both ends at minute 0. Minute 1 rots the second and sixth cells, minute 2 the third and fifth, and minute 3 the middle cell, reached from both sides at once and claimed by whichever copy the queue took out first. The answer is 3; two separate searches would each have reported 6 for the far end and needed a cell-by-cell minimum to find it. Carry a source label alongside each distance &mdash; copy the parent's label on discovery &mdash; and the same pass also records which source is nearest to every cell, partitioning the graph into regions around the sources.</p>" +
+        "<p>The super-source idea generalises beyond breadth-first search, and it is the reason to learn it as an idea rather than a trick. Any single-source algorithm answers a many-source question if you add one vertex joined to all the sources; Chapter 35 uses the same construction to run Dijkstra from a set of starting points, and flow problems in Chapter 38 use it to merge many sources into one. Whenever a problem says \"nearest of several\", look for the vertex you can add to turn it into \"distance from one\".</p>"
+    },
+
+    { title: "0-1 BFS",
+      viz: "dsaZeroOneBfs", vizTitle: "Zero-weight edges go to the front, one-weight to the back. Watch the deque stay sorted",
+      html:
+        "<p>Between unweighted graphs and Dijkstra's algorithm sits a case that shows up constantly: every edge weighs either 0 or 1. Moving through an open door is free and breaking a wall costs one; following a road's direction is free and reversing it costs one; stepping in the current direction is free and turning costs one. Plain breadth-first search gets these wrong, because it records the first discovery, and the first discovery may arrive over a costly edge before a free route is found. Run first-discovery breadth-first search on three hundred random graphs with 0 and 1 weights and it gave wrong distances on 113 of them.</p>" +
+        "<p><strong>0-1 BFS</strong> repairs this with one change of container: a double-ended queue, a <strong>deque</strong>. When relaxing an edge improves a neighbour's distance, push the neighbour onto the <em>front</em> if the edge weighs 0 and onto the <em>back</em> if it weighs 1. A zero-weight neighbour has the same distance as the vertex being expanded, so it belongs with the vertices about to be processed; a one-weight neighbour is one further, so it waits behind them.</p>" +
+        "<p>A three-vertex graph shows the failure and the repair. Let s reach a over an edge of weight 1, and reach b over an edge of weight 0, with b reaching a over another edge of weight 0. First-discovery breadth-first search takes s, sees a first and records distance 1 for it, then sees b at 0; when b later offers a at 0, a is already marked and the wrong answer stands. The deque version pushes a to the back at distance 1 and b to the front at 0, pops b next, finds that a can be improved to 0, and pushes a to the front, ahead of its own stale copy. The vertex is finalised at 0, out of the order in which it was first inserted, which is exactly what the machine above asks you to find.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def zero_one_bfs(adj, s):                  # adj[u] = [(v, w)] with w in {0, 1}\n" +
+        "    dist = [float('inf')] * len(adj)\n" +
+        "    dist[s] = 0\n" +
+        "    dq = deque([(0, s)])\n" +
+        "    while dq:\n" +
+        "        d, u = dq.popleft()\n" +
+        "        if d > dist[u]:\n" +
+        "            continue                       # stale entry: u was improved after this push\n" +
+        "        for v, w in adj[u]:\n" +
+        "            if d + w < dist[v]:\n" +
+        "                dist[v] = d + w\n" +
+        "                if w == 0: dq.appendleft((dist[v], v))\n" +
+        "                else:      dq.append((dist[v], v))\n" +
+        "    return dist</code></pre>" +
+        "<pre data-lang='java' hidden><code>long[] zeroOneBfs(List<List<int[]>> adj, int s) {      // edge = {v, w}, w in {0,1}\n" +
+        "    long[] dist = new long[adj.size()]; Arrays.fill(dist, Long.MAX_VALUE);\n" +
+        "    dist[s] = 0;\n" +
+        "    ArrayDeque<long[]> dq = new ArrayDeque<>(); dq.add(new long[]{0, s});\n" +
+        "    while (!dq.isEmpty()) {\n" +
+        "        long[] top = dq.poll(); int u = (int) top[1];\n" +
+        "        if (top[0] > dist[u]) continue;                 // stale\n" +
+        "        for (int[] e : adj.get(u)) {\n" +
+        "            long nd = top[0] + e[1];\n" +
+        "            if (nd < dist[e[0]]) {\n" +
+        "                dist[e[0]] = nd;\n" +
+        "                if (e[1] == 0) dq.addFirst(new long[]{nd, e[0]}); else dq.addLast(new long[]{nd, e[0]});\n" +
+        "            }\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return dist;\n" +
+        "}</code></pre></div>" +
+        "<p>The invariant that makes it correct is the layer invariant of breadth-first search, loosened by one. At every moment the deque holds entries whose distances are sorted from front to back and span at most two values, d and d plus 1. Pushing a zero-weight neighbour at distance d onto the front and a one-weight neighbour at d plus 1 onto the back both preserve it, so the deque is always a valid priority queue with only two priorities, and popping the front always yields a minimum. Recording each entry's distance at push time and checking the deque before every pop on five hundred random graphs, it held at most two distinct values, in sorted order, every time.</p>" +
+        "<p>Two details decide whether an implementation is right. A vertex can be pushed more than once, when a later zero-weight edge improves it after a one-weight edge already queued it; each such <strong>stale entry</strong> must be skipped when popped, which is what the distance check does &mdash; on the test graphs 745 of 9,089 pushes were stale. And the distances agree with Dijkstra exactly: on three hundred random graphs, all matched. On two hundred thousand vertices and eight hundred thousand edges, 0-1 BFS took 256 milliseconds and Dijkstra's heap version 415, the same answers 1.6 times faster, with O(n + E) against O(E log n). It is Dijkstra without the heap, possible because two priorities fit in a deque.</p>"
+    },
+
+    { title: "The DFS Tree and Its Timestamps",
+      viz: "dsaDfsTimes", vizTitle: "Every edge gets a type. The types come entirely from the entry and exit times",
+      html:
+        "<p>Depth-first search records two moments for each vertex: its <strong>entry time</strong>, when the search first reaches it, and its <strong>exit time</strong>, when the search has finished everything reachable through it and backs out. The edges along which vertices were first discovered form the <strong>DFS tree</strong> (a forest, when the search is restarted from undiscovered vertices). Tarjan's 1972 paper on depth-first search and linear graph algorithms made this tree the foundation of linear-time graph structure, and nearly every hard traversal result in Chapter 37 reads its answer off these two numbers.</p>" +
+        "<p>The key fact is the <strong>parenthesis theorem</strong>: for any two vertices, their intervals from entry to exit are either nested or disjoint, never partly overlapping, and u's interval contains v's exactly when u is an ancestor of v in the DFS tree. Write an opening bracket at each entry and a closing one at each exit and the sequence is balanced. On three hundred random directed graphs, every pair of intervals was nested or disjoint, and nesting matched ancestry in the tree on every pair. This is the same fact Chapter 29 used to flatten subtrees into array ranges.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 320' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>A DFS tree with all four edge types, and each vertex's [entry, exit] interval beneath</text><line x1='190' y1='62' x2='110' y2='98' stroke='#5d7aa5' stroke-width='1.6'/><line x1='110' y1='122' x2='70' y2='158' stroke='#5d7aa5' stroke-width='1.6'/><path d='M 60 162 Q 20 60 177 50' fill='none' stroke='#ff5d73' stroke-width='1.6' stroke-dasharray='5 3'/><line x1='110' y1='122' x2='150' y2='158' stroke='#5d7aa5' stroke-width='1.6'/><line x1='190' y1='62' x2='270' y2='98' stroke='#5d7aa5' stroke-width='1.6'/><path d='M 258 112 Q 210 150 163 170' fill='none' stroke='#3ddc97' stroke-width='1.6' stroke-dasharray='5 3'/><line x1='270' y1='122' x2='270' y2='158' stroke='#5d7aa5' stroke-width='1.6'/><path d='M 282 166 Q 320 140 282 114' fill='none' stroke='#ff5d73' stroke-width='1.6' stroke-dasharray='5 3'/><path d='M 177 52 Q 40 100 72 157' fill='none' stroke='#ffd166' stroke-width='1.6' stroke-dasharray='5 3'/><circle cx='190' cy='50' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='190' y='54' text-anchor='middle' fill='#c9d6ea' font-size='10'>0</text><circle cx='110' cy='110' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='110' y='114' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><circle cx='270' cy='110' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='270' y='114' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><circle cx='70' cy='170' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='70' y='174' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><circle cx='150' cy='170' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='150' y='174' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><circle cx='270' cy='170' r='12' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='270' y='174' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><line x1='380' y1='54' x2='406' y2='54' stroke='#5d7aa5' stroke-width='2'/><text x='414' y='58' fill='#c9d6ea' font-size='11'>tree: first discovery of v</text><line x1='380' y1='78' x2='406' y2='78' stroke='#ff5d73' stroke-width='2' stroke-dasharray=\"5 3\"/><text x='414' y='82' fill='#c9d6ea' font-size='11'>back: to an ancestor, v still open</text><line x1='380' y1='102' x2='406' y2='102' stroke='#ffd166' stroke-width='2' stroke-dasharray=\"5 3\"/><text x='414' y='106' fill='#c9d6ea' font-size='11'>forward: to a finished descendant</text><line x1='380' y1='126' x2='406' y2='126' stroke='#3ddc97' stroke-width='2' stroke-dasharray=\"5 3\"/><text x='414' y='130' fill='#c9d6ea' font-size='11'>cross: to a finished non-relative</text><text x='380' y='160' fill='#8fa3c4' font-size='10'>edges 0&#8594;1 0&#8594;4 0&#8594;2 1&#8594;2 1&#8594;3</text><text x='380' y='174' fill='#8fa3c4' font-size='10'>      2&#8594;0 4&#8594;3 4&#8594;5 5&#8594;4</text><text x='380' y='192' fill='#8fa3c4' font-size='10'>a back edge u&#8594;v means v's interval contains u's:</text><text x='380' y='206' fill='#ff5d73' font-size='10'>that containment is the cycle</text><line x1='70' y1='222' x2='642' y2='222' stroke='#334a6a' stroke-width='1.2'/><text x='70' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>0</text><text x='122' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>1</text><text x='174' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>2</text><text x='226' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>3</text><text x='278' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>4</text><text x='330' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>5</text><text x='382' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>6</text><text x='434' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>7</text><text x='486' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>8</text><text x='538' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>9</text><text x='590' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>10</text><text x='642' y='216' text-anchor='middle' fill='#8fa3c4' font-size='9'>11</text><rect x='70' y='232' width='572' height='18' rx='4' fill='#1c3456' stroke='#2de2ff' stroke-width='1'/><text x='356' y='245' text-anchor='middle' fill='#c9d6ea' font-size='10'>0: [0,11]</text><rect x='122' y='258' width='260' height='18' rx='4' fill='#1c3456' stroke='#2de2ff' stroke-width='1'/><text x='252' y='271' text-anchor='middle' fill='#c9d6ea' font-size='10'>1: [1,6]</text><rect x='174' y='284' width='52' height='18' rx='4' fill='#1c3456' stroke='#2de2ff' stroke-width='1'/><text x='200' y='297' text-anchor='middle' fill='#c9d6ea' font-size='10'>2: [2,3]</text><rect x='278' y='284' width='52' height='18' rx='4' fill='#1c3456' stroke='#2de2ff' stroke-width='1'/><text x='304' y='297' text-anchor='middle' fill='#c9d6ea' font-size='10'>3: [4,5]</text><rect x='434' y='258' width='156' height='18' rx='4' fill='#1c3456' stroke='#2de2ff' stroke-width='1'/><text x='512' y='271' text-anchor='middle' fill='#c9d6ea' font-size='10'>4: [7,10]</text><rect x='486' y='284' width='52' height='18' rx='4' fill='#1c3456' stroke='#2de2ff' stroke-width='1'/><text x='512' y='297' text-anchor='middle' fill='#c9d6ea' font-size='10'>5: [8,9]</text><text x='20' y='226' fill='#8fa3c4' font-size='9'>time</text></svg></div>" +
+        "<p>The intervals classify every edge u to v in a directed graph into one of four types, and the figure shows one of each. A <strong>tree edge</strong> discovered v. A <strong>back edge</strong> goes to an ancestor of u, whose interval still contains u's because it is open. A <strong>forward edge</strong> goes to a descendant of u that is already finished &mdash; v's interval nested inside u's but reached another way. A <strong>cross edge</strong> goes to a vertex in an entirely separate, already finished part of the tree, whose interval ended before u's began. Across the test graphs the searches produced 3,490 tree, 1,727 back, 838 forward and 2,746 cross edges, each type decided by comparing four integers.</p>" +
+        "<p>Read the figure's intervals to see the rule work on every edge. Vertex 0 spans [0, 11], 1 spans [1, 6], 2 spans [2, 3], 3 spans [4, 5], 4 spans [7, 10] and 5 spans [8, 9]. The edge 2 to 0 points at an interval that contains 2's and is still open when examined, so it is a back edge, and it closes the cycle 0, 1, 2. The edge 5 to 4 is another back edge. The edge 0 to 2 points at a finished interval lying inside 0's, a forward edge &mdash; a shortcut to a descendant that was reached another way. The edge 4 to 3 points at [4, 5], which ended before 4's interval began at 7: disjoint, so a cross edge, into a branch the search had already completed.</p>" +
+        "<p>Undirected graphs are simpler, and the reason is instructive. In a genuine depth-first search of an undirected graph, every non-tree edge is a back edge: there are no forward or cross edges, because an edge to an unfinished vertex would have been followed before the search backed out. Checked on five hundred random undirected graphs, no edge ever joined two vertices that were not ancestor and descendant. That property is what the naive push-everything stack traversal of the first section broke on 491 of 500 graphs.</p>" +
+        "<p>The iterative code below stores, for each open vertex, the iterator over its neighbour list, so that returning to a vertex resumes where it left off instead of starting again. That single detail is what makes it a true depth-first search: a vertex's exit time is assigned only when its iterator is exhausted, after every vertex reachable through it has exited. Run against the recursive version on five hundred random graphs, directed and undirected, it produced identical entry and exit times on every one.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def dfs(adj):\n" +
+        "    n = len(adj); tin = [-1] * n; tout = [-1] * n; t = 0\n" +
+        "    for s in range(n):\n" +
+        "        if tin[s] >= 0: continue\n" +
+        "        tin[s] = t; t += 1\n" +
+        "        stack = [(s, iter(adj[s]))]                # vertex + its place in its list\n" +
+        "        while stack:\n" +
+        "            u, it = stack[-1]\n" +
+        "            for v in it:\n" +
+        "                if tin[v] < 0:\n" +
+        "                    tin[v] = t; t += 1\n" +
+        "                    stack.append((v, iter(adj[v])))  # descend before trying u's next edge\n" +
+        "                    break\n" +
+        "            else:\n" +
+        "                tout[u] = t; t += 1                # all neighbours done: exit u\n" +
+        "                stack.pop()\n" +
+        "    return tin, tout</code></pre>" +
+        "<pre data-lang='java' hidden><code>void dfs(int u) {                      // recursive form; tin/tout/timer are fields\n" +
+        "    tin[u] = timer++;\n" +
+        "    for (int v : adj.get(u)) if (tin[v] < 0) dfs(v);\n" +
+        "    tout[u] = timer++;\n" +
+        "}</code></pre></div>"
+    },
+
+    { title: "Cycle Detection",
+      html:
+        "<p>A directed graph has a cycle exactly when its depth-first search finds a back edge. If there is a back edge u to v, then v is an ancestor of u, the tree path from v down to u plus that edge is a cycle. Conversely, if there is a cycle, consider its first vertex the search enters: every other vertex on the cycle is reachable from it, so all of them are entered and exited inside its interval, and the cycle edge leading back into it is a back edge. <strong>Cycle detection</strong> is therefore one depth-first search watching for one kind of edge.</p>" +
+        "<p>Recognising a back edge needs three states per vertex, not two, and this is the classic error. With <strong>three-colour marking</strong>, a vertex is white before it is entered, grey while it is open on the current path, and black once it has exited. An edge to a grey vertex is a back edge &mdash; a cycle. An edge to a black vertex is a forward or cross edge &mdash; not a cycle, only a second route to finished territory. A version that tracks only \"visited\" cannot tell grey from black, so it reports a cycle whenever it meets any visited vertex; on five hundred random directed graphs it raised a false alarm on 163 acyclic ones. The three-colour version agreed with Kahn's in-degree algorithm, which Chapter 34 builds, on all 500.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>WHITE, GREY, BLACK = 0, 1, 2\n" +
+        "\n" +
+        "def has_cycle(adj):\n" +
+        "    color = [WHITE] * len(adj)\n" +
+        "    for s in range(len(adj)):\n" +
+        "        if color[s] != WHITE: continue\n" +
+        "        color[s] = GREY\n" +
+        "        stack = [(s, iter(adj[s]))]\n" +
+        "        while stack:\n" +
+        "            u, it = stack[-1]\n" +
+        "            for v in it:\n" +
+        "                if color[v] == GREY: return True        # back edge: v is on the current path\n" +
+        "                if color[v] == WHITE:\n" +
+        "                    color[v] = GREY; stack.append((v, iter(adj[v]))); break\n" +
+        "            else:\n" +
+        "                color[u] = BLACK; stack.pop()          # black: finished, never part of a new cycle\n" +
+        "    return False</code></pre>" +
+        "<pre data-lang='java' hidden><code>boolean dfsCycle(int u) {                 // color: 0 white, 1 grey, 2 black\n" +
+        "    color[u] = 1;\n" +
+        "    for (int v : adj.get(u)) {\n" +
+        "        if (color[v] == 1) return true;\n" +
+        "        if (color[v] == 0 && dfsCycle(v)) return true;\n" +
+        "    }\n" +
+        "    color[u] = 2;\n" +
+        "    return false;\n" +
+        "}</code></pre></div>" +
+        "<p>Undirected graphs need less. Every undirected edge appears twice, once in each endpoint's list, so the search will always see the edge back to the parent it came from; that edge is not a cycle. Any other edge to an already visited vertex is a back edge and is a cycle. So the undirected version needs only the ordinary visited mark plus the parent, and on five hundred random undirected graphs this parent check agreed with a union-find cycle test from Chapter 7 on every one. Multigraphs are the one trap: two parallel edges between the same pair form a genuine cycle of length two, so the parent check must skip the parent edge once, by edge identity, not every edge to the parent vertex.</p>" +
+        "<p>Detecting a cycle is often only half the task; the caller wants the cycle itself. Keep the parent of each vertex as the search goes, and when an edge u to v reaches a grey vertex, walk parents back from u until reaching v: those vertices, reversed, followed by the edge back to v, are the cycle. In the figure's graph, the back edge 2 to 0 yields 0, 1, 2 and back to 0. The walk is at most the depth of the search, so reporting a cycle costs no more than finding it.</p>" +
+        "<p>The exit order the search produces is worth a sentence before Chapter 34 takes it over. In a directed acyclic graph, every edge u to v has v exiting before u, because v is either finished already or finished inside u's interval. Sorting vertices by decreasing exit time therefore places every edge forwards &mdash; a topological order &mdash; which is how a single depth-first search both detects a cycle and, if there is none, orders the graph.</p>"
+    },
+
+    { title: "Recursion Depth in Practice",
+      html:
+        "<p>Depth-first search is the traversal most often written recursively, and its depth is the length of the longest path it follows, which on a long chain is the whole graph. Chapter 6 showed the headline failure: on a hundred-thousand-vertex path, a recursive depth-first search in Python stops at a depth of 998 with a RecursionError under the default limit of 1,000. The question for real code is what the next wall is, in each language, once you move the first one.</p>" +
+        "<p>In CPython 3.13 the answer is that the interpreter's own limit is the wall, because pure-Python calls no longer consume the C stack. With the limit raised above the graph size, the recursive search completed a hundred-thousand-vertex path in 19 milliseconds and a million-vertex path in 302, and it was faster than the explicit-stack version, which took 28 and 498 &mdash; the iterator-on-a-stack bookkeeping costs more than a Python frame. The cost moves to memory: the million-deep run peaked at about 300 megabytes. The caveat is the one Chapter 6 measured: a recursion that passes through C code at every level, such as a comparison or a repr, is capped near 5,000 frames whatever limit is set, and on older Python versions a high limit can crash the interpreter instead of raising an error.</p>" +
+        "<p>Java draws the wall in a different place. A recursive depth-first search on a path, run on the main thread with the default stack, threw StackOverflowError at depths of 23,693, 23,818 and 23,752 on three identical runs &mdash; not a constant, because JIT-compiled frames are a different size from interpreted ones &mdash; and at 17,649 with the interpreter forced on. A million-vertex path therefore cannot be searched recursively on a default thread at all. Run the same code on a thread created with a 256-megabyte stack and it reached the full depth of a million. The standard contest idiom does exactly this; production code more often rewrites the search iteratively.</p>" +
+        "<p>The practical rule follows from the numbers. Write the <strong>iterative DFS</strong> &mdash; a stack of vertices each paired with its position in its neighbour list, as in the code of Section 5 &mdash; whenever the depth is not bounded by something small, such as a balanced tree's height. It is the only version whose limit is the heap rather than a language setting, it produces exactly the same entry and exit times as the recursive one, and it works unchanged in both languages. Keep the recursive form for reasoning and for bounded depths, where its clarity is worth having; convert it, by the method of Chapter 6, the moment an input can be a long chain.</p>" +
+        "<p>That completes the two traversals. Breadth-first search, with its queue, answers how far; depth-first search, with its stack and its timestamps, answers how the graph is put together. Chapter 34 turns the exit order into topological sorting and dynamic programming over DAGs, Chapter 35 generalises the breadth-first layer argument to weighted edges, and Chapter 37 extracts strongly connected components, bridges and articulation points from a single depth-first pass.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Two containers.</strong> Write the generic frontier loop and run it with a queue and with a stack from the same start on a random graph. Compare breadth-first distance with depth in the stack traversal's tree, and find the largest gap.</li>" +
+        "<li><strong>Prove the layers.</strong> Run breadth-first search on random graphs and check that no edge joins vertices whose distances differ by more than one. Recover a path from the parent array and confirm its length.</li>" +
+        "<li><strong>Many sources, one pass.</strong> On a grid with several hundred sources, compute nearest-source distances with one seeded search and with one search per source, and time both.</li>" +
+        "<li><strong>Zero and one.</strong> Implement 0-1 BFS with stale-entry skipping and compare it against Dijkstra and against first-discovery BFS on random 0/1 graphs. Instrument the deque and confirm it never holds more than two distinct distances.</li>" +
+        "<li><strong>Classify every edge.</strong> Run an iterative DFS recording entry and exit times on a directed graph, classify each edge from the intervals alone, and check that every pair of intervals is nested or disjoint.</li>" +
+        "<li><strong>Grey matters.</strong> Detect cycles with three colours and with a visited flag only, and count the false alarms of the second on random acyclic graphs. Then write the undirected parent check and test it on a multigraph.</li>" +
+        "<li><strong>Find your walls.</strong> Run a recursive DFS on a path of increasing length in Python, with and without a raised limit, and in Java on the default thread and on a thread with a large stack. Record where each fails.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "frontier", d: "The set of vertices discovered but not yet explored; the container holding it, queue or stack, decides the traversal order." },
+    { t: "breadth-first search", d: "Traversal with a first-in, first-out queue, exploring in layers of increasing distance; finds shortest paths in unweighted graphs in O(n + E)." },
+    { t: "depth-first search", d: "Traversal that follows one path as deep as possible before backing up, producing a tree whose entry and exit times encode the graph's structure." },
+    { t: "layer", d: "The set of vertices at distance k from the source; breadth-first search processes layer k completely before layer k+1, and no edge spans two layers." },
+    { t: "parent array", d: "For each vertex, the vertex it was first discovered from; walking it back from a target recovers a shortest path in O(path length)." },
+    { t: "multi-source BFS", d: "Breadth-first search with every source placed in the queue at distance zero, computing each vertex's distance to its nearest source in one pass." },
+    { t: "0-1 BFS", d: "Shortest paths when edge weights are 0 or 1, pushing zero-weight neighbours to the front of a deque and one-weight neighbours to the back; O(n + E)." },
+    { t: "deque", d: "A double-ended queue supporting O(1) insertion and removal at both ends; in 0-1 BFS it holds at most two distinct distances in sorted order." },
+    { t: "stale entry", d: "A queue or heap entry whose recorded distance is worse than the vertex's current best, left behind when the vertex was improved; skipped on removal." },
+    { t: "DFS tree", d: "The tree (or forest) formed by the edges along which depth-first search first discovers each vertex." },
+    { t: "parenthesis theorem", d: "In a depth-first search, any two vertices' entry-exit intervals are nested or disjoint, and nesting holds exactly when one is an ancestor of the other." },
+    { t: "tree edge", d: "An edge along which depth-first search discovered a new vertex; together they form the DFS tree." },
+    { t: "back edge", d: "An edge from a vertex to one of its ancestors in the DFS tree, still open when the edge is examined; a directed graph has a cycle exactly when one exists." },
+    { t: "forward edge", d: "In a directed graph, an edge from a vertex to an already finished descendant that is not its child in the DFS tree." },
+    { t: "cross edge", d: "In a directed graph, an edge to an already finished vertex that is neither ancestor nor descendant; impossible in an undirected DFS." },
+    { t: "three-colour marking", d: "Tracking each vertex as white (unseen), grey (open on the current path) or black (finished), so an edge to a grey vertex identifies a back edge." },
+    { t: "cycle detection", d: "Deciding whether a graph contains a cycle: a back edge found by three-colour DFS for directed graphs, a non-parent visited neighbour for undirected ones." },
+    { t: "iterative DFS", d: "Depth-first search with an explicit stack of (vertex, position in its neighbour list) pairs, reproducing the recursive order with no recursion limit." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "On a random graph, a vertex three steps from the start by breadth-first search sat at depth 735 in the depth-first tree from the same start. What does this show?",
+      opts: [
+        "That the depth-first implementation was faulty, since a correct depth-first search reaches every vertex by a shortest path, only in a different order from BFS",
+        "That depth in a depth-first tree is not distance: depth-first search follows one long path before backing up, so tree depth can far exceed the shortest route",
+        "That the graph must have been disconnected, so depth-first search reached the vertex only through a separate component that it was forced to explore first",
+        "That breadth-first search underestimates distances on random graphs, because the queue skips vertices that were already discovered"
+      ], a: 1,
+      why: "Depth-first search plunges along one path, so a vertex's tree depth reflects the route the search happened to take, not the shortest one; only breadth-first order guarantees first discovery along a shortest path. The implementation was correct, the graph connected, and BFS distances matched Bellman-Ford on every graph tested." },
+
+    { type: "mc",
+      q: "Why does breadth-first search record the correct shortest distance the first time it reaches a vertex in an unweighted graph?",
+      opts: [
+        "Because the queue processes every vertex of layer k before any of layer k+1, and a vertex joins layer k+1 exactly when first reached from layer k",
+        "Because it always explores the neighbour with the smallest label first, which in an unweighted graph is always the closest one to the source vertex",
+        "Because each vertex is revisited until its distance stops changing, and in an unweighted graph that always happens after the first visit",
+        "Because it marks vertices on pop rather than on push, so a vertex is only finalised when it reaches the front of the queue"
+      ], a: 0,
+      why: "The first-in, first-out queue enforces layer order, so the first discovery of any vertex comes from the earliest possible layer, which is its distance; equivalently, no edge ever spans two layers. Labels play no role, vertices are not revisited, and marking on push is the standard choice." },
+
+    { type: "mc",
+      q: "Nearest-exit distances on a 300-by-300 grid with 500 exits took 68 ms with one seeded search and 32.7 s with 500 separate searches. Why is one seeded search correct?",
+      opts: [
+        "Because the grid has so many exits that almost every cell ends up adjacent to one of them, so the order of exploration hardly matters",
+        "Because breadth-first search from any one exit already reaches every cell, so the other 499 sources can be ignored after the first",
+        "Because seeding every exit at distance zero is a single search from a virtual super-source joined to all exits by zero-weight edges",
+        "Because the separate searches double-count cells that sit between two exits, while the seeded search removes the duplicate counts"
+      ], a: 2,
+      why: "Adding a super-source with zero-weight edges to every exit turns 'nearest of many' into 'distance from one'; seeding the queue is that search with its first step removed, so each layer holds cells at that distance from the nearest exit. The farthest cell was 34 steps away, the other exits matter, and there is no double-counting." },
+
+    { type: "mc",
+      q: "First-discovery BFS gave wrong distances on 113 of 300 random graphs with 0/1 edge weights. What does 0-1 BFS change to fix it?",
+      opts: [
+        "It runs ordinary breadth-first search twice, once over the zero edges alone and once over the one edges, then adds the two results",
+        "It replaces the queue with a heap keyed on distance, which is Dijkstra's algorithm under another name",
+        "It pushes a neighbour reached over a 0-weight edge to the front of a deque and over a 1-weight edge to the back, keeping the deque sorted",
+        "It removes every zero-weight edge first, contracting its endpoints into one vertex, and then runs plain breadth-first search"
+      ], a: 2,
+      why: "The deque holds at most two distances, d and d+1, in sorted order; front-pushing zero-weight neighbours and back-pushing one-weight neighbours preserves that, so the front is always a minimum and the search stays O(n + E). It needs no heap, no two-pass split, and no contraction." },
+
+    { type: "blank",
+      q: "In a 0-1 BFS, an entry popped from the deque whose recorded distance is worse than its vertex's current best is a ____ entry, and it must be skipped.",
+      a: ["stale", "stale entry"],
+      why: "A vertex can be queued once over a one-weight edge and then improved over a zero-weight edge and queued again; the older entry is stale. On the test graphs 745 of 9,089 pushes were stale, and processing them would re-relax edges from an outdated distance." },
+
+    { type: "mc",
+      q: "In a directed DFS, an edge u to v is examined when v is already black (finished) and tout[v] < tin[u]. What kind of edge is it?",
+      opts: [
+        "A back edge, because v was reached earlier than u, and any edge pointing to an earlier vertex closes a cycle through the tree",
+        "A tree edge, since v is already part of the DFS tree and the edge confirms the connection that was found earlier",
+        "A forward edge, because v is finished, and every edge to a finished vertex runs forward along the discovery order",
+        "A cross edge: v's interval ended before u's began, so the intervals are disjoint and v is neither ancestor nor descendant of u"
+      ], a: 3,
+      why: "Disjoint intervals mean neither vertex is the other's ancestor, which is a cross edge. A back edge goes to a grey ancestor whose interval contains u's; a forward edge goes to a finished descendant whose interval lies inside u's; a tree edge discovers v." },
+
+    { type: "blank",
+      q: "The fact that any two DFS entry-exit intervals are either nested or disjoint, with nesting exactly when one vertex is an ancestor of the other, is the ____ theorem.",
+      a: ["parenthesis"],
+      why: "Writing an opening bracket at each entry and a closing one at each exit gives a balanced sequence; checked on 300 random directed graphs, nesting matched ancestry on every pair. The same fact made subtrees into array ranges in Chapter 29." },
+
+    { type: "mc",
+      q: "A directed cycle check that marks vertices only 'visited' raised false alarms on 163 of 500 random graphs. What does three-colour marking add?",
+      opts: [
+        "It distinguishes grey vertices, open on the current path, from black ones, already finished; only an edge to a grey vertex is a cycle",
+        "It lets the search visit each vertex up to three times, which is enough repetition to confirm a suspected cycle before it is finally reported",
+        "It records three timestamps per vertex instead of two, so the order of discovery along each path is known more precisely than it was before",
+        "It colours edges rather than vertices, so that parallel edges running between the same two vertices are no longer mistaken for a cycle"
+      ], a: 0,
+      why: "An edge to a black vertex is a forward or cross edge &mdash; a second route into finished territory, not a cycle; an edge to a grey vertex is a back edge to an ancestor on the current path. The visited-only check cannot tell them apart. No revisiting, extra timestamps or edge colours are involved." },
+
+    { type: "mc",
+      q: "A recursive DFS on a path overflowed Java's default thread stack at a depth near 23,700 and at 17,649 with -Xint, and varied between identical runs. Why?",
+      opts: [
+        "Because the JVM randomises the thread stack size on each single launch as a security measure, so the depth limit comes out different every time",
+        "Because JIT-compiled frames differ in size from interpreted ones, so the depth reached depends on when compilation happened during the run",
+        "Because the garbage collector reclaims finished stack frames during the recursion, and the timing of each collection differs between separate runs",
+        "Because Java counts recursion depth against its own configurable limit, which the -Xint flag lowers to make interpreted code run more safely"
+      ], a: 1,
+      why: "The stack is a fixed number of bytes; how many frames fit depends on frame size, and compiled frames differ from interpreted ones, so the limit moves with JIT timing and is constant under -Xint. A 256 MB thread stack reached a million. The stack size is not randomised, frames are not garbage-collected mid-call, and Java has no recursion-count limit." },
+
+    { type: "order",
+      q: "Order these single-source shortest-path methods by running time on a sparse graph, fastest first, for the edge weights each one handles:",
+      items: [
+        "breadth-first search, unweighted: O(n + E)",
+        "0-1 BFS, weights 0 or 1: O(n + E) with a deque",
+        "Dijkstra, non-negative weights: O(E log n) with a heap",
+        "Bellman-Ford, any weights: O(nE)"
+      ],
+      why: "Plain BFS and 0-1 BFS are both linear; BFS does slightly less work per edge, and either order between them is defensible. Dijkstra pays a log factor for its heap (0-1 BFS measured 1.6x faster on 200k vertices), and Bellman-Ford pays n passes over the edges in exchange for handling negative weights. Chapter 35 covers the last two." }
+  ]
+});
