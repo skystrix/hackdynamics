@@ -960,7 +960,7 @@ CHAPTERS.push({
         "That the model's constant-time arithmetic holds only while operands fit in a word, and past that its central assumption no longer describes the machine",
         "That multiplication is inherently more expensive than the model allows, which is why the model lists only addition and comparison as single steps"
       ], a: 2,
-      why: "The word-RAM assumes arithmetic on a word costs one step, and 262,144 bits is four thousand words. The model has not been refuted; it has been used outside its stated domain. This matters in practice whenever a running value grows without being reduced, which is why Chapter 17's rolling hash takes a modulus at every step rather than at the end." },
+      why: "The word-RAM assumes arithmetic on a word costs one step, and 262,144 bits is four thousand words. The model has not been refuted; it has been used outside its stated domain. This matters in practice whenever a running value grows without being reduced, which is why Chapter 41's rolling hash takes a modulus at every step rather than at the end." },
 
     { type: "mc",
       q: "Why does the word-RAM model require that a word be at least log₂ n bits wide?",
@@ -12298,5 +12298,361 @@ CHAPTERS.push({
         "a loop over all 32 bit positions: 2.06 s"
       ],
       why: "The built-in runs in C, the string count is C over a Python-built string, Kernighan's loop runs one Python iteration per set bit (about 16 on random words), and the naive loop always runs 32. The parallel count sat at 0.27 s, between the string and Kernighan." }
+  ]
+});
+
+/* ======================= CHAPTER 41 ======================= */
+CHAPTERS.push({
+  num: 41, part: 6, title: "String Matching: KMP, Z and Rabin-Karp",
+  blurb: "Finding a pattern in a text is the oldest string problem, and the naive algorithm is quadratic on exactly the inputs an adversary chooses; Java's own indexOf took 22 seconds on one here. The fixes are some of the most elegant algorithms in the subject. KMP is usually taught as failure links, a mechanism with no meaning. Taught from borders, the prefix function derives itself, KMP follows, and periods, repetitions and rotations come free. The Z-function reads the same facts from the other end, Rabin-Karp trades comparisons for hashes and an anti-hash input breaks the careless version, and Boyer-Moore skips most of the text.",
+  sections: [
+
+    { title: "Strings, Their Costs, and Naive Matching",
+      html:
+        "<p>A string is an array of characters with one property that changes every cost in this chapter: in both Python and Java it is <em>immutable</em>. No operation modifies a string; every apparent modification builds a new one and copies the old characters into it. So a loop that appends one character at a time to a string of length k pays k copies for the append, and n appends pay 1 + 2 + &#8230; + n, which is quadratic. Java measured exactly that shape here: 100,000 appends with <code>s = s + \"x\"</code> took 0.33 s and 200,000 took 1.06 s, while <code>StringBuilder</code> did 200,000 in 4 milliseconds. A builder is a dynamic array of characters, Chapter 4's doubling array, so its appends are amortized O(1), and <code>toString()</code> copies once at the end.</p>" +
+        "<p>Python is more surprising. The same <code>s += \"x\"</code> loop ran 400,000 appends in 0.022 s, linear, because CPython resizes the string in place when nothing else refers to it: an optimization in the interpreter, not a promise of the language. Keep one other reference to the string inside the loop and the optimization switches off: the same 400,000 appends then took 1.63 s, and quadrupling n multiplied the time by about eight. <code>''.join(parts)</code> is the form that is linear by specification rather than by accident, and it is the one to write.</p>" +
+        "<p>The problem this chapter solves is <strong>string matching</strong>: find every position where a pattern P of length m occurs in a text T of length n. <strong>Naive matching</strong> tries every alignment and compares left to right until a mismatch. On random text it is fast, because most alignments fail on the first or second character: over a 26-letter alphabet it made 1.04 comparisons per text character, over a 4-letter one 1.33. The worst case is a text that nearly matches everywhere. With T = aaa&#8230;a and P = aa&#8230;ab, every alignment matches m &#8722; 1 characters before failing on the b, so the total is (n &#8722; m + 1)&#183;m. For n = 100,000 and m = 1,000 that was 99,001,000 comparisons, 990 per text character.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def naive_find_all(t, p):\n" +
+        "    n, m, out = len(t), len(p), []\n" +
+        "    for i in range(n - m + 1):\n" +
+        "        j = 0\n" +
+        "        while j &lt; m and t[i + j] == p[j]:\n" +
+        "            j += 1\n" +
+        "        if j == m:\n" +
+        "            out.append(i)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; naiveFindAll(String t, String p) {\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    int n = t.length(), m = p.length();\n" +
+        "    for (int i = 0; i + m &lt;= n; i++) {\n" +
+        "        int j = 0;\n" +
+        "        while (j &lt; m &amp;&amp; t.charAt(i + j) == p.charAt(j)) j++;\n" +
+        "        if (j == m) out.add(i);\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
+        "<p>This worst case is not academic, because it is what the Java library does. OpenJDK 21's <code>String.indexOf</code> behaves as the naive algorithm with a fast inner loop: on a text of a million a's, patterns of the adversarial shape took 0.27 s at m = 1,000, 2.2 s at m = 10,000 and 22 s at m = 100,000, ten times slower for every tenfold m. The same calls on random text took under 3 milliseconds. Python's <code>str.find</code> did the adversarial search at n = 10,000,000 and m = 10,000 in 0.03 s: since 3.10, CPython switches to the linear-time two-way algorithm of Crochemore and Perrin (1991) for long patterns. If a user controls both strings passed to <code>indexOf</code>, the algorithms of this chapter are the defence.</p>" +
+        "<p>Every fix below shares one insight. When an alignment fails after matching k characters, the naive algorithm throws away what it learned: it knows exactly what those k text characters are, because they equal the pattern's first k. The fixes differ in what they do with that knowledge.</p>"
+    },
+
+    { title: "Borders and Periods",
+      html:
+        "<p>A <strong>border</strong> of a string is a proper prefix that is also a suffix. The string abacaba has two nonempty borders, a and aba; abacabadabacaba has three, a, aba and abacaba. The empty string counts as a border of every string, which keeps the formulas below free of special cases, and the whole string does not count, because a border must be proper. This is the definition to hold on to; everything else in the chapter is computed from it.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 288' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>All the borders of abacabadabacaba: each is a prefix (above) that is also a suffix (below)</text><rect x='80' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='99' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='120' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='139' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='160' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='179' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='200' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='219' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='240' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='259' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='280' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='299' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='320' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='339' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='360' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='379' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>d</text><rect x='400' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='419' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='440' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='459' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='480' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='499' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='520' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='539' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='560' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='579' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='600' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='619' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='640' y='120' width='38' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='659' y='138' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><text x='99' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>0</text><text x='139' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>1</text><text x='179' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>2</text><text x='219' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>3</text><text x='259' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>4</text><text x='299' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>5</text><text x='339' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>6</text><text x='379' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>7</text><text x='419' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>8</text><text x='459' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>9</text><text x='499' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>10</text><text x='539' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>11</text><text x='579' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>12</text><text x='619' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>13</text><text x='659' y='162' text-anchor='middle' fill='#8fa3c4' font-size='9'>14</text><path d='M 80 114 L 80 106 L 356 106 L 356 114' fill='none' stroke='#3ddc97' stroke-width='1.6'/><text x='362' y='110' text-anchor='start' fill='#3ddc97' font-size='10'>abacaba (7)</text><path d='M 400 170 L 400 178 L 676 178 L 676 170' fill='none' stroke='#3ddc97' stroke-width='1.6'/><text x='394' y='182' text-anchor='end' fill='#3ddc97' font-size='10'>abacaba (7)</text><path d='M 80 92 L 80 84 L 196 84 L 196 92' fill='none' stroke='#ffd166' stroke-width='1.6'/><text x='202' y='88' text-anchor='start' fill='#ffd166' font-size='10'>aba (3)</text><path d='M 560 192 L 560 200 L 676 200 L 676 192' fill='none' stroke='#ffd166' stroke-width='1.6'/><text x='554' y='204' text-anchor='end' fill='#ffd166' font-size='10'>aba (3)</text><path d='M 80 70 L 80 62 L 116 62 L 116 70' fill='none' stroke='#2de2ff' stroke-width='1.6'/><text x='122' y='66' text-anchor='start' fill='#2de2ff' font-size='10'>a (1)</text><path d='M 640 214 L 640 222 L 676 222 L 676 214' fill='none' stroke='#2de2ff' stroke-width='1.6'/><text x='634' y='226' text-anchor='end' fill='#2de2ff' font-size='10'>a (1)</text><text x='20' y='260' text-anchor='start' fill='#8fa3c4' font-size='10'>\u03c0 at the end is 7; the longest border of abacaba is aba, and of aba is a: borders form a chain</text><text x='20' y='278' text-anchor='start' fill='#8fa3c4' font-size='10'>periods are n \u2212 border: 15 \u2212 7 = 8, 15 \u2212 3 = 12, 15 \u2212 1 = 14, and 15 itself</text></svg></div>" +
+        "<p>Borders nest. If u is a border of s and v is a border of u, then v is a border of s: v is a prefix of u, which is a prefix of s, and v is a suffix of u, which is a suffix of s. The converse is the useful direction: every border of s shorter than its longest border is also a border of that longest border. So a string's borders form a chain, and they can all be listed by taking the longest border, then its longest border, and so on until the chain reaches the empty string. The figure shows the chain for abacabadabacaba: 7, then 3, then 1, then 0.</p>" +
+        "<p>A <strong>period</strong> of s is a shift p with s[i] = s[i + p] wherever both are defined: sliding the string p places over itself lines up equal characters. Borders and periods are the same facts read from opposite ends. If s has a border of length b, then the prefix and suffix of length b are equal, so s[i] = s[i + n &#8722; b] for every i below b, and n &#8722; b is a period; the argument runs equally well the other way. So abacabadabacaba, of length 15, has periods 8, 12, 14 and 15, one for each border including the empty one. The <strong>smallest period</strong> corresponds to the longest border: it is n &#8722; b<sub>max</sub>. I checked the correspondence against brute force on 2,000 random strings, and the period set read off the border chain was right on every one.</p>" +
+        "<p>Periods interact in one way worth knowing. The <strong>periodicity lemma</strong> of Fine and Wilf (1965) says that if p and q are both periods of s and p + q &#8722; gcd(p, q) &#8804; n, then gcd(p, q) is a period too. On 20,000 random strings the lemma's premise held for 45,398 pairs of periods, and the conclusion held on every one. The bound is tight: abaaba has length 6 = 3 + 5 &#8722; 1 &#8722; 1, periods 3 and 5, and is not constant, so gcd 1 is not a period. The lemma is what makes periodic strings rigid, and it is the reason arguments about repetition in strings rarely need case analysis beyond it.</p>" +
+        "<p>Why this matters for matching: when an alignment fails after k matched characters, the next alignment that could possibly succeed is the one that places a border of the matched prefix over the text characters already read. Any smaller shift would need a longer border that does not exist, and a larger shift could skip an occurrence. So the borders of the pattern's prefixes are exactly the information the naive algorithm threw away.</p>"
+    },
+
+    { title: "The Prefix Function",
+      viz: "dsaPrefixFunction", vizTitle: "Each cell is the length of the longest border of that prefix. The overlay shows you the border itself",
+      html:
+        "<p>The <strong>prefix function</strong> of a string s is the array &#960; with &#960;[i] = the length of the longest border of s[0..i]. For abacabad it is 0, 0, 1, 0, 1, 2, 3, 0: the prefix abacaba has longest border aba, so &#960;[6] = 3, and adding the d destroys every border. Computed directly, each entry costs a quadratic scan. Computed from the entries before it, the whole array costs O(n), and the reason is the chain of borders from the previous section.</p>" +
+        "<p>Suppose &#960;[i &#8722; 1] = k, so s[0..k&#8722;1] is the longest border of s[0..i&#8722;1]. A border of s[0..i] is a border of s[0..i&#8722;1] extended by one character, s[i]. So the candidates for &#960;[i] are the borders of the previous prefix, each plus one, in decreasing order of length: k, then &#960;[k &#8722; 1], then the border of that, down the chain. The first candidate k' for which s[k'] = s[i] gives &#960;[i] = k' + 1; if the chain reaches zero with no match, &#960;[i] is 1 when s[0] = s[i] and 0 otherwise. Nothing outside the chain can be a border, by the nesting argument, so nothing is missed.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def prefix_function(s):\n" +
+        "    pi = [0] * len(s)\n" +
+        "    for i in range(1, len(s)):\n" +
+        "        k = pi[i - 1]\n" +
+        "        while k &gt; 0 and s[i] != s[k]:\n" +
+        "            k = pi[k - 1]              # fall back along the border chain\n" +
+        "        if s[i] == s[k]:\n" +
+        "            k += 1\n" +
+        "        pi[i] = k\n" +
+        "    return pi</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] prefixFunction(String s) {\n" +
+        "    int[] pi = new int[s.length()];\n" +
+        "    for (int i = 1; i &lt; s.length(); i++) {\n" +
+        "        int k = pi[i - 1];\n" +
+        "        while (k &gt; 0 &amp;&amp; s.charAt(i) != s.charAt(k)) k = pi[k - 1];\n" +
+        "        if (s.charAt(i) == s.charAt(k)) k++;\n" +
+        "        pi[i] = k;\n" +
+        "    }\n" +
+        "    return pi;\n" +
+        "}</code></pre></div>" +
+        "<p>The inner <code>while</code> loop can run many times for one i, so the bound needs Chapter 4's potential method. Take the potential to be k, the current border length. Each step of the outer loop raises k by at most one. Each fallback in the inner loop lowers k by at least one, and k never goes below zero. So the total number of fallbacks over the whole run cannot exceed the total number of increases, which is at most n &#8722; 1, and the algorithm is O(n) however the fallbacks are distributed. On a string of 9,999 a's followed by one b, all the fallbacks arrive at the final character: 9,998 of them in a single iteration, still within the bound of n &#8722; 1. On 100,000 random characters the total was 0.34 fallbacks per character over two letters and 0.04 over twenty-six.</p>" +
+        "<p>The loop was checked against a brute-force longest-border computation at every position of 2,000 random strings, and agreed on all of them. Two details of it go wrong in interviews more than any others. The fallback is <code>k = pi[k - 1]</code>, not <code>k = pi[k]</code> and not <code>k - 1</code>: the next candidate is the longest border of the border, which is stored at the border's last index. And the loop starts at i = 1 with &#960;[0] = 0, because a one-character string has only the empty border.</p>" +
+        "<p>The prefix function is the chapter's central object because it answers more than one question. It gives every border of every prefix, which is what KMP needs to skip alignments. It gives every period of the whole string, through the chain at the last position. And, with a separator, it finds a pattern in a text without any separate search algorithm at all, which is where the next section begins.</p>"
+    },
+
+    { title: "KMP, and What Else the Border Table Answers",
+      viz: "dsaKMP", vizTitle: "Two counters: naive comparisons and KMP's. Find an input where they separate",
+      html:
+        "<p>The <strong>Knuth-Morris-Pratt</strong> algorithm, found independently by James Morris and by Donald Knuth with Vaughan Pratt and published jointly in 1977, is the prefix function run on the text. Keep k, the number of pattern characters matched so far. Read the next text character; while it does not extend the match and k is positive, fall back to &#960;[k &#8722; 1]; if it does extend, increase k; if k reaches m, report an occurrence and fall back to &#960;[m &#8722; 1] to look for the next one, which may overlap. The border table is built once from the pattern, in O(m).</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 316' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='11'>KMP: each mismatch slides the pattern to its border, and the text pointer never moves back</text><text x='100' y='58' text-anchor='end' fill='#8fa3c4' font-size='10'>text</text><rect x='110' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='127' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='146' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='163' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='182' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='199' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='218' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='235' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='254' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='271' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='290' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='307' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='326' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='343' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='362' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='379' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='398' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='415' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='434' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='451' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='470' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='487' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='506' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='523' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='542' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='559' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='578' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='595' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='614' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='631' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='650' y='40' width='34' height='26' rx='4' fill='#182842' stroke='#334a6a'/><text x='667' y='58' text-anchor='middle' fill='#c9d6ea' font-size='13'>d</text><text x='127' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>0</text><text x='163' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>1</text><text x='199' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>2</text><text x='235' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>3</text><text x='271' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>4</text><text x='307' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>5</text><text x='343' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>6</text><text x='379' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>7</text><text x='415' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>8</text><text x='451' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>9</text><text x='487' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>10</text><text x='523' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>11</text><text x='559' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>12</text><text x='595' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>13</text><text x='631' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>14</text><text x='667' y='78' text-anchor='middle' fill='#8fa3c4' font-size='9'>15</text><text x='100' y='116' text-anchor='end' fill='#8fa3c4' font-size='10'>step 1</text><rect x='110' y='98' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='127' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='146' y='98' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='163' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='182' y='98' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='199' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='218' y='98' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='235' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='254' y='98' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='271' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='290' y='98' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='307' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='326' y='98' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='343' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='362' y='98' width='34' height='26' rx='4' fill='#3a1520' stroke='#ff5d73'/><text x='379' y='116' text-anchor='middle' fill='#c9d6ea' font-size='13'>d</text><polygon points='379,94 374,87 384,87' fill='#ffd166'/><text x='110' y='142' text-anchor='start' fill='#8fa3c4' font-size='10'>matched 7; border of abacaba is aba (3): slide by 7&#8722;3 = 4</text><text x='100' y='184' text-anchor='end' fill='#8fa3c4' font-size='10'>step 2</text><rect x='254' y='166' width='34' height='26' rx='4' fill='#1c2c46' stroke='#334a6a'/><text x='271' y='184' text-anchor='middle' fill='#8fa3c4' font-size='13'>a</text><rect x='290' y='166' width='34' height='26' rx='4' fill='#1c2c46' stroke='#334a6a'/><text x='307' y='184' text-anchor='middle' fill='#8fa3c4' font-size='13'>b</text><rect x='326' y='166' width='34' height='26' rx='4' fill='#1c2c46' stroke='#334a6a'/><text x='343' y='184' text-anchor='middle' fill='#8fa3c4' font-size='13'>a</text><rect x='362' y='166' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='379' y='184' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='398' y='166' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='415' y='184' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='434' y='166' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='451' y='184' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='470' y='166' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='487' y='184' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='506' y='166' width='34' height='26' rx='4' fill='#3a1520' stroke='#ff5d73'/><text x='523' y='184' text-anchor='middle' fill='#c9d6ea' font-size='13'>d</text><polygon points='523,162 518,155 528,155' fill='#ffd166'/><text x='254' y='210' text-anchor='start' fill='#8fa3c4' font-size='10'>matched 7; border of abacaba is aba (3): slide by 7&#8722;3 = 4</text><text x='100' y='252' text-anchor='end' fill='#8fa3c4' font-size='10'>step 3</text><rect x='398' y='234' width='34' height='26' rx='4' fill='#1c2c46' stroke='#334a6a'/><text x='415' y='252' text-anchor='middle' fill='#8fa3c4' font-size='13'>a</text><rect x='434' y='234' width='34' height='26' rx='4' fill='#1c2c46' stroke='#334a6a'/><text x='451' y='252' text-anchor='middle' fill='#8fa3c4' font-size='13'>b</text><rect x='470' y='234' width='34' height='26' rx='4' fill='#1c2c46' stroke='#334a6a'/><text x='487' y='252' text-anchor='middle' fill='#8fa3c4' font-size='13'>a</text><rect x='506' y='234' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='523' y='252' text-anchor='middle' fill='#c9d6ea' font-size='13'>c</text><rect x='542' y='234' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='559' y='252' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='578' y='234' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='595' y='252' text-anchor='middle' fill='#c9d6ea' font-size='13'>b</text><rect x='614' y='234' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='631' y='252' text-anchor='middle' fill='#c9d6ea' font-size='13'>a</text><rect x='650' y='234' width='34' height='26' rx='4' fill='#123a2c' stroke='#3ddc97'/><text x='667' y='252' text-anchor='middle' fill='#c9d6ea' font-size='13'>d</text><polygon points='667,230 662,223 672,223' fill='#ffd166'/><text x='398' y='278' text-anchor='start' fill='#ffd166' font-size='10'>match at 8; its first 3 characters were never re-read</text><text x='20' y='306' text-anchor='start' fill='#8fa3c4' font-size='10'>grey: guaranteed by the border; green: compared, matched; red: mismatch; arrow: text pointer</text></svg></div>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def kmp_find_all(t, p):\n" +
+        "    pi, k, out = prefix_function(p), 0, []\n" +
+        "    for i, c in enumerate(t):\n" +
+        "        while k &gt; 0 and c != p[k]:\n" +
+        "            k = pi[k - 1]\n" +
+        "        if c == p[k]:\n" +
+        "            k += 1\n" +
+        "        if k == len(p):\n" +
+        "            out.append(i - len(p) + 1)\n" +
+        "            k = pi[k - 1]\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; kmpFindAll(String t, String p) {\n" +
+        "    int[] pi = prefixFunction(p);\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int i = 0, k = 0; i &lt; t.length(); i++) {\n" +
+        "        while (k &gt; 0 &amp;&amp; t.charAt(i) != p.charAt(k)) k = pi[k - 1];\n" +
+        "        if (t.charAt(i) == p.charAt(k)) k++;\n" +
+        "        if (k == p.length()) { out.add(i - k + 1); k = pi[k - 1]; }\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
+        "<p>Nothing here is a trick; it is the previous two sections applied. The text index i only increases, so KMP reads each text character once and can process a stream it cannot rewind. The potential argument bounds the fallbacks by the increases, so the total comparisons are at most 2n. On the adversarial input that cost the naive algorithm 990 comparisons per character, KMP made 1.99; on random text over four letters it made 1.25 against the naive 1.33. KMP's advantage is a guarantee, not an average: on typical text the naive loop is already near-linear. Against brute force on 2,000 random texts and patterns, KMP found the same occurrences every time.</p>" +
+        "<p>Trace the figure. The pattern abacabad has &#960; = 0, 0, 1, 0, 1, 2, 3, 0. In step 1 the first seven characters match and the d fails against the text's c at position 7. The matched part is abacaba, whose longest border is aba, so k falls to 3: the pattern slides four places and its first three characters are already known to sit over text positions 4 to 6, without reading them again. The text pointer stays at 7, where the c now matches the pattern's c, and the next three characters match before the d fails again at position 11. The same fallback slides the pattern to position 8, and this time the d matches: an occurrence at 8. Sixteen text characters cost eighteen comparisons, and no text character was read after the pointer had passed it.</p>" +
+        "<p>An equivalent formulation needs no search loop at all: compute the prefix function of P + # + T, where # occurs in neither string. The separator caps every border at m, and each position in the text part whose &#960; value equals m is the end of an occurrence. It costs O(n + m) memory rather than O(m), and in return it is the same twelve lines as the previous section. Precompute, for every state k and every character c, where the fallback loop would end, and KMP becomes a finite automaton with m + 1 states and no inner loop: O(m&#183;&#963;) to build for an alphabet of size &#963;, then exactly one table lookup per text character, which is what a real-time system needs. Chapter 42 builds the same automaton over a trie of many patterns.</p>" +
+        "<p>The border table answers three more questions for free. <strong>All periods</strong>: walk the chain at the last position, &#960;[n &#8722; 1], then &#960;[&#960;[n &#8722; 1] &#8722; 1], and so on; each border length b gives the period n &#8722; b. <strong>The smallest repeating unit</strong>: let u = n &#8722; &#960;[n &#8722; 1]. If u divides n, the string is its first u characters repeated n/u times, and otherwise no shorter unit tiles it; abcabcabc has &#960;[8] = 6 and unit 3. <strong>String rotation</strong>: b is a rotation of a exactly when they have equal length and b occurs in a + a, which KMP answers in linear time. Each of the three matched brute force on 2,000 random strings.</p>"
+    },
+
+    { title: "The Z-Function",
+      html:
+        "<p>The <strong>Z-function</strong> reads the same information in a different layout. For each position i, z[i] is the length of the longest common prefix of s and the suffix starting at i: how far the string matches itself when started again at i. For aabxaab, z is 7, 1, 0, 0, 3, 1, 0, where z[0] is conventionally n. Where the prefix function records, for each end position, the longest border ending there, the Z-function records, for each start position, the longest prefix starting there. The idea is old, and Dan Gusfield's 1997 textbook made it standard under the name Z algorithm.</p>" +
+        "<p>Computing it in O(n) uses the same already-computed-information idea as KMP. Maintain the <strong>Z-box</strong> [l, r): the rightmost segment found so far that matches a prefix of s, so that s[l..r&#8722;1] = s[0..r&#8722;l&#8722;1]. For a new position i inside the box, the characters from i up to r are a copy of the characters from i &#8722; l, so z[i] is at least min(r &#8722; i, z[i &#8722; l]) with no comparisons at all. Only beyond r does the algorithm compare characters, and every successful comparison moves r to the right. Since r never decreases and never exceeds n, the total work is linear.</p>" +
+        "<p>On aabxaab: at i = 1 there is no box, and comparing gives z[1] = 1. Positions 2 and 3 fail on their first comparison. At i = 4 three comparisons succeed, aab against aab, and the box becomes [4, 7). At i = 5, inside the box, the algorithm copies z[5 &#8722; 4] = z[1] = 1, capped at r &#8722; i = 2, then tries one comparison beyond it, s[1] against s[6], a against b, which fails; z[5] = 1. At i = 6 the copy is z[2] = 0 and one comparison fails. Seven positions, and every comparison that succeeded moved r.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def z_function(s):\n" +
+        "    n = len(s)\n" +
+        "    z, l, r = [0] * n, 0, 0\n" +
+        "    for i in range(1, n):\n" +
+        "        if i &lt; r:\n" +
+        "            z[i] = min(r - i, z[i - l])      # copied from inside the box\n" +
+        "        while i + z[i] &lt; n and s[z[i]] == s[i + z[i]]:\n" +
+        "            z[i] += 1                        # each success moves r right\n" +
+        "        if i + z[i] &gt; r:\n" +
+        "            l, r = i, i + z[i]\n" +
+        "    if n:\n" +
+        "        z[0] = n\n" +
+        "    return z</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] zFunction(String s) {\n" +
+        "    int n = s.length(), l = 0, r = 0;\n" +
+        "    int[] z = new int[n];\n" +
+        "    for (int i = 1; i &lt; n; i++) {\n" +
+        "        if (i &lt; r) z[i] = Math.min(r - i, z[i - l]);\n" +
+        "        while (i + z[i] &lt; n &amp;&amp; s.charAt(z[i]) == s.charAt(i + z[i])) z[i]++;\n" +
+        "        if (i + z[i] &gt; r) { l = i; r = i + z[i]; }\n" +
+        "    }\n" +
+        "    if (n &gt; 0) z[0] = n;\n" +
+        "    return z;\n" +
+        "}</code></pre></div>" +
+        "<p>Matching with Z uses the separator again: compute z of P + # + T, and every text position with z equal to m is an occurrence. The two functions carry the same information and convert into each other in linear time. From z to &#960;: each position i with z[i] &gt; 0 says that s[i..i+j] equals s[0..j] for every j below z[i], so a border of length j + 1 ends at i + j. Scanning i from left to right and setting &#960;[i + j] = j + 1 only where no earlier i has set it keeps the longest border at each position, and each entry is written once. I checked z against a brute-force definition, and the z-to-&#960; conversion against the prefix function, on 2,000 random strings each, with no disagreement.</p>" +
+        "<p>Which to use is a question of which index the problem is phrased in. If a question is about what can end at a position (the longest border, the next KMP state, an automaton), the prefix function reads naturally. If it is about what starts at a position (how much of the pattern appears here, which suffixes are also prefixes, compressing a string by its repeated prefix), the Z-function does. Many competitive programmers learn only one and translate; the translation is where bugs appear, so it pays to know both.</p>"
+    },
+
+    { title: "Rabin-Karp",
+      viz: "dsaRollingHash", vizTitle: "The hash updates in O(1) as the window slides. Pick a bad modulus and hunt for a collision",
+      html:
+        "<p><strong>Rabin-Karp</strong>, published by Richard Karp and Michael Rabin in 1987, replaces character comparison with number comparison. Give each window of m characters a hash, compare it with the pattern's hash, and check characters only when the hashes agree. The trick is that the next window's hash can be computed from the current one in O(1), so hashing all n windows costs O(n), not O(nm).</p>" +
+        "<p>The hash is a <strong>polynomial hash</strong>: read the window as the digits of a number in base B, reduced modulo M, h = (c<sub>0</sub>B<sup>m&#8722;1</sup> + c<sub>1</sub>B<sup>m&#8722;2</sup> + &#8230; + c<sub>m&#8722;1</sub>) mod M. Sliding the window one place right removes the leading digit and appends one at the end: h' = ((h &#8722; c<sub>0</sub>B<sup>m&#8722;1</sup>)&#183;B + c<sub>m</sub>) mod M, with B<sup>m&#8722;1</sup> mod M computed once. That update is the <strong>rolling hash</strong>. Reducing modulo M at every step, rather than once at the end, keeps every intermediate value within a machine word, which is the word-RAM condition of Chapter 2.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def rabin_karp(t, p, M=(1 &lt;&lt; 61) - 1):\n" +
+        "    import random\n" +
+        "    B, n, m = random.randrange(256, M), len(t), len(p)\n" +
+        "    if m &gt; n:\n" +
+        "        return []\n" +
+        "    top = pow(B, m - 1, M)\n" +
+        "    hp = ht = 0\n" +
+        "    for i in range(m):\n" +
+        "        hp = (hp * B + ord(p[i])) % M\n" +
+        "        ht = (ht * B + ord(t[i])) % M\n" +
+        "    out = []\n" +
+        "    for i in range(n - m + 1):\n" +
+        "        if ht == hp and t[i:i + m] == p:     # verify: equal hashes are not proof\n" +
+        "            out.append(i)\n" +
+        "        if i + m &lt; n:\n" +
+        "            ht = ((ht - ord(t[i]) * top) * B + ord(t[i + m])) % M\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; rabinKarp(String t, String p) {\n" +
+        "    final long M = 1_000_000_007L;               // prime; products of two residues fit in a long\n" +
+        "    long B = 256 + new java.util.Random().nextLong(M - 256);\n" +
+        "    int n = t.length(), m = p.length();\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    if (m &gt; n) return out;\n" +
+        "    long top = 1, hp = 0, ht = 0;\n" +
+        "    for (int i = 0; i &lt; m - 1; i++) top = top * B % M;\n" +
+        "    for (int i = 0; i &lt; m; i++) {\n" +
+        "        hp = (hp * B % M + p.charAt(i)) % M;\n" +
+        "        ht = (ht * B % M + t.charAt(i)) % M;\n" +
+        "    }\n" +
+        "    for (int i = 0; ; i++) {\n" +
+        "        if (ht == hp &amp;&amp; t.regionMatches(i, p, 0, m)) out.add(i);\n" +
+        "        if (i + m &gt;= n) break;\n" +
+        "        ht = (ht - t.charAt(i) * top % M + M) % M;\n" +
+        "        ht = (ht * B % M + t.charAt(i + m)) % M;\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
+        "<p>Equal hashes do not prove equal strings; a window whose hash matches without the characters matching is a <strong>spurious hit</strong>, and how often they happen depends entirely on M and B. With M prime and B chosen at random, two different strings of length m collide with probability at most (m &#8722; 1)/M, because their hash difference is a nonzero polynomial in B of degree below m, which has at most m &#8722; 1 roots. With M = 101 on 100,000 random letters, the search produced 951 spurious hits, close to the n/M = 990 you would expect, and an implementation that skipped verification would have reported all 951 as matches. With M = 2<sup>61</sup> &#8722; 1, the same search had none, and on 2,000 random tests it agreed with brute force every time.</p>" +
+        "<p>The randomness is the defence, which Chapter 17 already showed for hash tables. Java's <code>String.hashCode</code> is a fixed polynomial hash, base 31 modulo 2<sup>32</sup>, and \"Aa\" and \"BB\" both hash to 2112; so do all 2<sup>k</sup> strings of k such blocks. Take the text AaAa&#8230;Aa and the pattern Aa&#8230;AaBB: every window at an even offset collides with the pattern, and each verification runs almost m characters before failing. At n = 40,000 and m = 1,000 that was 19,501 spurious hits and 19.5 million comparisons, 487 per character, the naive worst case again. A random base modulo 2<sup>61</sup> &#8722; 1 on the same input produced no spurious hits. Even the modulus 2<sup>64</sup>, which native unsigned overflow gives for free, is attackable: the Thue-Morse string of length 1,024 and its complement collided under it for all 200 random odd bases I tried. Use a prime modulus and a base the input's author cannot predict.</p>" +
+        "<p>Rabin-Karp is rarely the best single-pattern matcher; KMP has a guarantee and Boyer-Moore reads less. Its value is that a hash turns a substring into a number, and numbers go into sets. Many patterns of the same length can be found in one pass by putting their hashes in a hash set and looking up each window's hash. The longest substring that occurs twice can be found by binary search on its length, testing each length with a set of window hashes, in O(n log n) expected time; Chapter 43 answers the same question deterministically with suffix arrays. And document fingerprinting, the basis of plagiarism detectors, keeps a sample of the rolling hashes of every k-character window and compares documents by the samples they share.</p>"
+    },
+
+    { title: "Boyer-Moore",
+      html:
+        "<p>Every algorithm so far reads each text character at least once. <strong>Boyer-Moore</strong>, published by Robert Boyer and J Strother Moore in 1977, does not. It aligns the pattern and compares from the pattern's right end leftwards. The point is what a mismatch at the right end tells you: if the text character there does not occur in the pattern at all, no alignment covering that character can match, and the pattern can jump m places at once. Long patterns over large alphabets therefore get faster as they get longer.</p>" +
+        "<p>Two rules decide the jump, and the algorithm takes whichever is larger. The <strong>bad-character rule</strong> says: on a mismatch against text character c, shift the pattern so that the rightmost occurrence of c in the pattern lines up with it, or past it if c does not occur. The <strong>good-suffix rule</strong> says: if a suffix of the pattern had already matched before the mismatch, shift to the next place where that suffix, or a border of it, occurs in the pattern. That is the border idea again, run from the right; its table is computed in O(m) with the same chain-walking as the prefix function.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def horspool(t, p):                      # bad-character rule only\n" +
+        "    n, m = len(t), len(p)\n" +
+        "    shift = {c: m - 1 - i for i, c in enumerate(p[:-1])}\n" +
+        "    out, i = [], 0\n" +
+        "    while i &lt;= n - m:\n" +
+        "        j = m - 1\n" +
+        "        while j &gt;= 0 and t[i + j] == p[j]:\n" +
+        "            j -= 1\n" +
+        "        if j &lt; 0:\n" +
+        "            out.append(i)\n" +
+        "        i += shift.get(t[i + m - 1], m)  # skip by the window's last character\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; horspool(String t, String p) {\n" +
+        "    int n = t.length(), m = p.length();\n" +
+        "    Map&lt;Character, Integer&gt; shift = new HashMap&lt;&gt;();\n" +
+        "    for (int i = 0; i &lt; m - 1; i++) shift.put(p.charAt(i), m - 1 - i);\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int i = 0; i &lt;= n - m; ) {\n" +
+        "        int j = m - 1;\n" +
+        "        while (j &gt;= 0 &amp;&amp; t.charAt(i + j) == p.charAt(j)) j--;\n" +
+        "        if (j &lt; 0) out.add(i);\n" +
+        "        i += shift.getOrDefault(t.charAt(i + m - 1), m);\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
+        "<p>The bad-character rule alone, in the simplified form Nigel Horspool published in 1980, is what the code above runs. On 200,000 random letters it inspected 0.23 characters per text character for m = 5, 0.075 for m = 20 and 0.039 for m = 100: sublinear, and falling as the pattern grows, against KMP's steady 1.04. On a four-letter alphabet like DNA the skips are shorter, 0.30 per character at m = 100, because every character occurs in the pattern somewhere. On English-like text the 28-character pattern cost 0.11. The full algorithm with the good-suffix rule agreed with brute force on 3,000 random tests.</p>" +
+        "<p>The good-suffix rule is not decoration either. On the text aaa&#8230;a and the pattern baa&#8230;a, the bad-character rule alone matches m &#8722; 1 characters from the right, fails on the b, and can shift only one place: 99.5 inspections per character at m = 100, the naive worst case again. With the good-suffix rule, the matched suffix a&#8230;a occurs nowhere else in the pattern, so the shift is m, and full Boyer-Moore inspected exactly one character per text character. For finding the first occurrence the full algorithm is linear, with a 3n bound Richard Cole proved tight in 1991. Reporting every occurrence is another matter: on aaa&#8230;a with the pattern a<sup>100</sup>, every alignment matches, the shift after a match is the period 1, and both versions inspected 99.5 characters per text character. Zvi Galil's 1979 rule, which skips re-reading the part of the pattern known to match after a periodic shift, restores linear time.</p>" +
+        "<p>This is what <code>grep</code> actually uses. Mike Haertel, GNU grep's original author, explained in a 2010 mailing-list post that its speed comes from Boyer-Moore on the fixed parts of a pattern, with an unrolled inner loop that avoids looking at most input bytes at all; only around a hit does it find the line boundaries and run the full matcher. The algorithm that reads the least wins on large alphabets, and the one with a guarantee wins against an adversary. Chapter 42 takes the border idea to many patterns at once.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Measure immutability.</strong> Time appending n characters with +=, with += while holding a second reference, with join and with StringBuilder, for n up to 400,000, and explain each curve.</li>" +
+        "<li><strong>Break indexOf.</strong> Time Java's String.indexOf on a text of a million a's and patterns a^(m-1)b for m = 10<sup>3</sup>, 10<sup>4</sup>, 10<sup>5</sup>, and the same calls with Python's find. Then run your KMP on the worst input.</li>" +
+        "<li><strong>Borders by hand.</strong> Write the prefix function of abacabadabacaba by hand, list its border chain and periods, and confirm with code. Find a string of length 7 with periods 3 and 5 that is not constant, or prove none exists.</li>" +
+        "<li><strong>Count the fallbacks.</strong> Instrument the prefix function to count inner-loop steps. Confirm the total never exceeds n - 1, and find a string where all of them happen at one position.</li>" +
+        "<li><strong>Answer with the table.</strong> Using only the prefix function, return the smallest repeating unit of a string, all its periods, and whether b is a rotation of a. Check each against brute force.</li>" +
+        "<li><strong>Z and back.</strong> Implement the Z-function, convert it to the prefix function and back, and match a pattern with z of P + # + T.</li>" +
+        "<li><strong>Attack a hash.</strong> Build a text that makes Rabin-Karp with Java's base-31 hash quadratic, count its spurious hits, then repeat with a random base modulo 2<sup>61</sup> - 1. Check whether the Thue-Morse string of length 1,024 collides with its complement modulo 2<sup>64</sup>.</li>" +
+        "<li><strong>Skip characters.</strong> Implement Horspool and full Boyer-Moore, count characters inspected per text character on random text over 4 and 26 letters for m = 5, 20, 100, and find the input that separates them.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "string matching", d: "Finding every position where a pattern of length m occurs in a text of length n." },
+    { t: "naive matching", d: "Trying every alignment and comparing until a mismatch; near-linear on random text and (n - m + 1)m comparisons on aaa...a against aa...ab." },
+    { t: "border", d: "A proper prefix of a string that is also a suffix; the borders of a string form a chain, each the longest border of the one before." },
+    { t: "period", d: "A shift p with s[i] = s[i + p] wherever both exist; p is a period exactly when n - p is a border length." },
+    { t: "smallest period", d: "n minus the longest border; if it divides n, the string is a repetition of that many characters." },
+    { t: "periodicity lemma", d: "Fine and Wilf 1965: if p and q are periods and p + q - gcd(p, q) is at most n, then gcd(p, q) is a period." },
+    { t: "prefix function", d: "pi[i] = the length of the longest border of s[0..i], computed in O(n) by walking the border chain with a potential argument." },
+    { t: "Knuth-Morris-Pratt", d: "String matching that runs the prefix function over the text, never moving the text pointer back; at most 2n comparisons." },
+    { t: "string rotation", d: "b is a rotation of a exactly when they have equal length and b occurs in a + a." },
+    { t: "Z-function", d: "z[i] = the length of the longest common prefix of s and its suffix starting at i; computed in O(n) with the Z-box." },
+    { t: "Z-box", d: "The rightmost segment [l, r) known to match a prefix of s, whose contents let z values inside it be copied without comparisons." },
+    { t: "polynomial hash", d: "A string read as digits in base B modulo M; two different strings of length m collide with probability at most (m - 1)/M over a random base." },
+    { t: "rolling hash", d: "Updating a window's polynomial hash in O(1) as it slides one place, by removing the leading digit and appending the new one." },
+    { t: "Rabin-Karp", d: "Karp and Rabin 1987: string matching by comparing rolling hashes of windows with the pattern's hash, verifying on equality." },
+    { t: "spurious hit", d: "A window whose hash equals the pattern's without the characters matching; common with a small or fixed modulus." },
+    { t: "Boyer-Moore", d: "Boyer and Moore 1977: string matching that compares right to left and skips alignments using the bad-character and good-suffix rules." },
+    { t: "bad-character rule", d: "On a mismatch against text character c, shift the pattern to line up c's rightmost occurrence in the pattern, or past it." },
+    { t: "good-suffix rule", d: "After a mismatch, shift to the next occurrence of the already-matched suffix, or of a border of it, within the pattern." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Appending one character at a time with s += \"x\" took 0.022 s for 400,000 appends in CPython but 1.63 s when a second reference to s was kept. Why?",
+      opts: [
+        "CPython resizes a string in place only when nothing else refers to it; otherwise every append copies the whole string",
+        "The second reference forces the garbage collector to run after each append, and the collection pass is what dominates the loop's time",
+        "Python strings are mutable when only one reference exists, so the language guarantees in-place appends in that case",
+        "Holding a reference converts the string to a list internally, and converting it back on each append is quadratic"
+      ], a: 0,
+      why: "In-place resizing is an interpreter optimization that applies only when the reference count allows it; the language makes no promise, and with an alias every append copies, so 4x the appends cost about 8x the time. join is linear by specification." },
+
+    { type: "mc",
+      q: "What does OpenJDK 21's String.indexOf do on a text of a million a's and a pattern of m - 1 a's followed by b?",
+      opts: [
+        "It runs in linear time, because the JIT replaces indexOf with a Boyer-Moore search whenever the pattern is long",
+        "It behaves as the naive algorithm: 0.27 s at m = 1,000, 2.2 s at m = 10,000 and 22 s at m = 100,000",
+        "It throws an exception once the pattern exceeds a fixed length, so callers are expected to use a regular expression instead",
+        "It hashes the pattern once and compares window hashes, so its time depends only on the number of hash collisions"
+      ], a: 1,
+      why: "Time grew tenfold for each tenfold m, the (n - m + 1)m signature, while random text of the same size took milliseconds. Python's find, which switches to the two-way algorithm for long patterns, did a larger adversarial case in 0.03 s." },
+
+    { type: "mc",
+      q: "Why does the prefix function's inner fallback loop cost O(n) in total, even though one position can fall back many times?",
+      opts: [
+        "Because each character of the string can be the target of at most one fallback over the whole computation",
+        "Because the fallbacks are memoized, so a border chain that was walked once is never walked again at a later position",
+        "Because k rises by at most one per position and each fallback lowers it by at least one, so fallbacks cannot outnumber rises",
+        "Because the border chain of any prefix has length O(log n), so each position falls back only logarithmically often"
+      ], a: 2,
+      why: "This is the potential method with potential k: total decreases are bounded by total increases, at most n - 1. On a^9999 b all 9,998 fallbacks happen at the last character. Border chains can be linear (a^n), and nothing is memoized." },
+
+    { type: "blank",
+      q: "A string of length n whose longest border has length b has smallest period n minus ____.",
+      a: ["b", "the longest border", "the border"],
+      why: "A border of length b makes the prefix and suffix of length b equal, so shifting by n - b lines up equal characters; the longest border gives the smallest period. The period set read from the border chain matched brute force on 2,000 of 2,000 strings." },
+
+    { type: "mc",
+      q: "On a mismatch after k matched characters, why does KMP shift the pattern to the longest border of the matched prefix rather than further?",
+      opts: [
+        "Because a further shift would make the text pointer move back, which the algorithm is designed never to do",
+        "Because shifting further would need the prefix function of the text, which KMP never computes",
+        "Because the border is the only shift that keeps the pattern inside the text when the mismatch is near the end",
+        "Because any shift that could still match must line up a border of the matched part, and shifting past the longest would skip one"
+      ], a: 3,
+      why: "An occurrence starting inside the matched region must agree with the text characters already read, which means a border of the matched prefix; the longest border is the smallest safe shift. The pointer argument and table are unrelated, and position in the text does not matter." },
+
+    { type: "mc",
+      q: "With M = 101, Rabin-Karp on 100,000 random letters produced 951 spurious hits. What would an implementation that trusts equal hashes report?",
+      opts: [
+        "951 false matches, because equal hashes are treated as proof that the window equals the pattern",
+        "No matches, since a hash collision always produces a hash that differs from the pattern's by a multiple of M",
+        "The true matches only, because the rolling update corrects collisions when the next window is hashed",
+        "An exception on the first collision, because the rolling hash detects that two windows produced the same value"
+      ], a: 0,
+      why: "Without the character check every collision is reported; n/M is about 990, close to the 951 observed. With M = 2^61 - 1 and a random base there were none. Collisions are not detected or corrected by the update." },
+
+    { type: "mc",
+      q: "Why is the text AaAa...Aa with pattern Aa...AaBB quadratic for Rabin-Karp using Java's String.hashCode?",
+      opts: [
+        "Because the base 31 is too small for 26-letter text, so almost every window of any English text collides with the pattern",
+        "Because \"Aa\" and \"BB\" have the same hash, so every even window collides and each verification runs nearly m characters",
+        "Because Java's hash is computed modulo 2^32, and a modulus that is a power of two makes every rolling update take O(m) steps",
+        "Because the pattern ends in BB, which the rolling update cannot remove without recomputing the whole hash"
+      ], a: 1,
+      why: "Blocks with equal hashes and lengths compose, so all even windows share the pattern's hash, and each verification fails only at the end: 487 comparisons per character at n = 40,000, m = 1,000. A random base mod 2^61 - 1 gave no spurious hits. The update stays O(1)." },
+
+    { type: "blank",
+      q: "The Z-algorithm copies z values from inside the rightmost prefix-matching segment [l, r), called the ____.",
+      a: ["Z-box", "z box", "z-box", "Z box"],
+      why: "Inside the Z-box, s[i..r-1] is a copy of s[i-l..r-l-1], so z[i] is at least min(r - i, z[i - l]) for free; only comparisons beyond r cost work, and r only grows, so the algorithm is linear." },
+
+    { type: "mc",
+      q: "Horspool (bad-character only) made 99.5 inspections per character on a^n with pattern b a^99, while full Boyer-Moore made 1. What does the good-suffix rule contribute?",
+      opts: [
+        "It compares from left to right after a mismatch, so the b at the front of the pattern is found on the first comparison",
+        "It remembers the text characters already inspected, so no character of the text is ever compared twice",
+        "It shifts past the matched suffix a...a, which occurs nowhere else in the pattern, so the jump is m rather than 1",
+        "It replaces the bad-character table with the prefix function of the reversed text, which is linear to build"
+      ], a: 2,
+      why: "The bad-character rule sees text character a, which occurs at the pattern's end, and can shift only 1. The good-suffix rule knows the matched suffix a^99 has no other occurrence or border in the pattern and shifts m. Boyer-Moore still compares right to left, and it does re-read characters." },
+
+    { type: "order",
+      q: "Order these by characters inspected per text character on 200,000 random letters (26-letter alphabet), fewest first:",
+      items: [
+        "Horspool, m = 100: 0.039",
+        "Horspool, m = 20: 0.075",
+        "Horspool, m = 5: 0.23",
+        "KMP, any m: 1.04"
+      ],
+      why: "Skips grow with m on a large alphabet, because a character absent from the pattern allows a jump of m; KMP reads every character, and on random text it is barely above one comparison each." }
   ]
 });
