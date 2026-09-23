@@ -11409,3 +11409,290 @@ CHAPTERS.push({
       why: "Tarjan, 2-SAT and two-colouring are all linear, so any order among the first three is defensible &mdash; 2-SAT is in fact Tarjan run on a built graph. Adding one more literal per clause or one more colour crosses into NP-completeness, the subject of Chapter 46." }
   ]
 });
+
+/* ======================= CHAPTER 38 ======================= */
+CHAPTERS.push({
+  num: 38, part: 5, title: "Max-Flow and Min-Cut",
+  blurb: "The maximum amount you can push through a network equals the cheapest set of pipes you could cut to stop it entirely. This chapter builds the machinery behind that theorem: residual graphs with backward edges that let an algorithm undo itself, and the three algorithms that differ only in how they pick the next augmenting path &mdash; measured from a million augmentations down to three phases on the same network. It proves max-flow min-cut from the algorithm's stopping condition, adds costs with Chapter 35's potentials, and closes with global cuts that have no source or sink.",
+  sections: [
+
+    { title: "Flows and the Residual Graph",
+      html:
+        "<p>The maximum amount you can push through a network equals the cheapest set of pipes you could cut to stop it entirely. That theorem is one of the most useful in the subject, and this chapter builds the machinery behind it. A <strong>flow network</strong> is a directed graph with a source s, a sink t, and a non-negative capacity on every edge. A flow assigns each edge an amount subject to two rules. The <strong>capacity constraint</strong>: no edge carries more than its capacity. <strong>Flow conservation</strong>: at every vertex other than s and t, what flows in equals what flows out. The value of the flow is the net amount leaving s, and the maximum-flow problem asks for the largest value possible.</p>" +
+        "<p>Several sources or several sinks need nothing new. Add a super-source joined to every real source by an edge of unlimited capacity, and a super-sink likewise, exactly the construction Chapter 33 used to merge many starting points into one. Capacities on vertices rather than edges are handled by splitting each vertex into an in-copy and an out-copy joined by an edge carrying the vertex's capacity. Undirected edges become a pair of opposite directed edges. These reductions are why one algorithm covers so many problems, and Chapter 39 is built on them.</p>" +
+        "<p>The obvious greedy approach fails. Find any path from s to t with spare capacity, push as much as its tightest edge allows, and repeat. On a small network where the only paths share one middle edge, the first path chosen can use that edge in the wrong direction, and greedy has no way to take it back. What is needed is a way to undo a decision, and the idea that provides it is the one the whole chapter rests on.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 292' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>After pushing 1 unit along s&#8594;a&#8594;b&#8594;t: the network (left) and its residual graph (right)</text><text x='40' y='40' fill='#8fa3c4' font-size='11'>flow / capacity</text><text x='440' y='40' fill='#8fa3c4' font-size='11'>residual capacities</text><path d='M 64 132 Q 110 105 149 82' fill='none' stroke='#ffd166' stroke-width='1.6'/><polygon points='156,78 151,86 147,79' fill='#ffd166'/><text x='116' y='119' text-anchor='middle' fill='#ffd166' font-size='10'>1/1</text><path d='M 64 148 Q 110 175 149 198' fill='none' stroke='#5d7aa5' stroke-width='1.6'/><polygon points='156,202 147,201 151,194' fill='#5d7aa5'/><text x='104' y='189' text-anchor='middle' fill='#5d7aa5' font-size='10'>0/1</text><path d='M 170 86 Q 170 140 170 186' fill='none' stroke='#ffd166' stroke-width='1.6'/><polygon points='170,194 166,186 174,186' fill='#ffd166'/><text x='158' y='144' text-anchor='middle' fill='#ffd166' font-size='10'>1/1</text><path d='M 184 78 Q 230 105 269 128' fill='none' stroke='#5d7aa5' stroke-width='1.6'/><polygon points='276,132 267,131 271,124' fill='#5d7aa5'/><text x='224' y='119' text-anchor='middle' fill='#5d7aa5' font-size='10'>0/1</text><path d='M 184 202 Q 230 175 269 152' fill='none' stroke='#ffd166' stroke-width='1.6'/><polygon points='276,148 271,156 267,149' fill='#ffd166'/><text x='236' y='189' text-anchor='middle' fill='#ffd166' font-size='10'>1/1</text><path d='M 464 148 Q 510 175 549 198' fill='none' stroke='#3ddc97' stroke-width='2.4'/><polygon points='556,202 547,201 551,194' fill='#3ddc97'/><text x='504' y='189' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><path d='M 565 195 Q 548 140 563 93' fill='none' stroke='#3ddc97' stroke-width='2.4' stroke-dasharray='5 3'/><polygon points='565,85 567,94 559,92' fill='#3ddc97'/><text x='525' y='144' text-anchor='middle' fill='#3ddc97' font-size='10'>1 (back)</text><path d='M 584 78 Q 630 105 669 128' fill='none' stroke='#3ddc97' stroke-width='2.4'/><polygon points='676,132 667,131 671,124' fill='#3ddc97'/><text x='624' y='119' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><path d='M 556 78 Q 510 105 471 128' fill='none' stroke='#ff9f43' stroke-width='1.5' stroke-dasharray='5 3'/><polygon points='464,132 469,124 473,131' fill='#ff9f43'/><text x='503' y='97' text-anchor='middle' fill='#ff9f43' font-size='10'>1 (back)</text><path d='M 676 148 Q 630 175 591 198' fill='none' stroke='#ff9f43' stroke-width='1.5' stroke-dasharray='5 3'/><polygon points='584,202 589,194 593,201' fill='#ff9f43'/><text x='623' y='167' text-anchor='middle' fill='#ff9f43' font-size='10'>1 (back)</text><circle cx='50' cy='140' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='50' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>s</text><circle cx='170' cy='70' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='170' y='74' text-anchor='middle' fill='#c9d6ea' font-size='11'>a</text><circle cx='170' cy='210' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='170' y='214' text-anchor='middle' fill='#c9d6ea' font-size='11'>b</text><circle cx='290' cy='140' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='290' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>t</text><circle cx='450' cy='140' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='450' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>s</text><circle cx='570' cy='70' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='570' y='74' text-anchor='middle' fill='#c9d6ea' font-size='11'>a</text><circle cx='570' cy='210' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='570' y='214' text-anchor='middle' fill='#c9d6ea' font-size='11'>b</text><circle cx='690' cy='140' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='690' y='144' text-anchor='middle' fill='#c9d6ea' font-size='11'>t</text><text x='40' y='262' fill='#c9d6ea' font-size='11'>dashed = backward edge: capacity to cancel flow already sent. green = next augmenting path</text><text x='40' y='280' fill='#3ddc97' font-size='11'>s&#8594;b&#8594;a&#8594;t uses b&#8594;a backward, cancelling a&#8594;b's unit. Total flow 2.</text></svg></div>" +
+        "<p>The <strong>residual graph</strong> records, for the current flow, how much each edge could still change. An edge from u to v with capacity c carrying flow f contributes a forward residual edge from u to v with capacity c minus f, the room left, and a <strong>backward edge</strong> from v to u with capacity f, the amount that could be cancelled. Pushing flow along a backward edge does not send anything from v to u physically; it reduces the flow already on u to v, which frees that capacity for a better route. In the figure, one unit has gone s to a to b to t. The residual graph shows a path s to b to a to t that uses the backward edge b to a: pushing along it cancels the unit on a to b and reroutes both units, for a total of 2, which is optimal. Every algorithm in this chapter works on the residual graph and differs only in which path it picks.</p>" +
+        "<p>In code the residual graph costs almost nothing extra. Store every edge together with its reverse in consecutive slots, so edge e's partner is e XOR 1; each slot holds only a residual capacity. The forward slot starts at the edge's capacity and the backward slot at zero, and pushing b units along a slot subtracts b from it and adds b to its partner. The flow on an original edge is then the capacity in its backward slot, and nothing else needs to be stored. One more fact is worth knowing before the algorithms: any flow can be decomposed into at most E paths from s to t and cycles, each carrying a constant amount. That decomposition is how a flow value becomes a concrete set of routes, and it is why an algorithm that builds flow one path at a time loses nothing by doing so.</p>"
+    },
+
+    { title: "Ford-Fulkerson",
+      viz: "dsaMaxFlow", vizTitle: "Each augmentation pushes flow along one path. Toggle the residual view to see the backward edges appear",
+      html:
+        "<p>The <strong>Ford-Fulkerson method</strong>, from their 1956 paper, is the loop that follows. While the residual graph has a path from s to t, called an <strong>augmenting path</strong>, find one, compute its bottleneck &mdash; the smallest residual capacity along it &mdash; and push that much, lowering the forward residuals and raising the backward ones. When no augmenting path remains, the flow is maximum; Section 5 proves why. With integer capacities each augmentation adds at least one unit, so the loop terminates, and the final flow is integral, a fact Chapter 39 uses constantly.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "def max_flow(n, edges, s, t, bfs=True):         # edges: (u, v, capacity)\n" +
+        "    graph = [[] for _ in range(n)]; to = []; cap = []\n" +
+        "    for u, v, c in edges:                         # edge i and its reverse i ^ 1\n" +
+        "        graph[u].append(len(to)); to.append(v); cap.append(c)\n" +
+        "        graph[v].append(len(to)); to.append(u); cap.append(0)\n" +
+        "    flow = 0\n" +
+        "    while True:\n" +
+        "        parent = [-1] * n; parent[s] = -2\n" +
+        "        frontier = deque([s])\n" +
+        "        while frontier and parent[t] == -1:       # BFS: Edmonds-Karp; a stack: plain DFS\n" +
+        "            u = frontier.popleft() if bfs else frontier.pop()\n" +
+        "            for e in graph[u]:\n" +
+        "                if cap[e] > 0 and parent[to[e]] == -1:\n" +
+        "                    parent[to[e]] = e; frontier.append(to[e])\n" +
+        "        if parent[t] == -1:\n" +
+        "            return flow                           # no augmenting path: maximum\n" +
+        "        push, v = float('inf'), t\n" +
+        "        while v != s:\n" +
+        "            e = parent[v]; push = min(push, cap[e]); v = to[e ^ 1]\n" +
+        "        v = t\n" +
+        "        while v != s:\n" +
+        "            e = parent[v]; cap[e] -= push; cap[e ^ 1] += push; v = to[e ^ 1]\n" +
+        "        flow += push</code></pre>" +
+        "<pre data-lang='java' hidden><code>// Residual edges stored in pairs: edge e and its reverse e ^ 1.\n" +
+        "// Augment: find parent edges by BFS from s; bottleneck = min cap along them;\n" +
+        "// then cap[e] -= push, cap[e ^ 1] += push for every edge on the path.</code></pre></div>" +
+        "<p>The termination bound is where the method shows its weakness: it is proportional to the flow value, not to the size of the graph. The classic four-vertex network has s joined to a and b by edges of capacity C, a and b joined to t likewise, and a single edge of capacity 1 from a to b. An unlucky choice alternates between the path through a to b and the path through its backward edge, each pushing one unit, and needs 2C augmentations where two would do. With C = 100,000 the adversarial choice took 200,000 augmentations; breadth-first choice took 2. <strong>Run arbitrary-path Ford-Fulkerson on that graph in the machine above and count the augmentations, then run Edmonds-Karp.</strong></p>" +
+        "<p>The failure is not only theoretical. On a random network of 2,000 vertices and 20,000 edges with capacities up to a million, picking augmenting paths by depth-first search needed 1,063,989 augmentations and ran for 603 seconds; breadth-first search found the same maximum flow with 15 augmentations in 0.03 seconds. Depth-first paths are long and their bottlenecks small, so each one moves a sliver of flow. And with irrational capacities the method need not terminate at all: Ford and Fulkerson gave a network on which a bad sequence of augmenting paths converges to a value strictly below the maximum, and Zwick found in 1995 the smallest networks where this happens. The method is correct; the choice of path is what makes it an algorithm.</p>" +
+        "<p>Trace the figure's network to see the backward edge earn its place. Every capacity is 1. Suppose the first search finds s to a to b to t and pushes one unit. The forward residuals on s to a, a to b and b to t drop to zero, and backward residuals of 1 appear on a to s, b to a and t to b. The only remaining path is s to b, then b to a backward, then a to t. Pushing one unit along it adds flow on s to b and a to t and removes the unit from a to b. The final flow sends one unit along s, a, t and one along s, b, t, total 2, and the middle edge carries nothing: the algorithm made a poor first choice and then quietly undid it. The <strong>integrality theorem</strong> follows from the same loop: with integer capacities there is always a maximum flow that is integral on every edge, because every bottleneck is an integer. That is what makes flow a tool for counting and matching rather than only for continuous quantities.</p>"
+    },
+
+    { title: "Edmonds-Karp",
+      html:
+        "<p><strong>Edmonds-Karp</strong>, from their 1972 paper, makes one choice: always augment along a shortest path, in number of edges, found by breadth-first search. That single rule bounds the number of augmentations by O(VE), independent of the capacities, giving O(VE squared) in all. It is the code of the previous section with the queue left as a queue.</p>" +
+        "<p>The proof has two steps. First, the breadth-first distance from s to every vertex in the residual graph never decreases from one augmentation to the next. An augmentation only adds backward edges pointing toward s along a shortest path, from a vertex at distance k plus 1 to one at distance k, and such an edge cannot shorten anyone's route. Second, each augmentation saturates at least one edge on its path, its critical edge. For the same edge u to v to be critical again, flow must first go back along v to u, which requires u's distance to exceed v's; since distances never decrease and v's was u's plus one, u's distance has grown by at least 2. Distances are at most V, so each edge is critical at most V over 2 times, and there are 2E residual edges: O(VE) augmentations, each an O(E) search.</p>" +
+        "<p>The practical behaviour is far better than the bound. On the classic four-vertex network it needed exactly 2 augmentations whatever C was; on random networks of 500 and 2,000 vertices it needed 29 and 15. The bound is a guarantee that no capacity values can make it slow, which is what the depth-first version lacked. Its remaining cost is that each augmentation is a full breadth-first search that moves flow along a single path, and on graphs where the maximum flow is made of many short paths of one unit each, that is a great deal of repeated searching.</p>" +
+        "<p>Bipartite matching is exactly that case. Give every edge capacity 1 and the maximum flow is a maximum matching, made of up to n separate one-unit paths. On a random bipartite graph with 5,000 vertices on each side and five edges per left vertex, Edmonds-Karp found a matching of 4,959 pairs with 4,959 augmentations in 9.12 seconds &mdash; one breadth-first search per matched pair. The next algorithm finds many shortest paths per search and did the same job in 0.09.</p>" +
+        "<p>On the classic four-vertex network the rule shows why it works. The shortest augmenting paths are s to a to t and s to b to t, two edges each, and breadth-first search finds them before the three-edge path through the middle edge. Pushing C along each saturates everything leaving s, and the algorithm stops after two augmentations for any C. The middle edge, which caused the depth-first version's 2C augmentations, is never used. A second fix, also from Edmonds and Karp, <em>capacity scaling</em>, attacks the other cause: consider only residual edges with capacity at least some threshold, starting from the largest power of two and halving it, so early augmentations move large amounts. It gives O(E squared log C) and is useful when capacities are huge and the graph is small.</p>"
+    },
+
+    { title: "Dinic",
+      viz: "dsaDinicLevels", vizTitle: "Each phase builds a level graph and saturates it. Watch the sink get further away",
+      html:
+        "<p><strong>Dinic's algorithm</strong>, published in 1970, keeps Edmonds-Karp's insight that shortest paths are the ones to push along, and exploits it in bulk. Each phase runs one breadth-first search from s over the residual graph and labels every vertex with its distance, its level. The <strong>level graph</strong> keeps only residual edges that go from one level to the next, so every s-to-t path in it is a shortest path. The phase then finds a <strong>blocking flow</strong> in the level graph &mdash; a flow after which every s-to-t path in the level graph has a saturated edge &mdash; using repeated depth-first searches that never revisit a dead end, and adds it to the total.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def dinic_phase_dfs(u, t, pushed, graph, to, cap, level, it):\n" +
+        "    if u == t:\n" +
+        "        return pushed\n" +
+        "    while it[u] < len(graph[u]):                  # it[u]: next edge to try (dead ends skipped)\n" +
+        "        e = graph[u][it[u]]; v = to[e]\n" +
+        "        if cap[e] > 0 and level[v] == level[u] + 1:\n" +
+        "            got = dinic_phase_dfs(v, t, min(pushed, cap[e]), graph, to, cap, level, it)\n" +
+        "            if got:\n" +
+        "                cap[e] -= got; cap[e ^ 1] += got\n" +
+        "                return got\n" +
+        "        it[u] += 1\n" +
+        "    return 0\n" +
+        "\n" +
+        "# one phase: level = BFS distances from s; it = [0] * n;\n" +
+        "# while (f := dinic_phase_dfs(s, t, inf, ...)) > 0: flow += f\n" +
+        "# repeat phases until BFS cannot reach t</code></pre>" +
+        "<pre data-lang='java' hidden><code>long dfs(int u, int t, long pushed) {           // level[] and it[] from the current phase\n" +
+        "    if (u == t) return pushed;\n" +
+        "    for (; it[u] < graph.get(u).size(); it[u]++) {\n" +
+        "        int e = graph.get(u).get(it[u]), v = to[e];\n" +
+        "        if (cap[e] > 0 && level[v] == level[u] + 1) {\n" +
+        "            long got = dfs(v, t, Math.min(pushed, cap[e]));\n" +
+        "            if (got > 0) { cap[e] -= got; cap[e ^ 1] += got; return got; }\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return 0;\n" +
+        "}</code></pre></div>" +
+        "<p>The key fact is that the sink's level strictly increases from one phase to the next: after a blocking flow, every shortest path of the current length has a saturated edge, so the next phase's shortest path is longer. Levels are below V, so there are at most V minus 1 phases, and each costs O(VE), for O(V squared E). On three hundred random networks the sink's level rose strictly at every phase, as the argument says. <strong>Count the phases in the machine above and watch the sink's level climb.</strong></p>" +
+        "<p>Two implementation details make that bound real. The level graph is never built as a separate structure: the phase refuses to follow an edge unless it goes from level k to level k plus 1. And each vertex keeps a pointer to the next edge worth trying, advanced past every edge that led to a dead end; since a dead end in this phase stays a dead end, the total work of all the depth-first searches in a phase is O(VE) rather than O(E) per path. On the classic four-vertex network, one phase suffices: the level graph puts s at level 0, a and b at level 1 and t at level 2, the middle edge joins two vertices of the same level and is excluded, and the blocking flow saturates both direct paths at once, for the full flow of 2C.</p>" +
+        "<p>A different family is worth knowing by name. Push-relabel algorithms, from Goldberg and Tarjan's 1988 paper, give up augmenting paths altogether: they let vertices hold excess flow temporarily, push it toward the sink along edges that lead downhill according to a height label, and raise a vertex's height when it is stuck. They run in O(V squared times the square root of E) with the right choice of vertex, and the fastest general-purpose max-flow codes are built on them. Dinic remains the better one to write by hand, because its correctness argument is the shortest-path argument this part of the course has been building.</p>" +
+        "<p>On unit-capacity networks the bound drops to O(E times the square root of V), because after about the square root of V phases the remaining flow is small and each further phase adds at least one unit. That is the bound Chapter 39 needs: Dinic on a bipartite matching network is the Hopcroft-Karp algorithm in all but name. The measurements show how pessimistic even that bound is. On the 5,000-by-5,000 bipartite graph, Dinic needed 6 phases, against a bound of about 200, and finished in 0.09 seconds against Edmonds-Karp's 9.12 &mdash; a hundred times faster, with the same 4,959 pairs. On the random 2,000-vertex network it needed 3 phases and 0.02 seconds. For contest and production use alike, it is the max-flow algorithm to implement.</p>"
+    },
+
+    { title: "Max-Flow Min-Cut",
+      viz: "dsaMinCut", vizTitle: "The flow is maxed out. Now try to find a cheaper cut than the algorithm's",
+      html:
+        "<p>An <strong>s-t cut</strong> splits the vertices into a set S containing s and the rest containing t; its capacity is the total capacity of edges from S to the other side. Every unit of flow from s to t must cross from S to the other side at least once more than it crosses back, so the value of any flow is at most the capacity of any cut. That is the straightforward half. The <strong>max-flow min-cut theorem</strong>, proved by Ford and Fulkerson and independently by Elias, Feinstein and Shannon in 1956, is that the bound is tight: the maximum flow equals the minimum cut capacity.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 322' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Min cut read off a maximum flow: S = vertices still reachable from s in the residual graph</text><polygon points='20,150 210,30 300,112 470,196 470,272 210,274 20,204' fill='#123a2c' opacity='0.55' stroke='#3ddc97' stroke-dasharray='5 3'/><text x='34' y='196' fill='#3ddc97' font-size='11'>S</text><path d='M 74 142 Q 135 110 189 81' fill='none' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='196,78 191,85 187,78' fill='#5d7aa5'/><text x='141' y='125' text-anchor='middle' fill='#5d7aa5' font-size='10'>8/10</text><path d='M 74 158 Q 135 190 189 219' fill='none' stroke='#ffd166' stroke-width='1.5'/><polygon points='196,222 187,222 191,215' fill='#ffd166'/><text x='129' y='205' text-anchor='middle' fill='#ffd166' font-size='10'>5/5</text><path d='M 210 86 Q 210 150 210 206' fill='none' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='210,214 206,206 214,206' fill='#5d7aa5'/><text x='198' y='154' text-anchor='middle' fill='#5d7aa5' font-size='10'>0/4</text><path d='M 226 70 Q 315 70 396 70' fill='none' stroke='#ff5d73' stroke-width='2.6'/><polygon points='404,70 396,74 396,66' fill='#ff5d73'/><text x='315' y='86' text-anchor='middle' fill='#ff5d73' font-size='10'>6/6</text><path d='M 226 230 Q 315 230 396 230' fill='none' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='404,230 396,234 396,226' fill='#5d7aa5'/><text x='315' y='246' text-anchor='middle' fill='#5d7aa5' font-size='10'>5/9</text><path d='M 434 78 Q 495 110 549 139' fill='none' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='556,142 547,142 551,135' fill='#5d7aa5'/><text x='489' y='125' text-anchor='middle' fill='#5d7aa5' font-size='10'>9/10</text><path d='M 420 214 Q 420 150 420 94' fill='none' stroke='#ff5d73' stroke-width='2.6'/><polygon points='420,86 424,94 416,94' fill='#ff5d73'/><text x='432' y='154' text-anchor='middle' fill='#ff5d73' font-size='10'>3/3</text><path d='M 434 222 Q 495 190 549 161' fill='none' stroke='#ff5d73' stroke-width='2.6'/><polygon points='556,158 551,165 547,158' fill='#ff5d73'/><text x='501' y='205' text-anchor='middle' fill='#ff5d73' font-size='10'>4/4</text><path d='M 221 81 Q 305 163 399 218' fill='none' stroke='#ffd166' stroke-width='1.5'/><polygon points='406,222 397,221 401,214' fill='#ffd166'/><text x='303' y='170' text-anchor='middle' fill='#ffd166' font-size='10'>2/2</text><circle cx='60' cy='150' r='16' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='60' y='154' text-anchor='middle' fill='#c9d6ea' font-size='11'>s</text><circle cx='210' cy='70' r='16' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='210' y='74' text-anchor='middle' fill='#c9d6ea' font-size='11'>a</text><circle cx='210' cy='230' r='16' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='210' y='234' text-anchor='middle' fill='#c9d6ea' font-size='11'>b</text><circle cx='420' cy='70' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='420' y='74' text-anchor='middle' fill='#c9d6ea' font-size='11'>c</text><circle cx='420' cy='230' r='16' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='420' y='234' text-anchor='middle' fill='#c9d6ea' font-size='11'>d</text><circle cx='570' cy='150' r='16' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='570' y='154' text-anchor='middle' fill='#c9d6ea' font-size='11'>t</text><text x='20' y='292' fill='#ff5d73' font-size='11'>red: edges leaving S, all saturated. Cut capacity 6 + 3 + 4 = 13 = max flow 13</text><text x='20' y='310' fill='#8fa3c4' font-size='10'>gold: saturated edges not in this cut. Checked: max flow == brute-force min cut on 300/300 networks</text></svg></div>" +
+        "<p>The proof falls out of the algorithm's stopping condition. When no augmenting path exists, let S be the set of vertices reachable from s in the residual graph; t is not in it. Every original edge from S to the rest must be saturated, or its forward residual edge would make its head reachable. Every original edge from the rest back into S must carry zero flow, or its backward residual edge would do the same. So the flow across the cut equals exactly the capacity of the cut, and since no flow can exceed any cut, this flow is maximum and this cut is minimum. On three hundred random networks the computed maximum flow equalled a brute-force minimum over every possible cut.</p>" +
+        "<p>The proof is also an algorithm for the cut itself. After any max-flow computation, one more search from s over edges with positive residual capacity gives S, and the edges leaving it form a minimum cut. In the figure, the reachable set is s, a, b and d; the edges leaving it, a to c, d to c and d to t, are saturated with capacities 6, 3 and 4, summing to 13, the maximum flow. On three hundred random networks, the reachable set read this way always gave a cut of capacity equal to the flow. <strong>In the machine above, propose three cuts by hand and confirm none is cheaper than the flow.</strong></p>" +
+        "<p>The theorem is the reason flows are so widely used, because many problems are naturally stated as a cut. What is the fewest links whose failure separates two data centres? Give each link capacity 1 and compute a max flow. Which projects should be funded when some depend on others? Chapter 39 builds a network whose minimum cut is the most profitable selection. Menger's theorem, that the number of edge-disjoint paths between two vertices equals the minimum number of edges separating them, is the unit-capacity case. Whenever a problem asks for the cheapest way to separate two things, it is asking for a minimum cut, and a maximum flow will find it.</p>" +
+        "<p>The minimum cut need not be unique, and the reachable-set construction picks a particular one: the minimum cut closest to s, the smallest source side. Searching backwards from t over edges with positive residual capacity into t gives the one closest to t instead. When they coincide, the minimum cut is unique; when they differ, every edge between the two is in some minimum cut but not all, the same every-some-none classification Chapter 36 made for spanning trees. Engineers use the difference to find which links are critical in every worst-case failure and which only in some.</p>"
+    },
+
+    { title: "Min-Cost Max-Flow",
+      html:
+        "<p>Give each edge a cost per unit of flow as well as a capacity, and ask for the maximum flow of least total cost: that is <strong>min-cost max-flow</strong>. It models shipping goods along priced routes, assigning workers to jobs, and scheduling under preferences. The standard method is <strong>successive shortest paths</strong>: repeatedly augment along a cheapest path in the residual graph, where a backward edge carries the negated cost, since cancelling a unit refunds what sending it cost. A flow is cheapest for its value exactly when the residual graph has no negative-cost cycle, and augmenting along cheapest paths preserves that condition.</p>" +
+        "<p>Backward edges have negative costs, so a cheapest path needs Bellman-Ford &mdash; unless the costs are reweighted, which is where Chapter 35's potentials return. After each round, set each vertex's potential to its shortest distance so far and replace every cost c(u, v) with c(u, v) + p(u) &minus; p(v). The reduced costs on residual edges are non-negative, so the next shortest path can be found with Dijkstra, and the true costs are recovered as in Johnson's algorithm. On two hundred random networks, successive shortest paths with potentials and Dijkstra gave the same flow and cost as the version using Bellman-Ford every round.</p>" +
+        "<p>A two-worker example shows the backward edge paying for itself in money. Workers A and B, jobs X and Y; A costs 1 on X and 2 on Y, B costs 2 on X and 5 on Y. Greedy assigns the cheapest pair first, A to X at 1, and is left with B on Y at 5: total 6. Successive shortest paths first pushes s to A to X to t at cost 1, the same choice. Its second cheapest path is s to B to X, then X back to A along the backward edge at cost minus 1, then A to Y to t: cost 2 &minus; 1 + 2 = 3. That path moves A to Y and gives X to B, for a total of 1 + 3 = 4, the optimum. The negative-cost backward edge is the refund for undoing A's first assignment, and the cheapest-path search is what decides the refund is worth taking.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_cost_flow(n, graph, to, cap, cost, s, t):     # paired residual edges as before\n" +
+        "    flow = total = 0\n" +
+        "    pot = [0] * n                                     # Johnson-style potentials\n" +
+        "    while True:\n" +
+        "        dist = [float('inf')] * n; dist[s] = 0; via = [-1] * n\n" +
+        "        heap = [(0, s)]\n" +
+        "        while heap:                                   # Dijkstra on reduced costs\n" +
+        "            d, u = heapq.heappop(heap)\n" +
+        "            if d > dist[u]: continue\n" +
+        "            for e in graph[u]:\n" +
+        "                v = to[e]\n" +
+        "                nd = d + cost[e] + pot[u] - pot[v]\n" +
+        "                if cap[e] > 0 and nd < dist[v]:\n" +
+        "                    dist[v] = nd; via[v] = e; heapq.heappush(heap, (nd, v))\n" +
+        "        if dist[t] == float('inf'):\n" +
+        "            return flow, total\n" +
+        "        for v in range(n):\n" +
+        "            if dist[v] < float('inf'): pot[v] += dist[v]\n" +
+        "        push, v = float('inf'), t\n" +
+        "        while v != s: e = via[v]; push = min(push, cap[e]); v = to[e ^ 1]\n" +
+        "        v = t\n" +
+        "        while v != s:\n" +
+        "            e = via[v]; cap[e] -= push; cap[e ^ 1] += push; total += push * cost[e]; v = to[e ^ 1]\n" +
+        "        flow += push</code></pre>" +
+        "<pre data-lang='java' hidden><code>// Same loop as max flow, but each augmenting path is a cheapest path:\n" +
+        "// Dijkstra on reduced cost c(u,v) + pot[u] - pot[v], then pot[v] += dist[v].\n" +
+        "// Backward residual edges carry -cost, so reduced costs stay non-negative.</code></pre></div>" +
+        "<p>The <strong>assignment problem</strong> &mdash; n workers, n jobs, a cost for each pairing, find the cheapest perfect matching &mdash; is min-cost flow on a bipartite network with unit capacities. On two hundred random instances of up to seven workers, successive shortest paths matched the best of all n factorial permutations every time. At 200 workers it took 1.18 seconds with potentials and Dijkstra against 5.56 with Bellman-Ford, the same optimal cost. The classical special-purpose method is Kuhn's 1955 Hungarian algorithm, refined by Munkres in 1957 and later brought to O(n cubed); it is successive shortest paths specialised to this one shape, and it is what library routines for assignment implement.</p>" +
+        "<p>Two other methods are worth recognising. Cycle cancelling starts from any maximum flow and repeatedly finds a negative-cost cycle in the residual graph and pushes flow around it, which lowers the cost without changing the value; it follows directly from the optimality condition but is slow unless the cycle is chosen carefully. Cost scaling, the basis of the fastest practical solvers, works in rounds of increasing precision. For problems of the size this course meets, successive shortest paths with potentials is the one to write.</p>"
+    },
+
+    { title: "Global Min Cut",
+      html:
+        "<p>Sometimes there is no source or sink: the question is the cheapest way to split an undirected graph into two non-empty parts, the <strong>global min cut</strong>, which measures how close a network is to falling apart. One answer is V minus 1 max-flow computations, fixing one vertex as the source and trying every other as the sink. Two better answers exist, one deterministic and one randomized, and both are simple enough to implement.</p>" +
+        "<p>Stoer and Wagner's 1997 algorithm works in phases. Each phase grows a set from an arbitrary start vertex by repeatedly adding the vertex most strongly connected to the set so far, a maximum-adjacency order. The theorem is that the cut separating the last vertex added from everything else is a minimum cut between the last two vertices added. Record that cut's weight, merge the last two vertices into one, and repeat; after V minus 1 phases the smallest recorded cut is the global minimum. It runs in O(VE + V squared log V) with a heap, and on two hundred random weighted graphs it matched a brute-force search over every bipartition.</p>" +
+        "<p><strong>Karger's contraction</strong> algorithm, from 1993, is shorter still. Pick a random edge and contract it, merging its endpoints and keeping parallel edges; repeat until two super-vertices remain, and report the edges between them. A single run finds a particular minimum cut with probability at least 2 over n(n minus 1), because at each step the chance of contracting one of the few cut edges is small. That guarantee is low, so the algorithm is repeated and the smallest result kept: about n squared log n runs make failure unlikely. In practice the guarantee is pessimistic; on random graphs of 30 vertices, a single run found the minimum cut 23.2 percent of the time, a hundred times the guaranteed 0.23 percent, because such graphs usually have several minimum cuts and small ones are hard to miss.</p>" +
+        "<p>The global min cut is the natural measure of how robust a network is: its weight is the least total capacity whose loss splits the network, and its two sides show where the split would fall. It also drives clustering, where cutting a similarity graph at its weakest point separates two natural groups, repeated recursively to build a hierarchy. For a graph given as a matrix of connection strengths, Stoer-Wagner is the practical choice; for a sparse multigraph with a tight time budget and a tolerance for a small failure probability, repeated contraction is shorter to write.</p>" +
+        "<p>Karger's algorithm matters less for its speed than for what it opened: the Karger-Stein refinement, near-linear algorithms for minimum cuts, and a line of randomized graph algorithms whose analysis is as simple as the code. Chapter 49 returns to it as part of the frontier. For this part of the course, the lesson is the one the whole chapter has taught: flows and cuts are two views of one quantity, and the algorithm to find either is chosen by how it picks its next path, its next phase, or its next edge to contract.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Build the residual graph.</strong> Implement paired residual edges and augment by DFS and by BFS on random networks. Check that both reach the same value and that it equals a brute-force minimum over all cuts.</li>" +
+        "<li><strong>Make DFS suffer.</strong> Build the four-vertex network with a unit middle edge and capacity C elsewhere, force alternating augmenting paths, and count augmentations for growing C. Compare with Edmonds-Karp.</li>" +
+        "<li><strong>Levels only rise.</strong> Implement Dinic, record the sink's level at each phase, and confirm it strictly increases. Count phases on unit-capacity bipartite networks and compare with the square root of V.</li>" +
+        "<li><strong>Race three algorithms.</strong> Time DFS augmentation, Edmonds-Karp and Dinic on random networks with large capacities and on a large unit bipartite network.</li>" +
+        "<li><strong>Read the cut.</strong> After a maximum flow, find the vertices reachable from s in the residual graph and verify that the edges leaving them are saturated and sum to the flow.</li>" +
+        "<li><strong>Assign at least cost.</strong> Solve the assignment problem as min-cost max-flow with potentials and Dijkstra, verify against all permutations for small n, and time it against Bellman-Ford rounds.</li>" +
+        "<li><strong>Cut without terminals.</strong> Implement Stoer-Wagner and Karger's contraction, check Stoer-Wagner against brute force, and measure Karger's single-run success rate against 2 over n(n-1).</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "flow network", d: "A directed graph with a source, a sink and a non-negative capacity on each edge, in which a flow is sought." },
+    { t: "capacity constraint", d: "The rule that no edge carries more flow than its capacity." },
+    { t: "flow conservation", d: "The rule that at every vertex other than the source and sink, inflow equals outflow." },
+    { t: "residual graph", d: "For a given flow, the graph of possible changes: forward edges with the remaining capacity and backward edges with the flow that could be cancelled." },
+    { t: "backward edge", d: "A residual edge from v to u with capacity equal to the flow on u to v; pushing along it cancels flow, letting the algorithm undo earlier choices." },
+    { t: "augmenting path", d: "A path from source to sink in the residual graph; pushing its bottleneck capacity along it increases the flow." },
+    { t: "Ford-Fulkerson method", d: "Repeatedly augment along any augmenting path until none remains; terminates with integer capacities but may take time proportional to the flow value. Ford & Fulkerson 1956." },
+    { t: "Edmonds-Karp", d: "Ford-Fulkerson with shortest augmenting paths found by BFS, giving O(VE) augmentations and O(VE squared) time regardless of capacities. Edmonds & Karp 1972." },
+    { t: "Dinic's algorithm", d: "Max flow by phases, each building a level graph by BFS and adding a blocking flow; O(V squared E), and O(E sqrt V) on unit capacities. Dinic 1970." },
+    { t: "level graph", d: "The subgraph of residual edges going from BFS level k to level k+1; every source-to-sink path in it is a shortest path." },
+    { t: "blocking flow", d: "A flow in the level graph after which every source-to-sink path in it contains a saturated edge." },
+    { t: "s-t cut", d: "A split of the vertices into a set containing the source and one containing the sink; its capacity sums the edges from the source side to the sink side." },
+    { t: "max-flow min-cut theorem", d: "The maximum flow value equals the minimum s-t cut capacity; proved by Ford & Fulkerson and by Elias, Feinstein & Shannon in 1956." },
+    { t: "min-cost max-flow", d: "Finding a maximum flow of least total cost when each edge also has a cost per unit of flow." },
+    { t: "successive shortest paths", d: "Min-cost flow by repeatedly augmenting along a cheapest residual path, using potentials so Dijkstra can replace Bellman-Ford." },
+    { t: "assignment problem", d: "Matching n workers to n jobs at least total cost; a unit-capacity min-cost flow, solved classically by Kuhn's 1955 Hungarian algorithm." },
+    { t: "global min cut", d: "The cheapest split of an undirected graph into two non-empty parts, with no designated source or sink; found by Stoer-Wagner or Karger's contraction." },
+    { t: "Karger's contraction", d: "A randomized global min cut algorithm that contracts random edges until two super-vertices remain; each run succeeds with probability at least 2/(n(n-1)). Karger 1993." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Pushing flow along a backward edge v to u in the residual graph does what?",
+      opts: [
+        "It cancels some of the flow already sent from u to v, freeing that capacity so the flow can be rerouted along a better path",
+        "It sends flow physically from v back to u along a new pipe that the residual graph adds to the original network as a real edge",
+        "It records that the edge u to v is now saturated, so that every later search in the residual graph will skip that edge entirely",
+        "It moves flow from the sink back to the source, reducing the total flow so that a completely different path can then be tried"
+      ], a: 0,
+      why: "A backward edge's capacity is the flow on u to v; pushing along it lowers that flow, which is how the algorithm undoes an earlier choice, as in the figure's rerouting to a total of 2. No new pipe is added, saturation is shown by a zero forward residual, and the total flow still increases by the bottleneck." },
+
+    { type: "mc",
+      q: "On the four-vertex network with capacity C on four edges and 1 on the middle edge, an adversarial Ford-Fulkerson took 200,000 augmentations at C = 100,000. Why?",
+      opts: [
+        "Because depth-first search cannot find any path that avoids the middle edge, so every single augmentation is forced through it",
+        "Because alternating paths through the middle edge and its backward edge each push only one unit, needing 2C augmentations",
+        "Because the method does not terminate on integer capacities larger than the number of vertices in the network",
+        "Because each augmentation must be followed by a full recomputation of the residual graph from the original network"
+      ], a: 1,
+      why: "Each alternate path is bottlenecked by the unit middle edge, so each moves one unit and 2C are needed; breadth-first choice takes the two direct paths and finishes in 2. Paths avoiding the middle edge exist, integer capacities always terminate, and the residual graph is updated incrementally." },
+
+    { type: "mc",
+      q: "Why does Edmonds-Karp need only O(VE) augmentations, whatever the capacities?",
+      opts: [
+        "Because each augmentation pushes at least half of the remaining flow, so the number of steps is only logarithmic in the capacity",
+        "Because breadth-first search visits every edge once, which caps the total number of augmentations at the edge count overall",
+        "Because residual distances from s never decrease and each edge can be critical only O(V) times, as its tail's distance grows by 2 each time",
+        "Because every augmenting path must use a different edge out of the source, and the source has at most V such edges to use"
+      ], a: 2,
+      why: "Shortest-path augmentation keeps distances non-decreasing, and an edge can be the bottleneck again only after its tail's distance rises by at least 2; with distances below V and 2E residual edges, augmentations are O(VE). The half-of-flow claim is the scaling algorithm's, BFS cost is per augmentation, and paths may share source edges." },
+
+    { type: "blank",
+      q: "In Dinic's algorithm, the subgraph of residual edges that go from one BFS level to the next, in which every source-to-sink path is shortest, is the ____ graph.",
+      a: ["level"],
+      why: "Each phase builds the level graph with one BFS and saturates it with a blocking flow; the sink's level then strictly increases, which bounded the phases (verified on 300 of 300 networks) and gave 6 phases on a 5,000-by-5,000 bipartite graph." },
+
+    { type: "mc",
+      q: "Dinic finished a 5,000-by-5,000 unit bipartite matching in 0.09 s where Edmonds-Karp took 9.12 s. Why the gap?",
+      opts: [
+        "Because Dinic uses depth-first search inside each phase, which is always much faster than breadth-first search on any bipartite graph",
+        "Because Dinic ignores the backward edges entirely, which are never needed at all when the network is a bipartite matching network",
+        "Because Dinic finds only an approximate matching, trading a few missed pairs for a much shorter running time on very large inputs",
+        "Because each Dinic phase finds a blocking flow of many shortest paths from one BFS, while Edmonds-Karp spends a BFS per unit path"
+      ], a: 3,
+      why: "Edmonds-Karp ran 4,959 BFS searches, one per matched pair; Dinic needed 6 phases, each BFS followed by a blocking flow of many unit paths. Both found 4,959 pairs, backward edges are still needed for rerouting, and Dinic's phase structure, not DFS alone, is the speedup." },
+
+    { type: "mc",
+      q: "After a maximum flow, S is the set of vertices reachable from s in the residual graph. Why is the cut around S minimum?",
+      opts: [
+        "Because every edge leaving S is saturated and every edge entering S carries no flow, so the flow equals the cut's capacity, and no flow exceeds any cut",
+        "Because S always contains exactly half of the vertices, and a balanced cut has the smallest possible capacity",
+        "Because S is chosen to contain the vertices with the most outgoing capacity, which are the ones any cut must separate",
+        "Because the residual graph removes every edge crossing S, so the cut has zero capacity in the final network"
+      ], a: 0,
+      why: "An unsaturated edge out of S or a flow-carrying edge into S would give a residual edge extending S; so flow across the cut equals its capacity, matching the weak-duality bound. S need not be balanced or chosen by capacity, and the cut's original capacity (13 in the figure) is positive." },
+
+    { type: "blank",
+      q: "The theorem that the maximum flow value equals the minimum s-t cut capacity is the max-flow ____ theorem.",
+      a: ["min-cut", "min cut", "mincut"],
+      why: "Proved in 1956 by Ford and Fulkerson and independently by Elias, Feinstein and Shannon; the max flow matched a brute-force minimum cut on 300 of 300 random networks, and the residual-reachable set produced the cut itself on 300 of 300." },
+
+    { type: "mc",
+      q: "Min-cost flow with Dijkstra needs potentials. Why can't plain Dijkstra be run on the residual costs?",
+      opts: [
+        "Because Dijkstra cannot handle graphs in which the same pair of vertices is joined by two edges running in opposite directions",
+        "Because backward residual edges carry negated costs, which can be negative, and potentials reweight them to be non-negative",
+        "Because costs and capacities are stored in the same array, so Dijkstra would read capacities as if they were distances",
+        "Because Dijkstra finds shortest paths by edge count rather than by cost when the graph has capacities attached"
+      ], a: 1,
+      why: "Cancelling a unit refunds its cost, so backward edges have negative cost; reduced costs c + p(u) - p(v) with shortest-distance potentials are non-negative, as in Johnson's algorithm, and matched Bellman-Ford rounds on 200 of 200 networks while running 4.7 times faster at n = 200. Opposite edges and capacities are not the obstacle." },
+
+    { type: "mc",
+      q: "Karger's contraction found the minimum cut in 23.2% of single runs on 30-vertex random graphs, against a guaranteed 0.23%. What explains the gap?",
+      opts: [
+        "Because the guarantee holds only for complete graphs, and on sparse random graphs the success rate has no relation to the bound at all",
+        "Because the measurement counted any small cut as a success, while the guarantee refers to finding the exact minimum",
+        "Because the bound is a worst case for one particular minimum cut, while random graphs usually have several minimum cuts to hit",
+        "Because contraction was run with a fixed random seed, so the same lucky sequence of edges repeated across trials"
+      ], a: 2,
+      why: "2/(n(n-1)) bounds the chance of finding one specific minimum cut in the worst graph; random graphs often have many minimum cuts, typically around the lowest-degree vertices, each a success. The bound holds for all graphs, the test compared against Stoer-Wagner's exact minimum, and trials used fresh randomness." },
+
+    { type: "order",
+      q: "Order these max-flow approaches by measured time on the random 2,000-vertex, 20,000-edge network, fastest first:",
+      items: [
+        "Dinic: 0.02 s in 3 phases",
+        "Edmonds-Karp: 0.03 s in 15 augmentations",
+        "Ford-Fulkerson with DFS paths: 603 s in 1,063,989 augmentations",
+        "brute force over all s-t cuts: 2 to the power 1,998 subsets"
+      ],
+      why: "Dinic and Edmonds-Karp are close on this graph, with Dinic's phases batching paths; DFS augmentation moved slivers of flow along long paths a million times; enumerating cuts is exponential and not a real option. The max-flow min-cut theorem is what lets the fast algorithms stand in for the brute-force cut." }
+  ]
+});
