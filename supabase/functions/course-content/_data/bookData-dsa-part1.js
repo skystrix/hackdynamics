@@ -11696,3 +11696,291 @@ CHAPTERS.push({
       why: "Dinic and Edmonds-Karp are close on this graph, with Dinic's phases batching paths; DFS augmentation moved slivers of flow along long paths a million times; enumerating cuts is exponential and not a real option. The max-flow min-cut theorem is what lets the fast algorithms stand in for the brute-force cut." }
   ]
 });
+
+/* ======================= CHAPTER 39 ======================= */
+CHAPTERS.push({
+  num: 39, part: 5, title: "Flow Modelling and Bipartite Matching",
+  blurb: "This is the chapter that justifies the last one. Max-flow is seldom implemented and often recognised, and the skill that matters is turning a problem that says nothing about networks into one. Bipartite matching, K\u00f6nig's and Hall's theorems, the Hungarian method for weighted assignment, disjoint paths, path covers and project selection are the same engine wired different ways, each checked against brute force. Stable marriage closes the chapter as the counterexample: it looks like matching and is not a flow problem at all.",
+  sections: [
+
+    { title: "Modelling as a Skill",
+      html:
+        "<p>This is the chapter that justifies the last one. Max-flow is an algorithm you will seldom need to implement and often need to recognise, because the skill that matters &mdash; the one university courses examine and interview banks rarely mention &mdash; is turning a problem that says nothing about networks into one. Matching workers to jobs, choosing which projects to fund, counting routes that share no link, covering a schedule with the fewest crews: one engine, many wirings. This chapter builds the wirings and proves why each is correct.</p>" +
+        "<p>Four questions decide whether a problem is a flow problem, and asking them in order is most of the work. First, what does one unit of flow represent? A matched pair, a message, a unit of money, a path. If nothing in the problem is counted in units that move, flow is probably the wrong tool. Second, where do units start and end? Those are the sources and sinks, merged into one of each by the super-source construction of Chapter 38 when there are several. Third, what limits the units? Capacities on edges say how many units may use a link; a limit on a vertex, such as each worker taking at most one job, is a capacity too, and node splitting turns it into an edge. Fourth, is the answer a flow value or a cut? Maximum counts and assignments are flows; cheapest separations and best selections are cuts, and max-flow min-cut says the two are computed by the same algorithm.</p>" +
+        "<p>One theorem from Chapter 38 makes these models exact rather than approximate: the integrality theorem. With integer capacities, some maximum flow is integral on every edge, and the algorithms find one. So when capacities are 1, each edge carries 0 or 1, and \"carries 1\" can be read as a yes-or-no decision: this worker takes this job, this path uses this link. Without integrality, a flow model of a matching could answer with half a worker on each of two jobs. With it, the flow is a combinatorial object, and its value counts one.</p>" +
+        "<p>The last section of this chapter is a deliberate counterexample: stable marriage looks like matching and is not a flow problem at all, because it asks about preferences and stability rather than counts and capacities. Knowing where the pattern stops is as much a part of the skill as knowing where it applies. Between here and there, every section follows the same shape: the construction, the reason its flow or cut means what the problem asks, and a brute-force check that it does.</p>"
+    },
+
+    { title: "Bipartite Matching",
+      viz: "dsaBipartiteMatching", vizTitle: "Match what you can, then find an augmenting path. Toggle the flow view to see it is the same problem",
+      html:
+        "<p>A <strong>bipartite matching</strong> pairs vertices on the left with vertices on the right along edges of a bipartite graph, using each vertex at most once; a <strong>maximum matching</strong> uses as many edges as possible, and a <strong>perfect matching</strong> uses every vertex. The flow model is direct. Add a source with a capacity-1 edge to every left vertex, a sink with a capacity-1 edge from every right vertex, and give every original edge capacity 1. A unit of flow is a path source, left vertex, right vertex, sink &mdash; one matched pair &mdash; and the unit capacities on the source and sink edges enforce that each vertex is used once. The maximum flow is the maximum matching.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 330' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Bipartite matching as max flow: every edge has capacity 1, and each unit of flow is one matched pair</text><line x1='73' y1='153' x2='231' y2='66' stroke='#3ddc97' stroke-width='1.4'/><polygon points='237,62 232,69 229,63' fill='#3ddc97'/><text x='160' y='98' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='75' y1='157' x2='228' y2='129' stroke='#3ddc97' stroke-width='1.4'/><polygon points='235,128 229,132 228,126' fill='#3ddc97'/><text x='163' y='136' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='75' y1='163' x2='228' y2='191' stroke='#3ddc97' stroke-width='1.4'/><polygon points='235,192 228,194 229,188' fill='#3ddc97'/><text x='166' y='174' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='73' y1='167' x2='231' y2='254' stroke='#3ddc97' stroke-width='1.4'/><polygon points='237,258 229,257 232,251' fill='#3ddc97'/><text x='169' y='214' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='523' y1='62' x2='681' y2='149' stroke='#3ddc97' stroke-width='1.4'/><polygon points='687,153 679,152 682,146' fill='#3ddc97'/><text x='600' y='98' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='525' y1='128' x2='678' y2='156' stroke='#3ddc97' stroke-width='1.4'/><polygon points='685,157 678,159 679,153' fill='#3ddc97'/><text x='597' y='136' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='525' y1='192' x2='678' y2='164' stroke='#3ddc97' stroke-width='1.4'/><polygon points='685,163 679,167 678,161' fill='#3ddc97'/><text x='594' y='174' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='523' y1='258' x2='681' y2='171' stroke='#3ddc97' stroke-width='1.4'/><polygon points='687,167 682,174 679,168' fill='#3ddc97'/><text x='591' y='214' text-anchor='middle' fill='#3ddc97' font-size='10'>1</text><line x1='265' y1='55' x2='488' y2='55' stroke='#5d7aa5' stroke-width='1.2'/><polygon points='495,55 488,58 488,52' fill='#5d7aa5'/><line x1='264' y1='59' x2='489' y2='119' stroke='#3ddc97' stroke-width='2.6'/><polygon points='496,121 488,123 490,116' fill='#3ddc97'/><line x1='264' y1='121' x2='489' y2='61' stroke='#3ddc97' stroke-width='2.6'/><polygon points='496,59 490,64 488,57' fill='#3ddc97'/><line x1='264' y1='191' x2='489' y2='131' stroke='#5d7aa5' stroke-width='1.2'/><polygon points='496,129 490,134 488,127' fill='#5d7aa5'/><line x1='265' y1='195' x2='488' y2='195' stroke='#5d7aa5' stroke-width='1.2'/><polygon points='495,195 488,198 488,192' fill='#5d7aa5'/><line x1='264' y1='199' x2='489' y2='259' stroke='#3ddc97' stroke-width='2.6'/><polygon points='496,261 488,263 490,256' fill='#3ddc97'/><line x1='264' y1='261' x2='489' y2='201' stroke='#3ddc97' stroke-width='2.6'/><polygon points='496,199 490,204 488,197' fill='#3ddc97'/><circle cx='60' cy='160' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='60' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>s</text><circle cx='700' cy='160' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='700' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>t</text><circle cx='250' cy='55' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='250' y='59' text-anchor='middle' fill='#c9d6ea' font-size='11'>w1</text><circle cx='250' cy='125' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='250' y='129' text-anchor='middle' fill='#c9d6ea' font-size='11'>w2</text><circle cx='250' cy='195' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='250' y='199' text-anchor='middle' fill='#c9d6ea' font-size='11'>w3</text><circle cx='250' cy='265' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='250' y='269' text-anchor='middle' fill='#c9d6ea' font-size='11'>w4</text><circle cx='510' cy='55' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='510' y='59' text-anchor='middle' fill='#c9d6ea' font-size='11'>j1</text><circle cx='510' cy='125' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='510' y='129' text-anchor='middle' fill='#c9d6ea' font-size='11'>j2</text><circle cx='510' cy='195' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='510' y='199' text-anchor='middle' fill='#c9d6ea' font-size='11'>j3</text><circle cx='510' cy='265' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='510' y='269' text-anchor='middle' fill='#c9d6ea' font-size='11'>j4</text><text x='20' y='318' fill='#3ddc97' font-size='11'>green: a perfect matching of 4, one flow unit per pair; w2 can only take j1, pushing w1 to j2</text></svg></div>" +
+        "<p>Stripped of the network, an augmenting path in this flow is an <strong>alternating path</strong>: it starts at an unmatched left vertex, uses an unmatched edge to the right, then a matched edge back to the left, and so on, ending at an unmatched right vertex. Flipping every edge on it &mdash; matched becomes unmatched and the reverse &mdash; adds one pair. Kuhn's algorithm tries, for each left vertex in turn, to find such a path by depth-first search, which gives O(VE) and fits in a dozen lines.</p>" +
+        "<p>Trace it on the figure. Worker w1 takes j1, which is free. Worker w2 can only use j1, which is taken, so the search asks w1 to move; w1 tries j2, finds it free, and the alternating path w2, j1, w1, j2 flips: w2 gets j1 and w1 moves to j2. Worker w3 tries j2, taken by w1, whose other option j1 leads to w2, who has nowhere else to go; so w3 takes j3 instead. Finally w4 can only use j3, taken by w3, who moves on to j4. Every worker is matched, and every step that looked like a conflict was resolved by pushing someone along an alternating path rather than by starting over.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def max_matching(adj, n_right):              # adj[left] = list of right vertices\n" +
+        "    match_right = [-1] * n_right\n" +
+        "    def try_augment(v, seen):\n" +
+        "        for u in adj[v]:\n" +
+        "            if not seen[u]:\n" +
+        "                seen[u] = True\n" +
+        "                if match_right[u] < 0 or try_augment(match_right[u], seen):\n" +
+        "                    match_right[u] = v               # flip the alternating path\n" +
+        "                    return True\n" +
+        "        return False\n" +
+        "    return sum(try_augment(v, [False] * n_right) for v in range(len(adj))), match_right</code></pre>" +
+        "<pre data-lang='java' hidden><code>boolean tryAugment(int v, boolean[] seen) {\n" +
+        "    for (int u : adj.get(v)) {\n" +
+        "        if (seen[u]) continue;\n" +
+        "        seen[u] = true;\n" +
+        "        if (matchRight[u] < 0 || tryAugment(matchRight[u], seen)) { matchRight[u] = v; return true; }\n" +
+        "    }\n" +
+        "    return false;\n" +
+        "}</code></pre></div>" +
+        "<p>The faster version is Chapter 38's observation made concrete. Run Dinic on the unit-capacity network, or search for many shortest alternating paths per phase directly, and the result is the <strong>Hopcroft-Karp</strong> algorithm of 1973, O(E times the square root of V). On random bipartite graphs with five edges per left vertex, both methods found the same matching &mdash; 19,816 pairs at 20,000 vertices per side &mdash; but Kuhn's took 3.81 seconds and Hopcroft-Karp 0.08, in 4 phases against a worst-case bound of about 200. At 5,000 per side the times were 0.23 and 0.02. On four hundred small random graphs, both agreed with a brute-force search over all edge subsets. <strong>In the machine above, find the maximum matching, then switch to the flow view and confirm it is the same computation.</strong></p>"
+    },
+
+    { title: "K\u00f6nig and Hall",
+      html:
+        "<p>A <strong>vertex cover</strong> is a set of vertices touching every edge. Each edge of a matching needs its own cover vertex, since matched edges share no endpoint, so every matching is at most every cover. <strong>K\u00f6nig's theorem</strong>, from 1931, says that in a bipartite graph the two are equal: the maximum matching has exactly the size of the minimum vertex cover. It is max-flow min-cut in disguise: a minimum cut in the matching network corresponds to a set of left and right vertices whose removal separates source from sink, which is a vertex cover, and its size is the flow.</p>" +
+        "<p>The cover can be read off the final matching without a flow. From every unmatched left vertex, follow alternating paths &mdash; unmatched edges left to right, matched edges right to left &mdash; and call Z the set of vertices reached. The cover is the left vertices <em>not</em> in Z together with the right vertices that <em>are</em> in Z. On four hundred random bipartite graphs this construction always produced a genuine vertex cover of exactly the matching's size, equal to the minimum found by brute force. The same numbers fail outside bipartite graphs: a triangle's largest matching has one edge, and its smallest cover needs two vertices. <strong>The machine in the previous section reveals the K\u00f6nig cover beside the matching; confirm the two counts agree.</strong></p>" +
+        "<p><strong>Hall's theorem</strong>, from 1935, answers when a matching can saturate the whole left side. For every set S of left vertices, let N(S) be the right vertices adjacent to some member of S. A matching covering every left vertex exists if and only if |N(S)| &ge; |S| for every S: no group of left vertices has fewer candidates than members. Necessity is obvious; sufficiency is the content. The <strong>deficiency</strong> version generalises it: the maximum matching equals the number of left vertices minus the largest shortfall |S| &minus; |N(S)| over all S. Both statements matched brute-force enumeration of every subset on all four hundred test graphs.</p>" +
+        "<p>The proof gives more than a verdict. When no left-perfect matching exists, the left vertices in Z from the K\u00f6nig construction form a Hall violator: their neighbourhood is strictly smaller than they are. On 254 random graphs with no left-perfect matching, that set violated Hall's condition every time. So the algorithm returns either a perfect matching or a certificate that none exists &mdash; for instance, three applicants who between them are qualified for only two positions. A certificate of impossibility is often worth more to the person asking than the failed answer itself.</p>" +
+        "<p>The deficiency formula also gives the number that planning questions actually ask for. If a hospital has 40 open shifts and some group of 12 shifts can only be covered by 9 qualified nurses among them, at least 3 of those shifts go unfilled whatever the rota does; the deficiency is the largest such gap over all groups, and the best possible rota leaves exactly that many unfilled. The flow computes it without enumerating groups, and the K\u00f6nig set names the group that causes it.</p>" +
+        "<p>K\u00f6nig and Hall are the first appearance of a pattern the next section extends. A maximisation problem (largest matching) and a minimisation problem (smallest cover) bound each other, and at the optimum they meet. Linear programming calls this duality; for bipartite graphs it is exact and combinatorial, and the weighted version is the key to the Hungarian method.</p>"
+    },
+
+    { title: "The Hungarian Method",
+      html:
+        "<p>Chapter 22 left the assignment problem at a bitmask DP that stops near n = 20 and promised a polynomial method for any n. Chapter 38 solved it with min-cost flow. The classical answer is the <strong>Hungarian method</strong>, published by Kuhn in 1955 and named for the Hungarian mathematicians K&ouml;nig and Egerv&aacute;ry whose work it builds on: an O(n cubed) algorithm for the minimum-cost perfect matching in a complete bipartite graph with n workers and n jobs.</p>" +
+        "<p>It rests on the weighted form of K\u00f6nig's theorem, due to Egerv\u00e1ry. Give each worker i a potential u(i) and each job j a potential v(j), with the constraint u(i) + v(j) &le; c(i, j) for every pair. Any perfect matching costs at least the sum of all potentials, since each matched pair's cost is at least its two potentials. Call a pair tight when the constraint holds with equality. If a perfect matching can be built from tight pairs alone, its cost equals the potential sum and it is optimal. The algorithm maintains feasible potentials and a matching of tight pairs, and grows the matching one worker at a time: search for an alternating path using tight pairs only; if none reaches a free job, raise the potentials of the workers reached and lower those of the jobs reached by the smallest amount that makes a new pair tight, and continue.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def hungarian(cost):                          # n x n; returns (total, job of each worker)\n" +
+        "    n = len(cost); INF = float('inf')\n" +
+        "    u = [0] * (n + 1); v = [0] * (n + 1); p = [0] * (n + 1); way = [0] * (n + 1)\n" +
+        "    for i in range(1, n + 1):                 # add worker i\n" +
+        "        p[0] = i; j0 = 0; minv = [INF] * (n + 1); used = [False] * (n + 1)\n" +
+        "        while True:\n" +
+        "            used[j0] = True; i0 = p[j0]; delta = INF; j1 = 0\n" +
+        "            for j in range(1, n + 1):\n" +
+        "                if not used[j]:\n" +
+        "                    cur = cost[i0 - 1][j - 1] - u[i0] - v[j]      # reduced cost\n" +
+        "                    if cur < minv[j]: minv[j] = cur; way[j] = j0\n" +
+        "                    if minv[j] < delta: delta = minv[j]; j1 = j\n" +
+        "            for j in range(n + 1):                                # shift potentials\n" +
+        "                if used[j]: u[p[j]] += delta; v[j] -= delta\n" +
+        "                else: minv[j] -= delta\n" +
+        "            j0 = j1\n" +
+        "            if p[j0] == 0: break                                  # reached a free job\n" +
+        "        while j0:                                                 # flip the path\n" +
+        "            j1 = way[j0]; p[j0] = p[j1]; j0 = j1\n" +
+        "    job = [0] * n\n" +
+        "    for j in range(1, n + 1): job[p[j] - 1] = j - 1\n" +
+        "    return sum(cost[i][job[i]] for i in range(n)), job</code></pre>" +
+        "<pre data-lang='java' hidden><code>// Same structure: potentials u[i], v[j]; for each new worker, grow a tree of tight\n" +
+        "// edges, tracking minv[j] = min reduced cost to column j; shift potentials by the\n" +
+        "// smallest minv until a free column is reached; then flip along way[].</code></pre></div>" +
+        "<p>The measurements confirm both halves of the argument. On three hundred random cost matrices of up to eight workers, the method matched the best of all n factorial assignments, and in every case its final potentials were feasible and summed exactly to the optimal cost &mdash; the dual certificate that proves optimality without comparing against anything. It is also fast: 0.04 seconds at n = 200, where Chapter 38's general min-cost flow took 1.18, then 0.51 seconds at 500 and 2.65 at 1,000, a clear cubic trend. The Hungarian method is successive shortest paths specialised to this shape, with the potentials maintained directly rather than recomputed, and it is what library routines for assignment implement.</p>" +
+        "<p>Chapter 38's two-worker example shows what the certificate looks like. Worker A costs 1 on job X and 2 on Y; B costs 2 on X and 5 on Y. The method returns A on Y and B on X, total 4, with worker potentials 2 and 3 and job potentials minus 1 and 0. Every pair satisfies the constraint &mdash; A with X gives 2 &minus; 1 = 1, exactly its cost; B with Y gives 3, below its cost of 5 &mdash; and the potentials sum to 2 + 3 &minus; 1 + 0 = 4. That sum is a lower bound on every possible assignment, and the assignment found meets it, so no search over the alternatives is needed to know that greedy's total of 6 is beaten and that nothing beats 4. For a thousand workers, the same four numbers per pair replace a comparison against a thousand factorial alternatives.</p>"
+    },
+
+    { title: "Disjoint Paths and Path Covers",
+      html:
+        "<p>How many routes between two nodes share no link? Give every edge capacity 1 and the maximum flow from s to t is the number of edge-disjoint paths, since flow decomposes into unit paths and capacity 1 forbids sharing. <strong>Menger's theorem</strong>, from 1927, is the cut side: that number equals the fewest edges whose removal disconnects t from s. On three hundred random graphs, the unit-capacity flow equalled a brute-force minimum edge cut every time. This is the measure of redundancy a network planner wants, and the paths themselves come out of the flow.</p>" +
+        "<p>Paths that share no <em>intermediate vertex</em> need a vertex capacity, and <strong>node splitting</strong> supplies it. Replace each vertex v by an in-copy and an out-copy joined by an edge of capacity 1; send every edge that entered v into the in-copy and every edge that left v out of the out-copy. Now any path through v must cross that one internal edge, so at most one path uses v. The maximum flow is the number of vertex-disjoint paths, and by Menger's vertex version it equals the smallest set of intermediate vertices whose removal separates s from t. On the same three hundred graphs, the split network's flow equalled a brute-force minimum vertex separator every time.</p>" +
+        "<p>Splitting also solves a covering problem on DAGs. A <strong>minimum path cover</strong> is the fewest vertex-disjoint paths that together visit every vertex &mdash; the fewest crews to run a set of timed jobs where one crew can do job v right after job u exactly when there is an edge from u to v. Split each vertex into a left copy (as a predecessor) and a right copy (as a successor), and for each edge u to v join u's left copy to v's right copy. A matching picks, for some vertices, a unique next vertex on the same path, and each matched edge merges two paths into one. So the minimum number of paths is n minus the maximum matching. On three hundred small random DAGs, n minus the matching equalled a brute-force search for the minimum cover every time.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_path_cover(n, dag_edges):\n" +
+        "    adj = [[] for _ in range(n)]              # left copy u -> right copy v for each edge u -> v\n" +
+        "    for u, v in dag_edges:\n" +
+        "        adj[u].append(v)\n" +
+        "    matched, _ = max_matching(adj, n)         # Kuhn or Hopcroft-Karp from the section above\n" +
+        "    return n - matched                         # each matched edge joins two paths into one</code></pre>" +
+        "<pre data-lang='java' hidden><code>int minPathCover(int n, int[][] dagEdges) {\n" +
+        "    List<List<Integer>> adj = new ArrayList<>();\n" +
+        "    for (int i = 0; i < n; i++) adj.add(new ArrayList<>());\n" +
+        "    for (int[] e : dagEdges) adj.get(e[0]).add(e[1]);\n" +
+        "    return n - maxMatching(adj, n);\n" +
+        "}</code></pre></div>" +
+        "<p>If paths may share vertices, compute the transitive closure first, so that an edge u to v means \"v can follow u eventually\", and the same construction gives the minimum number of chains covering a partial order. Dilworth's 1950 theorem says that number equals the largest antichain, a set of mutually incomparable elements &mdash; another max-equals-min duality, and another one that a matching computes.</p>" +
+        "<p>A small schedule makes the path-cover model concrete. Five deliveries must each be made by some van, and a van can do delivery v after delivery u when there is time to drive between them, an edge from u to v. If the edges are 1 to 2, 2 to 3, 1 to 4 and 4 to 5, the split graph can match 1 to 2, 2 to 3 and 4 to 5 but not also 1 to 4, since 1's successor slot is taken; the maximum matching is 3, so two vans suffice, running 1, 2, 3 and 4, 5. Adding one more edge, 3 to 4, lets the matching reach 4 and a single van run all five. The model counts vans, but the matched edges are the timetable.</p>"
+    },
+
+    { title: "Project Selection",
+      viz: "dsaProjectSelection", vizTitle: "Profits become source edges, costs become sink edges, prerequisites become infinite. The min cut picks your projects",
+      html:
+        "<p>The most surprising reduction in the course turns a selection problem into a cut. You have projects with profits and costs, some positive and some negative, and prerequisite rules: taking project i requires taking project j. Which set of projects maximises total profit? A set that respects every rule is a closed set of the prerequisite graph, so this is the <strong>maximum closure</strong> problem, and Picard showed in 1976 that it is a minimum cut.</p>" +
+        "<p>The construction has three kinds of edges. From the source, an edge to each profitable project with capacity equal to its profit. From each costly project, an edge to the sink with capacity equal to its cost. For each rule \"i requires j\", an edge from i to j with infinite capacity. Take any finite cut, and let the chosen set be the projects on the source side. No infinite edge can cross from the source side to the sink side, so if i is chosen, j is chosen: the set is closed. The cut's capacity is the profits of the projects left out plus the costs of the projects taken in. So the profit of the chosen set equals the sum of all positive profits minus the cut, and the minimum cut gives the maximum profit.</p>" +
+        "<p>Two practical details decide whether an implementation works. The infinite capacity must be a number larger than any finite cut, such as one more than the sum of all profits, never a value that could be summed into an overflow. And the chosen set is read from the residual graph exactly as in Chapter 38: after the maximum flow, the projects still reachable from the source are the ones to take. Projects with zero profit and no dependents can go either way, which reflects a real tie rather than an error.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 338' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Project selection as a min cut: profits from s, costs to t, prerequisites infinite</text><polygon points='24,160 230,40 520,30 540,300 230,290' fill='#123a2c' opacity='0.5' stroke='#3ddc97' stroke-dasharray='5 3'/><line x1='74' y1='155' x2='219' y2='98' stroke='#ffd166' stroke-width='1.4'/><polygon points='226,95 221,101 218,95' fill='#ffd166'/><text x='146' y='120' text-anchor='middle' fill='#ffd166' font-size='10'>+15</text><line x1='74' y1='165' x2='219' y2='222' stroke='#ffd166' stroke-width='1.4'/><polygon points='226,225 218,225 221,219' fill='#ffd166'/><text x='154' y='190' text-anchor='middle' fill='#ffd166' font-size='10'>+6</text><line x1='474' y1='66' x2='660' y2='151' stroke='#ff5d73' stroke-width='2.4'/><polygon points='666,154 659,154 661,148' fill='#ff5d73'/><text x='566' y='123' text-anchor='middle' fill='#ff5d73' font-size='10'>&#8722;7</text><line x1='475' y1='160' x2='658' y2='160' stroke='#ff5d73' stroke-width='2.4'/><polygon points='665,160 658,164 658,156' fill='#ff5d73'/><text x='570' y='174' text-anchor='middle' fill='#ff5d73' font-size='10'>&#8722;4</text><line x1='474' y1='254' x2='660' y2='169' stroke='#ff5d73' stroke-width='2.4'/><polygon points='666,166 661,172 659,166' fill='#ff5d73'/><text x='574' y='223' text-anchor='middle' fill='#ff5d73' font-size='10'>&#8722;5</text><line x1='255' y1='88' x2='438' y2='63' stroke='#8fa3c4' stroke-width='1.4' stroke-dasharray='5 3'/><polygon points='445,62 439,66 438,60' fill='#8fa3c4'/><text x='373' y='85' text-anchor='middle' fill='#8fa3c4' font-size='10'>&#8734;</text><line x1='254' y1='95' x2='439' y2='153' stroke='#8fa3c4' stroke-width='1.4' stroke-dasharray='5 3'/><polygon points='446,155 438,157 440,150' fill='#8fa3c4'/><text x='369' y='145' text-anchor='middle' fill='#8fa3c4' font-size='10'>&#8734;</text><line x1='254' y1='225' x2='439' y2='167' stroke='#8fa3c4' stroke-width='1.4' stroke-dasharray='5 3'/><polygon points='446,165 440,170 438,163' fill='#8fa3c4'/><text x='375' y='201' text-anchor='middle' fill='#8fa3c4' font-size='10'>&#8734;</text><line x1='255' y1='232' x2='438' y2='257' stroke='#8fa3c4' stroke-width='1.4' stroke-dasharray='5 3'/><polygon points='445,258 438,260 439,254' fill='#8fa3c4'/><text x='371' y='261' text-anchor='middle' fill='#8fa3c4' font-size='10'>&#8734;</text><circle cx='60' cy='160' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='60' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>s</text><circle cx='240' cy='90' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='240' y='94' text-anchor='middle' fill='#c9d6ea' font-size='11'>A</text><circle cx='240' cy='230' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='240' y='234' text-anchor='middle' fill='#c9d6ea' font-size='11'>B</text><circle cx='460' cy='60' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='460' y='64' text-anchor='middle' fill='#c9d6ea' font-size='11'>C</text><circle cx='460' cy='160' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='460' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>D</text><circle cx='460' cy='260' r='15' fill='#182842' stroke='#3ddc97' stroke-width='1.4'/><text x='460' y='264' text-anchor='middle' fill='#c9d6ea' font-size='11'>E</text><circle cx='680' cy='160' r='15' fill='#182842' stroke='#2de2ff' stroke-width='1.4'/><text x='680' y='164' text-anchor='middle' fill='#c9d6ea' font-size='11'>t</text><text x='20' y='308' fill='#c9d6ea' font-size='11'>min cut = 16 (red: C, D, E costs). Profit = 21 &#8722; 16 = 5: fund A and B, buy C, D, E</text><text x='20' y='326' fill='#8fa3c4' font-size='10'>A alone would give 15 &#8722; 11 = 4; B alone loses 3; together they share D, and the cut finds the +5</text></svg></div>" +
+        "<p>The figure works a small case. Projects A and B earn 15 and 6; tools C, D and E cost 7, 4 and 5; A needs C and D, and B needs D and E. Taking A alone nets 15 &minus; 7 &minus; 4 = 4. Taking B alone loses 3. Taking both shares D, netting 21 &minus; 16 = 5. The minimum cut has capacity 16 &mdash; the three tool edges into the sink &mdash; and 21 &minus; 16 = 5, choosing everything. On three hundred random instances of up to twelve projects with random profits, costs and prerequisites, positive profit minus the minimum cut equalled the best closed set found by checking every subset. <strong>In the machine above, make one prerequisite expensive enough to kill a profitable project and watch the selection change.</strong></p>" +
+        "<p>The pattern generalises far beyond projects. Open-pit mining decides which blocks of earth to extract when a block can be removed only after the blocks above it, which is exactly maximum closure and was one of Picard's motivating applications. Choosing features to build when some depend on others, choosing which courses to offer when some require prerequisites to run, and many labelling problems in image processing reduce the same way. The signature to recognise is a set of yes-or-no decisions with individual gains or losses and implications between decisions. Whenever it appears, the answer is one maximum-flow computation, not an exponential search over subsets.</p>"
+    },
+
+    { title: "Stable Marriage",
+      viz: "dsaGaleShapley", vizTitle: "One side proposes, the other holds the best offer so far. Watch who benefits from proposing",
+      html:
+        "<p>The last problem looks like matching and is not a flow problem, which is why it belongs here. Each of n people on one side ranks everyone on the other side, and vice versa. A matching is unstable if some pair would both rather be with each other than with their assigned partners &mdash; a blocking pair who could defect together. A <strong>stable matching</strong> has no blocking pair. The question is not how many pairs can be made or at what cost, but whether an assignment can be found that no two people have an incentive to break.</p>" +
+        "<p>The <strong>Gale-Shapley algorithm</strong>, from their 1962 paper, answers it constructively. Every unmatched proposer proposes to the highest-ranked receiver they have not yet approached; each receiver holds the best proposal so far and rejects the rest, trading up when a better one arrives. Proposers only move down their lists and receivers only trade up, so the process ends after at most n squared proposals, and the result is stable: if a proposer preferred some receiver to their final partner, they proposed there first and were rejected for someone that receiver ranked higher. On three hundred random instances the output had no blocking pair every time. The typical cost is far below n squared: at n = 1,000 the average was 7,948 proposals, close to n ln n, against the n squared bound of a million.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "def gale_shapley(prop_pref, recv_pref):      # lists of preference lists, indices 0..n-1\n" +
+        "    n = len(prop_pref)\n" +
+        "    rank = [{p: r for r, p in enumerate(pref)} for pref in recv_pref]\n" +
+        "    nxt = [0] * n; held = [-1] * n; free = deque(range(n))\n" +
+        "    while free:\n" +
+        "        p = free.popleft()\n" +
+        "        r = prop_pref[p][nxt[p]]; nxt[p] += 1          # best receiver not yet tried\n" +
+        "        if held[r] < 0:\n" +
+        "            held[r] = p\n" +
+        "        elif rank[r][p] < rank[r][held[r]]:\n" +
+        "            free.append(held[r]); held[r] = p           # trade up, release the old one\n" +
+        "        else:\n" +
+        "            free.append(p)                              # rejected: try the next\n" +
+        "    return held                                         # held[r] = proposer matched to r</code></pre>" +
+        "<pre data-lang='java' hidden><code>int[] galeShapley(int[][] propPref, int[][] recvRank) {   // recvRank[r][p] = r's rank of p\n" +
+        "    int n = propPref.length; int[] next = new int[n], held = new int[n];\n" +
+        "    Arrays.fill(held, -1); ArrayDeque<Integer> free = new ArrayDeque<>();\n" +
+        "    for (int p = 0; p < n; p++) free.add(p);\n" +
+        "    while (!free.isEmpty()) {\n" +
+        "        int p = free.poll(), r = propPref[p][next[p]++];\n" +
+        "        if (held[r] < 0) held[r] = p;\n" +
+        "        else if (recvRank[r][p] < recvRank[r][held[r]]) { free.add(held[r]); held[r] = p; }\n" +
+        "        else free.add(p);\n" +
+        "    }\n" +
+        "    return held;\n" +
+        "}</code></pre></div>" +
+        "<p>Which stable matching comes out matters, because there are usually several &mdash; 2.23 on average for random instances with seven on each side. The proposers' version is the best stable matching for every proposer simultaneously and the worst for every receiver: enumerating all stable matchings for three hundred small instances confirmed both properties every time. It is also strategy-proof for proposers, a result of Dubins and Freedman in 1981 and Roth in 1982: no proposer can do better by misreporting preferences. Receivers can: in 200 random instances with five per side, trying every possible false list for each receiver found one who could gain by lying in 13, while no proposer could in any. <strong>Swap which side proposes in the machine above and find a participant who does strictly better.</strong></p>" +
+        "<p>The algorithm extends in some directions and breaks in others, and the boundary is instructive. Many-to-one markets, where each hospital has several positions, work the same way: a hospital holds its best offers up to its capacity. Couples who must be placed together break it: a stable matching may then fail to exist, and deciding whether one does is NP-complete, as Ronn showed in 1990. The one-sided version, the stable roommates problem, where anyone may pair with anyone, can also have no stable solution, but Irving's 1985 algorithm decides it in polynomial time. Small changes to the rules move the problem across the line between tractable and intractable, which is the subject Chapter 46 treats in general.</p>" +
+        "<p>The counterexample is the point. Treat stable marriage as a weighted matching &mdash; minimise the total of everyone's rank for their partner, a min-cost assignment the Hungarian method would solve instantly &mdash; and the result was unstable in 164 of 300 random instances with six per side: the best total left some pair wanting to defect. Stability is a constraint about pairs of individuals, not a sum, and no flow network expresses it. The same algorithm, extended, runs the United States medical residency match, and Roth and Shapley shared the 2012 economics Nobel prize for this line of work. That closes Part 5: graphs recognised, traversed, ordered, weighted, spanned, decomposed, and pushed through, and a clear sense of where a graph algorithm stops being the answer.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Match two ways.</strong> Implement Kuhn's augmenting-path matching and Hopcroft-Karp, check both against brute force on small graphs, and time them on 20,000 vertices per side.</li>" +
+        "<li><strong>Read the cover.</strong> From a maximum matching, build the K\u00f6nig vertex cover by alternating reachability from unmatched left vertices, and verify it covers every edge and has the matching's size.</li>" +
+        "<li><strong>Certify impossibility.</strong> When no left-perfect matching exists, extract the Hall violator from the same reachability set and check |N(S)| < |S|. Verify the deficiency formula by brute force.</li>" +
+        "<li><strong>Hungarian with a certificate.</strong> Implement the Hungarian method, check it against all permutations for small n, and verify that the final potentials are feasible and sum to the optimal cost.</li>" +
+        "<li><strong>Split the vertices.</strong> Count edge-disjoint and vertex-disjoint s-t paths by unit-capacity flow with node splitting, and check each against a brute-force minimum cut or separator.</li>" +
+        "<li><strong>Cover a DAG.</strong> Compute the minimum vertex-disjoint path cover as n minus the matching in the split graph, then add transitive closure and compute the minimum chain cover of a partial order.</li>" +
+        "<li><strong>Select projects.</strong> Build the maximum-closure network for random projects and prerequisites, and check that positive profit minus the minimum cut equals the best closed set.</li>" +
+        "<li><strong>Propose and lie.</strong> Run Gale-Shapley, verify stability and proposer-optimality against all stable matchings for small n, and search for a receiver who gains by misreporting.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "bipartite matching", d: "A set of edges in a bipartite graph with no shared endpoint; a maximum one is found as a unit-capacity maximum flow." },
+    { t: "maximum matching", d: "A matching with as many edges as possible; equal in size to the minimum vertex cover in a bipartite graph." },
+    { t: "perfect matching", d: "A matching that uses every vertex; exists on the left side exactly when Hall's condition holds." },
+    { t: "alternating path", d: "A path alternating unmatched and matched edges between two unmatched vertices; flipping it enlarges the matching by one, and it is an augmenting path of the matching network." },
+    { t: "Hopcroft-Karp", d: "Bipartite matching in O(E sqrt V) by finding many shortest alternating paths per phase; Dinic on the unit-capacity network. Hopcroft & Karp 1973." },
+    { t: "vertex cover", d: "A set of vertices touching every edge; every matching is at most every vertex cover." },
+    { t: "K\u00f6nig's theorem", d: "In a bipartite graph the maximum matching equals the minimum vertex cover; the cover is read off a maximum matching by alternating reachability. K\u00f6nig 1931." },
+    { t: "Hall's theorem", d: "A bipartite graph has a matching saturating the left side if and only if every set S of left vertices has at least |S| neighbours. Hall 1935." },
+    { t: "deficiency", d: "The largest shortfall |S| - |N(S)| over sets of left vertices; the maximum matching equals the left size minus the deficiency." },
+    { t: "Hungarian method", d: "An O(n cubed) algorithm for minimum-cost perfect bipartite matching that maintains feasible potentials and grows a matching of tight pairs. Kuhn 1955." },
+    { t: "Menger's theorem", d: "The maximum number of edge-disjoint (or vertex-disjoint) s-t paths equals the minimum number of edges (or vertices) separating s from t. Menger 1927." },
+    { t: "node splitting", d: "Replacing a vertex by an in-copy and an out-copy joined by one edge, so a vertex capacity becomes an edge capacity." },
+    { t: "maximum closure", d: "The most profitable set of items closed under prerequisite rules; solved as a minimum cut with profits from the source, costs to the sink and infinite rule edges. Picard 1976." },
+    { t: "minimum path cover", d: "The fewest vertex-disjoint paths covering every vertex of a DAG; equal to n minus the maximum matching in the split graph." },
+    { t: "stable matching", d: "A matching between two ranked sides with no blocking pair who both prefer each other to their assigned partners." },
+    { t: "Gale-Shapley algorithm", d: "Stable matching by proposals and tentative acceptances; yields the proposer-optimal, receiver-pessimal stable matching and is strategy-proof for proposers. Gale & Shapley 1962." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "In the flow model of bipartite matching, what enforces that each vertex is matched at most once?",
+      opts: [
+        "The capacity-1 edges from the source to each left vertex and from each right vertex to the sink",
+        "The direction of the edges between the two sides, which only allows flow to move from the left side to the right side",
+        "The integrality theorem, which forbids any vertex from carrying more than one unit of flow through it",
+        "Dinic's level graph, which places each vertex on a single level and so lets only one path pass through it"
+      ], a: 0,
+      why: "A left vertex receives at most one unit from its capacity-1 source edge and a right vertex sends at most one to the sink, so each is used once. Edge direction does not limit reuse, integrality makes the flow whole but does not cap vertices, and the level graph is an algorithmic device, not part of the model." },
+
+    { type: "mc",
+      q: "On 20,000 vertices per side, Kuhn's augmenting-path matching took 3.81 s and Hopcroft-Karp 0.08 s. What makes the second faster?",
+      opts: [
+        "It uses breadth-first search to find the alternating paths, whereas Kuhn's algorithm uses depth-first search to find each of them",
+        "It finds many shortest alternating paths per phase, needing only a handful of phases, instead of one search per left vertex",
+        "It ignores left vertices of degree one, which Kuhn's algorithm wastes time trying to match first",
+        "It returns an approximate matching that is within one pair of the maximum, which avoids the final expensive searches"
+      ], a: 1,
+      why: "Hopcroft-Karp batches a maximal set of shortest alternating paths per phase (4 phases here, against a bound near 200), which is Dinic on the unit network; Kuhn runs a separate search for each of 20,000 left vertices. Both found 19,816 pairs, so it is exact, and BFS alone is not the speedup." },
+
+    { type: "mc",
+      q: "How is the minimum vertex cover read off a maximum matching, by K\u00f6nig's construction?",
+      opts: [
+        "Take every left vertex that is matched, since each matched edge needs exactly one of its endpoints in the cover",
+        "Take one endpoint of every matched edge, chosen so that it has the higher degree of the two endpoints",
+        "Let Z be vertices reachable by alternating paths from unmatched left vertices; take left vertices outside Z and right vertices in Z",
+        "Take every vertex that is not reachable from the source in the residual graph after the maximum flow has been computed"
+      ], a: 2,
+      why: "The alternating-reachability set Z gives the cover (L minus Z) plus (R intersect Z), which covered every edge with exactly the matching's size on 400 of 400 graphs. Matched left vertices alone can miss edges, a degree rule is not guaranteed, and the unreachable residual set is the sink side of a cut, not the cover itself." },
+
+    { type: "blank",
+      q: "The condition that every set S of left vertices has at least |S| neighbours, necessary and sufficient for a matching that saturates the left side, is ____'s condition.",
+      a: ["Hall", "Hall's"],
+      why: "Hall's theorem (1935): if some S has fewer neighbours than members, no matching can place all of them; otherwise one exists. When it fails, the K\u00f6nig set Z restricted to the left side is a violator, found on 254 of 254 test graphs." },
+
+    { type: "mc",
+      q: "The Hungarian method keeps potentials with u(i) + v(j) at most c(i, j). Why does a perfect matching of tight pairs prove optimality?",
+      opts: [
+        "Because tight pairs are always the cheapest edge in their row, so choosing them all minimises each worker's cost",
+        "Because the potentials are recomputed from scratch at the end, and that recomputation confirms which matching is cheapest",
+        "Because a matching of tight pairs is unique, so there is no other perfect matching left to compare against",
+        "Because any perfect matching costs at least the sum of the potentials, and a tight matching costs exactly that sum"
+      ], a: 3,
+      why: "Each matched pair costs at least its two potentials, so every perfect matching costs at least their total; a matching of tight pairs attains it, so nothing is cheaper. On 300 of 300 instances the final potentials were feasible and summed to the optimum. Tight edges need not be row minima, nothing is recomputed, and tight matchings need not be unique." },
+
+    { type: "mc",
+      q: "How does node splitting turn vertex-disjoint paths into a flow problem?",
+      opts: [
+        "Each vertex becomes an in-copy and an out-copy joined by one capacity-1 edge, so at most one path can pass through it",
+        "Each vertex is duplicated on both sides of a bipartite graph, and a perfect matching in that doubled graph then selects the paths",
+        "Each edge is replaced by two edges running in opposite directions, so paths can no longer share any edge between two vertices",
+        "Each vertex receives an infinite-capacity self-loop, so any flow that enters it is forced to leave it again by the same edge"
+      ], a: 0,
+      why: "Routing every path through v's single internal edge caps v at one path; the split network's flow matched a brute-force minimum vertex separator on 300 of 300 graphs, Menger's vertex version. The bipartite doubling is the path-cover construction, opposite edges model undirected links, and self-loops play no role." },
+
+    { type: "mc",
+      q: "In the project-selection network, why must the chosen set respect every prerequisite?",
+      opts: [
+        "Because the algorithm checks every prerequisite after the cut is found and adds any missing projects to the chosen set",
+        "Because prerequisite edges carry infinite capacity, so no finite cut can separate a chosen project from one it requires",
+        "Because projects with prerequisites are given zero profit, so the cut never has any reason to choose them without the rest",
+        "Because the prerequisite graph is always a tree, and a cut through a tree automatically keeps each subtree whole"
+      ], a: 1,
+      why: "An edge from i to j with infinite capacity cannot cross from the source side to the sink side in a finite cut, so choosing i forces choosing j. Nothing is repaired afterwards, profits are left as given, and the prerequisite graph can be any DAG or even contain cycles." },
+
+    { type: "blank",
+      q: "The minimum number of vertex-disjoint paths covering every vertex of a DAG equals n minus the size of a maximum ____ in the split graph.",
+      a: ["matching", "bipartite matching"],
+      why: "Each matched edge u to v chains v directly after u on one path, merging two paths into one; so the fewest paths is n minus the maximum matching, which matched brute force on 300 of 300 random DAGs." },
+
+    { type: "mc",
+      q: "Minimising the total of everyone's rank for their partner gave an unstable matching in 164 of 300 instances. What does that show?",
+      opts: [
+        "That the Hungarian method has a bug when costs come from preference ranks, since ranks are not true costs",
+        "That stable matchings do not exist in about half of all random instances, so some pair always defects",
+        "That stability is a condition on individual pairs, not a sum, so no weighted matching or flow objective captures it",
+        "That the proposing side was chosen badly, and the other side proposing would have produced the minimum total rank"
+      ], a: 2,
+      why: "A blocking pair can exist even when the total is minimal, because stability constrains every pair separately; Gale-Shapley always finds a stable matching (300 of 300), while the best-total matching was unstable in 164. The Hungarian method solved its objective correctly, and neither proposing side optimises the total." },
+
+    { type: "order",
+      q: "Order these matching methods by measured time on the largest instance each was run on here, fastest first:",
+      items: [
+        "Hopcroft-Karp, 20,000 per side: 0.08 s",
+        "Hungarian method, 1,000 x 1,000 costs: 2.65 s",
+        "Kuhn's augmenting paths, 20,000 per side: 3.81 s",
+        "brute force over all assignments, n = 20: 20 factorial permutations"
+      ],
+      why: "Hopcroft-Karp's few phases make large unweighted matchings near-instant; the Hungarian method's O(n cubed) weighted work at n = 1,000 took seconds; Kuhn's one search per left vertex was slowest of the three; enumerating 2.4 &times; 10^18 permutations is not a real option, which is why Chapter 22's bitmask DP and this chapter's polynomial methods exist." }
+  ]
+});
