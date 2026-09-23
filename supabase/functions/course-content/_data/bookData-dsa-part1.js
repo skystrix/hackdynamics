@@ -10196,3 +10196,314 @@ CHAPTERS.push({
       why: "Plain BFS and 0-1 BFS are both linear; BFS does slightly less work per edge, and either order between them is defensible. Dijkstra pays a log factor for its heap (0-1 BFS measured 1.6x faster on 200k vertices), and Bellman-Ford pays n passes over the edges in exchange for handling negative weights. Chapter 35 covers the last two." }
   ]
 });
+
+/* ======================= CHAPTER 34 ======================= */
+CHAPTERS.push({
+  num: 34, part: 5, title: "Topological Order and DAG Dynamic Programming",
+  blurb: "A directed acyclic graph is a dependency list, and a topological order is a schedule that respects it. This chapter builds both algorithms for producing one &mdash; Kahn's in-degree peeling and the reversed depth-first exit order &mdash; with what each reports when there is a cycle, how many orders there usually are and how to choose one. Then it shows why the order matters far beyond scheduling: it is the T in SRTBOT, every dynamic program runs on a DAG, and it is why longest path is linear on a DAG and NP-hard everywhere else. It closes with functional graphs, where every walk is a tail and a cycle.",
+  sections: [
+
+    { title: "The Problem",
+      html:
+        "<p>A directed acyclic graph is a dependency list. Courses have prerequisites, build targets depend on other targets, spreadsheet cells refer to other cells, tasks wait for other tasks. Draw an edge from each thing to whatever depends on it and the question is always the same: in what order can everything be done so that nothing is started before the things it needs? An order that places every edge forwards, u before v whenever there is an edge from u to v, is a <strong>topological order</strong>, and producing one is topological sorting.</p>" +
+        "<p>Two things can go wrong, and a correct algorithm has to report both. The first is a cycle. If A needs B, B needs C and C needs A, no order puts all three edges forwards, because whichever of the three comes first needs something that comes later. A topological order exists exactly when the graph has no directed cycle, so a topological sort is also a cycle detector, and a build system that finds a cycle in its dependencies has to say so rather than pick an order at random.</p>" +
+        "<p>The second is not an error but a surprise: the answer is usually not unique. Any order consistent with the edges is valid, and most dependency graphs leave many choices. A valid order is unique exactly when every consecutive pair in it is joined by an edge &mdash; when the graph contains a path through all its vertices, forcing each one to follow the last. On five hundred small random DAGs that condition, a unique order found by brute force, and a queue that never held two ready vertices at once agreed every time; 151 of the 500 had a unique order.</p>" +
+        "<p>That non-uniqueness matters in practice. Two correct implementations can emit different orders for the same input, so a test that compares output against one expected order is testing the implementation, not the property. The right test checks the property itself: every edge goes forwards and every vertex appears once. The remaining sections build the two standard algorithms, show how to choose a particular order when a problem asks for one, and then use the order for what it is really for &mdash; dynamic programming.</p>"
+    },
+
+    { title: "Kahn's Algorithm",
+      viz: "dsaTopoSort", vizTitle: "Peel every vertex that has nothing waiting on it. If you get stuck, there is a cycle",
+      html:
+        "<p>The first algorithm, from Kahn's 1962 paper on sorting large networks, works from the outside in. A vertex with <strong>in-degree</strong> zero &mdash; no incoming edges &mdash; depends on nothing, so it can go first. Emit it, delete its outgoing edges, and some of its successors may now have in-degree zero too. Keep a <strong>ready set</strong> of the vertices whose in-degree has reached zero, repeatedly take one out and emit it, and decrement the in-degree of each of its successors, adding any that reach zero. Each vertex and each edge is handled once, so <strong>Kahn's algorithm</strong> is O(n + E).</p>" +
+        "<p>The figure catches the algorithm mid-peel. At the start A and B have in-degree zero and form the ready set. Emitting A drops C to zero and D to one; emitting B drops D to zero and E to zero; emitting C drops F to one. That is the state drawn: A, B and C are done, D and E are ready, and F, G and H wait with in-degrees 1, 2 and 2. Emitting D next frees F and lowers G to one; E then frees G; F and G together free H. The order produced is A, B, C, D, E, F, G, H &mdash; one of many valid ones, determined by the queue's first-in, first-out rule.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 330' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Kahn's algorithm mid-peel: A, B, C emitted; D and E are ready; badges show remaining in-degree</text><line x1='88' y1='95' x2='182' y2='68' stroke='#3a4a66' stroke-width='1.5'/><polygon points='190,66 183,72 181,64' fill='#3a4a66'/><line x1='87' y1='107' x2='183' y2='149' stroke='#3a4a66' stroke-width='1.5'/><polygon points='191,152 182,152 185,145' fill='#3a4a66'/><line x1='87' y1='213' x2='183' y2='171' stroke='#3a4a66' stroke-width='1.5'/><polygon points='191,168 185,175 182,168' fill='#3a4a66'/><line x1='88' y1='225' x2='182' y2='252' stroke='#3a4a66' stroke-width='1.5'/><polygon points='190,254 181,256 183,248' fill='#3a4a66'/><line x1='228' y1='66' x2='323' y2='100' stroke='#3a4a66' stroke-width='1.5'/><polygon points='330,103 321,104 324,96' fill='#3a4a66'/><line x1='228' y1='154' x2='323' y2='120' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='330,117 324,124 321,116' fill='#5d7aa5'/><line x1='228' y1='166' x2='323' y2='200' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='330,203 321,204 324,196' fill='#5d7aa5'/><line x1='228' y1='254' x2='323' y2='220' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='330,217 324,224 321,216' fill='#5d7aa5'/><line x1='368' y1='117' x2='453' y2='150' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='460,152 451,153 454,146' fill='#5d7aa5'/><line x1='368' y1='203' x2='453' y2='170' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='460,168 454,174 451,167' fill='#5d7aa5'/><circle cx='70' cy='100' r='18' fill='#0f1a2c' stroke='#2a3a55' stroke-width='1.5'/><text x='70' y='105' text-anchor='middle' fill='#5d6f8f' font-size='13'>A</text><circle cx='70' cy='220' r='18' fill='#0f1a2c' stroke='#2a3a55' stroke-width='1.5'/><text x='70' y='225' text-anchor='middle' fill='#5d6f8f' font-size='13'>B</text><circle cx='210' cy='60' r='18' fill='#0f1a2c' stroke='#2a3a55' stroke-width='1.5'/><text x='210' y='65' text-anchor='middle' fill='#5d6f8f' font-size='13'>C</text><circle cx='210' cy='160' r='18' fill='#123a2c' stroke='#3ddc97' stroke-width='1.5'/><text x='210' y='165' text-anchor='middle' fill='#3ddc97' font-size='13'>D</text><circle cx='227' cy='143' r='9' fill='#3ddc97' /><text x='227' y='147' text-anchor='middle' fill='#0b1628' font-size='10'>0</text><circle cx='210' cy='260' r='18' fill='#123a2c' stroke='#3ddc97' stroke-width='1.5'/><text x='210' y='265' text-anchor='middle' fill='#3ddc97' font-size='13'>E</text><circle cx='227' cy='243' r='9' fill='#3ddc97' /><text x='227' y='247' text-anchor='middle' fill='#0b1628' font-size='10'>0</text><circle cx='350' cy='110' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='350' y='115' text-anchor='middle' fill='#c9d6ea' font-size='13'>F</text><circle cx='367' cy='93' r='9' fill='#ffd166' /><text x='367' y='97' text-anchor='middle' fill='#0b1628' font-size='10'>1</text><circle cx='350' cy='210' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='350' y='215' text-anchor='middle' fill='#c9d6ea' font-size='13'>G</text><circle cx='367' cy='193' r='9' fill='#ffd166' /><text x='367' y='197' text-anchor='middle' fill='#0b1628' font-size='10'>2</text><circle cx='480' cy='160' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='480' y='165' text-anchor='middle' fill='#c9d6ea' font-size='13'>H</text><circle cx='497' cy='143' r='9' fill='#ffd166' /><text x='497' y='147' text-anchor='middle' fill='#0b1628' font-size='10'>2</text><text x='560' y='50' fill='#8fa3c4' font-size='11' xml:space='preserve'>emitted:</text><text x='560' y='67' fill='#c9d6ea' font-size='11' xml:space='preserve'>  A, B, C</text><text x='560' y='101' fill='#3ddc97' font-size='11' xml:space='preserve'>ready (in-degree 0):</text><text x='560' y='118' fill='#3ddc97' font-size='11' xml:space='preserve'>  D, E</text><text x='560' y='152' fill='#ffd166' font-size='11' xml:space='preserve'>waiting:</text><text x='560' y='169' fill='#c9d6ea' font-size='11' xml:space='preserve'>  F (1), G (2), H (2)</text><text x='560' y='203' fill='#8fa3c4' font-size='11' xml:space='preserve'>emit D next: F drops to 0</text><text x='560' y='220' fill='#8fa3c4' font-size='11' xml:space='preserve'>and G to 1; F joins ready.</text><text x='560' y='254' fill='#ff5d73' font-size='11' xml:space='preserve'>if the ready set empties</text><text x='560' y='271' fill='#ff5d73' font-size='11' xml:space='preserve'>with vertices left, those</text><text x='560' y='288' fill='#ff5d73' font-size='11' xml:space='preserve'>vertices sit on or below</text><text x='560' y='305' fill='#ff5d73' font-size='11' xml:space='preserve'>a cycle.</text></svg></div>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "def kahn(adj):\n" +
+        "    n = len(adj)\n" +
+        "    indeg = [0] * n\n" +
+        "    for u in range(n):\n" +
+        "        for v in adj[u]:\n" +
+        "            indeg[v] += 1\n" +
+        "    ready = deque(v for v in range(n) if indeg[v] == 0)\n" +
+        "    order = []\n" +
+        "    while ready:\n" +
+        "        u = ready.popleft()\n" +
+        "        order.append(u)\n" +
+        "        for v in adj[u]:\n" +
+        "            indeg[v] -= 1\n" +
+        "            if indeg[v] == 0:\n" +
+        "                ready.append(v)\n" +
+        "    if len(order) < n:\n" +
+        "        return None                    # stalled: the leftovers contain a cycle\n" +
+        "    return order</code></pre>" +
+        "<pre data-lang='java' hidden><code>List<Integer> kahn(List<List<Integer>> adj) {\n" +
+        "    int n = adj.size(); int[] indeg = new int[n];\n" +
+        "    for (List<Integer> out : adj) for (int v : out) indeg[v]++;\n" +
+        "    ArrayDeque<Integer> ready = new ArrayDeque<>();\n" +
+        "    for (int v = 0; v < n; v++) if (indeg[v] == 0) ready.add(v);\n" +
+        "    List<Integer> order = new ArrayList<>();\n" +
+        "    while (!ready.isEmpty()) {\n" +
+        "        int u = ready.poll(); order.add(u);\n" +
+        "        for (int v : adj.get(u)) if (--indeg[v] == 0) ready.add(v);\n" +
+        "    }\n" +
+        "    return order.size() == n ? order : null;   // null: cycle\n" +
+        "}</code></pre></div>" +
+        "<p>The cycle report comes free. On a graph with a cycle, no vertex on the cycle ever reaches in-degree zero, since each waits on the one before it, so the ready set eventually empties while vertices remain. What remains is more than the cycle itself: it is every vertex on a cycle plus everything downstream of one, because a vertex that depends on a stuck vertex is stuck too. On five hundred random directed graphs, 350 of them cyclic, the leftover set was exactly that &mdash; the cycle vertices and all their descendants &mdash; on every graph. To name an actual cycle, run the three-colour search of Chapter 33 on the leftovers. <strong>Add an edge that creates a cycle in the machine above and watch the algorithm stall with vertices remaining.</strong></p>"
+    },
+
+    { title: "DFS-Based Ordering",
+      html:
+        "<p>The second algorithm reads the order off a depth-first search. Run the search of Chapter 33 over the whole graph, recording each vertex as it exits, and reverse the list: decreasing exit time is a topological order. This <strong>reverse postorder</strong> needs no in-degree counts and falls out of a search you may be running anyway, for instance to detect cycles.</p>" +
+        "<p>The proof is short and uses only the edge types. Take any edge u to v in a DAG. If v is still unvisited when the edge is examined, v is entered and finished inside u's interval, so v exits before u. If v is already finished, it exited before u by definition. The third case, v open on the current path, would make the edge a back edge, and a back edge means a cycle, which a DAG does not have. So in every case v exits before u, and reversing exit order puts u before v, which is what a topological order requires.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def dfs_topo(adj):\n" +
+        "    n = len(adj); state = [0] * n          # 0 unseen, 1 open, 2 done\n" +
+        "    out = []\n" +
+        "    for s in range(n):\n" +
+        "        if state[s]: continue\n" +
+        "        state[s] = 1\n" +
+        "        stack = [(s, iter(adj[s]))]\n" +
+        "        while stack:\n" +
+        "            u, it = stack[-1]\n" +
+        "            for v in it:\n" +
+        "                if state[v] == 1: return None          # back edge: cycle\n" +
+        "                if state[v] == 0:\n" +
+        "                    state[v] = 1; stack.append((v, iter(adj[v]))); break\n" +
+        "            else:\n" +
+        "                state[u] = 2; out.append(u); stack.pop()   # exit: postorder\n" +
+        "    return out[::-1]                                     # reverse postorder</code></pre>" +
+        "<pre data-lang='java' hidden><code>void visit(int u) {                     // recursive form; state[] and post are fields\n" +
+        "    state[u] = 1;\n" +
+        "    for (int v : adj.get(u)) {\n" +
+        "        if (state[v] == 1) throw new IllegalStateException(\"cycle\");\n" +
+        "        if (state[v] == 0) visit(v);\n" +
+        "    }\n" +
+        "    state[u] = 2;\n" +
+        "    post.add(u);                        // reverse post at the end\n" +
+        "}</code></pre></div>" +
+        "<p>Both algorithms produced valid orders on five hundred random DAGs of up to forty vertices, checked edge by edge. They generally produce different valid orders, for the reason of the first section. The practical differences are small but real. Kahn's algorithm is iterative by nature and processes vertices in waves, which suits parallel scheduling: everything in the ready set at once can run at once. The depth-first version reports the cycle it finds as a back edge, with a concrete path, where Kahn's reports only that one exists somewhere among the leftovers; it also inherits the recursion-depth caveats of Chapter 33 if written recursively.</p>" +
+        "<p>One misconception is worth heading off. Sorting by entry time instead of exit time does not work, and neither does the plain postorder unreversed: the postorder places every edge backwards, so it is a valid order for the reversed graph, which is occasionally what you want and more often a silent bug.</p>" +
+        "<p>A three-vertex example makes the entry-time failure concrete. Take edges A to C and B to C, and start the search at A. It enters A, then C, then later B, so the entry order is A, C, B &mdash; which puts C before B although B to C requires the opposite. The exit order is C, A, B, and reversed it is B, A, C, which respects both edges. The entry time records when a vertex was reached, which depends on where the search happened to start; the exit time records when everything depending on it was finished, which is the fact a schedule needs.</p>"
+    },
+
+    { title: "Counting Orderings, and Lexicographic Order",
+      html:
+        "<p>When many orders are valid, two questions follow: how many are there, and how do you produce a specific one? A topological order of a DAG is also called a <strong>linear extension</strong> of the partial order the DAG defines, and the number of them is usually astronomical. A random sparse DAG on 12 vertices with 12 edges had 1,584,000; on 20 vertices with 20 edges it had about 1.8 &times; 10^13. Counting them exactly is #P-complete in general, a result of Brightwell and Winkler in 1991, so no polynomial algorithm is expected. For small graphs, a bitmask DP over the set of vertices already placed counts them in O(2^n &middot; n), and on three hundred random DAGs of up to eight vertices it matched a brute-force enumeration of permutations every time.</p>" +
+        "<p>That DP is worth seeing because it is the counting version of Kahn's algorithm. Its state is the set S of vertices placed so far; a vertex v can be placed next when all of its predecessors are already in S, and the number of ways to reach S plus v adds the number of ways to reach S. Only sets closed under predecessors are ever reached, which is why it ran on twenty vertices in a fraction of a second despite the 2^20 possible sets, but on a graph with few edges the number of such sets itself grows exponentially, and so does the time.</p>" +
+        "<p>Producing a particular order is easier, and the common request is the lexicographically smallest one &mdash; among all valid orders, the one that sorts first when compared position by position. Replace Kahn's queue with a min-heap, so that the smallest ready vertex is always emitted next. Because at each step the heap offers every vertex that could legally come next and takes the smallest, no valid order can beat it at the first position where they differ. On the same three hundred DAGs, the heap version produced exactly the smallest of all enumerated orders every time, at a cost of O((n + E) log n).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "def smallest_topo(adj):\n" +
+        "    indeg = [0] * len(adj)\n" +
+        "    for u in range(len(adj)):\n" +
+        "        for v in adj[u]: indeg[v] += 1\n" +
+        "    heap = [v for v in range(len(adj)) if indeg[v] == 0]\n" +
+        "    heapq.heapify(heap)\n" +
+        "    order = []\n" +
+        "    while heap:\n" +
+        "        u = heapq.heappop(heap)                 # smallest ready vertex\n" +
+        "        order.append(u)\n" +
+        "        for v in adj[u]:\n" +
+        "            indeg[v] -= 1\n" +
+        "            if indeg[v] == 0: heapq.heappush(heap, v)\n" +
+        "    return order if len(order) == len(adj) else None</code></pre>" +
+        "<pre data-lang='java' hidden><code>List<Integer> smallestTopo(List<List<Integer>> adj) {\n" +
+        "    int n = adj.size(); int[] indeg = new int[n];\n" +
+        "    for (List<Integer> out : adj) for (int v : out) indeg[v]++;\n" +
+        "    PriorityQueue<Integer> heap = new PriorityQueue<>();\n" +
+        "    for (int v = 0; v < n; v++) if (indeg[v] == 0) heap.add(v);\n" +
+        "    List<Integer> order = new ArrayList<>();\n" +
+        "    while (!heap.isEmpty()) {\n" +
+        "        int u = heap.poll(); order.add(u);\n" +
+        "        for (int v : adj.get(u)) if (--indeg[v] == 0) heap.add(v);\n" +
+        "    }\n" +
+        "    return order.size() == n ? order : null;\n" +
+        "}</code></pre></div>" +
+        "<p>There is a trap here that catches experienced programmers. \"Lexicographically smallest\" is not the same as \"put vertex 1 as early as possible, then vertex 2 as early as possible, and so on\", a requirement that appears in scheduling problems where labels are priorities. The greedy min-heap does not solve the second one; the known fix runs the heap on the reversed graph, taking the <em>largest</em> ready vertex and reversing the result. On the three hundred test DAGs the two objectives gave different orders on 58, so reading which one a problem asks for is not pedantry.</p>"
+    },
+
+    { title: "DP over a DAG",
+      html:
+        "<p>Chapter 19's SRTBOT checklist had a T in it: give a topological order of the subproblems, so that each one comes after everything it depends on. This is where that letter comes from. Draw one vertex per subproblem and an edge from each subproblem to every subproblem that uses it; the dependency graph of any correct dynamic program is a DAG, and evaluating the subproblems in a topological order of it is what makes the recurrence well defined. Every table you filled left to right in Part 3 was a topological order you did not have to compute, because the grid made one obvious.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 330' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>The same DAG as a DP: #k is the topological position, the value is the number of paths from a source</text><line x1='88' y1='95' x2='182' y2='68' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='190,66 183,72 181,64' fill='#5d7aa5'/><line x1='87' y1='107' x2='183' y2='149' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='191,152 182,152 185,145' fill='#5d7aa5'/><line x1='87' y1='213' x2='183' y2='171' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='191,168 185,175 182,168' fill='#5d7aa5'/><line x1='88' y1='225' x2='182' y2='252' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='190,254 181,256 183,248' fill='#5d7aa5'/><line x1='228' y1='66' x2='323' y2='100' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='330,103 321,104 324,96' fill='#5d7aa5'/><line x1='228' y1='154' x2='323' y2='120' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='330,117 324,124 321,116' fill='#5d7aa5'/><line x1='228' y1='166' x2='323' y2='200' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='330,203 321,204 324,196' fill='#5d7aa5'/><line x1='228' y1='254' x2='323' y2='220' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='330,217 324,224 321,216' fill='#5d7aa5'/><line x1='368' y1='117' x2='453' y2='150' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='460,152 451,153 454,146' fill='#5d7aa5'/><line x1='368' y1='203' x2='453' y2='170' stroke='#5d7aa5' stroke-width='1.5'/><polygon points='460,168 454,174 451,167' fill='#5d7aa5'/><circle cx='70' cy='100' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='70' y='105' text-anchor='middle' fill='#c9d6ea' font-size='13'>A</text><text x='40' y='78' fill='#8fa3c4' font-size='10'>#1</text><text x='70' y='136' text-anchor='middle' fill='#ffd166' font-size='11'>1</text><circle cx='70' cy='220' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='70' y='225' text-anchor='middle' fill='#c9d6ea' font-size='13'>B</text><text x='40' y='198' fill='#8fa3c4' font-size='10'>#2</text><text x='70' y='256' text-anchor='middle' fill='#ffd166' font-size='11'>1</text><circle cx='210' cy='60' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='210' y='65' text-anchor='middle' fill='#c9d6ea' font-size='13'>C</text><text x='180' y='38' fill='#8fa3c4' font-size='10'>#3</text><text x='210' y='96' text-anchor='middle' fill='#ffd166' font-size='11'>1</text><circle cx='210' cy='160' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='210' y='165' text-anchor='middle' fill='#c9d6ea' font-size='13'>D</text><text x='180' y='138' fill='#8fa3c4' font-size='10'>#4</text><text x='210' y='196' text-anchor='middle' fill='#ffd166' font-size='11'>2</text><circle cx='210' cy='260' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='210' y='265' text-anchor='middle' fill='#c9d6ea' font-size='13'>E</text><text x='180' y='238' fill='#8fa3c4' font-size='10'>#5</text><text x='210' y='296' text-anchor='middle' fill='#ffd166' font-size='11'>1</text><circle cx='350' cy='110' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='350' y='115' text-anchor='middle' fill='#c9d6ea' font-size='13'>F</text><text x='320' y='88' fill='#8fa3c4' font-size='10'>#6</text><text x='350' y='146' text-anchor='middle' fill='#ffd166' font-size='11'>3</text><circle cx='350' cy='210' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='350' y='215' text-anchor='middle' fill='#c9d6ea' font-size='13'>G</text><text x='320' y='188' fill='#8fa3c4' font-size='10'>#7</text><text x='350' y='246' text-anchor='middle' fill='#ffd166' font-size='11'>3</text><circle cx='480' cy='160' r='18' fill='#182842' stroke='#2de2ff' stroke-width='1.5'/><text x='480' y='165' text-anchor='middle' fill='#c9d6ea' font-size='13'>H</text><text x='450' y='138' fill='#8fa3c4' font-size='10'>#8</text><text x='480' y='196' text-anchor='middle' fill='#ffd166' font-size='11'>6</text><text x='560' y='50' fill='#2de2ff' font-size='11' xml:space='preserve'>paths(v) = sum of</text><text x='560' y='67' fill='#2de2ff' font-size='11' xml:space='preserve'>  paths(u) over u&#8594;v</text><text x='560' y='101' fill='#c9d6ea' font-size='11' xml:space='preserve'>F = C + D = 1 + 2 = 3</text><text x='560' y='118' fill='#c9d6ea' font-size='11' xml:space='preserve'>G = D + E = 2 + 1 = 3</text><text x='560' y='135' fill='#c9d6ea' font-size='11' xml:space='preserve'>H = F + G = 3 + 3 = 6</text><text x='560' y='169' fill='#8fa3c4' font-size='11' xml:space='preserve'>each value is final when</text><text x='560' y='186' fill='#8fa3c4' font-size='11' xml:space='preserve'>its vertex is processed,</text><text x='560' y='203' fill='#8fa3c4' font-size='11' xml:space='preserve'>because every predecessor</text><text x='560' y='220' fill='#8fa3c4' font-size='11' xml:space='preserve'>comes earlier in the order.</text><text x='560' y='254' fill='#ff5d73' font-size='11' xml:space='preserve'>a random order was wrong on</text><text x='560' y='271' fill='#ff5d73' font-size='11' xml:space='preserve'>142 of 300 test DAGs</text></svg></div>" +
+        "<p>On an explicit DAG the order must be computed, and then three classic problems are one pass each &mdash; this is <strong>DAG dynamic programming</strong> in its plainest form. The <strong>longest path</strong> ending at v is the best of longest(u) plus the weight of u to v over incoming edges. <strong>Path counting</strong> is the sum of paths(u) over incoming edges, as the figure shows: H's six paths are F's three plus G's three. The figure starts each source at 1 and every other vertex at 0, counting paths from a source; the code below starts every vertex at 1, counting paths from any start &mdash; the initial values choose the question. Reachability, whether u can reach v, is a union of successor sets. Process vertices in topological order and each value is final when its vertex is processed, because all its predecessors came earlier. On three hundred random DAGs with weighted edges, the longest path and the total path count computed this way matched a brute-force enumeration of every path; processing the same vertices in a random order gave a wrong answer on 142 of them.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def dag_longest_and_count(adj, w, order):\n" +
+        "    n = len(adj)\n" +
+        "    best = [0] * n                  # longest path (by weight) ending at v\n" +
+        "    paths = [1] * n                 # number of paths ending at v (from any start)\n" +
+        "    for u in order:                 # topological: every predecessor already final\n" +
+        "        for v in adj[u]:\n" +
+        "            best[v] = max(best[v], best[u] + w[u, v])\n" +
+        "            paths[v] += paths[u]\n" +
+        "    return max(best), sum(paths)</code></pre>" +
+        "<pre data-lang='java' hidden><code>long[] dagDP(List<List<int[]>> adj, List<Integer> order) {   // edge = {v, w}\n" +
+        "    long[] best = new long[adj.size()];\n" +
+        "    for (int u : order)\n" +
+        "        for (int[] e : adj.get(u)) best[e[0]] = Math.max(best[e[0]], best[u] + e[1]);\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
+        "<p>The counts grow fast, which is itself a lesson. In the DAG whose vertices are 0 to 59 with edges from each vertex to the next two, the number of paths from 0 to 59 is 1,548,008,755,920 &mdash; the Fibonacci number F(60), because each path is a way of writing 59 as a sum of ones and twos &mdash; computed in sixty additions. <strong>Transitive closure</strong>, the full reachability relation, is the same pass with bitsets: processing a DAG of 5,000 vertices and 20,000 edges in reverse topological order and or-ing each vertex's successor sets took 7 milliseconds and found 946,613 reachable pairs, 3.8 percent of all ordered pairs.</p>"
+    },
+
+    { title: "Why Longest Path Is Linear Here and Hard in General",
+      html:
+        "<p>On a DAG, the longest path costs the same as the shortest: one topological pass, O(n + E). On a DAG of a hundred thousand vertices and four hundred thousand edges it took 60 milliseconds. On a general directed graph, the longest simple path &mdash; one that repeats no vertex &mdash; is one of the most famous hard problems there is. A longest simple path with n minus 1 edges exists exactly when the graph has a Hamiltonian path, a path through every vertex, and deciding that is NP-complete, which Chapter 46 explains properly. No polynomial algorithm is known, and one would resolve P versus NP.</p>" +
+        "<p>The measurements show the wall. A brute-force search over simple paths in random general graphs explored 212 partial paths at 8 vertices, 2,281 at 10, 57,693 at 12 and 364,166 at 14 &mdash; growing by roughly a factor of ten for every two vertices added, so thirty vertices would be far beyond a day. The DAG algorithm's time grows with the edge count; the brute force's grows with the number of paths, and a dense graph has exponentially many.</p>" +
+        "<p>Why does the DAG make the difference? The DP of the previous section works because, in a DAG, a longest path to u never passes through a vertex after u in topological order, so the best path to each predecessor can be extended without checking whether it already visited v &mdash; it cannot have, since v comes later. In a graph with cycles that guarantee disappears. The best path to u might already pass through v, and extending it to v would repeat a vertex; the subproblem \"longest path to u\" no longer determines \"longest path to v\", because it needs to know which vertices it used. Recording that set is what the exponential search does, and it is exactly the bitmask state of Chapter 22's travelling-salesman DP.</p>" +
+        "<p>The contrast with shortest paths is instructive. Shortest paths in general graphs are polynomial, because a shortest path never benefits from repeating a vertex when weights are non-negative, so the simple-path restriction is automatic. Negating weights turns longest into shortest, and on a DAG that works, since there are no cycles to exploit; on a general graph it creates negative cycles, and shortest simple path with negative cycles is as hard as longest path. Chapter 35 takes up the tractable side of that line.</p>"
+    },
+
+    { title: "Functional Graphs and Successor Paths",
+      html:
+        "<p>One more family of directed graphs deserves its own treatment because it is everywhere and has a fixed shape. In a <strong>functional graph</strong> every vertex has out-degree exactly one: vertex x has a single successor f(x). Any function from a finite set to itself is one &mdash; a permutation, a hash applied repeatedly, a pseudo-random generator's next-state function, the \"next pointer\" of every node in a linked structure. Following successors from any start must eventually repeat a vertex, since the set is finite, and from that moment it cycles forever.</p>" +
+        "<p>So every walk has the <strong>rho shape</strong>: a tail of distinct vertices leading into a cycle, drawn like the Greek letter. Each weakly connected component of a functional graph is one cycle with trees hanging into it. For a random function on n points, Flajolet and Odlyzko's 1990 analysis of random mappings gives an expected tail and an expected cycle length each of about the square root of pi n over 8, about 627 for a million points. Thirty random functions on a million points averaged a tail of 741 and a cycle of 473 &mdash; both quantities vary widely from trial to trial &mdash; and their sum, 1,214, sits close to the predicted 1,253. A million-vertex graph, and a walk revisits itself within about a thousand steps.</p>" +
+        "<p>Two questions come up constantly. Where does the walk from x enter its cycle, and how long is the cycle? Chapter 11's tortoise and hare answers both in O(1) extra space: one pointer moves one step and the other two until they meet, then a pointer restarted from x and one left at the meeting point, both moving one step, meet at the cycle's entry. On five hundred random functional graphs it matched a hash-set record of the walk on every one. And where is the walk after k steps, for k too large to simulate? Binary lifting from Chapter 29 applies unchanged, with f in place of the parent: precompute the 2^j-th successor of every vertex, and any k is one jump per set bit.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def build_lifting(f, LOG=62):\n" +
+        "    up = [f[:]]                                   # up[j][x] = f applied 2^j times\n" +
+        "    for _ in range(1, LOG):\n" +
+        "        prev = up[-1]\n" +
+        "        up.append([prev[prev[x]] for x in range(len(f))])\n" +
+        "    return up\n" +
+        "\n" +
+        "def kth_successor(up, x, k):\n" +
+        "    j = 0\n" +
+        "    while k:\n" +
+        "        if k & 1: x = up[j][x]\n" +
+        "        k >>= 1; j += 1\n" +
+        "    return x</code></pre>" +
+        "<pre data-lang='java' hidden><code>int kthSuccessor(int[][] up, int x, long k) {\n" +
+        "    for (int j = 0; k > 0; j++, k >>= 1)\n" +
+        "        if ((k & 1) == 1) x = up[j][x];\n" +
+        "    return x;\n" +
+        "}</code></pre></div>" +
+        "<p>Checked against direct simulation for three hundred random queries of up to five thousand steps, the lifted answers agreed on all of them; for k equal to 10^18, where simulation is impossible, the lifted answer matched the cycle arithmetic of walking the tail and then (k minus tail) modulo the cycle length, using 24 jumps, the number of one-bits in 10^18. That completes the ordering chapter. Chapter 35 returns to weights and asks the question BFS could only answer when every edge cost the same.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Two orders.</strong> Implement Kahn's algorithm and the reverse-postorder DFS, and check on random DAGs that both place every edge forwards. Find a DAG on which they emit different orders.</li>" +
+        "<li><strong>What the stall leaves.</strong> On random cyclic graphs, compare Kahn's leftover vertices with the set of vertices that lie on a cycle or are reachable from one.</li>" +
+        "<li><strong>Unique or not.</strong> Show on small DAGs that the order is unique exactly when the ready set never holds two vertices, and exactly when consecutive vertices in the order are joined by edges.</li>" +
+        "<li><strong>Count and choose.</strong> Count linear extensions with a bitmask DP and check against brute force. Produce the lexicographically smallest order with a min-heap, then the order that places small labels as early as possible, and find a DAG where they differ.</li>" +
+        "<li><strong>DP in order, and out of it.</strong> Compute the longest weighted path and the number of paths on random DAGs in topological order, verify by enumeration, then process in a random order and count the failures.</li>" +
+        "<li><strong>Feel the wall.</strong> Time a brute-force longest simple path on general graphs of growing size, and the DAG algorithm on a hundred thousand vertices.</li>" +
+        "<li><strong>Walk a function.</strong> On random functions over a million points, measure tail and cycle lengths and compare with the square root of pi n over 8. Answer k-th successor queries by binary lifting for k up to 10^18.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "topological order", d: "An order of a directed graph's vertices in which every edge u to v has u before v; exists exactly when the graph has no directed cycle." },
+    { t: "in-degree", d: "The number of edges entering a vertex; vertices of in-degree zero depend on nothing and can be placed first." },
+    { t: "Kahn's algorithm", d: "Topological sorting by repeatedly emitting a vertex of in-degree zero and decrementing its successors' in-degrees; O(n + E), and a stall with vertices left reveals a cycle. Kahn 1962." },
+    { t: "ready set", d: "The vertices whose in-degree has reached zero and can be emitted next; a queue, stack or heap, whose choice decides which valid order results." },
+    { t: "reverse postorder", d: "The vertices sorted by decreasing depth-first exit time; a topological order of any DAG, because every edge's head exits before its tail." },
+    { t: "linear extension", d: "A total order consistent with a partial order; for a DAG, the same thing as a topological order. Counting them is #P-complete." },
+    { t: "lexicographically smallest order", d: "The valid topological order that sorts first position by position, produced by Kahn's algorithm with a min-heap as the ready set." },
+    { t: "DAG dynamic programming", d: "Evaluating a recurrence over a DAG's vertices in topological order, so every predecessor's value is final when it is used; the T of SRTBOT." },
+    { t: "longest path", d: "The maximum-weight path; linear on a DAG by one topological pass, but NP-hard as a simple path in a general graph." },
+    { t: "path counting", d: "Counting paths by summing predecessors' counts in topological order; the counts can grow exponentially while the work stays linear." },
+    { t: "transitive closure", d: "The full reachability relation of a graph; on a DAG, computed by or-ing successor sets in reverse topological order." },
+    { t: "functional graph", d: "A directed graph in which every vertex has out-degree exactly one, the graph of a function from a finite set to itself." },
+    { t: "rho shape", d: "The tail-then-cycle form of every walk in a functional graph; for a random function on n points, tail and cycle are each about the square root of pi n over 8." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "Kahn's algorithm stalls on a cyclic graph with vertices left over. What exactly is in the leftover set?",
+      opts: [
+        "Only the vertices that lie on a directed cycle, since every other vertex eventually reaches in-degree zero",
+        "Every vertex that lies on a cycle, plus every vertex downstream of one, because depending on a stuck vertex leaves it stuck too",
+        "The vertices of largest in-degree, since the algorithm always gives up on those first when the ready set runs dry",
+        "Exactly one vertex per cycle, the one with the highest label, since the rest of each cycle is emitted before the stall"
+      ], a: 1,
+      why: "Cycle vertices never reach in-degree zero, and neither does anything reachable from them, because each waits on a stuck predecessor; on 500 random graphs the leftovers matched 'on a cycle or downstream of one' every time. Non-cycle vertices downstream stay; in-degree size and labels are irrelevant." },
+
+    { type: "mc",
+      q: "Why is reversing depth-first exit order a valid topological order of a DAG?",
+      opts: [
+        "Because depth-first search visits vertices in the order of their in-degrees, and reversing that order moves the sources to the front",
+        "Because exit times increase along every path of the DFS tree, so reversing them puts every tree edge forwards, and all of the other edges then follow",
+        "Because for every edge u to v, v exits before u: it is finished inside u's interval or was already finished, and a back edge would mean a cycle",
+        "Because the entry and exit times of a DAG coincide, so either order may be reversed and the result is the same topological order"
+      ], a: 2,
+      why: "Each edge's head exits before its tail in every non-cycle case, so decreasing exit time puts every edge forwards. DFS order is unrelated to in-degree, exit times decrease rather than increase down the tree, and entry and exit times never coincide." },
+
+    { type: "mc",
+      q: "When does a DAG have exactly one topological order?",
+      opts: [
+        "When it has exactly one source vertex, because that source is forced to come first and everything else in the graph then follows from it in turn",
+        "When it has no vertex of out-degree greater than one, since branching at a vertex is the only thing that can create a choice between orders",
+        "When the graph is connected, so that there are no independent components whose separate orders could be interleaved with each other in any way",
+        "When every consecutive pair in the order is joined by an edge &mdash; a path through all vertices &mdash; so the ready set never holds two"
+      ], a: 3,
+      why: "Any two consecutive vertices without an edge between them could be swapped, so uniqueness needs an edge between every consecutive pair; equivalently, Kahn's ready set never holds two vertices. One source, low out-degree or connectivity all allow several orders; 151 of 500 random DAGs were unique, all by this criterion." },
+
+    { type: "blank",
+      q: "Kahn's algorithm with a min-heap as its ready set produces the ____ smallest topological order.",
+      a: ["lexicographically", "lexicographic"],
+      why: "At each step the heap offers every vertex that can legally come next and takes the smallest, so no valid order can win at the first position where they differ; it matched brute force on 300 of 300 DAGs. It does not solve the different 'small labels as early as possible' objective, which disagreed on 58." },
+
+    { type: "mc",
+      q: "A DAG DP computed longest paths correctly in topological order but was wrong on 142 of 300 DAGs in a random order. What does the topological order guarantee?",
+      opts: [
+        "That every predecessor of a vertex has its final value before the vertex is processed, so no value is computed from an unfinished one",
+        "That the vertices are processed from the largest value to the smallest, which is what a longest-path computation requires in order to be correct",
+        "That each vertex is processed exactly once, whereas a random order may revisit some vertices and double-count their paths",
+        "That the edge weights are processed in sorted order, which is what makes the greedy extension of a path valid"
+      ], a: 0,
+      why: "In topological order every edge into v comes from an earlier vertex, so all of v's inputs are final when v is used; a random order can read a predecessor before its value is complete. Both orders process each vertex once, and neither sorts by value or weight." },
+
+    { type: "mc",
+      q: "Longest path is linear on a DAG but NP-hard for simple paths in a general graph. What does the cycle break?",
+      opts: [
+        "Nothing algorithmic; general graphs are only slower because they tend to contain many more edges than DAGs of the same size",
+        "The ability to use a queue, since breadth-first search cannot run on a graph that contains cycles without looping",
+        "The guarantee that extending the best path to u cannot revisit v, so 'longest path to u' no longer determines 'longest path to v'",
+        "The topological order itself, which still exists in a cyclic graph but becomes too expensive to compute exactly"
+      ], a: 2,
+      why: "In a DAG, v comes after every vertex on a path to its predecessors, so extension never repeats v; with cycles, the best path to u may pass through v, and the subproblem must remember which vertices were used, which is exponential state. BFS runs on cyclic graphs, and cyclic graphs have no topological order at all." },
+
+    { type: "blank",
+      q: "A directed graph in which every vertex has exactly one outgoing edge, so that following successors from any start forms a tail leading into a cycle, is a ____ graph.",
+      a: ["functional"],
+      why: "A functional graph is the graph of a function from a finite set to itself; every walk has the rho shape. For a random function on a million points, tail and cycle averaged 741 and 473 against a predicted 627 each." },
+
+    { type: "mc",
+      q: "How does binary lifting answer 'where is the walk from x after 10^18 steps' in a functional graph?",
+      opts: [
+        "It simulates the walk with the tortoise and hare until the two pointers meet, which is always guaranteed to happen within 10^18 steps",
+        "It precomputes the 2^j-th successor of every vertex, then jumps once per set bit of k &mdash; 24 jumps for 10^18",
+        "It builds the full rho structure of the graph once and then returns the vertex at position k modulo n along the cycle",
+        "It stores the walk from x in a hash map up to the first repeat, then reads position k directly out of that stored prefix"
+      ], a: 1,
+      why: "The table of 2^j-th successors lets any k be decomposed into powers of two, one jump per set bit; 10^18 has 24 one-bits. The tortoise and hare finds the cycle but does not jump; k modulo n is wrong because the cycle length is not n; and a stored prefix still needs cycle arithmetic, which the lifted answer matched." },
+
+    { type: "mc",
+      q: "Counting the topological orders of a DAG exactly is #P-complete. What does that imply in practice?",
+      opts: [
+        "That the count is always small enough to enumerate directly, because DAGs are restricted enough to limit it",
+        "That the count can be found by a single topological pass, adding one for each vertex that has more than one choice at that point",
+        "That the count only exists for DAGs, and on a general directed graph it is always infinite",
+        "That no polynomial algorithm is expected, so exact counts use exponential methods such as a bitmask DP over placed vertices"
+      ], a: 3,
+      why: "#P-completeness (Brightwell and Winkler 1991) means no polynomial counting algorithm is expected; a bitmask DP in O(2^n n) handles small graphs and matched brute force on 300 DAGs. The counts are huge &mdash; 1.8 &times; 10^13 for a 20-vertex sparse DAG &mdash; not a simple sum over choices, and a cyclic graph has zero orders, not infinitely many." },
+
+    { type: "order",
+      q: "Order these computations on a graph with n vertices and E edges by running time, fastest first:",
+      items: [
+        "topological sort by Kahn's algorithm: O(n + E)",
+        "longest path on a DAG by one topological pass: O(n + E) after the sort",
+        "lexicographically smallest topological order: O((n + E) log n)",
+        "longest simple path in a general graph by search: exponential"
+      ],
+      why: "Kahn's algorithm is linear; the DAG longest path adds one more linear pass over the same order, so either order between the first two is defensible. The lexicographic version pays a log factor for its heap. The general longest simple path has no known polynomial algorithm, and brute force grew about tenfold per two added vertices." }
+  ]
+});
