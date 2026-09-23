@@ -9081,3 +9081,248 @@ CHAPTERS.push({
       why: "A static subtree sum is a single prefix-sum subtraction, O(1). Binary-lifting LCA and a Fenwick-backed updatable subtree sum are both O(log n) per query, and either order between them is the intended judgement. A path aggregate under heavy-light decomposition pays O(log n) range queries of O(log n) each, O(log squared n), the most expensive. The flattening is what lets the array structures apply throughout." }
   ]
 });
+
+/* ======================= CHAPTER 30 ======================= */
+CHAPTERS.push({
+  num: 30, part: 4, title: "Range Queries: Prefix, Sparse Table, Fenwick",
+  blurb: "Chapter 9 answered range queries on an array that never changes. This chapter lets it change, and shows the whole family as one trade-off curve &mdash; what you pay to update against what you pay to query &mdash; with the prefix sum at one end, the plain array at the other, and measured workloads to show each one winning where it should. It builds the sparse table, whose O(1) query rests on a precise property called idempotence, and the Fenwick tree, the one-array structure at the balanced point whose loops you can write from memory once you see why the lowest set bit works. It closes with range updates, two dimensions, and the questions that choose between them.",
+  sections: [
+
+    { title: "The Update/Query Trade-off",
+      viz: "dsaRangeTradeoff", vizTitle: "Each dot is a structure. Change the workload and watch which one is cheapest",
+      html:
+        "<p>Chapter 9 answered range questions on an array that never changes: build a prefix array once and every range sum is one subtraction. This chapter lets the array change. The moment it does, every range structure has to answer two questions at once &mdash; what does one <strong>point update</strong> cost, and what does one <strong>range query</strong> cost &mdash; and the structures in this chapter and the next are best understood not as a list of tricks but as points on a single curve, the <strong>update/query trade-off</strong>.</p>" +
+        "<p>The two ends of the curve are the structures you already own. A plain array updates in O(1), because changing one value is one write, and queries in O(n), because summing a range walks it. A prefix-sum array is the mirror image: a query is O(1), but one update shifts every prefix to its right, O(n) to repair. Between them sit structures that refuse to be perfect at either operation in exchange for being tolerable at both. Cutting the array into blocks of about &#8730;n elements and keeping a total per block gives an O(1) update and an O(&#8730;n) query; keeping prefix sums inside and across the blocks flips that to an O(&#8730;n) update and an O(1) query. The Fenwick tree of this chapter and the segment tree of Chapter 31 sit at the balanced point, O(log n) for both. At the far right is the sparse table, which answers some queries in O(1) but has no update at all; changing a value means rebuilding it.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 345' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>The update/query trade-off: every range structure is a point; cheaper on one axis costs on the other</text><line x1='130' y1='300' x2='660' y2='300' stroke='#334a6a' stroke-width='1.4'/><line x1='130' y1='300' x2='130' y2='90' stroke='#334a6a' stroke-width='1.4'/><text x='150' y='318' text-anchor='middle' fill='#8fa3c4' font-size='10'>O(1)</text><text x='270' y='318' text-anchor='middle' fill='#8fa3c4' font-size='10'>O(log n)</text><text x='390' y='318' text-anchor='middle' fill='#8fa3c4' font-size='10'>O(&#8730;n)</text><text x='510' y='318' text-anchor='middle' fill='#8fa3c4' font-size='10'>O(n)</text><text x='630' y='318' text-anchor='middle' fill='#8fa3c4' font-size='10'>O(n log n)</text><text x='122' y='304' text-anchor='end' fill='#8fa3c4' font-size='10'>O(1)</text><text x='122' y='244' text-anchor='end' fill='#8fa3c4' font-size='10'>O(log n)</text><text x='122' y='184' text-anchor='end' fill='#8fa3c4' font-size='10'>O(&#8730;n)</text><text x='122' y='124' text-anchor='end' fill='#8fa3c4' font-size='10'>O(n)</text><text x='390' y='336' text-anchor='middle' fill='#8fa3c4' font-size='11'>cost of one update &#8594;</text><text x='20' y='40' fill='#8fa3c4' font-size='11'>&#8593; cost of one query</text><circle cx='150' cy='120' r='7' fill='#c9d6ea' opacity='0.9'/><text x='164' y='124' fill='#c9d6ea' font-size='11'>plain array</text><circle cx='150' cy='180' r='7' fill='#c9d6ea' opacity='0.9'/><text x='164' y='184' fill='#c9d6ea' font-size='11'>&#8730;n blocks</text><circle cx='270' cy='240' r='7' fill='#3ddc97' opacity='0.9'/><text x='284' y='244' fill='#3ddc97' font-size='11'>Fenwick tree / segment tree</text><circle cx='390' cy='300' r='7' fill='#c9d6ea' opacity='0.9'/><text x='390' y='286' text-anchor='middle' fill='#c9d6ea' font-size='11'>&#8730;n blocks, prefixed</text><circle cx='510' cy='300' r='7' fill='#ffd166' opacity='0.9'/><text x='510' y='286' text-anchor='middle' fill='#ffd166' font-size='11'>prefix sum</text><circle cx='630' cy='300' r='7' fill='#ff5d73' opacity='0.9'/><text x='630' y='286' text-anchor='middle' fill='#ff5d73' font-size='11'>sparse table (rebuild)</text><text x='430' y='96' fill='#8fa3c4' font-size='10'>measured, n=100k, 20k ops (ms):</text><text x='430' y='114' fill='#2de2ff' font-size='10'>workload</text><text x='560' y='114' fill='#2de2ff' font-size='10'>plain</text><text x='620' y='114' fill='#2de2ff' font-size='10'>prefix</text><text x='680' y='114' fill='#2de2ff' font-size='10'>Fenwick</text><text x='430' y='130' fill='#c9d6ea' font-size='10'>1 upd : 1000 qry</text><text x='560' y='130' fill='#c9d6ea' font-size='10'>2539</text><text x='620' y='130' fill='#c9d6ea' font-size='10'>17</text><text x='680' y='130' fill='#c9d6ea' font-size='10'>27</text><text x='430' y='146' fill='#c9d6ea' font-size='10'>1 : 1</text><text x='560' y='146' fill='#c9d6ea' font-size='10'>1279</text><text x='620' y='146' fill='#c9d6ea' font-size='10'>8204</text><text x='680' y='146' fill='#c9d6ea' font-size='10'>21</text><text x='430' y='162' fill='#c9d6ea' font-size='10'>1000 upd : 1 qry</text><text x='560' y='162' fill='#c9d6ea' font-size='10'>3</text><text x='620' y='162' fill='#c9d6ea' font-size='10'>31</text><text x='680' y='162' fill='#c9d6ea' font-size='10'>13</text></svg></div>" +
+        "<p>The curve only becomes a decision once you attach a workload to it, so it was measured. On an array of a hundred thousand elements, twenty thousand operations were run under three mixes, and all three structures returned identical answers. With one update per thousand queries, the prefix sum won &mdash; 17 milliseconds against the Fenwick tree's 27 and the plain array's 2.5 seconds &mdash; because it rebuilds only on the rare update and answers everything else with one subtraction. Invert the mix to a thousand updates per query and the plain array wins at 3 milliseconds, because it barely queries at all. At an even mix, the Fenwick tree finished in 21 milliseconds while the plain array took 1.3 seconds and the prefix sum, rebuilding before almost every query, took 8.2 seconds, nearly four hundred times slower.</p>" +
+        "<p>That is the whole argument of the chapter in three rows. Neither extreme is wrong; each is right for a workload, and the balanced structure is not the fastest in any lopsided case &mdash; it is the only one that is never catastrophic. <strong>Set the workload in the machine above to one update per thousand queries and find the winner; then invert the ratio and watch it change.</strong> The rest of the chapter builds the two structures that are new here, the sparse table and the Fenwick tree, and closes with the questions that place a real problem on the curve.</p>"
+    },
+
+    { title: "The Sparse Table and Idempotence",
+      html:
+        "<p>The <strong>sparse table</strong> gives up updates entirely and in exchange answers range minimum and range maximum in O(1). It precomputes the answer for every range whose length is a power of two: row k of the table holds, for each starting index i, the minimum of the 2^k elements beginning at i. Row zero is the array itself, and each later row is built from the one below by the same doubling Chapter 29 used for ancestors &mdash; the minimum of a block of length 2^k is the smaller of the minima of its two halves, each of length 2^(k-1). There are about log n rows of about n entries, so the build is O(n log n) in time and space.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def build(a, op=min):\n" +
+        "    t = [a[:]]                          # row 0: blocks of length 1\n" +
+        "    k = 1\n" +
+        "    while (1 << k) <= len(a):\n" +
+        "        prev, half = t[-1], 1 << (k - 1)\n" +
+        "        t.append([op(prev[i], prev[i + half])\n" +
+        "                  for i in range(len(a) - (1 << k) + 1)])\n" +
+        "        k += 1\n" +
+        "    return t\n" +
+        "\n" +
+        "def query(t, l, r, op=min):             # inclusive l..r\n" +
+        "    k = (r - l + 1).bit_length() - 1    # largest power of two that fits\n" +
+        "    return op(t[k][l], t[k][r - (1 << k) + 1])</code></pre>" +
+        "<pre data-lang='java' hidden><code>int query(int[][] t, int l, int r) {          // inclusive l..r, range minimum\n" +
+        "    int k = 31 - Integer.numberOfLeadingZeros(r - l + 1);\n" +
+        "    return Math.min(t[k][l], t[k][r - (1 << k) + 1]);\n" +
+        "}</code></pre></div>" +
+        "<p>The query is where the table earns its name. For a range of length len, take the largest power of two 2^k that fits, and cover the range with two blocks of that length: one starting at the left end, one ending at the right end. Because 2^k is more than half of len, the two blocks together reach every element, and because each is inside the range, they reach nothing outside it. The answer is the minimum of two table entries, O(1), and checked on two thousand random ranges against a direct scan it matched every one. On a hundred thousand elements the table has 17 rows and about 1.57 million entries, built in 70 milliseconds.</p>" +
+        "<p>The two blocks overlap, and that is the precise reason the trick is restricted. Since len is less than 2^(k+1), the overlap is 2^(k+1) minus len elements, which is always at least one. For minimum that overlap is harmless: counting an element twice in a minimum does not change the minimum. For sum it is fatal, because the overlapping elements are added twice. Run the same query rule with addition on two thousand random ranges of positive values and it returned the wrong answer on all two thousand &mdash; not most, all, because the overlap is never empty.</p>" +
+        "<p>The property being used has a name. An operation is an <strong>idempotent operation</strong> when combining a value with itself leaves it unchanged: min(x, x) is x, max(x, x) is x, gcd(x, x) is x, and so are bitwise AND and OR. Any associative, idempotent operation can use the overlapping two-block query, and a gcd table over fifty values checked every one of its 1,275 ranges correctly. Sum, product and XOR are associative but not idempotent, so for them the sparse table must fall back to covering the range with disjoint power-of-two blocks, one per set bit of the length, which is O(log n) and no better than the structures that also allow updates. The statement to remember is exact: the sparse table's O(1) query needs overlap to be harmless, and overlap is harmless precisely when the operation is idempotent.</p>"
+    },
+
+    { title: "The Fenwick Tree",
+      html:
+        "<p>The <strong>Fenwick tree</strong>, also called a <strong>binary indexed tree</strong>, is the structure that sits at the balanced point of the curve and fits in a single array of n plus one integers. Peter Fenwick published it in 1994 as a way to maintain cumulative frequency tables for arithmetic coding; Boris Ryabko had described essentially the same structure in 1989. It supports a point update and a <strong>prefix query</strong> &mdash; the sum of the first i elements &mdash; each in O(log n), and a range sum from l to r is two prefix queries subtracted.</p>" +
+        "<p>The array is 1-indexed, and every cell is responsible for a range of the underlying array determined by one number: the <strong>lowest set bit</strong> of its index, written lowbit(i) and computed as <code>i &amp; -i</code> in two's complement. Cell i stores the sum of the lowbit(i) elements ending at position i. Cell 12, binary 1100, has lowest bit 4 and stores elements 9 through 12; cell 13, binary 1101, has lowest bit 1 and stores element 13 alone; cell 8 stores elements 1 through 8. That interval is the cell's <strong>responsibility range</strong>, and the two operations are two loops that walk those ranges in opposite directions.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Fenwick:\n" +
+        "    def __init__(self, n):\n" +
+        "        self.n, self.t = n, [0] * (n + 1)   # 1-indexed; t[0] unused\n" +
+        "\n" +
+        "    def add(self, i, delta):                # point update\n" +
+        "        while i <= self.n:\n" +
+        "            self.t[i] += delta\n" +
+        "            i += i & -i                     # next cell whose range contains i\n" +
+        "\n" +
+        "    def prefix(self, i):                    # sum of elements 1..i\n" +
+        "        s = 0\n" +
+        "        while i > 0:\n" +
+        "            s += self.t[i]\n" +
+        "            i -= i & -i                     # jump past this cell's range\n" +
+        "        return s\n" +
+        "\n" +
+        "    def range_sum(self, l, r):\n" +
+        "        return self.prefix(r) - self.prefix(l - 1)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Fenwick {\n" +
+        "    final long[] t; final int n;\n" +
+        "    Fenwick(int n) { this.n = n; t = new long[n + 1]; }\n" +
+        "    void add(int i, long d) { for (; i <= n; i += i & -i) t[i] += d; }\n" +
+        "    long prefix(int i) { long s = 0; for (; i > 0; i -= i & -i) s += t[i]; return s; }\n" +
+        "    long rangeSum(int l, int r) { return prefix(r) - prefix(l - 1); }\n" +
+        "}</code></pre></div>" +
+        "<p>The prefix query starts at cell i, takes its range, then strips the lowest set bit to land on the cell that covers the elements immediately before, and repeats until it reaches zero. The update goes the other way: it adds the lowest set bit, which lands on the next cell whose range also contains position i, and repeats until it runs off the end. An update to position 5 touches cells 5, 6, 8 and 16 in a sixteen-element tree &mdash; every cell whose range includes 5, and no other. Checked on five hundred random sequences of mixed updates and range queries against a plain array, the Fenwick tree agreed on every query.</p>" +
+        "<p>Building the tree by n separate updates costs O(n log n), but there is a linear build worth knowing: copy the array into the cells, then sweep i from 1 to n and add each cell's total into its parent cell i plus lowbit(i), once. Each cell's range is the union of the ranges of the cells that feed it, so one pass suffices. On two hundred thousand elements the linear build produced an identical array in 16 milliseconds against 225 for the update loop, fourteen times faster &mdash; a constant worth taking when the initial array is large.</p>"
+    },
+
+    { title: "Why the Bit Trick Works",
+      html:
+        "<p>The loops look like magic until you draw the ranges. Lay the cells beneath the array as bars, one row per range length: every odd index owns a bar of length one, every index that is 2 mod 4 owns a bar of length two, multiples of 4 but not 8 own length four, and so on up to the single bar owned by the largest power of two. The bars form a nest, and the question of why the loops are correct becomes a question about how those bars tile a prefix.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 300' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' fill='#2de2ff' font-size='12'>Fenwick tree, n=16: cell i owns the lowbit(i) elements ending at i</text><text x='20' y='52' fill='#8fa3c4' font-size='11'>index i</text><rect x='100' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='117' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>1</text><rect x='138' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='155' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>2</text><rect x='176' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='193' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>3</text><rect x='214' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='231' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>4</text><rect x='252' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='269' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>5</text><rect x='290' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='307' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>6</text><rect x='328' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='345' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>7</text><rect x='366' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='383' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>8</text><rect x='404' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='421' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>9</text><rect x='442' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='459' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>10</text><rect x='480' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='497' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>11</text><rect x='518' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='535' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>12</text><rect x='556' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='573' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>13</text><rect x='594' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='611' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>14</text><rect x='632' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='649' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>15</text><rect x='670' y='36' width='34' height='26' rx='3' fill='#12233f' stroke='#24344f' stroke-width='1'/><text x='687' y='53' text-anchor='middle' fill='#c9d6ea' font-size='11'>16</text><text x='20' y='94' fill='#8fa3c4' font-size='10'>len 1</text><rect x='100' y='80' width='34' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='117' y='95' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[1]</text><rect x='176' y='80' width='34' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='193' y='95' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[3]</text><rect x='252' y='80' width='34' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='269' y='95' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[5]</text><rect x='328' y='80' width='34' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='345' y='95' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[7]</text><rect x='404' y='80' width='34' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='421' y='95' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[9]</text><rect x='480' y='80' width='34' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='497' y='95' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[11]</text><rect x='556' y='80' width='34' height='22' rx='3' fill='#ff5d73' fill-opacity='0.85' stroke='#ff5d73' stroke-width='1'/><text x='573' y='95' text-anchor='middle' fill='#0b1628' font-size='10'>t[13]</text><rect x='632' y='80' width='34' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='649' y='95' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[15]</text><text x='20' y='128' fill='#8fa3c4' font-size='10'>len 2</text><rect x='100' y='114' width='72' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='136' y='129' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[2]</text><rect x='252' y='114' width='72' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='288' y='129' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[6]</text><rect x='404' y='114' width='72' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='440' y='129' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[10]</text><rect x='556' y='114' width='72' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='592' y='129' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[14]</text><text x='20' y='162' fill='#8fa3c4' font-size='10'>len 4</text><rect x='100' y='148' width='148' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='174' y='163' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[4]</text><rect x='404' y='148' width='148' height='22' rx='3' fill='#ff5d73' fill-opacity='0.85' stroke='#ff5d73' stroke-width='1'/><text x='478' y='163' text-anchor='middle' fill='#0b1628' font-size='10'>t[12]</text><text x='20' y='196' fill='#8fa3c4' font-size='10'>len 8</text><rect x='100' y='182' width='300' height='22' rx='3' fill='#ff5d73' fill-opacity='0.85' stroke='#ff5d73' stroke-width='1'/><text x='250' y='197' text-anchor='middle' fill='#0b1628' font-size='10'>t[8]</text><text x='20' y='230' fill='#8fa3c4' font-size='10'>len 16</text><rect x='100' y='216' width='604' height='22' rx='3' fill='#1c3456' fill-opacity='1' stroke='#2d4a73' stroke-width='1'/><text x='402' y='231' text-anchor='middle' fill='#c9d6ea' font-size='10'>t[16]</text><text x='20' y='268' fill='#ff5d73' font-size='11'>13 = 1101: t[13] covers 13..13, t[12] covers 9..12, t[8] covers 1..8 &#8212; three reads, one per set bit</text><text x='20' y='288' fill='#8fa3c4' font-size='11'>update(5) climbs i += lowbit(i): 5 &#8594; 6 &#8594; 8 &#8594; 16, every cell whose range contains 5</text></svg></div>" +
+        "<p>The prefix query is a statement about binary representation. Write i in binary; each set bit, from the lowest upward, names one block. For 13, binary 1101, the blocks are the one element ending at 13, the four elements ending at 12, and the eight elements ending at 8 &mdash; lengths 1, 4 and 8, the set bits of 13, laid end to end from 13 back to 1 with no gap and no overlap. Stripping the lowest bit is exactly moving from one block to the start of the next, so the query reads one cell per set bit. Every prefix is a partition into at most log n blocks, and the number of cells the query reads is the population count of i: for an index below 2^20 that is at most 20 reads, whatever the array holds.</p>" +
+        "<p>The update is the same picture read upward. The cells whose ranges contain position i are the ones on a chain climbing the nest: i itself, then the smallest bar strictly longer that still covers i, and so on. Adding lowbit(i) to i moves to precisely that next bar, because it carries the lowest set bit upward and clears it, doubling the block length at least once per step. The chain therefore has at most about log n links, so an update touches O(log n) cells, and it touches every cell whose stored sum includes position i &mdash; which is exactly what keeping the sums correct requires.</p>" +
+        "<p>One consequence is worth stating plainly, because it decides what the Fenwick tree can hold. A range query is prefix(r) minus prefix(l minus 1), and that subtraction requires an inverse. Sum has one, and so does XOR, so the Fenwick tree answers range sums and range XORs. Minimum has no inverse &mdash; you cannot subtract a minimum back out &mdash; so a Fenwick tree can report the minimum of a prefix but not of an arbitrary range. The Fenwick tree needs an <strong>invertible operation</strong> for range queries, the sparse table needs an idempotent one, and Chapter 31's segment tree needs only associativity, which is why it is the general answer and why it costs more memory and more code.</p>"
+    },
+
+    { title: "Range Update, Point Query",
+      html:
+        "<p>Chapter 9's difference array handled a <strong>range update</strong> &mdash; add x to every element from l to r &mdash; in O(1) by writing +x at position l and &minus;x at position r plus one, and recovered each element as a prefix sum of the differences. The weakness was the recovery: one read cost O(n). Put the difference array inside a Fenwick tree and both halves become logarithmic. A range update is two point updates on the tree, and reading the current value of element i is a prefix query up to i, each O(log n).</p>" +
+        "<p>Supporting range updates and range sums together takes one more idea, the <strong>two-BIT construction</strong>. After a range add, the prefix sum up to i is a linear function of i over each stretch between update boundaries, so it can be written as B1(i) times i minus B2(i), where B1 and B2 are two Fenwick trees. B1 holds the differences themselves; B2 holds a correction that cancels the part of the product that falls before each range starts.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def range_add(b1, b2, l, r, x):             # add x to a[l..r]\n" +
+        "    b1.add(l, x);          b1.add(r + 1, -x)\n" +
+        "    b2.add(l, x * (l - 1)); b2.add(r + 1, -x * r)\n" +
+        "\n" +
+        "def prefix_sum(b1, b2, i):                  # a[1] + ... + a[i]\n" +
+        "    return b1.prefix(i) * i - b2.prefix(i)</code></pre>" +
+        "<pre data-lang='java' hidden><code>void rangeAdd(Fenwick b1, Fenwick b2, int l, int r, long x) {\n" +
+        "    b1.add(l, x);           b1.add(r + 1, -x);\n" +
+        "    b2.add(l, x * (l - 1)); b2.add(r + 1, -x * r);\n" +
+        "}\n" +
+        "long prefixSum(Fenwick b1, Fenwick b2, int i) { return b1.prefix(i) * i - b2.prefix(i); }</code></pre></div>" +
+        "<p>The correction is easiest to see for one update. After adding x to l through r, the true prefix sum at a position i inside the range is x times (i minus l plus 1). B1's prefix at i is x, so B1 times i gives x times i, which overcounts by x times (l minus 1) &mdash; exactly the amount B2 recorded at l. Past r, B1's prefix is back to zero and B2 holds x times (l minus 1) minus x times r, so the formula yields x times (r minus l plus 1), the full range, as it should. Tested on five hundred random sequences of range adds and range sums against a directly updated array, the pair of trees matched every query, and the one-tree version recovered every point value correctly.</p>" +
+        "<p>Two Fenwick treesFour Fenwick trees&apos; worth of loopsapos; worth of loops for a structure that handles range-update range-query in O(log n) is a good trade, and it is the point where the Fenwick tree runs out of tricks. Range assignment &mdash; set every element from l to r to the value v &mdash; is not an addition, so it cannot be expressed as differences, and neither can range-update range-minimum. Those need the lazy propagation of Chapter 31.</p>"
+    },
+
+    { title: "Two Dimensions",
+      html:
+        "<p>The Fenwick tree nests. A <strong>nested Fenwick tree</strong> over an R-by-C grid is a Fenwick tree over rows whose cells are themselves Fenwick trees over columns, stored as one R-plus-one by C-plus-one array. A point update runs the row loop, and inside each step the column loop; a prefix query over the rectangle from (1, 1) to (x, y) does the same with subtraction. Each operation is O(log R times log C), and a rectangle sum is four prefix queries combined by the same inclusion&ndash;exclusion that Chapter 9 used for the static 2-D prefix sum.</p>" +
+        "<p>The code is the 1-D loops wrapped in each other, and the correctness argument is the 1-D argument applied to each axis independently: the rows partition the row prefix into log R blocks, and within each the columns partition the column prefix into log C blocks. Tested on two hundred random grids with mixed point updates and rectangle queries against direct summation, the nested tree matched every query.</p>" +
+        "<p>The cost is where the 2-D version must be judged. On a 1,024 by 1,024 grid, one prefix query can read up to 10 times 10, a hundred cells, and a rectangle sum four times that, where the static 2-D prefix sum reads four cells total. The memory is the full grid, a million cells, whether or not most of them are ever touched. That is fine for a dense board, and hopeless when the coordinates range up to a billion with only a few thousand points in use; there you compress the coordinates to the ones that occur, process the queries offline, or move to a structure that allocates only what it touches. The general rule the 2-D case exposes is that each dimension multiplies the logarithm, so a nested structure is cheap in one dimension, acceptable in two and rarely worth it in three.</p>"
+    },
+
+    { title: "Choosing",
+      html:
+        "<p>Every range problem on an array reduces to a handful of workload questions, asked in order, and the answers place it on the curve from the first section. Does the array change at all? If not, the answer is a prefix sum for sums and a sparse table for minimum, maximum or gcd &mdash; O(1) queries and no reason to pay for anything more. Is the operation invertible, idempotent, or merely associative? An invertible operation can use a Fenwick tree; an idempotent one can use a sparse table while the data is static; anything else, and anything with range assignment, goes to the segment tree of Chapter 31.</p>" +
+        "<p>What is the ratio of updates to queries? The measured table in the first section is the honest answer: at a thousand queries per update, a prefix sum rebuilt lazily beat the Fenwick tree; at a thousand updates per query, the plain array beat it; only in between, which is most real workloads, did the balanced structure win, and there it won by one to three orders of magnitude. Are the updates to points or to ranges, and are the queries on points or ranges? Point update with range query is the plain Fenwick tree, range update with point query is the Fenwick tree over differences, and both at once is the two-BIT construction. How many dimensions? Each one multiplies the log factor and the memory.</p>" +
+        "<p>One further use belongs here because it turns the Fenwick tree from an array structure into a counting structure. Index the tree by value instead of by position, and it counts how many elements seen so far are below any threshold: that is the rank query of Chapter 26 for dense integer keys, in a few array steps with no pointers. Scanning an array from right to left and asking, at each element, how many smaller values are already in the tree counts the array&apos;s inversions in O(n log n); on a hundred thousand random values it counted about 2.5 billion inversions in 0.15 seconds, against the five billion pair comparisons a brute-force count would make. The same tree finds the k-th smallest value by descending through its powers of two, checked against sorting on a thousand random multisets.</p>" +
+        "<p>The discipline is to answer those questions before writing code, because they decide the structure and nothing else does. The structures in this chapter are small enough to write from memory; the error that costs time is reaching for the balanced one out of habit on a workload that is static, or for the prefix sum on one that is not. The next chapter builds the structure that answers the questions this one cannot &mdash; any associative operation, range assignment, range minimum with updates &mdash; and pays for its generality in memory and code.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Measure the curve.</strong> Implement a plain array, a prefix sum rebuilt lazily before any query that follows an update, and a Fenwick tree. On n = 100,000 run twenty thousand operations at 1:1000, 1:1 and 1000:1 update-to-query ratios; confirm all three agree and find the winner of each mix.</li>" +
+        "<li><strong>Build a sparse table.</strong> Implement it for range minimum and check every query against a scan. Then swap min for addition, find a query it gets wrong, and show the overlap is 2^(k+1) minus the length, never zero.</li>" +
+        "<li><strong>Idempotent or not.</strong> For min, max, gcd, bitwise AND, sum, product and XOR, decide whether the overlapping two-block query is valid, and confirm each answer with a small table.</li>" +
+        "<li><strong>Write the Fenwick tree.</strong> Implement point update and prefix query, verify range sums against a plain array on random operations, and confirm that prefix(13) reads exactly cells 13, 12 and 8.</li>" +
+        "<li><strong>Count the reads.</strong> For every index up to 2^20, count the cells a prefix query reads and confirm it equals the number of one-bits in the index. Then implement the linear build and time it against n separate updates.</li>" +
+        "<li><strong>Two trees for ranges.</strong> Implement range-add range-sum with the two-BIT construction and check it against a directly updated array. Explain in one sentence why range assignment cannot be done the same way.</li>" +
+        "<li><strong>Inversions and the nested tree.</strong> Count inversions with a Fenwick tree indexed by value and check against the quadratic count. Then build a 2-D Fenwick tree and verify rectangle sums against direct summation.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "update/query trade-off", d: "The curve on which every range structure sits: a cheaper update costs a more expensive query and vice versa, with the plain array and the prefix sum at the extremes and the Fenwick and segment trees at the balanced O(log n) point." },
+    { t: "point update", d: "Changing a single element of the array; O(1) in a plain array, O(n) in a prefix-sum array, O(log n) in a Fenwick tree." },
+    { t: "range query", d: "An aggregate such as a sum, minimum or maximum over a contiguous subarray from l to r." },
+    { t: "sparse table", d: "A static table of answers for every power-of-two-length range, built in O(n log n) by doubling; answers idempotent range queries in O(1) with two overlapping blocks and supports no updates." },
+    { t: "idempotent operation", d: "An operation where combining a value with itself leaves it unchanged, such as min, max, gcd, AND and OR; exactly the operations for which the sparse table's overlapping blocks are harmless." },
+    { t: "Fenwick tree", d: "An array of n+1 cells in which cell i stores the sum of the lowbit(i) elements ending at i, giving point update and prefix query in O(log n); Fenwick 1994, after Ryabko 1989." },
+    { t: "binary indexed tree", d: "Another name for the Fenwick tree, after the way each cell's index in binary determines the range it covers." },
+    { t: "lowest set bit", d: "The value of the least significant one-bit of an index, lowbit(i) = i & -i; it fixes the length of the range a Fenwick cell is responsible for." },
+    { t: "responsibility range", d: "The interval of the underlying array whose sum a Fenwick cell stores: the lowbit(i) elements ending at position i." },
+    { t: "prefix query", d: "The sum of the first i elements; in a Fenwick tree it reads one cell per set bit of i, at most log n cells." },
+    { t: "invertible operation", d: "An operation with an inverse, such as addition or XOR, which lets a range answer be computed as prefix(r) minus prefix(l-1); required for Fenwick range queries." },
+    { t: "range update", d: "Applying a change such as adding x to every element from l to r; handled in a Fenwick tree by storing differences, as in Chapter 9's difference array." },
+    { t: "two-BIT construction", d: "Two Fenwick trees B1 and B2 with prefix sum B1(i)*i - B2(i), giving range update and range query each in O(log n)." },
+    { t: "nested Fenwick tree", d: "A Fenwick tree over rows whose cells are Fenwick trees over columns, giving 2-D point update and rectangle query in O(log R * log C) at the cost of R*C memory." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "On an array of 100,000 elements, a workload makes one point update per thousand range-sum queries. Which structure did the measurement favour, and why?",
+      opts: [
+        "The Fenwick tree, because its O(log n) cost on both operations beats any structure that pays O(n) on either, whatever the ratio of updates to queries",
+        "The prefix sum, rebuilt only after an update, because almost every operation is an O(1) subtraction and the rare O(n) rebuild is amortized across a thousand queries",
+        "The plain array, because an O(1) update makes it the fastest structure whenever updates occur at all",
+        "The sparse table, because its O(1) query is the fastest available and range sum is one of the operations it handles in constant time"
+      ], a: 1,
+      why: "With a thousand queries per update the prefix sum answers nearly everything with one subtraction and pays its O(n) rebuild rarely; it measured 17 ms against the Fenwick tree's 27 and the plain array's 2.5 s. The Fenwick tree wins only mixed workloads, the plain array wins only when queries are rare, and the sparse table cannot do sum in O(1) at all." },
+
+    { type: "mc",
+      q: "A sparse table answers a range-minimum query from l to r with two overlapping power-of-two blocks. Why does the same query rule give wrong answers for range sum?",
+      opts: [
+        "Because the two blocks can leave a gap in the middle of the range whenever its length is not itself a power of two, so some elements are never counted",
+        "Because sum grows without bound as blocks double, so the upper rows of the table overflow the integer type long before the minimum rows ever would",
+        "Because the table is built with min at every level, and changing the query operation without rebuilding reads the wrong stored values",
+        "Because the blocks always overlap by at least one element, and adding those elements twice overcounts, while a repeated minimum changes nothing"
+      ], a: 3,
+      why: "The largest power of two that fits is more than half the length, so the two blocks always overlap by 2^(k+1) minus the length, at least one element. Min is idempotent, so the overlap is harmless; sum is not, so the overlapping elements are counted twice. There is never a gap, overflow is not the issue, and a sum table built with addition fails in the same way." },
+
+    { type: "blank",
+      q: "An operation such as min, max or gcd, for which combining a value with itself leaves it unchanged, is called ____ &mdash; the property the sparse table's O(1) query depends on.",
+      a: ["idempotent", "an idempotent operation", "idempotent operation"],
+      why: "Idempotence, op(x, x) = x, is exactly what makes the double-counted overlap of the two blocks harmless. Sum, product and XOR lack it, so for them a sparse table must fall back to disjoint blocks at O(log n)." },
+
+    { type: "mc",
+      q: "In a Fenwick tree, which cells does a prefix query for index 13 read, and why that many?",
+      opts: [
+        "Cells 13, 12 and 8 &mdash; thirteen is 1101 in binary, and each set bit names one block of the prefix",
+        "Cells 13, 14 and 16, because the query climbs to larger indices by adding the lowest set bit until it passes the end of the array",
+        "Cells 1 through 13, one per element, since each cell stores a single value and the prefix query must add them all up in order",
+        "Cells 13, 6, 3 and 1, because the query halves the index at each step as in a binary heap, reaching the root after log n steps"
+      ], a: 0,
+      why: "Thirteen is 1101, so its prefix splits into blocks of length 1, 4 and 8 ending at 13, 12 and 8; stripping the lowest set bit moves from one block to the next, one read per set bit. Adding the lowest bit is the update's direction, not the query's; the cells cover ranges, not single values; and there is no halving." },
+
+    { type: "mc",
+      q: "A Fenwick tree answers range sums as prefix(r) minus prefix(l-1). Why can the same structure not answer the minimum of an arbitrary range l to r?",
+      opts: [
+        "Because minimum is not associative, so the blocks cannot be combined in whatever order the query loop visits them",
+        "Because the cells store sums, and a minimum would need a second array of the same size that the structure does not have room to keep",
+        "Because the range answer relies on subtracting one prefix from another, and a minimum has no inverse that can be subtracted back out",
+        "Because the lowest-set-bit ranges overlap, and a minimum over overlapping ranges double-counts the shared elements"
+      ], a: 2,
+      why: "Range answers come from prefix(r) with prefix(l-1) removed, which needs an inverse; sum and XOR have one, minimum does not. Minimum is associative, a min-storing Fenwick tree is the same size, and the Fenwick ranges tile a prefix without overlap. That is why range minimum with updates goes to the segment tree." },
+
+    { type: "mc",
+      q: "An update to position 5 in a sixteen-element Fenwick tree touches cells 5, 6, 8 and 16. What do those four cells have in common?",
+      opts: [
+        "They are the cells whose indices share the lowest set bit of 5, so they all belong to the same level of the tree and are updated together",
+        "They are exactly the cells whose responsibility ranges contain position 5, reached by adding the lowest set bit at each step",
+        "They are the ancestors of 5 in a binary heap laid out over the same array",
+        "They are the cells that a prefix query for 5 would read, visited in the reverse order so that the update undoes the query"
+      ], a: 1,
+      why: "Each step adds lowbit(i), moving to the next longer range that still covers position 5; the cells reached are precisely those whose stored sums include element 5, which is what must change. Their lowest bits differ (1, 2, 8, 16), heap ancestors of 5 are 2 and 1, and a prefix query for 5 reads cells 5 and 4." },
+
+    { type: "mc",
+      q: "A problem needs to add x to every element from l to r and also ask for the sum from l to r, both many times. Which construction handles it in O(log n) per operation?",
+      opts: [
+        "Two Fenwick trees B1 and B2, both updated at l and r+1 and read as B1(i)*i - B2(i), since the prefix sum is linear in i between the boundaries",
+        "A sparse table rebuilt only over the changed range after each update, which keeps the O(1) query and bounds the rebuild by the range length",
+        "A single Fenwick tree over the difference array, because recovering each element as a prefix of differences is enough to answer any range sum at all",
+        "A nested 2-D Fenwick tree, using the second dimension to record the time of each update so that each earlier update can be subtracted back out"
+      ], a: 0,
+      why: "The two-BIT construction writes the prefix sum after range adds as B1(i)*i - B2(i), with both trees updated at l and r+1, so range update and range query are each O(log n). One tree over differences gives point values only, a sum over a range would need O(n) point reads, a partial sparse-table rebuild does not keep it correct, and a time dimension is not needed." },
+
+    { type: "blank",
+      q: "The Fenwick tree is also known as the ____ ____ ____, after the way each cell's index in binary determines the range it stores.",
+      a: ["binary indexed tree", "Binary Indexed Tree", "BIT"],
+      why: "Binary indexed tree names the mechanism: the lowest set bit of the index fixes the length of the range the cell covers, so the binary digits of an index spell out the blocks of its prefix." },
+
+    { type: "mc",
+      q: "A nested Fenwick tree on a 1,024 by 1,024 grid answers a rectangle sum. How does its cost compare with Chapter 9's static 2-D prefix sum?",
+      opts: [
+        "The nested Fenwick tree is faster, because four prefix queries of ten reads each are fewer than the inclusion&ndash;exclusion lookups the prefix sum needs",
+        "The two cost the same, because both combine four prefix values by inclusion&ndash;exclusion and differ only in how those values are stored in memory",
+        "The nested tree reads up to a hundred cells per prefix and four hundred per rectangle against the prefix sum&apos;s four, but it supports updates",
+        "The nested tree is slower by a factor of log n because only its row dimension is logarithmic, while its column dimension is scanned element by element"
+      ], a: 2,
+      why: "Each prefix query reads up to log R times log C cells, 10 x 10 = 100 here, and a rectangle needs four, so up to 400 reads against four for the static prefix sum; the price buys point updates. Both use inclusion&ndash;exclusion, but the Fenwick prefixes are not single lookups, and both dimensions are logarithmic." },
+
+    { type: "order",
+      q: "Order these structures by the cost of one point update, cheapest first:",
+      items: [
+        "plain array: O(1)",
+        "Fenwick tree: O(log n)",
+        "prefix-sum array: O(n)",
+        "sparse table: rebuild in O(n log n)"
+      ],
+      why: "A plain array writes one cell. A Fenwick tree climbs one chain of O(log n) cells. A prefix-sum array must shift every prefix to the right of the change, O(n). A sparse table has no update and must be rebuilt, O(n log n). The query costs run in almost the opposite order, which is the trade-off curve." }
+  ]
+});
