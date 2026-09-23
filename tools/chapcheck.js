@@ -23,6 +23,8 @@ mc.forEach((q, i) => { const L = q.opts.map(o => o.length); const k = L[q.a];
   console.log(`  Q${ch.quiz.indexOf(q)+1} a=${q.a} lens=${L.join(',')}`); });
 const po = (allHtml.match(/<p>/g)||[]).length, pc = (allHtml.match(/<\/p>/g)||[]).length;
 const refs = [...new Set((allHtml.match(/Chapter \d+/g)||[]))];
+const perSec = ch.sections.map(s => [s.title, strip(s.html).split(/\s+/).filter(w => /\w/.test(w)).length]);
+perSec.forEach(([t, w]) => console.log(`  §${w > 700 ? ' OVER 700' : ''} ${w} ${t}`));
 console.log({ part: ch.part, sections: ch.sections.length, terms: ch.terms.length, quiz: ch.quiz.length, words,
   vizzes: ch.sections.filter(s => s.viz).map(s => s.viz), bannedHits, missing, keylong: kl, keyshort: ks, mc: mc.length, pos,
   pOpen: po, pClose: pc, figs: (allHtml.match(/<svg/g)||[]).length, refs });
