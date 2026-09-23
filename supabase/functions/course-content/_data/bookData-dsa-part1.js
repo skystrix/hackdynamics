@@ -12995,3 +12995,355 @@ CHAPTERS.push({
       why: "Automata and Manacher are linear, so large inputs finish in hundredths of a second; the backtracking engine is exponential, so 26 characters take seconds; the centre method is quadratic, n\u00b2/2 comparisons at 40,000." }
   ]
 });
+
+/* ======================= CHAPTER 43 ======================= */
+CHAPTERS.push({
+  num: 43, part: 6, title: "Suffix Arrays and What They Answer",
+  blurb: "Sort every suffix of a string and you have a structure that answers questions no other string structure can: how many distinct substrings there are, what the longest substring appearing twice is, what two strings have in common, and where any pattern occurs in O(m log n). This chapter measures what the one-line naive construction really costs, builds the suffix array by prefix doubling, adds the LCP array in linear time with Kasai's short algorithm, and spends the pair. It closes on the suffix automaton, suffix trees, the Burrows-Wheeler transform behind bzip2 and DNA aligners, and the string sorts that suffix construction depends on.",
+  sections: [
+
+    { title: "Sorted Suffixes, and the Naive Construction",
+      html:
+        "<p>Chapters 41 and 42 preprocess the <em>patterns</em> and then read a text. This chapter preprocesses the <em>text</em>, once, so that any later question about its substrings is fast: which substrings repeat, how many distinct ones there are, what two texts have in common, where a pattern occurs. The structure is simple to state. A string of length n has n suffixes, one starting at each position. Sort them, and every substring of the text is a prefix of some suffix, so every question about substrings becomes a question about adjacent entries in a sorted list.</p>" +
+        "<p>The <strong>suffix array</strong> is that sorted list, stored as start indices: SA[k] is the position where the k-th smallest suffix begins. Storing indices rather than the suffixes themselves is the whole point. The suffixes have total length n(n + 1)/2, so a list of the strings is quadratic in space, while the array of indices is n integers. The figure shows banana: the sorted suffixes are a, ana, anana, banana, na, nana, and the suffix array is 5, 3, 1, 0, 4, 2.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 254' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>The suffixes of banana in text order, then sorted; the suffix array stores only the start indices</text><text x='40' y='44' text-anchor='middle' fill='#8fa3c4' font-size='10'>i</text><text x='120' y='44' text-anchor='start' fill='#8fa3c4' font-size='10'>suffix i</text><text x='420' y='44' text-anchor='middle' fill='#8fa3c4' font-size='10'>k</text><text x='470' y='44' text-anchor='middle' fill='#8fa3c4' font-size='10'>SA[k]</text><text x='520' y='44' text-anchor='start' fill='#8fa3c4' font-size='10'>suffix SA[k]</text><text x='40' y='72' text-anchor='middle' fill='#8fa3c4' font-size='11'>0</text><rect x='120' y='58' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='130' y='72' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='142' y='58' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='152' y='72' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='164' y='58' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='174' y='72' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='186' y='58' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='196' y='72' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='208' y='58' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='218' y='72' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='230' y='58' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='240' y='72' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='420' y='72' text-anchor='middle' fill='#8fa3c4' font-size='11'>0</text><text x='470' y='72' text-anchor='middle' fill='#ffd166' font-size='12'>5</text><rect x='520' y='58' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='530' y='72' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='100' text-anchor='middle' fill='#8fa3c4' font-size='11'>1</text><rect x='120' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='130' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='142' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='152' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='164' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='174' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='186' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='196' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='208' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='218' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='420' y='100' text-anchor='middle' fill='#8fa3c4' font-size='11'>1</text><text x='470' y='100' text-anchor='middle' fill='#ffd166' font-size='12'>3</text><rect x='520' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='530' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='542' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='552' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='564' y='86' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='574' y='100' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='128' text-anchor='middle' fill='#8fa3c4' font-size='11'>2</text><rect x='120' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='130' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='142' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='152' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='164' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='174' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='186' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='196' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='420' y='128' text-anchor='middle' fill='#8fa3c4' font-size='11'>2</text><text x='470' y='128' text-anchor='middle' fill='#ffd166' font-size='12'>1</text><rect x='520' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='530' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='542' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='552' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='564' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='574' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='586' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='596' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='608' y='114' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='618' y='128' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='156' text-anchor='middle' fill='#8fa3c4' font-size='11'>3</text><rect x='120' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='130' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='142' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='152' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='164' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='174' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='420' y='156' text-anchor='middle' fill='#8fa3c4' font-size='11'>3</text><text x='470' y='156' text-anchor='middle' fill='#ffd166' font-size='12'>0</text><rect x='520' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='530' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='542' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='552' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='564' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='574' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='586' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='596' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='608' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='618' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='630' y='142' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='640' y='156' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='184' text-anchor='middle' fill='#8fa3c4' font-size='11'>4</text><rect x='120' y='170' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='130' y='184' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='142' y='170' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='152' y='184' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='420' y='184' text-anchor='middle' fill='#8fa3c4' font-size='11'>4</text><text x='470' y='184' text-anchor='middle' fill='#ffd166' font-size='12'>4</text><rect x='520' y='170' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='530' y='184' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='542' y='170' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='552' y='184' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='212' text-anchor='middle' fill='#8fa3c4' font-size='11'>5</text><rect x='120' y='198' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='130' y='212' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='420' y='212' text-anchor='middle' fill='#8fa3c4' font-size='11'>5</text><text x='470' y='212' text-anchor='middle' fill='#ffd166' font-size='12'>2</text><rect x='520' y='198' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='530' y='212' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='542' y='198' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='552' y='212' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='564' y='198' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='574' y='212' text-anchor='middle' fill='#c9d6ea' font-size='12'>n</text><rect x='586' y='198' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='596' y='212' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='20' y='244' text-anchor='start' fill='#8fa3c4' font-size='10'>SA = [5, 3, 1, 0, 4, 2]: six integers stand for six strings, O(n) space instead of O(n&#178;) characters</text></svg></div>" +
+        "<p>The naive construction sorts the indices with the suffix as the key. In Python that is <code>sorted(range(n), key=lambda i: s[i:])</code>, one line, and it hides two costs. The first is memory: the key function materializes every suffix, and at n = 20,000 the peak was 202 MB, exactly the n<sup>2</sup>/2 characters of all the suffixes. The second is the comparison cost that sorting analyses leave out. Chapter 15 counted comparisons as O(1) each, but comparing two suffixes costs their longest common prefix plus one, and on a text with long repeats that is long. On 4,000 random letters the sort compared 74,905 characters in total; on a string of the same length made by repeating one 100-character block, it compared 17.4 million, 230 times more. The bound is O(n log n) comparisons of up to n characters each, O(n<sup>2</sup> log n).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def suffix_array_naive(s):                   # O(n^2 log n) time, O(n^2) memory\n" +
+        "    return sorted(range(len(s)), key=lambda i: s[i:])</code></pre>" +
+        "<pre data-lang='java' hidden><code>static Integer[] suffixArrayNaive(String s) {  // O(n^2 log n) character comparisons\n" +
+        "    Integer[] sa = new Integer[s.length()];\n" +
+        "    for (int i = 0; i &lt; sa.length; i++) sa[i] = i;\n" +
+        "    Arrays.sort(sa, (a, b) -&gt; s.substring(a).compareTo(s.substring(b)));\n" +
+        "    return sa;\n" +
+        "}</code></pre></div>" +
+        "<p>One input that looks as if it should be the worst is not. On a string of one repeated letter every comparison is long, yet the Python sort took 0.03 s at n = 20,000, because the suffixes of a<sup>n</sup> in index order are already sorted in descending order and Timsort, from Chapter 16, detects the run and reverses it in linear comparisons. The worst case is the periodic string, where the long common prefixes arrive in no useful order: there the naive time grew from 0.11 s to 0.69 s when n doubled from 20,000 to 40,000. The rest of the chapter removes both costs, and then spends the result.</p>"
+    },
+
+    { title: "The Doubling Construction",
+      viz: "dsaSuffixArray", vizTitle: "Sort by the first character, then the first two, then four. Watch the ranks refine",
+      html:
+        "<p><strong>Prefix doubling</strong>, from Udi Manber and Gene Myers in 1990, never compares two suffixes character by character. It sorts them by their first character, then by their first two characters, then four, eight and so on, and each stage reuses the previous one. After the stage for length k, record each suffix's position in the <strong>rank array</strong>: equal ranks for suffixes whose first k characters agree, and ranks ordered as those prefixes are. Now the first 2k characters of suffix i are its first k characters followed by the first k characters of suffix i + k. So the order by 2k characters is the order of the pairs (rank[i], rank[i + k]), with a missing second part counting as smallest. Comparing two pairs of integers is O(1), however long the prefixes they stand for.</p>" +
+        "<p>The loop stops when every rank is distinct, which happens once 2k exceeds the longest repeated substring, and never later than k = n. That gives at most log<sub>2</sub> n stages. Sorting the pairs with a comparison sort costs O(n log n) per stage, O(n log<sup>2</sup> n) in total. Sorting them with two passes of the counting sort from Chapter 15, second key first and then first key, costs O(n) per stage and O(n log n) in total; it is Chapter 15's LSD radix sort with ranks as digits.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def suffix_array(s):                          # prefix doubling, O(n log^2 n)\n" +
+        "    n = len(s)\n" +
+        "    rank = [ord(c) for c in s]\n" +
+        "    sa, k = list(range(n)), 1\n" +
+        "    while n &gt; 1:\n" +
+        "        key = lambda i: (rank[i], rank[i + k] if i + k &lt; n else -1)\n" +
+        "        sa.sort(key=key)\n" +
+        "        new = [0] * n\n" +
+        "        for j in range(1, n):\n" +
+        "            new[sa[j]] = new[sa[j - 1]] + (key(sa[j]) != key(sa[j - 1]))\n" +
+        "        rank = new\n" +
+        "        if rank[sa[-1]] == n - 1:             # all ranks distinct: done\n" +
+        "            break\n" +
+        "        k *= 2\n" +
+        "    return sa</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] suffixArray(String s) {          // prefix doubling, O(n log^2 n)\n" +
+        "    int n = s.length();\n" +
+        "    Integer[] sa = new Integer[n];\n" +
+        "    int[] rank = new int[n], tmp = new int[n];\n" +
+        "    for (int i = 0; i &lt; n; i++) { sa[i] = i; rank[i] = s.charAt(i); }\n" +
+        "    for (int k = 1; n &gt; 1; k *= 2) {\n" +
+        "        final int K = k; final int[] r = rank;\n" +
+        "        Comparator&lt;Integer&gt; cmp = Comparator.&lt;Integer&gt;comparingInt(i -&gt; r[i])\n" +
+        "            .thenComparingInt(i -&gt; i + K &lt; n ? r[i + K] : -1);\n" +
+        "        Arrays.sort(sa, cmp);\n" +
+        "        tmp[sa[0]] = 0;\n" +
+        "        for (int j = 1; j &lt; n; j++)\n" +
+        "            tmp[sa[j]] = tmp[sa[j - 1]] + (cmp.compare(sa[j - 1], sa[j]) &lt; 0 ? 1 : 0);\n" +
+        "        int[] t = rank; rank = tmp; tmp = t;\n" +
+        "        if (rank[sa[n - 1]] == n - 1) break;\n" +
+        "    }\n" +
+        "    return Arrays.stream(sa).mapToInt(Integer::intValue).toArray();\n" +
+        "}</code></pre></div>" +
+        "<p>The number of stages depends on the text, and it is worth measuring. On 100,000 random letters the ranks were all distinct after 3 stages, because no substring longer than 6 characters repeated. Over a two-letter alphabet it took 5. On a<sup>n</sup> it took 17, the full log<sub>2</sub> n, since the longest repeat is n &#8722; 1 characters. In Python, the comparison-sort version took 0.17 s, 0.26 s and 0.61 s on those three inputs, and the counting-sort version 0.13 s, 0.19 s and 0.53 s; on the periodic string that took the naive sort 0.69 s, doubling took 0.21 s. All three constructions produced identical arrays on 2,000 random strings.</p>" +
+        "<p>On banana the whole run is two stages. By first character the ranks are b = 1, a = 0, n = 2, so banana reads 1 0 2 0 2 0. With k = 1 each suffix gets the pair of its own rank and the next one's: suffix 5, the lone a, is (0, &#8722;1) and sorts first; suffixes 1 and 3 are both (0, 2), an and an, still tied; suffix 0 is (1, 0); suffixes 2 and 4 are both (2, 0), na and na. With k = 2 the pairs look four characters ahead through the new ranks, and the ties break: suffix 3 is (1, 0) and suffix 1 is (1, 1), so ana sorts before anana, and na before nana. Every rank is now distinct, and the array is 5, 3, 1, 0, 4, 2, without a single character comparison after the first stage.</p>" +
+        "<p>Doubling is not the end of the story. Linear-time constructions exist: the DC3 algorithm of K&#228;rkk&#228;inen and Sanders (2003), and SA-IS by Nong, Zhang and Chan (2009), which sorts a sample of suffixes recursively and induces the order of the rest. SA-IS is what production libraries use. Doubling is the one to understand first, because its invariant, ranks for prefixes of length k, is the idea the linear algorithms refine.</p>"
+    },
+
+    { title: "The LCP Array and Kasai's Algorithm",
+      html:
+        "<p>The suffix array orders the suffixes; the <strong>LCP array</strong> says how much each one shares with its neighbour. LCP[k] is the length of the longest common prefix of the suffixes at SA[k &#8722; 1] and SA[k], with LCP[0] = 0. The pair of arrays is what answers questions, because any two suffixes' common prefix is the minimum of the LCP values between them in sorted order: suffixes that share a long prefix sit next to each other, and the shared part cannot grow across a neighbour that shares less.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 362' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Sorted suffixes of abracadabra: green is the prefix shared with the row above</text><text x='40' y='40' text-anchor='middle' fill='#8fa3c4' font-size='10'>SA</text><text x='90' y='40' text-anchor='middle' fill='#8fa3c4' font-size='10'>LCP</text><text x='150' y='40' text-anchor='start' fill='#8fa3c4' font-size='10'>suffix</text><text x='450' y='40' text-anchor='start' fill='#8fa3c4' font-size='10'>LCP as a skyline</text><text x='40' y='64' text-anchor='middle' fill='#8fa3c4' font-size='11'>10</text><text x='90' y='64' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text><rect x='150' y='50' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='160' y='64' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='90' text-anchor='middle' fill='#8fa3c4' font-size='11'>7</text><text x='90' y='90' text-anchor='middle' fill='#c9d6ea' font-size='11'>1</text><rect x='150' y='76' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='160' y='90' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='172' y='76' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='182' y='90' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='194' y='76' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='204' y='90' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='216' y='76' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='226' y='90' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='450' y='79' width='50' height='14' rx='2' fill='#3ddc97' opacity='0.8'/><text x='40' y='116' text-anchor='middle' fill='#8fa3c4' font-size='11'>0</text><text x='90' y='116' text-anchor='middle' fill='#ffd166' font-size='11'>4</text><rect x='150' y='102' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='160' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='172' y='102' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='182' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='194' y='102' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='204' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='216' y='102' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='226' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='238' y='102' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='248' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><rect x='260' y='102' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='270' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='282' y='102' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='292' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><rect x='304' y='102' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='314' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='326' y='102' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='336' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='348' y='102' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='358' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='370' y='102' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='380' y='116' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='450' y='105' width='200' height='14' rx='2' fill='#ffd166' opacity='0.8'/><text x='40' y='142' text-anchor='middle' fill='#8fa3c4' font-size='11'>3</text><text x='90' y='142' text-anchor='middle' fill='#c9d6ea' font-size='11'>1</text><rect x='150' y='128' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='160' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='172' y='128' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='182' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><rect x='194' y='128' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='204' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='216' y='128' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='226' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><rect x='238' y='128' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='248' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='260' y='128' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='270' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='282' y='128' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='292' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='304' y='128' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='314' y='142' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='450' y='131' width='50' height='14' rx='2' fill='#3ddc97' opacity='0.8'/><text x='40' y='168' text-anchor='middle' fill='#8fa3c4' font-size='11'>5</text><text x='90' y='168' text-anchor='middle' fill='#c9d6ea' font-size='11'>1</text><rect x='150' y='154' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='160' y='168' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='172' y='154' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='182' y='168' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><rect x='194' y='154' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='204' y='168' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='216' y='154' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='226' y='168' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='238' y='154' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='248' y='168' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='260' y='154' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='270' y='168' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='450' y='157' width='50' height='14' rx='2' fill='#3ddc97' opacity='0.8'/><text x='40' y='194' text-anchor='middle' fill='#8fa3c4' font-size='11'>8</text><text x='90' y='194' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text><rect x='150' y='180' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='160' y='194' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='172' y='180' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='182' y='194' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='194' y='180' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='204' y='194' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='220' text-anchor='middle' fill='#8fa3c4' font-size='11'>1</text><text x='90' y='220' text-anchor='middle' fill='#c9d6ea' font-size='11'>3</text><rect x='150' y='206' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='160' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='172' y='206' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='182' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='194' y='206' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='204' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='216' y='206' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='226' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><rect x='238' y='206' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='248' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='260' y='206' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='270' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><rect x='282' y='206' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='292' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='304' y='206' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='314' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='326' y='206' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='336' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='348' y='206' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='358' y='220' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='450' y='209' width='150' height='14' rx='2' fill='#3ddc97' opacity='0.8'/><text x='40' y='246' text-anchor='middle' fill='#8fa3c4' font-size='11'>4</text><text x='90' y='246' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text><rect x='150' y='232' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='160' y='246' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><rect x='172' y='232' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='182' y='246' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='194' y='232' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='204' y='246' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><rect x='216' y='232' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='226' y='246' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='238' y='232' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='248' y='246' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='260' y='232' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='270' y='246' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='282' y='232' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='292' y='246' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='272' text-anchor='middle' fill='#8fa3c4' font-size='11'>6</text><text x='90' y='272' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text><rect x='150' y='258' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='160' y='272' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><rect x='172' y='258' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='182' y='272' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='194' y='258' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='204' y='272' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='216' y='258' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='226' y='272' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='238' y='258' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='248' y='272' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='298' text-anchor='middle' fill='#8fa3c4' font-size='11'>9</text><text x='90' y='298' text-anchor='middle' fill='#c9d6ea' font-size='11'>0</text><rect x='150' y='284' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='160' y='298' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='172' y='284' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='182' y='298' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><text x='40' y='324' text-anchor='middle' fill='#8fa3c4' font-size='11'>2</text><text x='90' y='324' text-anchor='middle' fill='#c9d6ea' font-size='11'>2</text><rect x='150' y='310' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='160' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='172' y='310' width='20' height='20' rx='3' fill='#123a2c' stroke='#3ddc97'/><text x='182' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='194' y='310' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='204' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>c</text><rect x='216' y='310' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='226' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='238' y='310' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='248' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>d</text><rect x='260' y='310' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='270' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='282' y='310' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='292' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>b</text><rect x='304' y='310' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='314' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>r</text><rect x='326' y='310' width='20' height='20' rx='3' fill='#182842' stroke='#334a6a'/><text x='336' y='324' text-anchor='middle' fill='#c9d6ea' font-size='12'>a</text><rect x='450' y='313' width='100' height='14' rx='2' fill='#3ddc97' opacity='0.8'/><text x='20' y='352' text-anchor='start' fill='#8fa3c4' font-size='10'>tallest bar 4: abra is the longest repeated substring; distinct substrings = 66 &#8722; 12 = 54</text></svg></div>" +
+        "<p>Computing LCP entry by entry, comparing each adjacent pair from its first character, costs up to n per entry and O(n<sup>2</sup>) in total. <strong>Kasai's algorithm</strong>, published by Kasai, Lee, Arimura, Arikawa and Park in 2001, computes all of it in O(n) with a loop barely longer than the naive one. The trick is the order: it fills the entries in the order of the <em>text</em>, suffix 0, then suffix 1, then suffix 2, rather than in the order of the array.</p>" +
+        "<p>The invariant is this. Suppose suffix i shares h characters with the suffix immediately before it in sorted order, and h &gt; 0. Drop the first character of both. Suffix i + 1 then shares h &#8722; 1 characters with the suffix obtained from that neighbour, and that suffix sorts before suffix i + 1, so the neighbour immediately before suffix i + 1 shares at least h &#8722; 1 characters with it. So when the algorithm moves from i to i + 1, it may start comparing at h &#8722; 1 rather than 0. The counter h drops by at most one per step and never exceeds n, so the total number of increments is at most 2n; this is the potential argument of Chapter 4 once more, with h as the potential.</p>" +
+        "<p>Trace it on banana, whose suffix array is 5, 3, 1, 0, 4, 2. Suffix 0, banana, has neighbour anana and shares nothing. Suffix 1, anana, has neighbour ana and shares three characters, so h = 3. Suffix 2, nana, has neighbour na, and the invariant says to start at h &#8722; 1 = 2 rather than 0: the two characters na are already known to match, and the comparison stops at the end of na. Suffix 3, ana, starts at 1 against a and stops there. The LCP array comes out as 0, 1, 3, 0, 0, 2, and the characters compared after the first match were never compared again.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lcp_array(s, sa):                          # Kasai et al. 2001, O(n)\n" +
+        "    n = len(s)\n" +
+        "    rank = [0] * n\n" +
+        "    for k, p in enumerate(sa):\n" +
+        "        rank[p] = k\n" +
+        "    lcp, h = [0] * n, 0\n" +
+        "    for i in range(n):                         # text order, not array order\n" +
+        "        if rank[i] &gt; 0:\n" +
+        "            j = sa[rank[i] - 1]                # the neighbour just before suffix i\n" +
+        "            while i + h &lt; n and j + h &lt; n and s[i + h] == s[j + h]:\n" +
+        "                h += 1\n" +
+        "            lcp[rank[i]] = h\n" +
+        "            if h &gt; 0:\n" +
+        "                h -= 1                         # the invariant: lose at most one\n" +
+        "        else:\n" +
+        "            h = 0\n" +
+        "    return lcp</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] lcpArray(String s, int[] sa) {    // Kasai et al. 2001, O(n)\n" +
+        "    int n = s.length();\n" +
+        "    int[] rank = new int[n], lcp = new int[n];\n" +
+        "    for (int k = 0; k &lt; n; k++) rank[sa[k]] = k;\n" +
+        "    for (int i = 0, h = 0; i &lt; n; i++) {\n" +
+        "        if (rank[i] == 0) { h = 0; continue; }\n" +
+        "        int j = sa[rank[i] - 1];\n" +
+        "        while (i + h &lt; n &amp;&amp; j + h &lt; n &amp;&amp; s.charAt(i + h) == s.charAt(j + h)) h++;\n" +
+        "        lcp[rank[i]] = h;\n" +
+        "        if (h &gt; 0) h--;\n" +
+        "    }\n" +
+        "    return lcp;\n" +
+        "}</code></pre></div>" +
+        "<p>On a<sup>n</sup> with n = 100,000, the counter rose 99,999 times in total, although the largest LCP value was 99,999 itself; the naive pairwise method would have compared about n<sup>2</sup>/2 characters. On random text it also rose almost exactly n times, and Kasai's output matched a direct pairwise computation on 2,000 random strings.</p>"
+    },
+
+    { title: "What the Pair Answers",
+      html:
+        "<p><strong>Distinct substrings.</strong> Every substring is a prefix of some suffix, and a suffix at SA[k] contributes n &#8722; SA[k] prefixes, of which the first LCP[k] also appear as prefixes of its neighbour and were already counted. So the <strong>distinct substring count</strong> is n(n + 1)/2 minus the sum of the LCP array. For abracadabra that is 66 &#8722; 12 = 54, as the figure shows. On 100,000 random letters, 99.99% of the five billion substrings were distinct; on a<sup>n</sup>, only 100,000 were, one per length. The formula agreed with a brute-force set of all substrings on 1,000 random strings.</p>" +
+        "<p><strong>Longest repeated substring.</strong> A substring occurs twice exactly when it is a common prefix of two suffixes, and the longest common prefix of any two suffixes is attained by some adjacent pair. So the <strong>longest repeated substring</strong> is read off the maximum LCP value and its position: abra in abracadabra, a 6-character repeat in 100,000 random letters, 32 characters over a binary alphabet. Chapter 41 found the same answer with rolling hashes and a binary search on the length, in expected O(n log n) with a small chance of error; this is deterministic, O(n) once the arrays exist.</p>" +
+        "<p><strong>Longest common substring of two strings.</strong> Join them with a <strong>separator</strong>, a character that occurs in neither, and build the arrays for s + # + t. A common substring is a common prefix of one suffix starting in s and one starting in t, and the separator stops any common prefix from running across the join. So the <strong>longest common substring</strong> is the largest LCP value between adjacent suffixes that start on different sides of the separator. That is O(n + m) after construction; the obvious dynamic program, a cousin of Chapter 21's longest common subsequence table, takes O(nm). On 1,000 random pairs it matched brute force.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def distinct_substrings(s):\n" +
+        "    sa = suffix_array(s)\n" +
+        "    return len(s) * (len(s) + 1) // 2 - sum(lcp_array(s, sa))\n" +
+        "\n" +
+        "def longest_common_substring(s, t):\n" +
+        "    u = s + '\\0' + t                          # a separator in neither string\n" +
+        "    sa = suffix_array(u)\n" +
+        "    lcp = lcp_array(u, sa)\n" +
+        "    best = 0\n" +
+        "    for k in range(1, len(u)):\n" +
+        "        if (sa[k] &lt; len(s)) != (sa[k - 1] &lt; len(s)):\n" +
+        "            best = max(best, lcp[k])           # neighbours from different sides\n" +
+        "    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long distinctSubstrings(String s) {\n" +
+        "    int[] sa = suffixArray(s), lcp = lcpArray(s, sa);\n" +
+        "    long total = (long) s.length() * (s.length() + 1) / 2;\n" +
+        "    for (int x : lcp) total -= x;\n" +
+        "    return total;\n" +
+        "}\n" +
+        "static int longestCommonSubstring(String s, String t) {\n" +
+        "    String u = s + '\\0' + t;\n" +
+        "    int[] sa = suffixArray(u), lcp = lcpArray(u, sa);\n" +
+        "    int best = 0;\n" +
+        "    for (int k = 1; k &lt; u.length(); k++)\n" +
+        "        if ((sa[k] &lt; s.length()) != (sa[k - 1] &lt; s.length())) best = Math.max(best, lcp[k]);\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
+        "<p>The same pattern extends. The number of times a substring occurs is the width of the block of suffixes that share it as a prefix, found with range-minimum queries over LCP, the sparse table of Chapter 30. The longest substring occurring at least k times is the maximum over windows of k &#8722; 1 consecutive LCP values of their minimum, the sliding-window minimum of Chapter 10. Each is a known technique applied to a new array.</p>"
+    },
+
+    { title: "Pattern Search",
+      html:
+        "<p>Every occurrence of a pattern P is the start of a suffix that has P as a prefix, and in sorted order those suffixes form one contiguous block. So finding all occurrences is two binary searches over the suffix array, one for the first suffix that is not less than P and one for the first that does not start with P, and the answer is the block between them. Each probe compares P with a suffix, at most m characters, so the search costs O(m log n) and then O(1) per occurrence reported. The text can be gigabytes; only the pattern's length and the logarithm matter. The block matched a brute-force scan on 1,000 random tests.</p>" +
+        "<p>On banana, searching for ana: the first binary search stops at the first suffix not less than ana, which is ana itself at sorted position 1; the second stops at the first suffix that does not start with ana, banana at position 3. The block holds positions 1 and 2 of the array, suffixes 3 and 1, so ana occurs at 1 and 3, overlapping. Counting occurrences needs only the width of the block, so a count costs O(m log n) however many occurrences there are, which is how a search index answers how often a phrase appears without listing where.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def find_all(s, sa, p):\n" +
+        "    m = len(p)\n" +
+        "    lo, hi = 0, len(sa)\n" +
+        "    while lo &lt; hi:                             # first suffix &gt;= p\n" +
+        "        mid = (lo + hi) // 2\n" +
+        "        if s[sa[mid]:sa[mid] + m] &lt; p: lo = mid + 1\n" +
+        "        else: hi = mid\n" +
+        "    start, hi = lo, len(sa)\n" +
+        "    while lo &lt; hi:                             # first suffix not starting with p\n" +
+        "        mid = (lo + hi) // 2\n" +
+        "        if s[sa[mid]:sa[mid] + m] &lt;= p: lo = mid + 1\n" +
+        "        else: hi = mid\n" +
+        "    return sorted(sa[start:lo])</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; findAll(String s, int[] sa, String p) {\n" +
+        "    int m = p.length(), lo = 0, hi = sa.length;\n" +
+        "    while (lo &lt; hi) {\n" +
+        "        int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "        if (prefix(s, sa[mid], m).compareTo(p) &lt; 0) lo = mid + 1; else hi = mid;\n" +
+        "    }\n" +
+        "    int start = lo; hi = sa.length;\n" +
+        "    while (lo &lt; hi) {\n" +
+        "        int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "        if (prefix(s, sa[mid], m).compareTo(p) &lt;= 0) lo = mid + 1; else hi = mid;\n" +
+        "    }\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int k = start; k &lt; lo; k++) out.add(sa[k]);\n" +
+        "    Collections.sort(out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "static String prefix(String s, int i, int m) { return s.substring(i, Math.min(s.length(), i + m)); }</code></pre></div>" +
+        "<p>The m log n term can be improved, and the obvious improvement does not work. Keep the number of characters P shares with the suffixes at the low and high ends of the search range; every suffix in between shares at least the smaller of the two, so comparisons can start there. On 200,000 random letters this saved 15%, 122 character comparisons against 143. On a<sup>n</sup> with the pattern a<sup>999</sup>b it saved nothing, 17,000 either way: the pattern is larger than every suffix, only the low end ever moves, the high end's shared length stays 0, and so does the minimum. Manber and Myers' real fix precomputes, for every midpoint the binary search can visit, the LCP between it and its range's endpoints, which makes the search O(m + log n) in the worst case at the price of two more arrays.</p>"
+    },
+
+    { title: "Suffix Automata, Suffix Trees and the BWT",
+      html:
+        "<p>Three relatives of the suffix array are worth knowing by name, and what each answers that the array does not. The <strong>suffix tree</strong>, from Peter Weiner in 1973, is the trie of all suffixes with every chain of single-child nodes compressed into one edge. It has O(n) nodes, can be built in linear time by McCreight's (1976) or Ukkonen's (1995) online algorithm, and answers everything the array does, often more directly. Its cost is memory: careful implementations spend roughly 10 to 20 bytes per character, where the suffix array spends 4 with 32-bit indices, which is why the array, with its LCP companion, replaced it for most uses. Chapter 49 returns to suffix trees among the structures at the frontier.</p>" +
+        "<p>The <strong>suffix automaton</strong> of Blumer and colleagues (1985) is the smallest deterministic automaton that accepts exactly the substrings of a string. Its surprising property is its size: at most 2n &#8722; 1 states and 3n &#8722; 4 transitions, for n of at least 3. Both bounds are tight, and I checked them on the strings that meet them, ab<sup>n&#8722;1</sup> with 1,999 states at n = 1,000 and ab<sup>n&#8722;2</sup>c with 2,996 transitions, and on 20,000 random strings, where neither was ever exceeded. It is built online, one character at a time, and it answers questions in the pattern's length alone: whether t is a substring is |t| transitions. Each state stands for a class of substrings with the same set of end positions, so the distinct substring count is a sum over states, and it matched the suffix-array count on all 20,000 strings.</p>" +
+        "<p>The <strong>Burrows-Wheeler transform</strong> (1994) takes the character before each suffix, in suffix-array order. For banana with an end marker it is annb$aa. Characters that precede similar contexts land next to each other, so the transform has long runs: on the 200,000-character text from Chapter 42's compression measurements, it cut the number of runs from 177,921 to 80,782. That is the first stage of bzip2, which compressed the same text to 1.67 bits per character against zlib's 2.36. The transform is reversible, and with small auxiliary tables it becomes the <strong>FM-index</strong> of Ferragina and Manzini (2000), a compressed text that can still be searched. That is how the standard DNA read aligners, BWA and Bowtie, fit a human genome's index in a few gigabytes.</p>"
+    },
+
+    { title: "String Sorts",
+      html:
+        "<p>Building a suffix array is sorting strings with long common prefixes, and sorting strings in general deserves the same care. Chapter 15 introduced the two radix sorts: LSD for fixed-length keys, and MSD, which buckets by the first character and recurses into each bucket, for variable-length strings. MSD's weakness is the bucket array: with an alphabet of 256 or 65,536 characters, every small subproblem allocates and scans a large count array, and most of the time goes into empty buckets.</p>" +
+        "<p><strong>3-way radix quicksort</strong>, from Jon Bentley and Robert Sedgewick in 1997, keeps MSD's character-at-a-time scan without the buckets. Partition on the d-th character of a pivot into three groups: less than it, equal to it, greater than it. Recurse on the less and greater groups at the same position d, and on the equal group at d + 1. It is Chapter 15's 3-way quicksort applied to one character position at a time, and a character is inspected again only when it failed to separate its strings. Equal characters are never examined twice at the same position once they form a group, so a long shared prefix costs one pass per character for the whole group rather than one per comparison, which is exactly the cost a comparison sort pays over and over.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def radix_quicksort(a, lo=0, hi=None, d=0):\n" +
+        "    if hi is None: hi = len(a)\n" +
+        "    if hi - lo &lt;= 1: return\n" +
+        "    ch = lambda s: s[d] if d &lt; len(s) else ''  # '' sorts before every character\n" +
+        "    v, lt, gt, i = ch(a[lo]), lo, hi - 1, lo + 1\n" +
+        "    while i &lt;= gt:\n" +
+        "        c = ch(a[i])\n" +
+        "        if c &lt; v:   a[lt], a[i] = a[i], a[lt]; lt += 1; i += 1\n" +
+        "        elif c &gt; v: a[i], a[gt] = a[gt], a[i]; gt -= 1\n" +
+        "        else:       i += 1\n" +
+        "    radix_quicksort(a, lo, lt, d)\n" +
+        "    if v != '': radix_quicksort(a, lt, gt + 1, d + 1)\n" +
+        "    radix_quicksort(a, gt + 1, hi, d)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static void radixQuicksort(String[] a, int lo, int hi, int d) {   // sorts a[lo..hi)\n" +
+        "    if (hi - lo &lt;= 1) return;\n" +
+        "    int v = charAt(a[lo], d), lt = lo, gt = hi - 1, i = lo + 1;\n" +
+        "    while (i &lt;= gt) {\n" +
+        "        int c = charAt(a[i], d);\n" +
+        "        if (c &lt; v) swap(a, lt++, i++);\n" +
+        "        else if (c &gt; v) swap(a, i, gt--);\n" +
+        "        else i++;\n" +
+        "    }\n" +
+        "    radixQuicksort(a, lo, lt, d);\n" +
+        "    if (v &gt;= 0) radixQuicksort(a, lt, gt + 1, d + 1);\n" +
+        "    radixQuicksort(a, gt + 1, hi, d);\n" +
+        "}\n" +
+        "static int charAt(String s, int d) { return d &lt; s.length() ? s.charAt(d) : -1; }\n" +
+        "static void swap(String[] a, int i, int j) { String t = a[i]; a[i] = a[j]; a[j] = t; }</code></pre></div>" +
+        "<p>The measurement is the one Chapter 15 predicted for URLs. On 20,000 random words, 3-way radix quicksort inspected 278,567 characters and a comparison sort, charged for every character each comparison reads, 517,476. Give every word the same 24-character prefix, as URLs have, and the comparison sort's count rose to 6.8 million while radix quicksort's rose to 778,445, nearly nine times fewer. The wall clock tells the other half: Python's built-in <code>sorted</code>, a comparison sort written in C, took 0.004 s on the URLs, against 0.12 s for the radix quicksort written in Python. The character count is the right argument for the algorithm, and a C implementation is what collects on it; the standard libraries of Chapter 16 do not ship a string radix sort, so when strings with long shared prefixes are the bottleneck, it is one of the few sorts worth writing yourself.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Pay for the naive sort.</strong> Measure the naive suffix sort's peak memory and character comparisons on random text, on a<sup>n</sup> and on a periodic string, and explain why a<sup>n</sup> is fast.</li>" +
+        "<li><strong>Count the stages.</strong> Implement prefix doubling with a comparison sort and with counting sort, and record the number of stages on random text, a binary alphabet and a<sup>n</sup>. Relate the stage count to the longest repeat.</li>" +
+        "<li><strong>Watch h.</strong> Instrument Kasai's algorithm to record h after every step. Confirm that it never falls by more than one and that the total increments stay below 2n.</li>" +
+        "<li><strong>Count and repeat.</strong> From the suffix and LCP arrays, compute the distinct substring count and the longest repeated substring, and check both against brute force.</li>" +
+        "<li><strong>Two strings.</strong> Compute the longest common substring of two strings through a separator, compare with an O(nm) dynamic program in the style of Chapter 21's LCS table, and time both on strings of 5,000 characters.</li>" +
+        "<li><strong>Search a text.</strong> Implement the two binary searches that bound a pattern's block, then find the input where the low-high shared-prefix shortcut saves nothing.</li>" +
+        "<li><strong>Build the automaton.</strong> Implement the suffix automaton, confirm its state and transition counts on ab<sup>n-1</sup> and ab<sup>n-2</sup>c, and count distinct substrings from it.</li>" +
+        "<li><strong>Sort by characters.</strong> Count characters inspected by 3-way radix quicksort and by a comparison sort on random words and on words sharing a long prefix.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "suffix array", d: "The start indices of a string's suffixes in sorted order; n integers standing for n(n+1)/2 characters." },
+    { t: "prefix doubling", d: "Manber and Myers 1990: sorting suffixes by their first 1, 2, 4, ... characters, each stage from the previous stage's ranks; O(n log n) with radix sort." },
+    { t: "rank array", d: "For each suffix, the position of its first k characters in sorted order, equal for equal prefixes; the key doubling sorts on." },
+    { t: "LCP array", d: "LCP[k] is the longest common prefix of the suffixes at SA[k-1] and SA[k]; any two suffixes share the minimum LCP between them." },
+    { t: "Kasai's algorithm", d: "Kasai et al. 2001: the LCP array in O(n), filled in text order so the shared length falls by at most one per step." },
+    { t: "distinct substring count", d: "n(n+1)/2 minus the sum of the LCP array." },
+    { t: "longest repeated substring", d: "The longest substring occurring at least twice; the maximum LCP value." },
+    { t: "separator", d: "A character in neither string, placed between two strings joined for one suffix array so no common prefix crosses the join." },
+    { t: "longest common substring", d: "The longest string occurring in both of two strings; the largest LCP between adjacent suffixes from different sides of the separator." },
+    { t: "suffix tree", d: "Weiner 1973: the compressed trie of all suffixes, O(n) nodes, built online by Ukkonen's algorithm; more memory than the suffix array." },
+    { t: "suffix automaton", d: "Blumer et al. 1985: the minimal automaton accepting exactly the substrings of a string, at most 2n - 1 states and 3n - 4 transitions." },
+    { t: "Burrows-Wheeler transform", d: "The character preceding each suffix in suffix-array order; clusters equal characters into runs, the basis of bzip2." },
+    { t: "FM-index", d: "Ferragina and Manzini 2000: the Burrows-Wheeler transform with small tables that let the compressed text be searched." },
+    { t: "3-way radix quicksort", d: "Bentley and Sedgewick 1997: partitioning strings on one character into less, equal and greater, advancing to the next character only in the equal group." },
+    { t: "comparison cost", d: "The characters one string comparison reads, their common prefix plus one; ignored by comparison counts and dominant for strings with long shared prefixes." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "The one-line naive suffix sort in Python used 202 MB at n = 20,000. Where does the memory go?",
+      opts: [
+        "The key function builds every suffix as its own string, n\u00b2/2 characters in total, before sorting begins",
+        "Timsort allocates a fresh merge buffer the size of the whole input for every level of its merge recursion",
+        "Python stores each integer index as a separate object of 28 bytes, and there are n such objects alive at once",
+        "The sort keeps a copy of the whole list at every comparison, which it needs in order to guarantee stability"
+      ], a: 0,
+      why: "key=lambda i: s[i:] materializes all n suffixes, whose lengths sum to n(n+1)/2: 200 million characters at n = 20,000, matching the measured peak. Timsort's buffer is at most n/2 references, n integer objects are about half a megabyte, and stability needs no copies." },
+
+    { type: "mc",
+      q: "Why is the naive suffix sort fast on a string of one repeated letter but slow on a periodic string?",
+      opts: [
+        "Timsort recognises runs of repeated characters inside the strings and compares each such run with a single memory operation",
+        "The suffixes of a^n arrive already sorted in descending order, and Timsort detects and reverses that run in linear time",
+        "Suffixes of a^n are all distinct lengths, so Python compares their lengths before their characters",
+        "The periodic string has more distinct characters, and each distinct character adds a pass to the sort"
+      ], a: 1,
+      why: "In index order a^n's suffixes are longest to shortest, which is descending sorted order, so Timsort finds one run. The periodic string's long prefixes arrive in no useful order: 17.4 million character comparisons at n = 4,000 against 74,905 on random text." },
+
+    { type: "mc",
+      q: "In prefix doubling, why does sorting by the pair (rank[i], rank[i + k]) give the order by the first 2k characters?",
+      opts: [
+        "Because rank[i + k] counts how many suffixes share the first k characters with suffix i",
+        "Because each stage doubles the alphabet, so a pair of ranks encodes two characters in one integer",
+        "Because suffix i's first 2k characters are its first k followed by suffix i + k's first k, and ranks order those halves",
+        "Because the pair is the suffix's position in the previous stage, and positions only ever move forward between stages"
+      ], a: 2,
+      why: "The rank from the previous stage orders the first k characters of each suffix, and the second half of suffix i's 2k-prefix is exactly suffix i + k's k-prefix, so comparing the pair compares the 2k-prefix in O(1). Ranks do not count suffixes or encode characters, and positions change freely." },
+
+    { type: "blank",
+      q: "Kasai's algorithm is linear because, moving from suffix i to suffix i + 1 in text order, the shared length h falls by at most ____.",
+      a: ["one", "1"],
+      why: "Dropping the first character of suffix i and its neighbour leaves a pair sharing h - 1 characters, and the new neighbour shares at least that, so h rises at most 2n times in total. On a^n with n = 100,000 it rose 99,999 times." },
+
+    { type: "mc",
+      q: "Why is the number of distinct substrings n(n + 1)/2 minus the sum of the LCP array?",
+      opts: [
+        "Because each LCP value counts the substrings that occur exactly twice in the text, and those were counted once too often",
+        "Because the LCP array lists how many times each substring repeats in the text, and those repeats are subtracted from the total",
+        "Because every substring shorter than LCP[k] appears in only one suffix, so those substrings are removed from the count",
+        "Because the first LCP[k] prefixes of each suffix are also prefixes of its sorted neighbour and were already counted"
+      ], a: 3,
+      why: "Each suffix contributes n - SA[k] prefixes; the first LCP[k] of them also start the previous suffix in sorted order, so only the rest are new. For abracadabra, 66 - 12 = 54, and the formula matched a brute-force set on 1,000 strings." },
+
+    { type: "mc",
+      q: "To find the longest common substring of s and t with one suffix array, why join them with a separator that occurs in neither?",
+      opts: [
+        "So that no common prefix can run across the join, and any common prefix of two suffixes lies within one string",
+        "So that the suffix array has exactly |s| + |t| entries, one per character of the two strings, with no empty suffix counted",
+        "So that suffixes of s all sort before suffixes of t, and each string's suffixes can be read separately",
+        "So that the LCP array becomes monotone, which lets a single pass find the maximum"
+      ], a: 0,
+      why: "Without the separator, a suffix of s could share a prefix that continues into t, producing matches that exist in neither string. The answer is the largest LCP between neighbours from different sides. The separator does not group the suffixes or make LCP monotone." },
+
+    { type: "mc",
+      q: "Skipping the smaller of the low and high ends' shared prefix saved nothing when searching a^n for a^999 b. Why?",
+      opts: [
+        "Because every suffix of a^n has a different length, so no two probes can share any prefix at all",
+        "Because the pattern is larger than every suffix, so only the low end moves and the high end's shared prefix stays 0",
+        "Because the binary search visits the same midpoint twice on repetitive text, so each saving made on one visit is cancelled on the next",
+        "Because the skip is only valid when the pattern is shorter than log n, and here it is 1,000 characters"
+      ], a: 1,
+      why: "The shortcut starts at min(shared with low, shared with high), and the high end never moves, so the minimum is 0: 17,000 character comparisons either way, against 122 versus 143 on random text. Manber and Myers precompute midpoint LCPs to get O(m + log n) guaranteed." },
+
+    { type: "blank",
+      q: "The suffix automaton of a string of length n at least 3 has at most 2n - 1 states and at most ____ transitions.",
+      a: ["3n - 4", "3n-4", "3n \u2212 4"],
+      why: "Both bounds are tight: ab^(n-1) reaches 1,999 states at n = 1,000, and ab^(n-2)c reaches 2,996 transitions; on 20,000 random strings neither bound was exceeded." },
+
+    { type: "mc",
+      q: "3-way radix quicksort inspected nine times fewer characters than a comparison sort on URLs, yet Python's sorted was 30 times faster. What does that show?",
+      opts: [
+        "That character inspections are not a meaningful cost measure for strings, since memory comparison is effectively free",
+        "That the radix quicksort must contain a bug, since an algorithm doing fewer operations cannot be slower",
+        "That the comparison is between a Python implementation and one in C, so the operation count argues for the algorithm and C collects on it",
+        "That URLs are a best case for Timsort, which detects the shared prefix and skips it in every comparison"
+      ], a: 2,
+      why: "The counts, 778,445 against 6.8 million, favour radix quicksort; the wall clock compares interpreted Python with C. Character reads are real work, the code is correct, and Timsort has no shared-prefix detection." },
+
+    { type: "order",
+      q: "Order the stages prefix doubling needed on 100,000 characters, fewest first:",
+      items: [
+        "random letters, alphabet 26: 3 stages",
+        "random letters, alphabet 2: 5 stages",
+        "a^n: 17 stages"
+      ],
+      why: "Doubling stops once 2^stages exceeds the longest repeated substring: about 6 characters on 26 letters, about 30 on two letters, and n - 1 on a^n, which forces the full log2 n." }
+  ]
+});
