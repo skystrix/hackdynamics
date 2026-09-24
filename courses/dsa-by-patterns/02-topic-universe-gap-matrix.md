@@ -171,7 +171,7 @@ The guide's four rules, plus three tie-breaks this course adopts and the owner s
 | H13 | Tree diameter, centroid, centroid decomposition | — | H | 1 | **core** (diameter/centroid) · **supporting** (decomposition) | — |
 | H14 | **Heavy-light decomposition**; path queries | — | — | 0 | **supporting** | CP-Algorithms only; Sleator & Tarjan 1983 as the ancestor. Rule 6 would say mentioned; promoted to supporting because it is the natural finish of H12+N4 |
 | H15 | Euler-tour flattening; subtree as a contiguous range | — | H | 0 | **core** | The idea that turns tree problems into array problems; unnamed by every bank |
-| H16 | kd-trees, interval trees, geometric BST applications | P | L | 0 | **supporting** | COS 226 L13. Rule 1 |
+| H16 | kd-trees, interval trees, geometric BST applications | P | L | 0 | **mentioned** | COS 226 L13. Rule 1. Downgraded from supporting 2026-09-24 (owner): no interview bank asks it; frontier chapter |
 
 ### I. Graphs
 
@@ -285,8 +285,8 @@ Erickson all treat it as a named paradigm. Rule 1 governs; see §5 for the disag
 | N5 | **Lazy propagation**; range updates | — | H | 0 | **core** | — |
 | N6 | Dynamic, implicit and persistent segment trees | — | H | 0 | **supporting** | — |
 | N7 | **Sqrt decomposition** and **Mo's algorithm** | — | H | 0 | **supporting** | Mo's has no canonical paper — see Phase 1 §6; the text will say so |
-| N8 | Offline query processing; small-to-large merging | — | H | 0 | **supporting** | — |
-| N9 | Treaps and balanced BSTs as sequences; implicit keys | — | — | 1 | **supporting** | — |
+| N8 | Offline query processing; small-to-large merging | — | H | 0 | **mentioned** | Downgraded from supporting 2026-09-24 (owner): no interview bank asks it; frontier chapter. Mo's offline reordering stays in the segment-tree chapter |
+| N9 | Treaps and balanced BSTs as sequences; implicit keys | — | — | 1 | **mentioned** | Downgraded from supporting 2026-09-24 (owner): one bank of five; frontier chapter |
 | N10 | Ordered-statistics containers: `TreeMap`, `SortedList`, policy trees | — | WH | 3 | **core** | The "Ordered Set" bank pattern; the one place C++ is named because Python and Java lack a direct equivalent |
 | N11 | Dynamic connectivity; DSU with rollback | — | — | 0 | **supporting** | Capstone layer B5's second half |
 
@@ -374,8 +374,8 @@ Erickson all treat it as a named paradigm. Rule 1 governs; see §5 for the disag
 | Decision | Rows | Share |
 |---|---|---|
 | **core** | 155 | 69% |
-| **supporting** | 56 | 25% |
-| **mentioned** | 12 | 5% |
+| **supporting** | 53 | 24% |
+| **mentioned** | 15 | 7% |
 | **out** | 1 | 0.4% |
 | **Total** | **224** | |
 
@@ -420,7 +420,7 @@ can overrule:
 
 ## 6. The frontier chapter: how "mentioned" is honoured
 
-Twelve rows are **mentioned** (A15, A16, A17, D8, E9, I25, I26, K21, O9's suffix-tree half, O12, P8, Q9, R6). Guide §4 defines that as "named with a pointer, one
+Twelve rows are **mentioned** (A15, A16, A17, D8, E9, I25, I26, K21, O9's suffix-tree half, O12, P8, Q9, R6), fifteen since H16, N8 and N9 were downgraded on 2026-09-24. Guide §4 defines that as "named with a pointer, one
 paragraph" — and a dozen orphaned paragraphs scattered across fifty chapters is how a course
 loses them. **Proposal:** they are collected into one closing field-guide chapter, *The
 Frontier*, structured as a map rather than a list: for each, the problem it solves, its
@@ -433,7 +433,7 @@ Contents: A15 PSPACE · A16 local search and metaheuristics · D8 external-memor
 cache-oblivious models · E9 cuckoo and perfect hashing · I25 Karger and Stoer–Wagner ·
 I26 connectivity and Menger · K21 SOS DP · O12 Lyndon factorization · O9′ suffix trees ·
 P8 Burnside and Pólya · Q9 Delaunay, Voronoi, half-plane intersection · R6 event-driven
-simulation · CSES interactive problems · and the CP-Algorithms residue named in Phase 0 §1
+simulation · H16 kd-trees and interval trees · N8 small-to-large · N9 implicit treaps · CSES interactive problems · and the CP-Algorithms residue named in Phase 0 §1
 (Montgomery multiplication, Garner, discrete root, Sqrt Tree, D'Esopo-Pape, MPM, Kirchhoff,
 Prüfer, Stern–Brocot, the 15-puzzle).
 

@@ -1058,7 +1058,7 @@ touching every element, by leaving a note at a node saying "everyone below me st
 - Lazy propagation: a node holding a pending value, before and after push-down.
 - Mo's ordering drawn as a path through query points in (block, right-endpoint) space.
 
-**Rows:** N4, N5, N6, N7, N8, N9, N11, H16 · **Outcomes:** E18, A7, B6 · **Terms:** 18
+**Rows:** N4, N5, N6, N7, N11 · **Outcomes:** E18, A7, B6 · **Terms:** 18
 
 ---
 
@@ -1627,7 +1627,7 @@ with its origin and where to read it, so that "complete" means something you can
 3. *The structure chooser* — a decision procedure across every structure in the course, by workload rather than by feature list.
 4. *The algorithm chooser* — the same for graph algorithms, DP shapes and string algorithms.
 5. *The Frontier: analysis* — PSPACE and the complexity zoo; local search, simulated annealing and metaheuristics; external-memory and cache-oblivious models.
-6. *The Frontier: structures* — cuckoo and perfect hashing; suffix trees; Sqrt trees; randomized heaps; link-cut trees.
+6. *The Frontier: structures* — cuckoo and perfect hashing; suffix trees; Sqrt trees; randomized heaps; link-cut trees; small-to-large merging, implicit treaps, kd-trees and interval trees (downgraded from Chapter 31, 2026-09-24).
 7. *The Frontier: graphs* — Karger's randomized min cut; Stoer–Wagner; edge and vertex connectivity and Menger's theorem; Kirchhoff's matrix-tree theorem; Prüfer codes; D'Esopo-Pape.
 8. *The Frontier: mathematics* — sum-over-subsets DP; Burnside and Pólya; Montgomery multiplication; Garner's algorithm; discrete roots; the Stern–Brocot tree.
 9. *The Frontier: geometry* — Delaunay triangulation and Voronoi diagrams; half-plane intersection; vertical decomposition.
@@ -1641,7 +1641,7 @@ with its origin and where to read it, so that "complete" means something you can
 - The structure chooser as a decision tree.
 - The Frontier as a map: the course's territory, with each named-but-untaught algorithm placed at its border.
 
-**Rows:** A16, D8(revisit), E8, E9, I25(revisit), I26(revisit), K21, O9(suffix tree), O12, P8, Q9, R6 · **Outcomes:** A6, A7, O1 · **Terms:** 14
+**Rows:** A16, D8(revisit), E8, E9, I25(revisit), I26(revisit), K21, O9(suffix tree), O12, P8, Q9, R6, N8, N9, H16 · **Outcomes:** A6, A7, O1 · **Terms:** 14
 
 ---
 
@@ -1793,10 +1793,9 @@ wording. Real gaps, all rows assigned in a `Rows:` line but absent from the chap
 | H12 (core) | Tarjan's offline LCA | Ch 29 §5 |
 | P14 | Newton's method | Ch 14 §4 |
 
-Each fix carries measured numbers and, where it has code, Python and Java tested against brute force. **Left open for
-the owner:** N8 (small-to-large), N9 (implicit treaps) and H16 (kd-trees, interval trees), all *supporting* rows
-assigned to Chapter 31 and asked by at most one interview bank. Recommendation: downgrade them to *mentioned* and
-name them in Chapter 49's frontier rather than write them.
+Each fix carries measured numbers and, where it has code, Python and Java tested against brute force. **Downgraded by the owner:** N8 (small-to-large), N9 (implicit treaps) and H16 (kd-trees, interval trees) were
+*supporting* rows assigned to Chapter 31 and asked by at most one interview bank. They are now *mentioned*, moved to
+Chapter 49's `Rows:` line, and named with their origins in its structures frontier section.
 
 **The single `out` row checks out:** R5 (concurrency) is referenced in exactly one chapter —
 Chapter 2, §6 — which is where Phase 1 §5 promised its §2-mandated orientation paragraph and
