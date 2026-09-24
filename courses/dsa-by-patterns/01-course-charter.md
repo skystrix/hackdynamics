@@ -5,8 +5,8 @@
 
 **Gate decisions inherited from Phase 0, binding on every later phase:**
 
-1. Capstone is the **structures library**, each layer fuzzed against the language's own standard library.
-2. Capstone and body languages: **Python + Java**.
+1. ~~Capstone is the **structures library**, each layer fuzzed against the language's own standard library.~~ **Reversed 2026-09-24 by the owner: no capstone.** This is an interview course, and a fuzzed structures library does not move a candidate closer to passing one. Part 7 (Chapters 50–57) is removed; the course ends at Chapter 49. Declared as a deviation from guide §9 in Blueprint §0 and §3.
+2. Body languages: **Python + Java**.
 3. Chapter budget deviates above §2's 24–36; target ~45–55, justified in the Blueprint.
 4. Course opens a third track, **CS Fundamentals**, as course 01.
 5. Topic universe keyed on **textbook topic with pattern name as an attribute** (Phase 0 §0.3, open item O5) — **approved**.
@@ -91,13 +91,13 @@ it is the entry point of the track and of the roster.
 |---|---|---|
 | Comfortable programming in **one** of Python or Java | Every example is given in both; you read one and can ignore the other tab | The official Python tutorial, or any first programming course |
 | Loops, arrays, functions, and how to define a class or a struct | The structures are built from these and nothing more | Any intro course |
-| Willingness to read the other language's tab occasionally | Two places in the course — the standard-library chapters and the capstone benchmark — the *difference* between Python and Java is the lesson, not an implementation detail | The course teaches the ~20 Java constructs and the ~15 Python constructs it uses, where it uses them |
+| Willingness to read the other language's tab occasionally | In the standard-library chapters the *difference* between Python and Java is the lesson, not an implementation detail | The course teaches the ~20 Java constructs and the ~15 Python constructs it uses, where it uses them |
 | High-school algebra: exponents, logarithms, summing a series | Complexity is logarithms and series, and nothing harder | Khan Academy algebra II; the course's own appendix chapter re-derives every identity it uses |
 | **Not required:** a discrete mathematics course | Induction, invariants and the small amount of counting and probability the course needs are taught in place, at the depth this subject needs | An appendix chapter covers induction and proof by invariant from scratch |
 | **Not required:** a prior data-structures or algorithms course | The course starts at "what is a running time" and does not assume you have met a linked list | — |
 | **Not required:** competitive programming experience | Contest problems appear only as an exercise reservoir, always re-framed, never assumed | — |
 | **Not required:** any other course on this site | This is track 3, course 01, and the earliest entry point on the roster | — |
-| **Hardware:** any laptop | Nothing in this course needs a GPU, a cloud account, a database, or more than a few hundred megabytes of memory. Every benchmark in the capstone is sized to run in under a minute on a five-year-old machine | — |
+| **Hardware:** any laptop | Nothing in this course needs a GPU, a cloud account, a database, or more than a few hundred megabytes of memory. Every benchmark in the course is sized to run in under a minute on a five-year-old machine | — |
 
 ---
 
@@ -153,19 +153,21 @@ in Phase 6.
 - **O7.** Avoid the language traps that cost interview rounds: Python's recursion limit and floor division on negatives; Java's silent `int` overflow, `Arrays.sort` on primitives being attackable, and `==` on boxed integers.
 - **O8.** Present a solution the way the mechanism was taught — invariant, cost, edge cases, then code — which is also the order an interviewer scores.
 
-### Build (the capstone: the structures library, Python + Java)
+### Build (in the body chapters' Build exercises, Python + Java)
 
-- **B1.** Implement a dynamic array with amortized-O(1) growth, then *measure* the amortization and show the potential function in the data rather than asserting it.
-- **B2.** Implement an open-addressing hash map with resizing and tombstones, fuzz it against `dict` and `HashMap` until they agree, then construct the adversarial key set that degrades it and measure the degradation.
+B1, B2, B7 and B9 were delivered only by the capstone and are **retired** with it (2026-09-24). The ids are kept, not renumbered, so later documents stay valid.
+
+- ~~**B1.** Implement a dynamic array with amortized-O(1) growth, then *measure* the amortization and show the potential function in the data rather than asserting it.~~ *Retired.*
+- ~~**B2.** Implement an open-addressing hash map with resizing and tombstones, fuzz it against `dict` and `HashMap` until they agree, then construct the adversarial key set that degrades it and measure the degradation.~~ *Retired.*
 - **B3.** Implement a balanced binary search tree with order-statistics queries, fuzzed against a sorted container, and report the measured height against the theoretical bound.
 - **B4.** Implement a binary heap with the O(n) build, fuzzed against `heapq` and `PriorityQueue`, and demonstrate the linear build empirically against the naive one.
 - **B5.** Implement union-find with union by rank and path compression, plus a rollback variant, and plot the measured near-constant cost curve.
 - **B6.** Implement a segment tree with lazy propagation over a general monoid, and a Fenwick tree, both fuzzed against a naive array over a random operation stream.
-- **B7.** Implement a graph engine — adjacency structures, Dijkstra on your own heap, Dinic's max-flow — with Dijkstra cross-checked against Bellman-Ford and the flow cross-checked against a brute-force min-cut.
+- ~~**B7.** Implement a graph engine — adjacency structures, Dijkstra on your own heap, Dinic's max-flow — with Dijkstra cross-checked against Bellman-Ford and the flow cross-checked against a brute-force min-cut.~~ *Retired.*
 - **B8.** Implement a trie and Aho-Corasick, fuzzed against a naive multi-pattern scan.
-- **B9.** Benchmark the finished library against both standard libraries, explain every gap with a mechanism from the course rather than with a shrug, and write the confession table of everything simplified.
+- ~~**B9.** Benchmark the finished library against both standard libraries, explain every gap with a mechanism from the course rather than with a shrug, and write the confession table of everything simplified.~~ *Retired.*
 
-**48 outcomes.** §4 of the guide asks for 15–30. *RAG In Depth* shipped 39 and *LLM In Depth*
+**48 outcomes, 44 active after the four capstone retirements.** §4 of the guide asks for 15–30. *RAG In Depth* shipped 39 and *LLM In Depth*
 40 against the same §1 bar; this course carries ~50 chapters against that range's 24–36, and
 48 is proportionate to the chapter budget the owner already approved. The alternative is not
 consolidation, it is dropping testable claims. Flagged here for the gate rather than quietly
@@ -195,7 +197,7 @@ quietly assume it.
 
 | # | Course | Status | Owns |
 |---|---|---|---|
-| 01 | **DSA By Patterns** | In production | Complexity and amortized analysis; every core data structure and algorithm; the pattern recognition procedure; the structures-library capstone |
+| 01 | **DSA By Patterns** | In production | Complexity and amortized analysis; every core data structure and algorithm; the pattern recognition procedure |
 | 02 | **Operating Systems in Depth** | Planned | Processes and threads; **concurrency, synchronization and parallel algorithms**; scheduling; virtual memory; file systems; I/O |
 | 03 | **Computer Networks in Depth** | Planned | The stack from the wire up; TCP; TLS; HTTP; routing |
 | 04 | **System Design in Depth** | Planned | The design interview from mechanism: load balancing, caching, partitioning, queues, consistency — resting on tracks 1 and 2 |
@@ -274,18 +276,19 @@ Per §3.5 it will not be given an invented citation.
 
 | Role | Choice | Why |
 |---|---|---|
-| Body code blocks | **Python + Java**, as `code-tabs`, throughout — not only in the capstone | Python is what candidates actually type in interviews; Java is the most-asked enterprise interview language and the one whose collections have documented, readable costs. Per §3.7 both are popular, widely used, and fit the mechanism |
-| Capstone | Same two, line-for-line equivalent in intent per §9 | The structures library is exactly the case §9 was written for |
+| Body code blocks | **Python + Java**, as `code-tabs`, throughout | Python is what candidates actually type in interviews; Java is the most-asked enterprise interview language and the one whose collections have documented, readable costs. Per §3.7 both are popular, widely used, and fit the mechanism |
 | C++ | **Named, never required**, and only where the standard library is the subject | Three places: ordered-statistics containers (`std::set`, GNU policy trees) where Python and Java have no direct equivalent, `std::nth_element` as the shipped quickselect, and `__builtin_popcount`. Competitive programming's default language cannot be ignored in a field guide, but the course does not require reading it |
 | Problem corpus | Problems referenced **by name only**, never reproduced | §3.4. LeetCode, CSES and Codeforces are named as where to find them; the course writes its own worked examples and its own exercises |
-| Verification in the capstone | Standard library only: `random`, `assert`, `unittest` / plain `main` | Per §9 the code must be complete as shown with no hidden helper files, and a fuzzer that needs Hypothesis or JUnit is not readable inside a chapter. The field-guide chapter names the real tools for when the reader wants them |
+| Verification in Build exercises | Standard library only: `random`, `assert`, `unittest` / plain `main` | Per §9 the code must be complete as shown with no hidden helper files, and a fuzzer that needs Hypothesis or JUnit is not readable inside a chapter. The field-guide chapter names the real tools for when the reader wants them |
 | Benchmarking | `time.perf_counter` with warmup and repetition; `System.nanoTime` with a stated warmup | JMH is the correct tool for Java microbenchmarks and the course says so and explains JIT warmup as the reason it exists — but a benchmark the reader cannot run from the chapter text is not a benchmark they will run |
 | Complexity measurement | Measured operation counts plotted against n, from the course's own counters | The honest alternative to asserting a bound: instrument the structure, fit the curve, show it |
-| Hardware | Any laptop | Stated in §3 and enforced: every capstone benchmark is sized to finish in under a minute on a five-year-old machine |
+| Hardware | Any laptop | Stated in §3 and enforced: every benchmark is sized to finish in under a minute on a five-year-old machine |
 
-**No deviation from §9 is requested.** Unlike *LLM In Depth*, the two-language,
-line-for-line capstone is a natural fit here and is retained exactly as the guide specifies,
-including the honest benchmark, the confession table and three graduation projects.
+**Deviation from §9: no capstone** (owner decision, 2026-09-24, reversing the original plan).
+The course's job is getting a candidate through a DSA interview. The planned capstone, a
+fuzzed and benchmarked structures library, served the guide's template rather than that job,
+and its method (differential testing against a brute-force oracle) is already taught in
+Chapter 48 and used in the Build exercises throughout.
 
 ---
 
@@ -296,7 +299,7 @@ including the honest benchmark, the confession table and three graduation projec
 - Track position stated: a new CS Fundamentals track with this course as 01, and `COURSE_PLAN.md` amended in the same commit because §2's "out because it belongs to course X" rule depends on course 02 existing.
 - The concurrency "out" decision is recorded with the location of its mandatory orientation paragraph and forward pointer, and the one ambiguous row is handed to Phase 2 rather than silently decided.
 - §3.6 disclosure is categorical: the whole course rests on primary literature and real source code, with per-part spines named and one known-difficult attribution flagged in advance.
-- §3.7 tool choices justified; no guide deviation requested beyond the chapter budget already approved at Phase 0.
+- §3.7 tool choices justified; guide deviations are the chapter budget approved at Phase 0 and, since 2026-09-24, no §9 capstone.
 
 **Gate:** owner approves audience **including the B 45% / A 30% / C 25% re-weighting**,
 outcomes, prerequisites, and the CS Fundamentals track with its four courses.

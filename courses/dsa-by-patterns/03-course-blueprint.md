@@ -2,9 +2,9 @@
 
 **Status:** Phase 3 complete, awaiting owner approval. **Approval freezes chapter numbers** —
 the platform keys progress and links on them (§4 Phase 3).
-**Date:** 2026-09-20. Phases 0, 1 and 2 gated 2026-09-20.
+**Date:** 2026-09-20. Phases 0, 1 and 2 gated 2026-09-20. **Amended 2026-09-24:** Part 7 (the capstone) removed by owner decision; see §3.
 
-**Shape:** 7 parts · **57 chapters** (49 content + 8 capstone) · **142 machines** · 3 free chapters ·
+**Shape:** 6 parts · **49 chapters** · **134 machines** · 3 free chapters ·
 Python + Java throughout. Orphan list **empty**, verified mechanically (§6).
 
 ---
@@ -13,18 +13,18 @@ Python + Java throughout. Orphan list **empty**, verified mechanically (§6).
 
 | Guide says | This course | Why |
 |---|---|---|
-| §2: 24–36 chapters | **57** | Approved at Phase 0. 155 core rows (Phase 2 §4). At 3–4 core rows per chapter this is the floor, not an indulgence; the alternative is demoting rows a university final examines |
-| §2: 4–6 parts | **7** | One over. A 57-chapter course in 6 parts gives ~10 chapters per part with no coherent spine for the last third |
-| §2: ≥1 machine per chapter | **142 machines over 57 chapters** | Every chapter has at least one; the median is 2 and keystones carry 3–4. **This is 1.75× the 81 machines of *LLM In Depth* and is the single largest risk in this Blueprint — see §7** |
-| §9: 5–8 capstone chapters | **8** | In range, at the top of it |
-| §2: median 2,100 words | **~2,600 median, ~168,000 total body words** | Mechanism-chapter floor of 1,800 per §2; keystones to 5,000 |
+| §2: 24–36 chapters | **49** | Approved at Phase 0. 155 core rows (Phase 2 §4). At 3–4 core rows per chapter this is the floor, not an indulgence; the alternative is demoting rows a university final examines |
+| §2: ≥1 machine per chapter | **134 machines over 49 chapters** | Every chapter has at least one; the median is 2 and keystones carry 3–4. **This is 1.65× the 81 machines of *LLM In Depth* and is the single largest risk in this Blueprint — see §7** |
+| §9: 5–8 capstone chapters | **0** | Owner decision 2026-09-24: an interview course does not need a structures library. See §3 |
+| §6.3: all five archetypes | **four; no `build-it`** | Follows from having no capstone |
+| §2: median 2,100 words | **~2,600 median, ~138,000 planned body words** (as written: ~187,000) | Mechanism-chapter floor of 1,800 per §2; keystones to 5,000 |
 
 **Part 1 merges foundations with the linear scans, and that is the course's structural bet
 made visible in the table of contents.** Two pointers, sliding windows and the monotonic stack
 are taught as corollaries of Chapter 4's amortized analysis, in the same part, rather than as
 array tricks in a later one. Phase 2 §7 records the disagreement with every interview bank;
 this is where the decision becomes architecture. If the owner rejects it, Part 1 splits in two
-and the course becomes 8 parts.
+and the course becomes 7 parts.
 
 ---
 
@@ -65,11 +65,6 @@ window.PARTS = [ ... ]
 > problems stop being solvable; and then the part of the subject no textbook covers — what to
 > do in the room, what your language actually costs you, and where the field goes next.
 
-**Part 7 — Build It: The Structures Library** (Chapters 50–57)
-> Eight layers, two languages, one rule: each structure is fuzzed against the one your
-> standard library ships until they stop disagreeing. At the end you benchmark yours against
-> theirs and explain every gap with a mechanism from this course.
-
 ---
 
 ## 2. Reading conventions used below
@@ -99,12 +94,12 @@ keep, and get the map of the machine you are about to descend into.
 1. *One problem, four answers* — maximum subarray solved brute-force, divide-and-conquer, prefix-sum and Kadane; the same answer at four costs, timed in front of you.
 2. *The three questions* — is the input ordered? is the structure static or changing? do you need the value or the thing itself? Nearly every choice in this course is one of these.
 3. *What a pattern is, and what it is not* — the recognition-without-transfer critique stated at full strength, and this course's answer: every pattern arrives with its proof and its failure case.
-4. *The map* — the seven parts as a descent, and which structures are built in Part 7.
-5. *How to use this course* — machines, quizzes, exercises, the two language tabs, the capstone.
+4. *The map* — the six parts as a descent.
+5. *How to use this course* — machines, quizzes, exercises, the two language tabs, and checking your own code against a brute force.
 
 **Machines**
 - `dsaFourSolutions` — **comparator** — state: array of 24 values, chosen algorithm, step index, operation counter. Controls: pick algorithm (4 buttons), input shape (random / all-negative / one-big-positive), step / run / reset. **Discovery:** set the input to all-negative and find the two solutions that return 0 instead of the right answer. Note: "Four algorithms, one problem. Run each on the same array and watch the operation counter."
-- `dsaCourseMap` — **inspector** — state: hovered part. Controls: hover or tab to each of the seven parts and the capstone. **Discovery:** find the three chapters that are free. Note: "Hover a part to see what it teaches and which structures it builds."
+- `dsaCourseMap` — **inspector** — state: hovered part. Controls: hover or tab to each of the six parts. **Discovery:** find the three chapters that are free. Note: "Hover a part to see what it teaches and which structures it builds."
 
 **Figures**
 - The three questions as a decision trident, with example problems on each branch.
@@ -1598,7 +1593,7 @@ interview in the order that gets scored.
 2. *The traps* — `list.insert(0, x)`, `list.pop(0)`, string concatenation in a loop, `ArrayList.remove(i)`, autoboxing in `PriorityQueue<Integer>`, `==` on boxed Integers above 127, `HashMap` iteration order, mutating a key after insertion.
 3. *Language limits* — Python's recursion limit and how to raise it safely or avoid it; JVM stack sizes; Java's silent `int` overflow versus Python's arbitrary precision; floor division on negatives, which differs between the two.
 4. *Finding the accidental quadratic* — the profile-first discipline, the shapes that hide an O(n²) inside innocent code, and three real examples.
-5. *Testing an algorithm* — the brute-force oracle, random small inputs, and shrinking a failing case to something you can read. The method used by every capstone chapter.
+5. *Testing an algorithm* — the brute-force oracle, random small inputs, and shrinking a failing case to something you can read. The method the Build exercises use throughout the course.
 6. *Benchmarking honestly* — warmup and the JIT, repetition and variance, stating conditions, and why a single timing is not a measurement. Where JMH fits and when you need it.
 7. *Design problems as online problems* — LRU and LFU revisited with Chapter 2's model and the competitive-ratio framing from the Frontier; rate limiters, hit counters, and the median stream.
 8. *Randomized structures in practice* — O(1) insert/delete/getRandom; reservoir sampling (Vitter 1985); Fisher–Yates, and the off-by-one that produces a biased shuffle — with the bias measured rather than asserted.
@@ -1650,200 +1645,23 @@ with its origin and where to read it, so that "complete" means something you can
 
 ---
 
-# PART 7 — Build It: The Structures Library
+## 3. No capstone (deviation from §9)
 
-**The capstone is `pocketds`**, a data-structures library written from scratch in **Python and
-Java**, presented as `code-tabs` with the two versions equivalent line for line in intent.
-Every chapter adds one structure and ends with a test the learner runs that proves it, and the
-test is always the same shape: **a fuzzer that drives your structure and the standard
-library's through the same random operation stream and asserts they agree at every step.**
-That is the rule of this capstone. You do not check your red-black tree by reading it; you
-check it by running a million random operations against `TreeMap` and finding the first
-disagreement.
+**Owner decision, 2026-09-24.** Part 7, *Build It: The Structures Library* (Chapters 50–57,
+`pocketds`, 8 machines, ~29,600 planned words), is removed before any of it was written. The
+course ends at Chapter 49.
 
-## Chapter 50 — pocketds: The Array That Grows
-**Archetype:** build-it · **Words:** 3,000 · **Prereq:** 4
+**Why.** This course exists to get a candidate through a DSA interview. A structures library
+fuzzed against the standard library and benchmarked against it is a template requirement of
+§9, not something an interview asks for. What the capstone would have taught that the body
+does not already teach was its test method, and that method (brute-force oracle, random small
+inputs, shrinking) is Chapter 48 §5 and runs through the Build exercises of every chapter.
 
-**Blurb.** The first layer, and the one that sets the method for all eight: a dynamic array
-built on a fixed buffer, with a growth policy you choose and then *measure*. Chapter 4 proved
-that doubling gives amortized O(1). Here you instrument the structure, count every element
-copy, plot the potential function, and watch the theory come out of your own data.
-
-**Sections**
-1. *The interface* — what the structure promises, written before any code; the cost contract from Chapter 26 §1.
-2. *The fixed buffer and the growth step* — `append`, `get`, `set`, `pop`, with the capacity check.
-3. *The growth policy as a parameter* — ×2, ×1.5, +k; instrumenting the copy counter.
-4. *Insert and delete at an index* — the O(n) operations, and why they are O(n).
-5. **The test** — a fuzzer against Python's `list` and Java's `ArrayList` over 10⁶ random operations; then the amortization measurement, plotted, with the potential function overlaid.
-6. *The confession* — what this array does not do: no shrink policy, no memory reuse, no iterator invalidation semantics. Pointers to where the real ones handle it.
-
-**Rows:** covered in 4, 26 (implementation) · **Outcomes:** B1 · **Machine:** `dsaPocketArray` — **builder** — state: your implementation's internal buffer and the measured copy curve. Controls: run the fuzzer, change growth policy, plot. **Discovery:** set growth to +16 and watch your measured curve stop matching the amortized-constant line.
-
----
-
-## Chapter 51 — The Hash Map, and the Keys That Break It
-**Archetype:** build-it · **Words:** 3,600 · **Prereq:** 17, 50
-
-**Blurb.** An open-addressing hash map with linear probing, resizing and tombstones — the
-design CPython uses rather than the chaining design most tutorials build. Then the part nobody
-asks you to do: construct the adversarial key set that makes your own table quadratic, measure
-the degradation, and fix it with a randomized seed.
-
-**Sections**
-1. *The interface* — `put`, `get`, `remove`, `len`, iteration order.
-2. *The hash function* — using the language's, and why; what `__hash__` and `hashCode` must guarantee.
-3. *Linear probing and the probe sequence* — with the clustering visible in your own table.
-4. *Tombstones* — the deletion bug from Chapter 17, reproduced in your code first, then fixed.
-5. *Resizing* — the load-factor trigger and the rehash, with the amortized argument from Chapter 50 reused.
-6. **The test** — fuzz against `dict` and `HashMap`, including deletes, over a million operations; then generate colliding keys for your own function and measure the lookup cost before and after adding a random seed.
-7. *The confession* — no `__eq__` contract enforcement, no iteration-order guarantee, no concurrent-modification detection, no treeification.
-
-**Rows:** covered in 17 (implementation) · **Outcomes:** B2, E7 · **Machine:** `dsaPocketHash` — **simulator** — state: your table under a normal and an adversarial key stream, with timings. Controls: run either stream, toggle the seed. **Discovery:** find the number of colliding keys at which your lookup becomes visibly linear.
-
----
-
-## Chapter 52 — The Balanced Tree
-**Archetype:** build-it · **Words:** 4,000 · **Prereq:** 26, 51
-
-**Blurb.** A treap, not a red-black tree, and the choice is deliberate: the treap gets you
-expected O(log n) with rotations you can hold in your head, which means you will finish it,
-understand it, and be able to debug it — where a hand-written red-black tree is 400 lines of
-case analysis that teaches you less. Then you augment it with subtree sizes and get
-order-statistics queries, which is the thing `TreeMap` will not give you.
-
-**Sections**
-1. *The interface* — ordered map operations plus `select(k)` and `rank(key)`.
-2. *BST insert and delete* — the three deletion cases from Chapter 26, implemented.
-3. *The treap* — random priorities, the heap invariant, and rotations to restore it; why the expected height is O(log n).
-4. *Split and merge* — the two operations that make a treap easy, and every other operation rewritten in terms of them.
-5. *Augmenting with subtree size* — the invariant to maintain, and where it must be updated.
-6. **The test** — fuzz against `TreeMap` / `SortedDict` on the map operations, and against a sorted list for `select` and `rank`; then measure the tree's height across 10⁵ insertions and compare it to the theoretical bound.
-7. *The confession* — expected rather than worst-case bounds; no persistence; no bulk-load; recursion depth on adversarial random seeds.
-
-**Rows:** covered in 26 (implementation) · **Outcomes:** B3 · **Machine:** `dsaPocketTreap` — **builder** — state: your treap with priorities shown, measured height curve. Controls: insert/delete, run the fuzzer, plot height vs log n. **Discovery:** find a random seed that produces a tree more than twice the expected height, and see how rare it is.
-
----
-
-## Chapter 53 — The Heap, and the Linear Build
-**Archetype:** build-it · **Words:** 3,000 · **Prereq:** 27, 50
-
-**Blurb.** A binary heap in an array, with both construction methods implemented side by side
-so you can measure the claim from Chapter 27 that `build-heap` is O(n) while n inserts is
-O(n log n). This is the shortest capstone chapter and it carries the most satisfying
-measurement in the course.
-
-**Sections**
-1. *The interface* — `push`, `pop`, `peek`, `heapify`, and the comparator parameter.
-2. *Sift up and sift down* — implemented over the array indexing from Chapter 27.
-3. *Two constructions* — repeated push, and bottom-up heapify; both instrumented.
-4. *Decrease-key and the index map* — the operation Dijkstra wants and `heapq` does not have, and the lazy-deletion alternative everyone actually uses.
-5. **The test** — fuzz against `heapq` and `PriorityQueue`; then the build-cost measurement across n from 10³ to 10⁷, plotted, showing the two curves separate.
-6. *The confession* — no meld, no decrease-key without the index map, no stability on equal keys.
-
-**Rows:** covered in 27 (implementation) · **Outcomes:** B4 · **Machine:** `dsaPocketHeap` — **comparator** — state: measured swap counts for both constructions across n. Controls: n slider, run. **Discovery:** find the n at which the two construction costs differ by more than 5×.
-
----
-
-## Chapter 54 — Union–Find, Fenwick and the Segment Tree
-**Archetype:** build-it · **Words:** 4,200 · **Prereq:** 7, 30, 31, 50
-
-**Blurb.** Three structures in one chapter because they share a test harness: all three are
-"maintain something over a changing collection and answer queries", and all three are fuzzed
-against a naive array that recomputes from scratch. You will also implement the rollback
-variant of union–find, which is the one that makes offline dynamic connectivity possible.
-
-**Sections**
-1. *Union–find* — both optimizations, and the measured α(n) curve across n up to 10⁷.
-2. *Union–find with rollback* — an undo stack instead of path compression, and why the two are incompatible.
-3. *The Fenwick tree* — the lowest-set-bit loops, point update and prefix query, in about fifteen lines.
-4. *The segment tree over a monoid* — the operation and identity as parameters, so one implementation serves sum, min, max and gcd.
-5. *Lazy propagation* — the pending value, the push-down, and the composition rule for two lazy operations.
-6. **The test** — all three fuzzed against a naive array over random operation streams; the segment tree tested with four different monoids using the same harness; a rollback test that undoes to a checkpoint and compares against a saved snapshot.
-7. *The confession* — no persistence, no dynamic node allocation, no 2-D, and a recursive segment tree rather than the faster iterative one, with the reason.
-
-**Rows:** covered in 7, 30, 31 (implementation) · **Outcomes:** B5, B6 · **Machine:** `dsaPocketSegTree` — **builder** — state: your tree under a fuzz stream with the naive array beside it. Controls: run fuzzer, monoid picker, inject a deliberate bug. **Discovery:** enable the injected bug and find the first operation where the two disagree.
-
----
-
-## Chapter 55 — The Trie and Aho–Corasick
-**Archetype:** build-it · **Words:** 3,400 · **Prereq:** 28, 42, 51
-
-**Blurb.** A trie, then the automaton built on top of it. The trie is straightforward; the
-failure links are the first place in this capstone where a subtle bug produces *almost* correct
-output, which is exactly why the fuzzer compares against a naive multi-pattern scan rather
-than against your own reading of the code.
-
-**Sections**
-1. *The trie* — nodes as maps or arrays, the memory trade, `insert`, `search`, `starts_with`, `delete`.
-2. *Building failure links* — the BFS from Chapter 42, implemented, with the root special case.
-3. *Output links* — reporting nested patterns, and the bug you get without them.
-4. *The scan* — one pass, no backtracking.
-5. **The test** — fuzz against a naive "search every pattern separately" scan over random texts and pattern sets, including patterns that are suffixes of each other; assert the match sets are identical including positions.
-6. *A measurement* — total time against the number of patterns, showing your automaton flat where the naive scan is linear in pattern count.
-7. *The confession* — no compression, no dynamic pattern addition after building, byte alphabet only.
-
-**Rows:** covered in 28, 42 (implementation) · **Outcomes:** B8 · **Machine:** `dsaPocketAho` — **comparator** — state: your automaton's timing against the naive scan, as pattern count rises. Controls: pattern-count slider, run. **Discovery:** find the pattern count at which the automaton is 20× faster.
-
----
-
-## Chapter 56 — The Graph Engine: Dijkstra and Dinic
-**Archetype:** build-it · **Words:** 4,400 · **Prereq:** 35, 38, 53, 54
-
-**Blurb.** The last and largest layer: adjacency structures, Dijkstra running on the heap you
-built in Chapter 53, and Dinic's max-flow. The tests here are the best in the capstone, because
-graph algorithms can check each other — Dijkstra is verified against Bellman-Ford on the same
-graph, and your max-flow is verified against a brute-force minimum cut by enumerating every
-vertex subset on small instances.
-
-**Sections**
-1. *The graph structure* — compressed adjacency (CSR) rather than a list of lists, with the cache argument from Chapter 16 as the reason.
-2. *BFS and DFS* — iterative only, because Chapter 33 showed what recursion does at 10⁵ vertices.
-3. *Dijkstra* — on your own heap from Chapter 53, with lazy deletion.
-4. *Bellman-Ford* — as the oracle, and as the negative-cycle detector.
-5. *Dinic* — level graphs, blocking flow, the edge-list-with-paired-indices representation that makes residual updates trivial.
-6. **The tests** — Dijkstra against Bellman-Ford on 10⁴ random weighted graphs; Dinic against brute-force min-cut (2^V enumeration) on every graph with V ≤ 12; a shortest-path test that asserts the recovered path's weight equals the reported distance.
-7. *A measurement* — Dijkstra's cost against graph density, showing where the heap stops helping.
-8. *The confession* — no min-cost flow, no parallel edges in the CSR builder, integer weights only, no dynamic edge insertion.
-
-**Rows:** covered in 33, 35, 38 (implementation) · **Outcomes:** B7 · **Machine:** `dsaPocketFlow` — **simulator** — state: your Dinic's phases against the brute-force cut enumeration on a small graph. Controls: graph size slider, run both, reset. **Discovery:** find the smallest graph where brute force takes longer than Dinic.
-
----
-
-## Chapter 57 — The Honest Benchmark, the Confession Table and Three Graduations
-**Archetype:** build-it · **Words:** 4,000 · **Prereq:** 16, 48, 50–56
-
-**Blurb.** You have eight structures. Now find out how they compare to the ones your language
-ships, and — this is the part that matters — explain every single gap with a mechanism from
-this course rather than with a shrug. Then the confession table: every simplification you
-made, with the chapter that holds the real machinery. It ends with three projects that take
-`pocketds` toward something real, each scoped to a weekend.
-
-**Sections**
-1. *How to benchmark this honestly* — warmup, repetition, variance, stating conditions; the JIT problem in Java and why the first thousand iterations are a lie.
-2. *The results* — your eight structures against `list`/`ArrayList`, `dict`/`HashMap`, `TreeMap`, `heapq`/`PriorityQueue`, measured on the same machine with conditions printed.
-3. *Explaining every gap* — each difference attributed to a named mechanism: your hash map is 3× slower than `dict` because of the compact-layout indirection CPython uses; your treap is slower than `TreeMap` because rotations touch more cache lines than colour flips; your heap is competitive because there was nowhere to hide.
-4. *Where you are faster, and why that is suspicious* — the cases where your structure wins because it does less, not because it is better.
-5. *The confession table* — every simplification across all eight chapters, with the chapter that holds the real machinery, ending on "this is early, not wrong".
-6. *Graduation project 1 — persistence* — make the segment tree persistent by path copying, and answer queries about any past version.
-7. *Graduation project 2 — a real hash map* — add treeification at a bucket threshold, and reproduce the OpenJDK behaviour you read about in Chapter 16.
-8. *Graduation project 3 — an external-memory B-tree* — build the structure of Chapter 26 §8 against a file rather than memory, and measure the page reads. The bridge into *Databases in Depth*.
-
-**Rows:** S5(applied), D7(revisit) · **Outcomes:** B9, O5 · **Machine:** `dsaBenchBoard` — **comparator** — state: the full benchmark matrix, yours against the standard library, with per-row mechanism attribution. Controls: structure picker, operation picker, n slider, "show attribution" toggle. **Discovery:** find the one operation where your structure beats the standard library, and read why.
-
----
-
-## 3. The capstone plan (§9 checklist)
-
-| §9 requires | This capstone |
-|---|---|
-| 5–8 chapters, one layer each | **8** (50–57), one structure per chapter except 54 which groups three that share a harness |
-| Two languages, tabbed, equivalent line for line | **Python + Java**, `code-tabs` per §10.2 |
-| Each chapter ends with a test the learner runs | Every chapter: a **differential fuzzer** against the language's own standard library, or against a brute-force oracle where no library equivalent exists |
-| Design decisions made out loud, naming the road not taken | Each chapter's §1 states the interface and the alternative design, naming the chapter that explains it. The treap-over-red-black choice in Chapter 52 is the model |
-| Honest benchmark near the end | Chapter 57 §§1–4, with conditions printed and every gap attributed to a mechanism |
-| Confession table | Chapter 57 §5, collecting all eight chapters' confessions, ending "this is early, not wrong" |
-| Graduation: three projects, a weekend each | Chapter 57 §§6–8: persistence, treeification, an external-memory B-tree |
-| Code complete as shown, no hidden helpers | Every structure fits in its chapter; the fuzzers use only `random`, `assert` and the standard test runner (Charter §7) |
+**What went with it.** Charter outcomes B1, B2, B7 and B9 (retired, ids kept); the
+`build-it` archetype (declared in §0); machines `dsaPocketArray`, `dsaPocketHash`,
+`dsaPocketTreap`, `dsaPocketHeap`, `dsaPocketSegTree`, `dsaPocketAho`, `dsaPocketFlow`,
+`dsaBenchBoard`. No Topic Universe row was placed only in Part 7 (its rows, S5 and D7, are
+both placed in Chapters 1–49), so the orphan list stays empty (§6).
 
 ---
 
@@ -1928,10 +1746,6 @@ Vitter 1985 (reservoir sampling) · Fisher & Yates 1938 and Durstenfeld 1964 (sh
 Flajolet et al. 2007 (HyperLogLog) · Cormode & Muthukrishnan 2005 (Count-Min) · Lucene's FST ·
 `grep`'s matcher.
 
-**Part 7 — Build It.** No new primary sources; the capstone's references are the standard
-libraries it is fuzzed against (CPython `list`/`dict`, OpenJDK `ArrayList`/`HashMap`/`TreeMap`/
-`PriorityQueue`) and the chapters that hold the mechanisms it simplifies.
-
 ---
 
 ## 6. Coverage check — computed, not asserted
@@ -1958,7 +1772,7 @@ argued away:
 **A note on how the check was run, because the first version of it was wrong.** The initial
 script matched any `[A-Z]\d+` token inside a chapter block, which also matched Charter
 *outcome* identifiers — and outcome ids collide with row ids (`B5`, `A8`, `O1` are both). That
-masked **B7**, which appeared "placed" only because Chapter 56 delivers outcome B7. The
+masked **B7**, which appeared "placed" only because Chapter 56 (a capstone chapter, removed 2026-09-24) delivered outcome B7. The
 corrected script parses only the `Rows:` segment. Recorded because the same collision will
 mislead the Phase 6 outcome→assessment map if it is not anticipated.
 
@@ -1966,9 +1780,9 @@ mislead the Phase 6 outcome→assessment map if it is not anticipated.
 Chapter 2, §6 — which is where Phase 1 §5 promised its §2-mandated orientation paragraph and
 forward pointer to *Operating Systems in Depth* would live.
 
-**Machines:** 142 unique `viz` keys, all distinct, all prefixed `dsa` for site-wide uniqueness
-(§10.3). Every chapter has at least one; median 2; maximum 4. By kind: 51 stepper, 29 builder,
-23 comparator, 11 playground, 11 simulator, 9 tuner, 8 inspector — a distribution weighted
+**Machines:** 134 unique `viz` keys, all distinct, all prefixed `dsa` for site-wide uniqueness
+(§10.3). Every chapter has at least one; median 2; maximum 4. By kind: 51 stepper, 26 builder,
+20 comparator, 11 playground, 9 simulator, 9 tuner, 8 inspector — a distribution weighted
 toward steppers because this subject is mostly mechanisms with state that changes over steps
 (§7.1's first trigger).
 
@@ -1976,15 +1790,15 @@ toward steppers because this subject is mostly mechanisms with state that change
 
 ## 7. Risks in this Blueprint, stated before you approve it
 
-1. **142 machines is the real cost of this course, and it is 1.75× *LLM In Depth*'s 81.**
+1. **134 machines is the real cost of this course, and it is 1.65× *LLM In Depth*'s 81.**
    That is the largest single commitment here and it is front-loaded into Phase 5. Three
-   honest options: build all 142; cut to roughly 90 by dropping the second and third machine
+   honest options: build all 134; cut to roughly 90 by dropping the second and third machine
    in non-keystone chapters (the Blueprint marks which are load-bearing by naming the
    discovery); or build the keystone machines first and ship the rest as a second pass. **My
    recommendation is the third** — every chapter keeps its first machine, so no chapter ships
    machine-less, and the extra 50 land after Phase 7. The owner should decide now, because it
    changes Phase 4's text: a chapter that says "step through it above" must have the machine.
-2. **~168,000 body words** is roughly 1.4× *LLM In Depth*. The chapter count is the cause and
+2. **~168,000 body words** (138,000 after the capstone's removal; 187,000 as written) is roughly 1.4× *LLM In Depth*. The chapter count is the cause and
    it was approved at Phase 0; this is the arithmetic consequence, recorded so it is not a
    surprise at Phase 4.
 3. **Chapter 4 is load-bearing for Chapters 8, 10 and 11.** If the amortized-first ordering is
@@ -2000,17 +1814,17 @@ toward steppers because this subject is mostly mechanisms with state that change
 
 ## 8. Self-check against §4 Phase 3 and §11
 
-- [x] 7 parts, each with a title and a two-sentence description in the voice of the existing `PARTS` entries. Deviation from 4–6 declared in §0.
-- [x] 57 chapters numbered continuously, each with title, archetype, blurb, 4–8 sections with a line of content each, machine specs per §7.5, figures, outcomes, Topic Universe rows, prerequisite chapters, and an estimated word count.
-- [x] All five §6.3 archetypes present: orientation (1), mechanism (most), engineering reality / field guide (16, 47, 49 — three, against the required two), practitioner handbook (48), build-it (50–57).
-- [x] Capstone plan complete against §9's eight requirements (§3), including the confession table and three weekend-scoped graduation projects.
+- [x] 6 parts, each with a title and a two-sentence description in the voice of the existing `PARTS` entries.
+- [x] 49 chapters numbered continuously, each with title, archetype, blurb, 4–8 sections with a line of content each, machine specs per §7.5, figures, outcomes, Topic Universe rows, prerequisite chapters, and an estimated word count.
+- [x] Four of the five §6.3 archetypes present: orientation (1), mechanism (most), engineering reality / field guide (16, 47, 49 — three, against the required two), practitioner handbook (48). No build-it chapters since the capstone's removal; declared in §0.
+- [x] No capstone (§3): owner decision 2026-09-24, declared as a §9 deviation in §0.
 - [x] Three free chapters named with justification and the rejected alternatives recorded (§4); six machines visible before the paywall against §2's required two.
 - [x] Reading map complete and grouped by part (§5), with two open attributions flagged rather than invented.
 - [x] **Coverage check run as a script; orphan list empty** (§6). Three real orphans found and placed; the faulty first version of the check is documented so the same collision does not mislead Phase 6.
 - [x] Machine keys unique across the site (`dsa` prefix), every chapter carries at least one.
 
 **Gate:** owner approves the parts, the chapter list and numbering (**approval freezes the
-numbers**), the capstone plan, the three free chapters — and makes the §7.1 decision on the
+numbers**), the three free chapters — and makes the §7.1 decision on the
 machine count.
 Next: **Phase 4 — chapter production**, one chapter per response in the §10 data format,
 starting with Chapter 1 and writing in syllabus order, with Chapter 47 deferred to last.
