@@ -1776,6 +1776,28 @@ masked **B7**, which appeared "placed" only because Chapter 56 (a capstone chapt
 corrected script parses only the `Rows:` segment. Recorded because the same collision will
 mislead the Phase 6 outcome→assessment map if it is not anticipated.
 
+**Rows audit, ch1–39 (2026-09-24).** The check above proves every row is *assigned*; it cannot prove the
+chapter *teaches* it. A second pass matched each of the 172 row assignments in Chapters 1–39 against the written text
+(key-term coverage, then a concept probe, then a course-wide search for anything still missing). Most flags were
+wording. Real gaps, all rows assigned in a `Rows:` line but absent from the chapter's section plan, were fixed in place:
+
+| Row | Was missing | Fixed in |
+|---|---|---|
+| K4 (B=5) | house robber, decode ways | Ch 19 §3 (decode ways, tabulation) and §7 (house robber, rolling array) |
+| L7 (B=5) | gas station, jump game, candy, partition labels | Ch 23, new section *Four interview greedies, and why they are safe* |
+| K11 (B=5) | palindrome partitioning | Ch 21 §7 (minimum cuts, O(n²)) |
+| F3 (B=5) | stock span by name | Ch 10 §3 |
+| M3 (core) | submask enumeration in O(3ⁿ) | Ch 22 §4 (was only in Ch 40, now optional) |
+| E5 (core) | rolling hash | Ch 17 §8 (repeated windows; was only in Ch 41, now optional) |
+| E7 (core) | mutable keys as a bug | Ch 17 §2 |
+| H12 (core) | Tarjan's offline LCA | Ch 29 §5 |
+| P14 | Newton's method | Ch 14 §4 |
+
+Each fix carries measured numbers and, where it has code, Python and Java tested against brute force. **Left open for
+the owner:** N8 (small-to-large), N9 (implicit treaps) and H16 (kd-trees, interval trees), all *supporting* rows
+assigned to Chapter 31 and asked by at most one interview bank. Recommendation: downgrade them to *mentioned* and
+name them in Chapter 49's frontier rather than write them.
+
 **The single `out` row checks out:** R5 (concurrency) is referenced in exactly one chapter —
 Chapter 2, §6 — which is where Phase 1 §5 promised its §2-mandated orientation paragraph and
 forward pointer to *Operating Systems in Depth* would live.
