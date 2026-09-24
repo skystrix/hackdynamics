@@ -2069,7 +2069,34 @@ CHAPTERS.push({
 
         "<p>Neither of this course's two languages does it. In CPython, disassembling a tail-recursive factorial shows the call and the return as two separate instructions:</p>" +
 
-        "<pre><code>def fact(n, acc=1):\n    if n == 0: return acc\n    return fact(n - 1, acc * n)\n\n# CPython 3.13 bytecode for the last line:\nLOAD_GLOBAL      1 (fact + NULL)\nLOAD_FAST        0 (n)\nLOAD_CONST       2 (1)\nBINARY_OP       10 (-)\nLOAD_FAST_LOAD_FAST  16 (acc, n)\nBINARY_OP        5 (*)\nCALL             2\nRETURN_VALUE</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def fact(n, acc=1):\n" +
+        "    if n == 0: return acc\n" +
+        "    return fact(n - 1, acc * n)\n" +
+        "\n" +
+        "# CPython 3.13 bytecode for the last line:\n" +
+        "LOAD_GLOBAL      1 (fact + NULL)\n" +
+        "LOAD_FAST        0 (n)\n" +
+        "LOAD_CONST       2 (1)\n" +
+        "BINARY_OP       10 (-)\n" +
+        "LOAD_FAST_LOAD_FAST  16 (acc, n)\n" +
+        "BINARY_OP        5 (*)\n" +
+        "CALL             2\n" +
+        "RETURN_VALUE</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long fact(long n, long acc) {       // call fact(n, 1)\n" +
+        "    if (n == 0) return acc;\n" +
+        "    return fact(n - 1, acc * n);\n" +
+        "}\n" +
+        "\n" +
+        "// javap -c, OpenJDK 21, for the last line:\n" +
+        "lload_0\n" +
+        "lconst_1\n" +
+        "lsub\n" +
+        "lload_2\n" +
+        "lload_0\n" +
+        "lmul\n" +
+        "invokestatic  #7        // Method fact:(JJ)J\n" +
+        "lreturn</code></pre></div>" +
 
         "<p><code>CALL</code> pushes a frame and runs the callee to completion; <code>RETURN_VALUE</code> then returns whatever came back. The caller's frame is live for the whole of the callee's execution, so <code>fact(5000)</code> builds five thousand frames. A runtime performing tail call elimination would emit a jump to the top of the same frame instead, and there would be nothing to disassemble after the call because there would be no after. The reason CPython's maintainers have declined the optimisation is the one section 2 pointed at: the eliminated frames are exactly the ones a traceback would have listed, and a debugging story is worth more to most Python programs than an unbounded tail recursion.</p>" +
 
@@ -2333,7 +2360,25 @@ CHAPTERS.push({
       html:
         "<p>Quick-union's failure has a precise cause: <code>union</code> picks which root goes under which arbitrarily, and <code>union(i, i+1)</code> happens to pick worst every time. So stop picking arbitrarily. Keep a second array, <code>rank[r]</code>, holding an upper bound on the height of the tree rooted at r, and always link the shorter tree under the taller one. When the ranks are equal, either will do, and the winner's rank goes up by one.</p>" +
 
-        "<pre><code>def union(self, a, b):\n    ra, rb = self.find(a), self.find(b)\n    if ra == rb:\n        return\n    if self.rank[ra] &lt; self.rank[rb]:\n        ra, rb = rb, ra          # ra is now the taller root\n    self.p[rb] = ra\n    if self.rank[ra] == self.rank[rb]:\n        self.rank[ra] += 1</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def union(self, a, b):\n" +
+        "    ra, rb = self.find(a), self.find(b)\n" +
+        "    if ra == rb:\n" +
+        "        return\n" +
+        "    if self.rank[ra] &lt; self.rank[rb]:\n" +
+        "        ra, rb = rb, ra          # ra is now the taller root\n" +
+        "    self.p[rb] = ra\n" +
+        "    if self.rank[ra] == self.rank[rb]:\n" +
+        "        self.rank[ra] += 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>void union(int a, int b) {\n" +
+        "    int ra = find(a), rb = find(b);\n" +
+        "    if (ra == rb) return;\n" +
+        "    if (rank[ra] &lt; rank[rb]) {\n" +
+        "        int t = ra; ra = rb; rb = t;   // ra is now the taller root\n" +
+        "    }\n" +
+        "    p[rb] = ra;\n" +
+        "    if (rank[ra] == rank[rb]) rank[ra]++;\n" +
+        "}</code></pre></div>" +
 
         "<div class='fig'><svg viewBox='0 0 760 268' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>six elements after the same sequence: union(0,1), union(1,2), ... union(4,5)</text><text x='20' y='40' fill='#2de2ff' font-size='11'>quick-find</text><text x='20' y='232' fill='#7d8fb0' font-size='9'>one array, all equal</text><text x='20' y='248' fill='#ff5d73' font-size='9'>union rewrites all 6</text><text x='205' y='40' fill='#2de2ff' font-size='11'>quick-union</text><text x='205' y='232' fill='#7d8fb0' font-size='9'>a path, depth 5</text><text x='205' y='248' fill='#ff5d73' font-size='9'>find walks 5 links</text><text x='390' y='40' fill='#2de2ff' font-size='11'>union by rank</text><text x='390' y='232' fill='#7d8fb0' font-size='9'>a star, depth 1</text><text x='390' y='248' fill='#3ddc97' font-size='9'>find walks 1 link</text><text x='575' y='40' fill='#2de2ff' font-size='11'>+ compression</text><text x='575' y='232' fill='#7d8fb0' font-size='9'>identical here</text><text x='575' y='248' fill='#3ddc97' font-size='9'>nothing left to flatten</text><rect x='32' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='42' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='54' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='64' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='76' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='86' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='98' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='108' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='120' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='130' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='142' y='60' width='20' height='22' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='152' y='75' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><text x='32' y='96' fill='#7d8fb0' font-size='9'>id[0..5]</text><rect x='263' y='58' width='34' height='20' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='280' y='72' text-anchor='middle' fill='#ffd166' font-size='10'>0</text><line x1='280' y1='78' x2='280' y2='85' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='85' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='99' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><line x1='280' y1='105' x2='280' y2='112' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='112' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='126' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><line x1='280' y1='132' x2='280' y2='139' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='139' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='153' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><line x1='280' y1='159' x2='280' y2='166' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='166' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='180' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><line x1='280' y1='186' x2='280' y2='193' stroke='#4f7cff' stroke-width='2'/><rect x='263' y='193' width='34' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='280' y='207' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><rect x='460' y='58' width='34' height='20' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='477' y='72' text-anchor='middle' fill='#ffd166' font-size='10'>0</text><rect x='412' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='425' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><line x1='425' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='442' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='455' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><line x1='455' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='472' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='485' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><line x1='485' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='502' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='515' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><line x1='515' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='532' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='545' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><line x1='545' y1='132' x2='477' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='645' y='58' width='34' height='20' rx='5' fill='#1a2440' stroke='#ffd166' stroke-width='2'/><text x='662' y='72' text-anchor='middle' fill='#ffd166' font-size='10'>0</text><rect x='597' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='610' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>1</text><line x1='610' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='627' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='640' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>2</text><line x1='640' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='657' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='670' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>3</text><line x1='670' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='687' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='700' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>4</text><line x1='700' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/><rect x='717' y='132' width='26' height='20' rx='5' fill='#111a2e' stroke='#4f7cff' stroke-width='2'/><text x='730' y='146' text-anchor='middle' fill='#c9d6ea' font-size='10'>5</text><line x1='730' y1='132' x2='662' y2='78' stroke='#3ddc97' stroke-width='1.2'/></svg><div class='fig-cap'>The same input under four implementations; the last two are the same picture, which is the point of section 5.</div></div>" +
         "<p>Three added lines, and the depth is now bounded. The proof is short enough to carry in your head.</p>" +
@@ -2372,7 +2417,24 @@ CHAPTERS.push({
       html:
         "<p>A <code>find</code> walks from a node to its root, and on the way it learns something it then throws away: the root of every node it passed through. Keeping that information is <strong>path compression</strong> &#8212; after reaching the root, walk the path a second time and point every node on it straight at the root.</p>" +
 
-        "<pre><code>def find(self, x):\n    root = x\n    while self.p[root] != root:\n        root = self.p[root]\n    while self.p[x] != root:         # second pass: re-point\n        self.p[x], x = root, self.p[x]\n    return root</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def find(self, x):\n" +
+        "    root = x\n" +
+        "    while self.p[root] != root:\n" +
+        "        root = self.p[root]\n" +
+        "    while self.p[x] != root:         # second pass: re-point\n" +
+        "        self.p[x], x = root, self.p[x]\n" +
+        "    return root</code></pre>" +
+        "<pre data-lang='java' hidden><code>int find(int x) {\n" +
+        "    int root = x;\n" +
+        "    while (p[root] != root) root = p[root];\n" +
+        "    while (p[x] != root) {             // second pass: re-point\n" +
+        "        int next = p[x];\n" +
+        "        p[x] = root;\n" +
+        "        x = next;\n" +
+        "    }\n" +
+        "    return root;\n" +
+        "}</code></pre></div>" +
 
         "<div class='fig'><svg viewBox='0 0 760 244' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
         "<text x='20' y='18' fill='#2de2ff' font-size='12'>one find(5) on a chain of six, before and after compression</text>" +
@@ -2657,7 +2719,23 @@ CHAPTERS.push({
       html:
         "<p>The second arrangement puts both pointers at the start and lets them travel at different speeds. A <strong>read pointer</strong> scans every element; a <strong>write pointer</strong> marks where the next kept element belongs. Because the write pointer never overtakes the read pointer, the rewriting happens <strong>in place</strong> and needs no second array. This is the <strong>compaction scan</strong>, and removing duplicates from a sorted array is its smallest instance:</p>" +
 
-        "<pre><code>def dedupe(a):               # a is sorted; returns new length\n    if not a:\n        return 0\n    w = 1                    # write pointer\n    for r in range(1, len(a)):   # read pointer\n        if a[r] != a[w - 1]:\n            a[w] = a[r]\n            w += 1\n    return w</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def dedupe(a):               # a is sorted; returns new length\n" +
+        "    if not a:\n" +
+        "        return 0\n" +
+        "    w = 1                    # write pointer\n" +
+        "    for r in range(1, len(a)):   # read pointer\n" +
+        "        if a[r] != a[w - 1]:\n" +
+        "            a[w] = a[r]\n" +
+        "            w += 1\n" +
+        "    return w</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int dedupe(int[] a) {           // a is sorted; returns new length\n" +
+        "    if (a.length == 0) return 0;\n" +
+        "    int w = 1;                         // write pointer\n" +
+        "    for (int r = 1; r &lt; a.length; r++) // read pointer\n" +
+        "        if (a[r] != a[w - 1]) a[w++] = a[r];\n" +
+        "    return w;\n" +
+        "}</code></pre></div>" +
 
         "<p>The invariant is that <code>a[0:w]</code> holds exactly the distinct elements seen so far, in order, and it is maintained because the only write happens when a genuinely new value arrives. Partitioning works the same way: move every zero to the end by writing the non-zeros forward and filling the tail afterwards. Both are one pass, no extra space, and the correctness argument fits in one sentence.</p>" +
 
@@ -2667,7 +2745,24 @@ CHAPTERS.push({
 
         "<p>There is an extreme case of the same-direction idea that looks impossible the first time you see it. If the array holds a permutation of 0 &#8230; n&#8722;1 &#8212; every index present exactly once, in some order &#8212; then each value knows where it belongs, because the value <em>is</em> the destination index. So put it there, and look at whatever you displaced:</p>" +
 
-        "<pre><code>def cyclic_place(a):         # a is a permutation of 0..n-1\n    i = 0\n    while i &lt; len(a):\n        if a[i] != i:\n            a[a[i]], a[i] = a[i], a[a[i]]   # send a[i] home\n        else:\n            i += 1</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def cyclic_place(a):         # a is a permutation of 0..n-1\n" +
+        "    i = 0\n" +
+        "    while i &lt; len(a):\n" +
+        "        if a[i] != i:\n" +
+        "            a[a[i]], a[i] = a[i], a[a[i]]   # send a[i] home\n" +
+        "        else:\n" +
+        "            i += 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>static void cyclicPlace(int[] a) {     // a is a permutation of 0..n-1\n" +
+        "    int i = 0;\n" +
+        "    while (i &lt; a.length) {\n" +
+        "        if (a[i] != i) {               // send a[i] home\n" +
+        "            int home = a[i];\n" +
+        "            a[i] = a[home];\n" +
+        "            a[home] = home;\n" +
+        "        } else i++;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>The loop looks quadratic and is not. Every swap places one value at its final index, where it is never disturbed again, so the total number of swaps over the whole run is at most n&#8722;1 &#8212; and the pointer i advances n times. This is Chapter 4's argument in its purest form: the inner work is bounded globally rather than per iteration, so a nested-looking loop is linear. Measured on a shuffled permutation of a million elements, it performed <strong>999,987 swaps</strong> against the bound of 999,999, and sorted the array correctly while never comparing two elements to each other.</p>" +
 
@@ -2702,7 +2797,26 @@ CHAPTERS.push({
         "<text x='40' y='192' fill='#3ddc97' font-size='10'>the unexamined band shrinks by one every iteration, so the loop ends after n steps</text>" +
         "</svg><div class='fig-cap'>The third rule is the one people get wrong: what arrives from hi has never been looked at.</div></div>" +
 
-        "<pre><code>def dutch_flag(a, pivot):\n    lo, i, hi = 0, 0, len(a) - 1\n    while i &lt;= hi:\n        if a[i] &lt; pivot:\n            a[lo], a[i] = a[i], a[lo]; lo += 1; i += 1\n        elif a[i] &gt; pivot:\n            a[hi], a[i] = a[i], a[hi]; hi -= 1      # i stays put\n        else:\n            i += 1</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def dutch_flag(a, pivot):\n" +
+        "    lo, i, hi = 0, 0, len(a) - 1\n" +
+        "    while i &lt;= hi:\n" +
+        "        if a[i] &lt; pivot:\n" +
+        "            a[lo], a[i] = a[i], a[lo]; lo += 1; i += 1\n" +
+        "        elif a[i] &gt; pivot:\n" +
+        "            a[hi], a[i] = a[i], a[hi]; hi -= 1      # i stays put\n" +
+        "        else:\n" +
+        "            i += 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>static void dutchFlag(int[] a, int pivot) {\n" +
+        "    int lo = 0, i = 0, hi = a.length - 1;\n" +
+        "    while (i &lt;= hi) {\n" +
+        "        if (a[i] &lt; pivot)      { swap(a, lo, i); lo++; i++; }\n" +
+        "        else if (a[i] &gt; pivot) { swap(a, hi, i); hi--; }       // i stays put\n" +
+        "        else                   i++;\n" +
+        "    }\n" +
+        "}\n" +
+        "\n" +
+        "static void swap(int[] a, int i, int j) { int t = a[i]; a[i] = a[j]; a[j] = t; }</code></pre></div>" +
 
         "<p><strong>Why i does not advance in the middle branch.</strong> The element swapped in from <code>hi</code> came from the unexamined region and has never been compared to the pivot. Advancing i would move it into the settled &#8220;= pivot&#8221; region on no evidence. In the first branch the situation is different: the element arriving from <code>lo</code> came from the region already known to equal the pivot, so it is safe to step over. Getting this wrong produces code that is correct on most inputs and wrong when a large value is swapped leftward, which is the worst kind of wrong.</p>" +
 
@@ -2723,7 +2837,25 @@ CHAPTERS.push({
       html:
         "<p>A <strong>fixed-size window</strong> asks the same question of every k consecutive elements: their sum, their average, their maximum. Computing each answer from scratch costs n &#215; k. The observation that removes the k is that consecutive windows overlap in k&#8722;1 elements, so moving the window one step changes the answer by exactly two elements &#8212; one enters, one leaves. That is the <strong>rolling update</strong>:</p>" +
 
-        "<pre><code>def window_sums(a, k):\n    s = sum(a[:k])\n    out = [s]\n    for r in range(k, len(a)):\n        s += a[r] - a[r - k]      # one in, one out\n        out.append(s)\n    return out</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def window_sums(a, k):\n" +
+        "    s = sum(a[:k])\n" +
+        "    out = [s]\n" +
+        "    for r in range(k, len(a)):\n" +
+        "        s += a[r] - a[r - k]      # one in, one out\n" +
+        "        out.append(s)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long[] windowSums(int[] a, int k) {\n" +
+        "    long[] out = new long[a.length - k + 1];\n" +
+        "    long s = 0;\n" +
+        "    for (int i = 0; i &lt; k; i++) s += a[i];\n" +
+        "    out[0] = s;\n" +
+        "    for (int r = k; r &lt; a.length; r++) {\n" +
+        "        s += a[r] - a[r - k];          // one in, one out\n" +
+        "        out[r - k + 1] = s;\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
 
         "<p>Now the cost is n additions and n subtractions regardless of k, which matters because k is often large: a 200-day moving average over a decade of prices is 2,500 windows of 200 elements, and the rolling version does 5,000 arithmetic operations instead of 500,000.</p>" +
 
@@ -2779,7 +2911,27 @@ CHAPTERS.push({
 
         "<p>The canonical victim is minimum-size subarray with sum at least a target:</p>" +
 
-        "<pre><code>def min_len(nums, target):\n    best, s, left = float('inf'), 0, 0\n    for right, v in enumerate(nums):\n        s += v\n        while s &gt;= target:\n            best = min(best, right - left + 1)\n            s -= nums[left]; left += 1\n    return best</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_len(nums, target):\n" +
+        "    best, s, left = float('inf'), 0, 0\n" +
+        "    for right, v in enumerate(nums):\n" +
+        "        s += v\n" +
+        "        while s &gt;= target:\n" +
+        "            best = min(best, right - left + 1)\n" +
+        "            s -= nums[left]; left += 1\n" +
+        "    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int minLen(int[] nums, int target) {   // Integer.MAX_VALUE if none\n" +
+        "    int best = Integer.MAX_VALUE, left = 0;\n" +
+        "    long s = 0;\n" +
+        "    for (int right = 0; right &lt; nums.length; right++) {\n" +
+        "        s += nums[right];\n" +
+        "        while (s &gt;= target) {\n" +
+        "            best = Math.min(best, right - left + 1);\n" +
+        "            s -= nums[left++];\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
 
         "<p>With non-negative values this is correct, and the reason is precisely monotonicity: adding an element can only increase the sum, so if a window is too small it stays too small until the right edge moves, and if it is large enough, shrinking from the left is the only way to find a shorter one. Tested against brute force on 20,000 random non-negative arrays, it disagreed <strong>zero times</strong>.</p>" +
 
@@ -2959,7 +3111,19 @@ CHAPTERS.push({
 
         "<p>The <strong>prefix sum</strong> array replaces all of it. Define P so that P[i] is the sum of the first i elements &#8212; the first <em>i</em>, not the elements up to index i, and that distinction is the whole of the bookkeeping:</p>" +
 
-        "<pre><code>P = [0] * (len(a) + 1)\nfor i, v in enumerate(a):\n    P[i + 1] = P[i] + v\n\n# sum of a[l..r] inclusive:\ntotal = P[r + 1] - P[l]</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>P = [0] * (len(a) + 1)\n" +
+        "for i, v in enumerate(a):\n" +
+        "    P[i + 1] = P[i] + v\n" +
+        "\n" +
+        "# sum of a[l..r] inclusive:\n" +
+        "total = P[r + 1] - P[l]</code></pre>" +
+        "<pre data-lang='java' hidden><code>long[] P = new long[a.length + 1];\n" +
+        "for (int i = 0; i &lt; a.length; i++)\n" +
+        "    P[i + 1] = P[i] + a[i];\n" +
+        "\n" +
+        "// sum of a[l..r] inclusive:\n" +
+        "long total = P[r + 1] - P[l];</code></pre></div>" +
 
         "<p>Building P costs one pass. Every question afterwards costs one subtraction. The same workload that took 5,150 ms takes <strong>7.14 ms</strong>, a factor of 721, and the factor grows with the number of questions because the build is paid once.</p>" +
 
@@ -2981,7 +3145,18 @@ CHAPTERS.push({
 
         "<p>The subtraction is there because the rectangle above and the rectangle to the left overlap in the square above-and-to-the-left, which would otherwise be counted twice. That is <strong>inclusion–exclusion</strong>, and the query reads the same way with the signs reversed:</p>" +
 
-        "<pre><code>def rect_sum(P, r1, c1, r2, c2):        # inclusive corners\n    return (P[r2+1][c2+1]\n            - P[r1][c2+1]                # strip above\n            - P[r2+1][c1]                # strip to the left\n            + P[r1][c1])                 # add back the double-subtracted corner</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def rect_sum(P, r1, c1, r2, c2):        # inclusive corners\n" +
+        "    return (P[r2+1][c2+1]\n" +
+        "            - P[r1][c2+1]                # strip above\n" +
+        "            - P[r2+1][c1]                # strip to the left\n" +
+        "            + P[r1][c1])                 # add back the double-subtracted corner</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long rectSum(long[][] P, int r1, int c1, int r2, int c2) {   // inclusive corners\n" +
+        "    return P[r2 + 1][c2 + 1]\n" +
+        "         - P[r1][c2 + 1]               // strip above\n" +
+        "         - P[r2 + 1][c1]               // strip to the left\n" +
+        "         + P[r1][c1];                  // add back the double-subtracted corner\n" +
+        "}</code></pre></div>" +
 
         "<div class='fig'><svg viewBox='0 0 760 268' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace' data-overlap='intentional'>" +
         "<text x='20' y='18' fill='#2de2ff' font-size='12'>the query rectangle is one big sum minus two strips, plus the corner counted twice</text>" +
@@ -3016,7 +3191,35 @@ CHAPTERS.push({
 
         "<p>A <strong>difference array</strong> D stores the change between consecutive elements rather than the elements. Then adding v across a whole range is two writes, because only the two boundaries change:</p>" +
 
-        "<pre><code>D = [0] * (n + 1)\n\ndef range_add(l, r, v):      # inclusive\n    D[l]     += v            # from here on, v more\n    D[r + 1] -= v            # from here on, take it back\n\ndef materialise():           # one pass at the end\n    out, run = [], 0\n    for i in range(n):\n        run += D[i]\n        out.append(run)\n    return out</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>D = [0] * (n + 1)\n" +
+        "\n" +
+        "def range_add(l, r, v):      # inclusive\n" +
+        "    D[l]     += v            # from here on, v more\n" +
+        "    D[r + 1] -= v            # from here on, take it back\n" +
+        "\n" +
+        "def materialise():           # one pass at the end\n" +
+        "    out, run = [], 0\n" +
+        "    for i in range(n):\n" +
+        "        run += D[i]\n" +
+        "        out.append(run)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>long[] D = new long[n + 1];\n" +
+        "\n" +
+        "void rangeAdd(int l, int r, long v) {  // inclusive\n" +
+        "    D[l]     += v;                     // from here on, v more\n" +
+        "    D[r + 1] -= v;                     // from here on, take it back\n" +
+        "}\n" +
+        "\n" +
+        "long[] materialise() {                 // one pass at the end\n" +
+        "    long[] out = new long[n];\n" +
+        "    long run = 0;\n" +
+        "    for (int i = 0; i &lt; n; i++) {\n" +
+        "        run += D[i];\n" +
+        "        out[i] = run;\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
 
         "<p>Every update is O(1) and the final read-out is O(n), so u updates cost O(u + n) instead of O(un). Checked against the naive loop on 5,000 random updates over 2,000 elements, the two agreed exactly.</p>" +
 
@@ -3031,7 +3234,30 @@ CHAPTERS.push({
 
         "<p>The prefix sum reduces it to something a hash map can do. A subarray a[l..r] sums to k exactly when P[r+1] &#8722; P[l] = k, which rearranges to P[l] = P[r+1] &#8722; k. So walk the array maintaining the running prefix sum, and at each position ask how many earlier prefixes had the value <code>run - k</code>:</p>" +
 
-        "<pre><code>from collections import defaultdict\n\ndef count_subarrays(nums, k):\n    seen = defaultdict(int)\n    seen[0] = 1              # the empty prefix, before any element\n    run = count = 0\n    for v in nums:\n        run += v\n        count += seen[run - k]   # every earlier prefix that works\n        seen[run] += 1\n    return count</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import defaultdict\n" +
+        "\n" +
+        "def count_subarrays(nums, k):\n" +
+        "    seen = defaultdict(int)\n" +
+        "    seen[0] = 1              # the empty prefix, before any element\n" +
+        "    run = count = 0\n" +
+        "    for v in nums:\n" +
+        "        run += v\n" +
+        "        count += seen[run - k]   # every earlier prefix that works\n" +
+        "        seen[run] += 1\n" +
+        "    return count</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int countSubarrays(int[] nums, int k) {\n" +
+        "    Map&lt;Long, Integer&gt; seen = new HashMap&lt;&gt;();\n" +
+        "    seen.put(0L, 1);                   // the empty prefix, before any element\n" +
+        "    long run = 0;\n" +
+        "    int count = 0;\n" +
+        "    for (int v : nums) {\n" +
+        "        run += v;\n" +
+        "        count += seen.getOrDefault(run - k, 0);   // every earlier prefix that works\n" +
+        "        seen.merge(run, 1, Integer::sum);\n" +
+        "    }\n" +
+        "    return count;\n" +
+        "}</code></pre></div>" +
 
         "<p>One pass, O(n) expected time, and it handles negative values without complaint &#8212; which is exactly the case where Chapter 8's sliding window was unsound. The two techniques are not competitors so much as different tools: a window needs a monotone predicate, and this does not.</p>" +
 
@@ -3080,7 +3306,16 @@ CHAPTERS.push({
 
         "<p>The version people write from memory clamps the running sum at zero:</p>" +
 
-        "<pre><code>best = run = 0\nfor v in a:\n    run = max(0, run + v)        # wrong when every value is negative\n    best = max(best, run)</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>best = run = 0\n" +
+        "for v in a:\n" +
+        "    run = max(0, run + v)        # wrong when every value is negative\n" +
+        "    best = max(best, run)</code></pre>" +
+        "<pre data-lang='java' hidden><code>int best = 0, run = 0;\n" +
+        "for (int v : a) {\n" +
+        "    run = Math.max(0, run + v);        // wrong when every value is negative\n" +
+        "    best = Math.max(best, run);\n" +
+        "}</code></pre></div>" +
 
         "<p>On an array where every element is negative this returns 0, and 0 is not the sum of any subarray at all &#8212; it is the sum of the <em>empty</em> subarray. Tested on 20,000 random arrays, the version above was wrong on <strong>every single all-negative array it saw: 2,306 out of 2,306</strong>. On [&#8722;5, &#8722;2, &#8722;9] it answers 0 where the correct answer is &#8722;2.</p>" +
 
@@ -3264,7 +3499,37 @@ CHAPTERS.push({
       html:
         "<p>A queue in a fixed array is the <strong>circular buffer</strong>: keep a head index and a tail index, push at the tail, pop from the head, and let both wrap to 0 when they run off the end. The <strong>wraparound</strong> is the modulo, and it is the whole implementation:</p>" +
 
-        "<pre><code>class Ring:\n    def __init__(self, cap):\n        self.b = [None] * cap\n        self.head = self.tail = 0\n\n    def push(self, v):\n        self.b[self.tail] = v\n        self.tail = (self.tail + 1) % len(self.b)\n\n    def pop(self):\n        v = self.b[self.head]\n        self.head = (self.head + 1) % len(self.b)\n        return v</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Ring:\n" +
+        "    def __init__(self, cap):\n" +
+        "        self.b = [None] * cap\n" +
+        "        self.head = self.tail = 0\n" +
+        "\n" +
+        "    def push(self, v):\n" +
+        "        self.b[self.tail] = v\n" +
+        "        self.tail = (self.tail + 1) % len(self.b)\n" +
+        "\n" +
+        "    def pop(self):\n" +
+        "        v = self.b[self.head]\n" +
+        "        self.head = (self.head + 1) % len(self.b)\n" +
+        "        return v</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Ring {\n" +
+        "    final int[] b;\n" +
+        "    int head, tail;\n" +
+        "\n" +
+        "    Ring(int cap) { b = new int[cap]; }\n" +
+        "\n" +
+        "    void push(int v) {\n" +
+        "        b[tail] = v;\n" +
+        "        tail = (tail + 1) % b.length;\n" +
+        "    }\n" +
+        "\n" +
+        "    int pop() {\n" +
+        "        int v = b[head];\n" +
+        "        head = (head + 1) % b.length;\n" +
+        "        return v;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>This code is wrong, and the bug is not in any line of it. It is in what the two indices can express.</p>" +
 
@@ -3348,7 +3613,31 @@ CHAPTERS.push({
 
         "<p>Keep indices on a stack with heights increasing. When a bar arrives that is not taller than the stack top, the bar on top can extend no further right &#8212; <strong>its rectangle has ended</strong> &#8212; so pop it and settle its area. Its right boundary is the arriving index; its left boundary is whatever is now beneath it on the stack, because everything between was taller and got popped earlier.</p>" +
 
-        "<pre><code>def largest_rectangle(h):\n    h = h + [0]              # sentinel: forces every bar to be settled\n    st, best = [], 0\n    for i, v in enumerate(h):\n        while st and h[st[-1]] &gt;= v:\n            height = h[st.pop()]\n            left = st[-1] + 1 if st else 0   # first index this height covers\n            best = max(best, height * (i - left))\n        st.append(i)\n    return best</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def largest_rectangle(h):\n" +
+        "    h = h + [0]              # sentinel: forces every bar to be settled\n" +
+        "    st, best = [], 0\n" +
+        "    for i, v in enumerate(h):\n" +
+        "        while st and h[st[-1]] &gt;= v:\n" +
+        "            height = h[st.pop()]\n" +
+        "            left = st[-1] + 1 if st else 0   # first index this height covers\n" +
+        "            best = max(best, height * (i - left))\n" +
+        "        st.append(i)\n" +
+        "    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long largestRectangle(int[] h) {\n" +
+        "    Deque&lt;Integer&gt; st = new ArrayDeque&lt;&gt;();\n" +
+        "    long best = 0;\n" +
+        "    for (int i = 0; i &lt;= h.length; i++) {\n" +
+        "        int v = i &lt; h.length ? h[i] : 0;   // sentinel: forces every bar to be settled\n" +
+        "        while (!st.isEmpty() &amp;&amp; h[st.peek()] &gt;= v) {\n" +
+        "            int height = h[st.pop()];\n" +
+        "            int left = st.isEmpty() ? 0 : st.peek() + 1;   // first index this height covers\n" +
+        "            best = Math.max(best, (long) height * (i - left));\n" +
+        "        }\n" +
+        "        st.push(i);\n" +
+        "    }\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
 
         "<p>Two details carry the whole implementation. The appended <strong>zero sentinel</strong> is shorter than every real bar, so it forces the stack to drain at the end and no bar leaves unsettled &#8212; the same idea as the prefix array's leading zero in Chapter 9, a fake element that removes a special case. And the left boundary is <code>st[-1] + 1</code> rather than the popped index, because after the pop the new top is the nearest bar to the left that is <em>shorter</em>, so the rectangle starts one past it.</p>" +
 
@@ -3356,7 +3645,34 @@ CHAPTERS.push({
 
         "<h3>The same pops, read as water</h3>" +
         "<p>Trapping rain water asks how much water an elevation map holds after rain, and it is the same loop with the pop interpreted differently. Keep a stack of indices with heights decreasing. When a taller bar arrives it forms the right wall of a basin, so pop the floor, and the element now beneath it on the stack is the left wall. Water sits above the floor up to the lower of the two walls, across the gap between them:</p>" +
-        "<pre><code>def trap(h):\n    st, total = [], 0\n    for i, v in enumerate(h):\n        while st and h[st[-1]] &lt; v:\n            floor = h[st.pop()]\n            if not st:\n                break                 # no left wall, water escapes\n            width = i - st[-1] - 1\n            depth = min(h[st[-1]], v) - floor\n            total += width * depth    # one horizontal slab\n        st.append(i)\n    return total</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def trap(h):\n" +
+        "    st, total = [], 0\n" +
+        "    for i, v in enumerate(h):\n" +
+        "        while st and h[st[-1]] &lt; v:\n" +
+        "            floor = h[st.pop()]\n" +
+        "            if not st:\n" +
+        "                break                 # no left wall, water escapes\n" +
+        "            width = i - st[-1] - 1\n" +
+        "            depth = min(h[st[-1]], v) - floor\n" +
+        "            total += width * depth    # one horizontal slab\n" +
+        "        st.append(i)\n" +
+        "    return total</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long trap(int[] h) {\n" +
+        "    Deque&lt;Integer&gt; st = new ArrayDeque&lt;&gt;();\n" +
+        "    long total = 0;\n" +
+        "    for (int i = 0; i &lt; h.length; i++) {\n" +
+        "        while (!st.isEmpty() &amp;&amp; h[st.peek()] &lt; h[i]) {\n" +
+        "            int floor = h[st.pop()];\n" +
+        "            if (st.isEmpty()) break;       // no left wall, water escapes\n" +
+        "            int width = i - st.peek() - 1;\n" +
+        "            int depth = Math.min(h[st.peek()], h[i]) - floor;\n" +
+        "            total += (long) width * depth; // one horizontal slab\n" +
+        "        }\n" +
+        "        st.push(i);\n" +
+        "    }\n" +
+        "    return total;\n" +
+        "}</code></pre></div>" +
         "<p>Each pop settles one horizontal slab rather than one column, which is why the accumulation is a sum over pops rather than over indices. The <code>if not st: break</code> line is the honest edge: a floor with nothing to its left has no left wall, so the water runs off and there is nothing to add. Every one of these problems has an edge of that shape, and it is always the element that reaches the end of the stack.</p>" +
         "<div class='callout'>The reading that generalises: in every problem of this family, <em>the pop is where an element's answer is computed</em>. Next-greater settles a value; largest-rectangle settles an area; trapping-rain-water settles a horizontal slab of water. Whenever a question asks for something bounded on both sides by the nearest element that breaks a condition, the monotonic stack is the structure and the pop is the moment.</div>"
     },
@@ -3399,7 +3715,36 @@ CHAPTERS.push({
 
         "<p>The answer needs no second structure, only a second stack holding, for each position, the minimum of everything at or below it:</p>" +
 
-        "<pre><code>class MinStack:\n    def __init__(self):\n        self.st, self.mn = [], []\n\n    def push(self, v):\n        self.st.append(v)\n        self.mn.append(v if not self.mn else min(v, self.mn[-1]))\n\n    def pop(self):\n        self.mn.pop()\n        return self.st.pop()\n\n    def get_min(self):\n        return self.mn[-1]</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class MinStack:\n" +
+        "    def __init__(self):\n" +
+        "        self.st, self.mn = [], []\n" +
+        "\n" +
+        "    def push(self, v):\n" +
+        "        self.st.append(v)\n" +
+        "        self.mn.append(v if not self.mn else min(v, self.mn[-1]))\n" +
+        "\n" +
+        "    def pop(self):\n" +
+        "        self.mn.pop()\n" +
+        "        return self.st.pop()\n" +
+        "\n" +
+        "    def get_min(self):\n" +
+        "        return self.mn[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class MinStack {\n" +
+        "    private final Deque&lt;Integer&gt; st = new ArrayDeque&lt;&gt;(), mn = new ArrayDeque&lt;&gt;();\n" +
+        "\n" +
+        "    void push(int v) {\n" +
+        "        st.push(v);\n" +
+        "        mn.push(mn.isEmpty() ? v : Math.min(v, mn.peek()));\n" +
+        "    }\n" +
+        "\n" +
+        "    int pop() {\n" +
+        "        mn.pop();\n" +
+        "        return st.pop();\n" +
+        "    }\n" +
+        "\n" +
+        "    int getMin() { return mn.peek(); }\n" +
+        "}</code></pre></div>" +
 
         "<p>Because the two stacks move together, <code>mn[-1]</code> is by construction the minimum of the live elements, and a pop restores the previous minimum without recomputing it. The history is kept rather than derived, which costs O(n) extra space &#8212; reducible by storing pairs of (value, run length) when values repeat, though the plain version is what to write first. Checked against recomputing <code>min</code> over a reference list on 2,000 random push and pop sequences, it disagreed zero times.</p>" +
 
@@ -3421,7 +3766,47 @@ CHAPTERS.push({
 
         "<p>Converting ordinary infix to RPN is Dijkstra's <strong>shunting-yard algorithm</strong>, published in 1961 and named for the railway siding its operator stack resembles. Numbers go straight to the output; an operator waits on a stack until an operator of lower or equal precedence arrives, at which point it is forced out:</p>" +
 
-        "<pre><code>PREC = {'+': 1, '-': 1, '*': 2, '/': 2}\n\ndef to_rpn(tokens):\n    out, ops = [], []\n    for t in tokens:\n        if t.isdigit():\n            out.append(t)\n        elif t == '(':\n            ops.append(t)\n        elif t == ')':\n            while ops[-1] != '(':\n                out.append(ops.pop())\n            ops.pop()                     # discard the '('\n        else:\n            while ops and ops[-1] != '(' and PREC[ops[-1]] &gt;= PREC[t]:\n                out.append(ops.pop())     # forced out by precedence\n            ops.append(t)\n    while ops:\n        out.append(ops.pop())\n    return out</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>PREC = {'+': 1, '-': 1, '*': 2, '/': 2}\n" +
+        "\n" +
+        "def to_rpn(tokens):\n" +
+        "    out, ops = [], []\n" +
+        "    for t in tokens:\n" +
+        "        if t.isdigit():\n" +
+        "            out.append(t)\n" +
+        "        elif t == '(':\n" +
+        "            ops.append(t)\n" +
+        "        elif t == ')':\n" +
+        "            while ops[-1] != '(':\n" +
+        "                out.append(ops.pop())\n" +
+        "            ops.pop()                     # discard the '('\n" +
+        "        else:\n" +
+        "            while ops and ops[-1] != '(' and PREC[ops[-1]] &gt;= PREC[t]:\n" +
+        "                out.append(ops.pop())     # forced out by precedence\n" +
+        "            ops.append(t)\n" +
+        "    while ops:\n" +
+        "        out.append(ops.pop())\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static final Map&lt;String, Integer&gt; PREC = Map.of(\"+\", 1, \"-\", 1, \"*\", 2, \"/\", 2);\n" +
+        "\n" +
+        "static List&lt;String&gt; toRpn(List&lt;String&gt; tokens) {\n" +
+        "    List&lt;String&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    Deque&lt;String&gt; ops = new ArrayDeque&lt;&gt;();\n" +
+        "    for (String t : tokens) {\n" +
+        "        if (Character.isDigit(t.charAt(0))) out.add(t);\n" +
+        "        else if (t.equals(\"(\")) ops.push(t);\n" +
+        "        else if (t.equals(\")\")) {\n" +
+        "            while (!ops.peek().equals(\"(\")) out.add(ops.pop());\n" +
+        "            ops.pop();                          // discard the '('\n" +
+        "        } else {\n" +
+        "            while (!ops.isEmpty() &amp;&amp; !ops.peek().equals(\"(\") &amp;&amp; PREC.get(ops.peek()) &gt;= PREC.get(t))\n" +
+        "                out.add(ops.pop());             // forced out by precedence\n" +
+        "            ops.push(t);\n" +
+        "        }\n" +
+        "    }\n" +
+        "    while (!ops.isEmpty()) out.add(ops.pop());\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
 
         "<p>The stack is doing the only thing a stack does: remembering the most recent unfinished thing. An operator is unfinished until something arrives that settles where it belongs, exactly as an index on the monotonic stack is unfinished until something evicts it. Converting and evaluating 20,000 randomly generated parenthesised expressions and comparing against Python's own evaluator gave <strong>zero disagreements</strong>. On <code>3+4*2-(1+1)</code> the output is <code>3 4 2 * + 1 1 + -</code>, which evaluates to 9.</p>" +
 
@@ -3626,7 +4011,25 @@ CHAPTERS.push({
       html:
         "<p><strong>In-place reversal</strong> of a <strong>singly linked list</strong> is three pointers and one rule: before you overwrite a link, save where it was going.</p>" +
 
-        "<pre><code>def reverse(head):\n    prev, cur = None, head\n    while cur:\n        nxt = cur.next      # save the rest of the list\n        cur.next = prev     # flip this link\n        prev = cur          # advance both markers\n        cur = nxt\n    return prev             # the old tail is the new head</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def reverse(head):\n" +
+        "    prev, cur = None, head\n" +
+        "    while cur:\n" +
+        "        nxt = cur.next      # save the rest of the list\n" +
+        "        cur.next = prev     # flip this link\n" +
+        "        prev = cur          # advance both markers\n" +
+        "        cur = nxt\n" +
+        "    return prev             # the old tail is the new head</code></pre>" +
+        "<pre data-lang='java' hidden><code>static Node reverse(Node head) {\n" +
+        "    Node prev = null, cur = head;\n" +
+        "    while (cur != null) {\n" +
+        "        Node next = cur.next;   // save the rest of the list\n" +
+        "        cur.next = prev;        // flip this link\n" +
+        "        prev = cur;             // advance both markers\n" +
+        "        cur = next;\n" +
+        "    }\n" +
+        "    return prev;                // the old tail is the new head\n" +
+        "}</code></pre></div>" +
 
         "<p>The loop invariant is worth writing down, because it is what makes the four lines checkable rather than memorised: <em>everything from <code>prev</code> backwards is already reversed, everything from <code>cur</code> forwards is untouched, and the two halves are not connected.</em> The list is temporarily in two pieces, which is exactly why <code>nxt</code> must be saved first &#8212; the moment <code>cur.next</code> is overwritten, the forward half is unreachable. Verified on every length from 0 to 49, including the empty list, where the loop body never runs and <code>prev</code> is correctly <code>None</code>.</p>" +
 
@@ -3658,7 +4061,35 @@ CHAPTERS.push({
 
         "<p>A list with a cycle has a <strong>rho shape</strong>: a tail of &#956; nodes leading into a cycle of &#955; nodes, named for the Greek letter it resembles. <strong>Floyd's cycle detection</strong> finds &#956; in two phases, and the second phase is three lines that look like a coincidence:</p>" +
 
-        "<pre><code>def find_cycle_start(head):\n    slow = fast = head\n    while fast and fast.next:                 # phase 1: find a meeting point\n        slow, fast = slow.next, fast.next.next\n        if slow is fast:\n            break\n    else:\n        return None                           # no cycle\n\n    slow = head                               # phase 2: restart one pointer\n    while slow is not fast:\n        slow, fast = slow.next, fast.next     # now both move ONE step\n    return slow                               # the cycle entry</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def find_cycle_start(head):\n" +
+        "    slow = fast = head\n" +
+        "    while fast and fast.next:                 # phase 1: find a meeting point\n" +
+        "        slow, fast = slow.next, fast.next.next\n" +
+        "        if slow is fast:\n" +
+        "            break\n" +
+        "    else:\n" +
+        "        return None                           # no cycle\n" +
+        "\n" +
+        "    slow = head                               # phase 2: restart one pointer\n" +
+        "    while slow is not fast:\n" +
+        "        slow, fast = slow.next, fast.next     # now both move ONE step\n" +
+        "    return slow                               # the cycle entry</code></pre>" +
+        "<pre data-lang='java' hidden><code>static Node findCycleStart(Node head) {\n" +
+        "    Node slow = head, fast = head;\n" +
+        "    while (true) {                            // phase 1: find a meeting point\n" +
+        "        if (fast == null || fast.next == null) return null;   // no cycle\n" +
+        "        slow = slow.next;\n" +
+        "        fast = fast.next.next;\n" +
+        "        if (slow == fast) break;\n" +
+        "    }\n" +
+        "    slow = head;                              // phase 2: restart one pointer\n" +
+        "    while (slow != fast) {\n" +
+        "        slow = slow.next;                     // now both move ONE step\n" +
+        "        fast = fast.next;\n" +
+        "    }\n" +
+        "    return slow;                              // the cycle entry\n" +
+        "}</code></pre></div>" +
 
         "<div class='fig'><svg viewBox='0 0 760 240' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
         "<text x='20' y='18' fill='#2de2ff' font-size='12'>the rho shape: a tail of length μ into a cycle of length λ</text>" +
@@ -3919,7 +4350,33 @@ CHAPTERS.push({
       html:
         "<p>\u201cHow many meeting rooms are needed?\u201d is the maximum number of intervals open at any single moment. The state is a counter, the events are +1 at each start and &#8722;1 at each end, and the answer is the running total's maximum:</p>" +
 
-        "<pre><code>def min_rooms(intervals):\n    events = []\n    for s, e in intervals:\n        events.append((s,  1))\n        events.append((e, -1))\n    events.sort()          # at equal coordinate, -1 sorts before +1\n    cur = best = 0\n    for _, delta in events:\n        cur += delta\n        best = max(best, cur)\n    return best</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_rooms(intervals):\n" +
+        "    events = []\n" +
+        "    for s, e in intervals:\n" +
+        "        events.append((s,  1))\n" +
+        "        events.append((e, -1))\n" +
+        "    events.sort()          # at equal coordinate, -1 sorts before +1\n" +
+        "    cur = best = 0\n" +
+        "    for _, delta in events:\n" +
+        "        cur += delta\n" +
+        "        best = max(best, cur)\n" +
+        "    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int minRooms(int[][] intervals) {\n" +
+        "    int[][] events = new int[2 * intervals.length][];\n" +
+        "    for (int i = 0; i &lt; intervals.length; i++) {\n" +
+        "        events[2 * i]     = new int[]{intervals[i][0],  1};\n" +
+        "        events[2 * i + 1] = new int[]{intervals[i][1], -1};\n" +
+        "    }\n" +
+        "    Arrays.sort(events, (x, y) -&gt; x[0] != y[0] ? Integer.compare(x[0], y[0])\n" +
+        "                                               : Integer.compare(x[1], y[1]));  // -1 before +1\n" +
+        "    int cur = 0, best = 0;\n" +
+        "    for (int[] e : events) {\n" +
+        "        cur += e[1];\n" +
+        "        best = Math.max(best, cur);\n" +
+        "    }\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
 
         "<div class='fig'><svg viewBox='0 0 760 252' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
         "<text x='20' y='18' fill='#2de2ff' font-size='12'>five intervals, and the count of open ones beneath the sweep line</text>" +
@@ -3999,7 +4456,26 @@ CHAPTERS.push({
       html:
         "<p>A <strong>majority element</strong> is one occurring strictly more than n/2 times. The obvious solutions are a hash map of counts in O(n) space, or sorting and taking the middle in O(n log n). The <strong>Boyer–Moore majority vote</strong>, devised by Robert Boyer and J Strother Moore in 1981, does it in one pass and O(1) space, with two variables:</p>" +
 
-        "<pre><code>def majority_candidate(a):\n    candidate, count = None, 0\n    for v in a:\n        if count == 0:\n            candidate, count = v, 1\n        elif v == candidate:\n            count += 1\n        else:\n            count -= 1\n    return candidate</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def majority_candidate(a):\n" +
+        "    candidate, count = None, 0\n" +
+        "    for v in a:\n" +
+        "        if count == 0:\n" +
+        "            candidate, count = v, 1\n" +
+        "        elif v == candidate:\n" +
+        "            count += 1\n" +
+        "        else:\n" +
+        "            count -= 1\n" +
+        "    return candidate</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int majorityCandidate(int[] a) {\n" +
+        "    int candidate = 0, count = 0;\n" +
+        "    for (int v : a) {\n" +
+        "        if (count == 0)          { candidate = v; count = 1; }\n" +
+        "        else if (v == candidate) count++;\n" +
+        "        else                     count--;\n" +
+        "    }\n" +
+        "    return candidate;\n" +
+        "}</code></pre></div>" +
 
         "<p>The invariant is a <strong>pairing argument</strong> and it is the reason the algorithm is correct rather than lucky. Reading a value that differs from the candidate and decrementing the counter is <em>discarding a pair</em>: one occurrence of the candidate and one of something else, cancelling each other. A true majority element occurs more than n/2 times, so it cannot be exhausted by pairing every one of its occurrences against a distinct other element &#8212; there are not enough other elements. Whatever survives the cancellation must be the majority, if one exists.</p>" +
 
@@ -4358,7 +4834,29 @@ CHAPTERS.push({
 
         "<p><strong>Exponential search</strong> &#8212; also called galloping search &#8212; supplies the missing bound in two phases. Probe at 1, 2, 4, 8, 16 and so on until a probe overshoots; that bracket must contain the answer, because the previous probe undershot. Then binary search inside [previous, current].</p>" +
 
-        "<pre><code>def exponential_search(f, target):\n    hi = 1\n    while f(hi) &lt; target:          # phase 1: find any bracket\n        hi *= 2\n    lo = hi // 2                    # the previous probe undershot\n    while lo &lt; hi:                  # phase 2: ordinary binary search\n        mid = lo + (hi - lo) // 2\n        if f(mid) &lt; target: lo = mid + 1\n        else:               hi = mid\n    return lo</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def exponential_search(f, target):\n" +
+        "    hi = 1\n" +
+        "    while f(hi) &lt; target:          # phase 1: find any bracket\n" +
+        "        hi *= 2\n" +
+        "    lo = hi // 2                    # the previous probe undershot\n" +
+        "    while lo &lt; hi:                  # phase 2: ordinary binary search\n" +
+        "        mid = lo + (hi - lo) // 2\n" +
+        "        if f(mid) &lt; target: lo = mid + 1\n" +
+        "        else:               hi = mid\n" +
+        "    return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long exponentialSearch(LongUnaryOperator f, long target) {\n" +
+        "    long hi = 1;\n" +
+        "    while (f.applyAsLong(hi) &lt; target)   // phase 1: find any bracket\n" +
+        "        hi *= 2;\n" +
+        "    long lo = hi / 2;                     // the previous probe undershot\n" +
+        "    while (lo &lt; hi) {                     // phase 2: ordinary binary search\n" +
+        "        long mid = lo + (hi - lo) / 2;\n" +
+        "        if (f.applyAsLong(mid) &lt; target) lo = mid + 1;\n" +
+        "        else                             hi = mid;\n" +
+        "    }\n" +
+        "    return lo;\n" +
+        "}</code></pre></div>" +
 
         "<p>Both phases are logarithmic in the answer rather than in any array length, which is the point: the cost depends on where the answer is, not on how large the space might be. Measured, counting every probe:</p>" +
 
