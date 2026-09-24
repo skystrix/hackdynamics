@@ -4560,21 +4560,102 @@ CHAPTERS.push({
 
         "<p><em>Given piles of bananas and h hours, what is the smallest eating rate k that finishes them?</em> At rate k a pile of size p takes &#8968;p / k&#8969; hours, so the check is a sum:</p>" +
 
-        "<pre><code>def can_finish(piles, h, k):\n    return sum((p + k - 1) // k for p in piles) &lt;= h</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def can_finish(piles, h, k):\n" +
+        "    return sum((p + k - 1) // k for p in piles) &lt;= h</code></pre>" +
+        "<pre data-lang='java' hidden><code>static boolean canFinish(int[] piles, int h, int k) {\n" +
+        "    long hours = 0;\n" +
+        "    for (int p : piles) hours += (p + (long) k - 1) / k;  // long: p + k overflows int\n" +
+        "    return hours &lt;= h;\n" +
+        "}</code></pre></div>" +
 
         "<p>Monotone because a larger k never increases any &#8968;p / k&#8969;, so the total hours can only fall. Bounds: 1 at the low end and <code>max(piles)</code> at the high end, since eating faster than the largest pile saves nothing.</p>" +
+        "<p>Put the predicate inside Chapter 13's lower-bound loop, with those bounds, and the whole solution is this:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_eating_rate(piles, h):\n" +
+        "    lo, hi = 1, max(piles)          # hi always finishes, so the answer is in [lo, hi]\n" +
+        "    while lo &lt; hi:\n" +
+        "        mid = lo + (hi - lo) // 2\n" +
+        "        if can_finish(piles, h, mid):\n" +
+        "            hi = mid                # mid works: the answer is mid or smaller\n" +
+        "        else:\n" +
+        "            lo = mid + 1            # mid is too slow: discard it\n" +
+        "    return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int minEatingRate(int[] piles, int h) {\n" +
+        "    int lo = 1, hi = Arrays.stream(piles).max().getAsInt();\n" +
+        "    while (lo &lt; hi) {\n" +
+        "        int mid = lo + (hi - lo) / 2;\n" +
+        "        if (canFinish(piles, h, mid)) hi = mid;      // mid works: keep it\n" +
+        "        else                          lo = mid + 1;  // too slow: discard it\n" +
+        "    }\n" +
+        "    return lo;\n" +
+        "}</code></pre></div>" +
 
         "<h3>Shipping capacity</h3>" +
 
         "<p><em>Given package weights in order and D days, what is the smallest ship capacity?</em> The check walks the packages, starting a new day whenever the current one would overflow:</p>" +
 
-        "<pre><code>def can_ship(weights, days, cap):\n    if cap &lt; max(weights):\n        return False                 # a package that never fits\n    used, load = 1, 0\n    for w in weights:\n        if load + w &gt; cap:\n            used, load = used + 1, 0\n        load += w\n    return used &lt;= days</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def can_ship(weights, days, cap):\n" +
+        "    if cap &lt; max(weights):\n" +
+        "        return False                 # a package that never fits\n" +
+        "    used, load = 1, 0\n" +
+        "    for w in weights:\n" +
+        "        if load + w &gt; cap:\n" +
+        "            used, load = used + 1, 0\n" +
+        "        load += w\n" +
+        "    return used &lt;= days</code></pre>" +
+        "<pre data-lang='java' hidden><code>static boolean canShip(int[] weights, int days, long cap) {\n" +
+        "    int used = 1;\n" +
+        "    long load = 0;\n" +
+        "    for (int w : weights) {\n" +
+        "        if (w &gt; cap) return false;               // a package that never fits\n" +
+        "        if (load + w &gt; cap) { used++; load = 0; }\n" +
+        "        load += w;\n" +
+        "    }\n" +
+        "    return used &lt;= days;\n" +
+        "}</code></pre></div>" +
 
         "<p>The explicit <code>cap &lt; max(weights)</code> guard is not defensive clutter; without it the loop would report a feasible schedule that cannot exist. Bounds: <code>max(weights)</code> to <code>sum(weights)</code>, which is the lower end already doing the guard's job if you set it correctly.</p>" +
 
         "<h3>Splitting an array</h3>" +
 
         "<p><em>Split an array into at most m contiguous parts, minimising the largest part's sum.</em> The same greedy: count how many parts a given limit forces, and compare with m. Identical shape to shipping, which is the point &#8212; these are the same problem wearing different nouns, and recognising that is worth more than solving either.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def split_array(nums, m):\n" +
+        "    def parts_needed(limit):          # greedy: close a part only when forced to\n" +
+        "        parts, total = 1, 0\n" +
+        "        for x in nums:\n" +
+        "            if total + x &gt; limit:\n" +
+        "                parts, total = parts + 1, 0\n" +
+        "            total += x\n" +
+        "        return parts\n" +
+        "    lo, hi = max(nums), sum(nums)     # no part can be smaller than the largest element\n" +
+        "    while lo &lt; hi:\n" +
+        "        mid = lo + (hi - lo) // 2\n" +
+        "        if parts_needed(mid) &lt;= m: hi = mid\n" +
+        "        else:                      lo = mid + 1\n" +
+        "    return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long splitArray(int[] nums, int m) {\n" +
+        "    long lo = 0, hi = 0;\n" +
+        "    for (int x : nums) { lo = Math.max(lo, x); hi += x; }\n" +
+        "    while (lo &lt; hi) {\n" +
+        "        long mid = lo + (hi - lo) / 2;\n" +
+        "        if (partsNeeded(nums, mid) &lt;= m) hi = mid;\n" +
+        "        else                             lo = mid + 1;\n" +
+        "    }\n" +
+        "    return lo;\n" +
+        "}\n" +
+        "\n" +
+        "static int partsNeeded(int[] nums, long limit) {\n" +
+        "    int parts = 1;\n" +
+        "    long total = 0;\n" +
+        "    for (int x : nums) {\n" +
+        "        if (total + x &gt; limit) { parts++; total = 0; }\n" +
+        "        total += x;\n" +
+        "    }\n" +
+        "    return parts;\n" +
+        "}</code></pre></div>" +
 
         "<p>Each predicate's monotonicity is the hypothesis the whole method rests on, so it is worth checking rather than assuming. Evaluating each one at <em>every</em> candidate across the full answer space, on 3,000 random instances each:</p>" +
 
@@ -4599,6 +4680,40 @@ CHAPTERS.push({
         "<p>The two are mirror images and the mirror is where the off-by-one lives. A false-then-true strip is exactly Chapter 13's lower bound and the loop returns <code>lo</code>. A true-then-false strip is the same loop with the comparison inverted, and it returns the position <em>before</em> the flip &#8212; which is <code>lo - 1</code> if you write it as a lower bound, and a source of silent errors if you forget.</p>" +
 
         "<p>There is a cleaner way that avoids the second case entirely: <strong>negate the predicate.</strong> “Can every gap be at least G?” is true-then-false; “is G too large?” is false-then-true, and the same lower-bound loop applies unchanged. One convention, one loop, and the inversion is done once in the predicate where it is visible rather than in the boundary arithmetic where it is not.</p>" +
+        "<p>Placing k objects on given positions so that the closest pair is as far apart as possible shows the negated predicate at work, and the one subtraction at the end is the only trace of the inversion:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def max_min_gap(positions, k):        # k &gt;= 2 objects on distinct positions\n" +
+        "    pos = sorted(positions)\n" +
+        "    def too_large(g):                 # false then true: gap g cannot be kept\n" +
+        "        placed, last = 1, pos[0]\n" +
+        "        for p in pos[1:]:\n" +
+        "            if p - last &gt;= g:         # greedy: place as early as the gap allows\n" +
+        "                placed, last = placed + 1, p\n" +
+        "        return placed &lt; k\n" +
+        "    lo, hi = 1, pos[-1] - pos[0] + 1  # hi is always too large\n" +
+        "    while lo &lt; hi:\n" +
+        "        mid = lo + (hi - lo) // 2\n" +
+        "        if too_large(mid): hi = mid\n" +
+        "        else:              lo = mid + 1\n" +
+        "    return lo - 1                     # the last gap that still fits</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int maxMinGap(int[] positions, int k) {       // k &gt;= 2, distinct positions\n" +
+        "    int[] pos = positions.clone();\n" +
+        "    Arrays.sort(pos);\n" +
+        "    int lo = 1, hi = pos[pos.length - 1] - pos[0] + 1;\n" +
+        "    while (lo &lt; hi) {\n" +
+        "        int mid = lo + (hi - lo) / 2;\n" +
+        "        if (tooLarge(pos, k, mid)) hi = mid;\n" +
+        "        else                       lo = mid + 1;\n" +
+        "    }\n" +
+        "    return lo - 1;                                   // the last gap that still fits\n" +
+        "}\n" +
+        "\n" +
+        "static boolean tooLarge(int[] pos, int k, int g) {\n" +
+        "    int placed = 1, last = pos[0];\n" +
+        "    for (int i = 1; i &lt; pos.length; i++)\n" +
+        "        if (pos[i] - last &gt;= g) { placed++; last = pos[i]; }\n" +
+        "    return placed &lt; k;\n" +
+        "}</code></pre></div>" +
 
         "<h3>The other reliable trigger</h3>" +
 
@@ -4615,7 +4730,24 @@ CHAPTERS.push({
 
         "<p>The standard repair is to stop caring about termination and start caring about precision: run a <strong>fixed iteration count</strong>. Each iteration halves the interval, so after k iterations the remaining width is (hi &#8722; lo) / 2<sup>k</sup>, whatever the function is. That makes the error budget a matter of arithmetic decided before the loop runs.</p>" +
 
-        "<pre><code>lo, hi = 0.0, 2.0\nfor _ in range(60):              # not 'while hi - lo &gt; eps'\n    mid = (lo + hi) / 2\n    if feasible(mid): hi = mid\n    else:             lo = mid\nreturn lo</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def search_real(feasible, lo, hi):\n" +
+        "    for _ in range(60):              # not 'while hi - lo &gt; eps'\n" +
+        "        mid = (lo + hi) / 2\n" +
+        "        if feasible(mid): hi = mid\n" +
+        "        else:             lo = mid\n" +
+        "    return lo\n" +
+        "\n" +
+        "# search_real(lambda x: x * x &gt;= 2, 0.0, 2.0) -&gt; 1.414213562373095, one step below the root</code></pre>" +
+        "<pre data-lang='java' hidden><code>static double searchReal(DoublePredicate feasible, double lo, double hi) {\n" +
+        "    for (int i = 0; i &lt; 60; i++) {   // not 'while (hi - lo &gt; eps)'\n" +
+        "        double mid = (lo + hi) / 2;\n" +
+        "        if (feasible.test(mid)) hi = mid;\n" +
+        "        else                    lo = mid;\n" +
+        "    }\n" +
+        "    return lo;\n" +
+        "}\n" +
+        "// searchReal(x -&gt; x * x &gt;= 2, 0.0, 2.0) -&gt; 1.414213562373095, one step below the root</code></pre></div>" +
 
         "<p>Searching for &#8730;2 in [0, 2], measured against the true value:</p>" +
 
@@ -4666,6 +4798,28 @@ CHAPTERS.push({
         "<p>That is not an argument against ternary search; it is a statement of when it applies. Binary search is unavailable here, because there is no monotone predicate to probe &#8212; a single evaluation genuinely cannot pick a side. Ternary search is not a worse alternative to binary search, it is the price of a weaker hypothesis. Chapter 13 made the same point from the other direction: when one probe suffices, halve.</p>" +
 
         "<p>Measured on a smooth unimodal function with its peak at 1.37, a hundred rounds &#8212; 200 probes &#8212; located the peak to twelve digits. For the common case where the function is over integers rather than reals, the loop runs until the bracket holds three or fewer points and then checks them directly, which sidesteps the precision question entirely.</p>" +
+        "<p>The integer version, which returns the position of the peak:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def ternary_max(f, lo, hi):           # f strictly rises, then strictly falls, on lo..hi\n" +
+        "    while hi - lo &gt; 2:\n" +
+        "        m1 = lo + (hi - lo) // 3\n" +
+        "        m2 = hi - (hi - lo) // 3\n" +
+        "        if f(m1) &lt; f(m2):\n" +
+        "            lo = m1 + 1               # the peak is right of m1\n" +
+        "        else:\n" +
+        "            hi = m2 - 1               # the peak is left of m2\n" +
+        "    return max(range(lo, hi + 1), key=f)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int ternaryMax(IntUnaryOperator f, int lo, int hi) {\n" +
+        "    while (hi - lo &gt; 2) {\n" +
+        "        int m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;\n" +
+        "        if (f.applyAsInt(m1) &lt; f.applyAsInt(m2)) lo = m1 + 1;  // peak right of m1\n" +
+        "        else                                     hi = m2 - 1;  // peak left of m2\n" +
+        "    }\n" +
+        "    int best = lo;\n" +
+        "    for (int x = lo + 1; x &lt;= hi; x++)\n" +
+        "        if (f.applyAsInt(x) &gt; f.applyAsInt(best)) best = x;\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
 
         "<div class='callout'>Ternary search has a faster cousin worth knowing by name: <strong>golden-section search</strong> places its probes so that one of the two evaluations can be reused on the next round, costing about one probe per round instead of two. It is the same idea with better bookkeeping, and for a function that is expensive to evaluate the difference is the whole cost.</div>"
     },
@@ -4675,6 +4829,28 @@ CHAPTERS.push({
         "<p>Every search here has assumed known bounds. For <code>can_finish</code> the upper bound was <code>max(piles)</code> and finding it was trivial. Sometimes the answer space has no obvious ceiling: the first day a compounding process exceeds a threshold, the smallest budget under which a plan exists, the first index where a generated sequence passes a value.</p>" +
 
         "<p>Chapter 13's exponential search supplies the bracket: probe at 1, 2, 4, 8 until the predicate turns true, then binary search inside the last interval. The cost is logarithmic in the answer rather than in any assumed ceiling, which matters here more than it did there &#8212; <em>an answer space with no ceiling has no log to be logarithmic in</em>, so bracketing is not an optimisation but the only way to start.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def first_true_unbounded(pred):       # pred is false, then true; answer &gt;= 1\n" +
+        "    hi = 1\n" +
+        "    while not pred(hi):               # phase 1: double until the predicate turns true\n" +
+        "        hi *= 2\n" +
+        "    lo = hi // 2 + 1                  # the previous probe was false\n" +
+        "    while lo &lt; hi:                    # phase 2: the usual lower bound\n" +
+        "        mid = lo + (hi - lo) // 2\n" +
+        "        if pred(mid): hi = mid\n" +
+        "        else:         lo = mid + 1\n" +
+        "    return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long firstTrueUnbounded(LongPredicate pred) {\n" +
+        "    long hi = 1;\n" +
+        "    while (!pred.test(hi)) hi *= 2;   // phase 1: find a bracket\n" +
+        "    long lo = hi / 2 + 1;             // the previous probe was false\n" +
+        "    while (lo &lt; hi) {                 // phase 2: the usual lower bound\n" +
+        "        long mid = lo + (hi - lo) / 2;\n" +
+        "        if (pred.test(mid)) hi = mid;\n" +
+        "        else                lo = mid + 1;\n" +
+        "    }\n" +
+        "    return lo;\n" +
+        "}</code></pre></div>" +
 
         "<p>One caution specific to searching on the answer: the doubling phase evaluates the predicate at values that may be far outside anything sensible, so the predicate must be <em>total</em>. A feasibility check that divides by the candidate, indexes with it, or allocates proportional to it will fail at 2<sup>40</sup> long before the search converges. Write the predicate to answer honestly for any input, or clamp the doubling.</p>" +
 
@@ -4859,6 +5035,25 @@ CHAPTERS.push({
         "</ul>" +
 
         "<p>The crossover sits near n = 48 here and somewhere between 10 and 64 in most implementations. That is why every serious sort in the world is a hybrid that switches to insertion sort on small runs, which Chapter 16 reads out of the actual source.</p>" +
+        "<p>Insertion sort itself is a few lines, and the inner loop runs exactly once per inversion, which is where the adaptivity comes from:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def insertion_sort(a):\n" +
+        "    for i in range(1, len(a)):\n" +
+        "        x, j = a[i], i - 1\n" +
+        "        while j &gt;= 0 and a[j] &gt; x:     # one shift per inversion\n" +
+        "            a[j + 1] = a[j]\n" +
+        "            j -= 1\n" +
+        "        a[j + 1] = x</code></pre>" +
+        "<pre data-lang='java' hidden><code>static void insertionSort(int[] a) {\n" +
+        "    for (int i = 1; i &lt; a.length; i++) {\n" +
+        "        int x = a[i], j = i - 1;\n" +
+        "        while (j &gt;= 0 &amp;&amp; a[j] &gt; x) {   // one shift per inversion\n" +
+        "            a[j + 1] = a[j];\n" +
+        "            j--;\n" +
+        "        }\n" +
+        "        a[j + 1] = x;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p><strong>Use the machine above.</strong> Set the input shape to nearly-sorted and find which algorithm wins; then set it to all-equal and find which one collapses. Both answers are surprising the first time.</p>",
       viz: "dsaSortRace", vizTitle: "Six sorts, one array — change the input shape and watch the winner change"
@@ -4878,7 +5073,39 @@ CHAPTERS.push({
 
         "<p>An inversion is a pair (i, j) with i &lt; j and a[i] &gt; a[j]. The count measures how far from sorted an array is, and it is exactly the number of shifts insertion sort performs. Counting them directly is &#920;(n&#178;); mergesort counts them as a by-product, because <em>when an element is taken from the right run, it is smaller than every element still left in the left run</em>, so that single move resolves however many elements remain on the left. One added line:</p>" +
 
-        "<pre><code>while i &lt; len(L) and j &lt; len(R):\n    if L[i] &lt;= R[j]:\n        out.append(L[i]); i += 1\n    else:\n        out.append(R[j]); j += 1\n        inversions += len(L) - i      # the whole rest of L is inverted with R[j]</code></pre>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def sort_count(a):                    # returns (sorted copy, number of inversions)\n" +
+        "    if len(a) &lt; 2:\n" +
+        "        return list(a), 0\n" +
+        "    L, x = sort_count(a[:len(a) // 2])\n" +
+        "    R, y = sort_count(a[len(a) // 2:])\n" +
+        "    out, i, j, inversions = [], 0, 0, x + y\n" +
+        "    while i &lt; len(L) and j &lt; len(R):\n" +
+        "        if L[i] &lt;= R[j]:              # &lt;= takes ties from the left: stable\n" +
+        "            out.append(L[i]); i += 1\n" +
+        "        else:\n" +
+        "            out.append(R[j]); j += 1\n" +
+        "            inversions += len(L) - i  # the whole rest of L is inverted with R[j]\n" +
+        "    out += L[i:] + R[j:]\n" +
+        "    return out, inversions</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long sortCount(int[] a) {                     // sorts a, returns inversions\n" +
+        "    return sortCount(a, new int[a.length], 0, a.length);\n" +
+        "}\n" +
+        "\n" +
+        "static long sortCount(int[] a, int[] buf, int lo, int hi) {   // a[lo, hi)\n" +
+        "    if (hi - lo &lt; 2) return 0;\n" +
+        "    int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "    long inv = sortCount(a, buf, lo, mid) + sortCount(a, buf, mid, hi);\n" +
+        "    int i = lo, j = mid, k = lo;\n" +
+        "    while (i &lt; mid &amp;&amp; j &lt; hi) {\n" +
+        "        if (a[i] &lt;= a[j]) buf[k++] = a[i++];         // ties from the left: stable\n" +
+        "        else { buf[k++] = a[j++]; inv += mid - i; }  // rest of left inverted with it\n" +
+        "    }\n" +
+        "    while (i &lt; mid) buf[k++] = a[i++];\n" +
+        "    while (j &lt; hi)  buf[k++] = a[j++];\n" +
+        "    System.arraycopy(buf, lo, a, lo, hi - lo);\n" +
+        "    return inv;\n" +
+        "}</code></pre></div>" +
 
         "<p>Checked against brute force on 2,000 random arrays: zero disagreements. On 2,000 elements the counts come out as you would hope &#8212; a sorted array has 0, a reversed array has 1,999,000 = n(n&#8722;1)/2 exactly, and a random array had 1,013,138, close to the expected n(n&#8722;1)/4 = 999,500.</p>" +
 
@@ -4944,7 +5171,50 @@ CHAPTERS.push({
 
         "<p>Two repairs are standard. <strong>Randomise the pivot</strong>, which converts the average case into an expected case and removes the adversary's power entirely &#8212; Chapter 5's distinction, applied. Or take the <strong>median-of-three</strong>: the median of the first, middle and last elements, which costs two comparisons and makes sorted input the <em>best</em> case rather than the worst. Median-of-three is deterministic and so remains defeatable by an input built against it, which is why library implementations that care about adversarial input randomise instead.</p>" +
 
-        "<p>For duplicates the repair is Chapter 8's three-way partition, which puts elements equal to the pivot into a middle band that is never recursed into. The all-equal column of section 1's table shows the result: 1,200 comparisons, or 2n, making the worst input for two-way quicksort into the best input for three-way. <strong>Step the machine above</strong> with a first-element pivot on sorted input and watch the recursion depth become n.</p>",
+        "<p>For duplicates the repair is Chapter 8's three-way partition, which puts elements equal to the pivot into a middle band that is never recursed into. The all-equal column of section 1's table shows the result: 1,200 comparisons, or 2n, making the worst input for two-way quicksort into the best input for three-way. <strong>Step the machine above</strong> with a first-element pivot on sorted input and watch the recursion depth become n.</p>" +
+        "<p>Both repairs in one routine, a random pivot and the three-way partition, sorting in place:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import random\n" +
+        "\n" +
+        "def partition3(a, lo, hi):            # random pivot; returns (lt, gt) of the equal band\n" +
+        "    p = a[random.randint(lo, hi)]\n" +
+        "    lt, i, gt = lo, lo, hi            # a[lo:lt] &lt; p, a[lt:i] == p, a[gt+1:hi+1] &gt; p\n" +
+        "    while i &lt;= gt:\n" +
+        "        if a[i] &lt; p:\n" +
+        "            a[lt], a[i] = a[i], a[lt]; lt += 1; i += 1\n" +
+        "        elif a[i] &gt; p:\n" +
+        "            a[i], a[gt] = a[gt], a[i]; gt -= 1\n" +
+        "        else:\n" +
+        "            i += 1\n" +
+        "    return lt, gt\n" +
+        "\n" +
+        "def quicksort(a, lo=0, hi=None):      # sorts a[lo..hi] in place\n" +
+        "    if hi is None:\n" +
+        "        hi = len(a) - 1\n" +
+        "    if lo &gt;= hi:\n" +
+        "        return\n" +
+        "    lt, gt = partition3(a, lo, hi)\n" +
+        "    quicksort(a, lo, lt - 1)          # the equal band is never recursed into\n" +
+        "    quicksort(a, gt + 1, hi)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] partition3(int[] a, int lo, int hi) {   // returns {lt, gt}\n" +
+        "    int p = a[ThreadLocalRandom.current().nextInt(lo, hi + 1)];\n" +
+        "    int lt = lo, i = lo, gt = hi;\n" +
+        "    while (i &lt;= gt) {\n" +
+        "        if (a[i] &lt; p)      swap(a, lt++, i++);\n" +
+        "        else if (a[i] &gt; p) swap(a, i, gt--);\n" +
+        "        else               i++;\n" +
+        "    }\n" +
+        "    return new int[]{lt, gt};\n" +
+        "}\n" +
+        "\n" +
+        "static void quicksort(int[] a, int lo, int hi) {     // call quicksort(a, 0, a.length - 1)\n" +
+        "    if (lo &gt;= hi) return;\n" +
+        "    int[] band = partition3(a, lo, hi);\n" +
+        "    quicksort(a, lo, band[0] - 1);                   // equal band never recursed into\n" +
+        "    quicksort(a, band[1] + 1, hi);\n" +
+        "}\n" +
+        "\n" +
+        "static void swap(int[] a, int i, int j) { int t = a[i]; a[i] = a[j]; a[j] = t; }</code></pre></div>",
       viz: "dsaPartition", vizTitle: "Watch the array split — the shaded regions are what each scheme has already decided"
     },
 
@@ -4953,6 +5223,27 @@ CHAPTERS.push({
         "<p>Finding the k-th smallest element does not require sorting. <strong>Quickselect</strong> is quicksort that recurses into only one side: partition, see which side k falls in, and discard the other. Since the discarded half is never touched, the recurrence is T(n) = T(n/2) + &#920;(n) on average rather than 2T(n/2) + &#920;(n), and Chapter 3's master theorem gives &#920;(n) rather than &#920;(n log n).</p>" +
 
         "<p>The intuition is worth having: the work per level is linear and the levels shrink geometrically, so the total is n + n/2 + n/4 + &#8230; &lt; 2n. It is Chapter 4's geometric series again, this time as the reason a search is linear rather than the reason an array append is constant.</p>" +
+        "<p>With the three-way partition from the previous section, quickselect is a loop, not a recursion, because only one side is ever kept:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def quickselect(a, k):                # k-th smallest, counting from 0; reorders a\n" +
+        "    lo, hi = 0, len(a) - 1\n" +
+        "    while True:\n" +
+        "        lt, gt = partition3(a, lo, hi)\n" +
+        "        if k &lt; lt:\n" +
+        "            hi = lt - 1               # the answer is left of the equal band\n" +
+        "        elif k &gt; gt:\n" +
+        "            lo = gt + 1               # right of it\n" +
+        "        else:\n" +
+        "            return a[k]               # inside it</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int quickselect(int[] a, int k) {             // k-th smallest, from 0\n" +
+        "    int lo = 0, hi = a.length - 1;\n" +
+        "    while (true) {\n" +
+        "        int[] band = partition3(a, lo, hi);\n" +
+        "        if (k &lt; band[0])      hi = band[0] - 1;      // left of the equal band\n" +
+        "        else if (k &gt; band[1]) lo = band[1] + 1;      // right of it\n" +
+        "        else                  return a[k];           // inside it\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>Quickselect inherits quicksort's worst case: bad pivots give &#920;(n&#178;). In 1973 Blum, Floyd, Pratt, Rivest and Tarjan showed the worst case could be removed entirely, with an algorithm that finds a provably good pivot in linear time. <strong>Median of medians</strong> splits the array into groups of five, takes each group's median, and recursively selects the median <em>of those medians</em> to use as the pivot. That pivot is guaranteed to be greater than at least 30% of the array and less than at least 30%, so each level discards at least three tenths, and the recursion terminates in linear time.</p>" +
 
@@ -4966,7 +5257,7 @@ CHAPTERS.push({
 
         "<p>Both are &#920;(n). The constant is what separates them: median of medians makes a full extra recursive pass purely to choose a pivot, and then throws that work away at the next level. You pay it on every input to insure against an input you will probably never see.</p>" +
 
-        "<div class='callout'>That is a general shape worth recognising. <strong>A guarantee has a price, and the price is paid on every run while the guarantee is collected only in the worst case.</strong> Randomised quickselect makes the bad case improbable rather than impossible, for free; median of medians makes it impossible, for a factor of two. Which is correct depends entirely on whether an adversary chooses your input — and the standard hybrid, introselect, takes both by running quickselect and switching to the guaranteed algorithm only if it recurses too deeply.</p>" +
+        "<div class='callout'>That is a general shape worth recognising. <strong>A guarantee has a price, and the price is paid on every run while the guarantee is collected only in the worst case.</strong> Randomised quickselect makes the bad case improbable rather than impossible, for free; median of medians makes it impossible, for a factor of two. Which is correct depends entirely on whether an adversary chooses your input — and the standard hybrid, introselect, takes both by running quickselect and switching to the guaranteed algorithm only if it recurses too deeply.</div>" +
 
         "<h3>What selection is actually for</h3>" +
         "<p>The k-th smallest element sounds like a puzzle and is a workload. Percentile latency is selection: the p99 of a million request times is the 990,000th smallest, and computing it by sorting is &#920;(n log n) where selection is &#920;(n). Finding the top k results, trimming outliers before taking a mean, and picking a pivot for a distributed range partition are all the same operation.</p>" +
@@ -4983,6 +5274,24 @@ CHAPTERS.push({
         "<h3>Counting sort</h3>" +
 
         "<p><strong>Counting sort</strong> reads a value and uses it as an array index. Count how many of each value there are, then write them out in order. It never compares two elements; it does arithmetic on them, which the bound says nothing about. The cost is &#920;(n + k) for values in a range of size k, and the assumption it needs is that k is manageable &#8212; the counts array is allocated, so k = 10<sup>12</sup> is not a sort but an out-of-memory error.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def counting_sort(a, k):              # every value in range(k)\n" +
+        "    counts = [0] * k\n" +
+        "    for x in a:\n" +
+        "        counts[x] += 1                # a value used as an index: no comparison\n" +
+        "    out = []\n" +
+        "    for v in range(k):\n" +
+        "        out.extend([v] * counts[v])\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] countingSort(int[] a, int k) {          // every value in [0, k)\n" +
+        "    int[] counts = new int[k];\n" +
+        "    for (int x : a) counts[x]++;                     // value as index: no comparison\n" +
+        "    int[] out = new int[a.length];\n" +
+        "    int i = 0;\n" +
+        "    for (int v = 0; v &lt; k; v++)\n" +
+        "        for (int c = 0; c &lt; counts[v]; c++) out[i++] = v;\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
 
         "<p>Measured against the language's built-in Timsort on a million elements:</p>" +
 
@@ -4996,6 +5305,25 @@ CHAPTERS.push({
         "<h3>Radix sort</h3>" +
 
         "<p><strong>Radix sort</strong> applies counting sort one digit at a time. The <strong>LSD radix sort</strong> variant starts from the least significant digit and works up, and it is correct <em>because</em> each pass is stable: sorting by a higher digit preserves the order established by the lower ones. Stability is not a nicety here, it is the correctness argument.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def radix_sort(a):                    # non-negative ints below 2**32, 8-bit digits\n" +
+        "    for shift in range(0, 32, 8):\n" +
+        "        buckets = [[] for _ in range(256)]\n" +
+        "        for x in a:\n" +
+        "            buckets[(x &gt;&gt; shift) &amp; 255].append(x)   # appending keeps each pass stable\n" +
+        "        a = [x for b in buckets for x in b]\n" +
+        "    return a</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] radixSort(int[] a) {                    // non-negative ints, 8-bit digits\n" +
+        "    int[] out = new int[a.length];\n" +
+        "    for (int shift = 0; shift &lt; 32; shift += 8) {\n" +
+        "        int[] start = new int[257];\n" +
+        "        for (int x : a) start[((x &gt;&gt;&gt; shift) &amp; 255) + 1]++;\n" +
+        "        for (int d = 0; d &lt; 256; d++) start[d + 1] += start[d];   // bucket offsets\n" +
+        "        for (int x : a) out[start[(x &gt;&gt;&gt; shift) &amp; 255]++] = x;     // in order: stable\n" +
+        "        int[] t = a; a = out; out = t;\n" +
+        "    }\n" +
+        "    return a;                                        // note: reuses a's array as scratch\n" +
+        "}</code></pre></div>" +
 
         "<div class='fig'><svg viewBox='0 0 760 216' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>" +
         "<text x='20' y='16' fill='#2de2ff' font-size='11'>LSD radix sort on eight 3-digit numbers: one stable pass per digit, least significant first</text>" +
@@ -5051,7 +5379,33 @@ CHAPTERS.push({
         "<h3>Where the repeated-sort idiom actually shows up</h3>" +
         "<p>Three places make this more than a trick. A <strong>spreadsheet or table UI</strong> where the user clicks column headers in sequence gets multi-key ordering for free if the sort is stable, and needs no memory of previous clicks. A <strong>report pipeline</strong> whose grouping keys are configuration rather than code cannot write a fixed comparator, so it sorts once per key in reverse priority order. And <strong>LSD radix sort</strong>, from the previous section, is the same idiom applied to digits of one key rather than to several keys.</p>" +
         "<p>The cost is a factor of the number of keys: k stable sorts of n elements is &#920;(kn log n) against &#920;(n log n) for one composite comparator that does k comparisons internally. The composite version wins on paper. The repeated version wins whenever the keys are not known when the code is written.</p>" +
-        "<p>The alternative to relying on stability is to sort once by a composite key: compare department first, then name, in a single comparator. That is one pass rather than two and is usually the better choice when you control the comparator. Repeated stable sorting wins when you do not &#8212; when the sort is somebody else's function, when the keys arrive at different times, or when the number of keys varies at runtime.</p>"
+        "<p>The alternative to relying on stability is to sort once by a composite key: compare department first, then name, in a single comparator. That is one pass rather than two and is usually the better choice when you control the comparator. Repeated stable sorting wins when you do not &#8212; when the sort is somebody else's function, when the keys arrive at different times, or when the number of keys varies at runtime.</p>" +
+        "<p>Both forms side by side; on the five records above they return the same order:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import namedtuple\n" +
+        "Emp = namedtuple('Emp', 'name dept')\n" +
+        "\n" +
+        "def by_two_sorts(staff):\n" +
+        "    rows = sorted(staff, key=lambda e: e.name)   # least significant key first\n" +
+        "    rows.sort(key=lambda e: e.dept)              # stable: names stay in order\n" +
+        "    return rows\n" +
+        "\n" +
+        "def by_composite(staff):\n" +
+        "    return sorted(staff, key=lambda e: (e.dept, e.name))</code></pre>" +
+        "<pre data-lang='java' hidden><code>record Emp(String name, String dept) {}\n" +
+        "\n" +
+        "static List&lt;Emp&gt; byTwoSorts(List&lt;Emp&gt; staff) {\n" +
+        "    List&lt;Emp&gt; rows = new ArrayList&lt;&gt;(staff);\n" +
+        "    rows.sort(Comparator.comparing(Emp::name));      // least significant key first\n" +
+        "    rows.sort(Comparator.comparing(Emp::dept));      // List.sort is stable\n" +
+        "    return rows;\n" +
+        "}\n" +
+        "\n" +
+        "static List&lt;Emp&gt; byComposite(List&lt;Emp&gt; staff) {\n" +
+        "    List&lt;Emp&gt; rows = new ArrayList&lt;&gt;(staff);\n" +
+        "    rows.sort(Comparator.comparing(Emp::dept).thenComparing(Emp::name));\n" +
+        "    return rows;\n" +
+        "}</code></pre></div>"
     },
 
     { title: "Selection Across Two Sorted Arrays",
@@ -5065,6 +5419,43 @@ CHAPTERS.push({
         "<p>If <code>A[i-1] &gt; B[j]</code> then i is too large; if <code>B[j-1] &gt; A[i]</code> then i is too small. That is a monotone predicate over i, so Chapter 14's technique applies directly &#8212; this is a <strong>partition search</strong>, a binary search whose candidate is a boundary rather than a value.</p>" +
 
         "<p>Two details carry the implementation. Search over the <em>shorter</em> array, which makes the bound log min(m, n) and guarantees j stays in range. And use infinities for the out-of-range ends: when i = 0 there is no <code>A[i-1]</code>, and treating it as &#8722;&#8734; makes the comparison true without a special case &#8212; the sentinel device from Chapter 9 and Chapter 11, applied to a boundary rather than a list.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def median_two_sorted(A, B):          # A and B sorted, not both empty\n" +
+        "    if len(A) &gt; len(B):\n" +
+        "        A, B = B, A                   # search over the shorter array\n" +
+        "    m, n = len(A), len(B)\n" +
+        "    half = (m + n + 1) // 2\n" +
+        "    lo, hi = 0, m\n" +
+        "    while True:\n" +
+        "        i = (lo + hi) // 2            # take i from A ...\n" +
+        "        j = half - i                  # ... and the rest of the left half from B\n" +
+        "        a_left  = A[i - 1] if i &gt; 0 else float('-inf')\n" +
+        "        a_right = A[i]     if i &lt; m else float('inf')\n" +
+        "        b_left  = B[j - 1] if j &gt; 0 else float('-inf')\n" +
+        "        b_right = B[j]     if j &lt; n else float('inf')\n" +
+        "        if a_left &gt; b_right:\n" +
+        "            hi = i - 1                # i is too large\n" +
+        "        elif b_left &gt; a_right:\n" +
+        "            lo = i + 1                # i is too small\n" +
+        "        elif (m + n) % 2:\n" +
+        "            return max(a_left, b_left)\n" +
+        "        else:\n" +
+        "            return (max(a_left, b_left) + min(a_right, b_right)) / 2</code></pre>" +
+        "<pre data-lang='java' hidden><code>static double medianTwoSorted(int[] A, int[] B) {    // not both empty\n" +
+        "    if (A.length &gt; B.length) { int[] t = A; A = B; B = t; }   // shorter first\n" +
+        "    int m = A.length, n = B.length, half = (m + n + 1) / 2, lo = 0, hi = m;\n" +
+        "    while (true) {\n" +
+        "        int i = (lo + hi) / 2, j = half - i;\n" +
+        "        double aLeft  = i &gt; 0 ? A[i - 1] : Double.NEGATIVE_INFINITY;\n" +
+        "        double aRight = i &lt; m ? A[i]     : Double.POSITIVE_INFINITY;\n" +
+        "        double bLeft  = j &gt; 0 ? B[j - 1] : Double.NEGATIVE_INFINITY;\n" +
+        "        double bRight = j &lt; n ? B[j]     : Double.POSITIVE_INFINITY;\n" +
+        "        if (aLeft &gt; bRight)      hi = i - 1;          // i is too large\n" +
+        "        else if (bLeft &gt; aRight) lo = i + 1;          // i is too small\n" +
+        "        else if ((m + n) % 2 == 1) return Math.max(aLeft, bLeft);\n" +
+        "        else return (Math.max(aLeft, bLeft) + Math.min(aRight, bRight)) / 2;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>Checked against merging on 20,000 random pairs of arrays, including empty ones and arrays of wildly different lengths: <strong>zero disagreements</strong>.</p>" +
 
@@ -5281,7 +5672,19 @@ CHAPTERS.push({
         "<li><strong>reversed</strong> &#8212; 4 ms</li>" +
         "</ul>" +
 
-        "<p>Which is to say the textbook description “Java uses dual-pivot quicksort for primitives” is true and incomplete: it uses dual-pivot quicksort <em>on the inputs that need it</em>, after checking whether they do. Every algorithm in this chapter has acquired that shape.</p>"
+        "<p>Which is to say the textbook description “Java uses dual-pivot quicksort for primitives” is true and incomplete: it uses dual-pivot quicksort <em>on the inputs that need it</em>, after checking whether they do. Every algorithm in this chapter has acquired that shape.</p>" +
+        "<p>The split shows up in everyday code. Only the object sort takes a comparator, so descending order on an <code>int[]</code> means sorting ascending and reversing, where Python has one sort for everything:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def descending(a):\n" +
+        "    return sorted(a, reverse=True)    # one sort for everything; reverse keeps it stable</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] descending(int[] a) {\n" +
+        "    int[] b = a.clone();\n" +
+        "    Arrays.sort(b);                   // int[] has no comparator overload\n" +
+        "    for (int i = 0, j = b.length - 1; i &lt; j; i++, j--) {\n" +
+        "        int t = b[i]; b[i] = b[j]; b[j] = t;\n" +
+        "    }\n" +
+        "    return b;                         // boxing to Integer[] would also work, at ~7x the cost\n" +
+        "}</code></pre></div>"
     },
 
     { title: "Introsort",
@@ -5365,7 +5768,28 @@ CHAPTERS.push({
         "<li><strong>Is the key cheap to compare?</strong> If not, the comparison count is what matters and a sort that minimises comparisons beats one that minimises data movement. If it is, the reverse.</li>" +
         "</ul>" +
 
-        "<p>Notice what is absent: asymptotic complexity. All four are &#920;(n log n) on random input, and no choice among them is made on that basis. That is the honest position for most library-level decisions, and it is why this chapter exists at the midpoint of a course that has otherwise been about asymptotics.</p>"
+        "<p>Notice what is absent: asymptotic complexity. All four are &#920;(n log n) on random input, and no choice among them is made on that basis. That is the honest position for most library-level decisions, and it is why this chapter exists at the midpoint of a course that has otherwise been about asymptotics.</p>" +
+        "<p>In code you write, the decision usually comes down to a key or a comparator. A composite key answers most multi-field orderings in one sort, and relying on stability is safe in both languages because both object sorts guarantee it:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def rank(players):                    # [(name, score)]: best score first, ties by name\n" +
+        "    return sorted(players, key=lambda p: (-p[1], p[0]))\n" +
+        "\n" +
+        "def by_length(words):                 # stable: equal lengths keep their input order\n" +
+        "    return sorted(words, key=len)</code></pre>" +
+        "<pre data-lang='java' hidden><code>record Player(String name, int score) {}\n" +
+        "\n" +
+        "static List&lt;Player&gt; rank(List&lt;Player&gt; players) {     // best first, ties by name\n" +
+        "    List&lt;Player&gt; out = new ArrayList&lt;&gt;(players);\n" +
+        "    out.sort(Comparator.comparingInt(Player::score).reversed()\n" +
+        "                       .thenComparing(Player::name));\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static List&lt;String&gt; byLength(List&lt;String&gt; words) {   // List.sort is Timsort: stable\n" +
+        "    List&lt;String&gt; out = new ArrayList&lt;&gt;(words);\n" +
+        "    out.sort(Comparator.comparingInt(String::length));\n" +
+        "    return out;\n" +
+        "}</code></pre></div>"
     },
 
     { title: "The Constant Factors Nobody Teaches",
@@ -5426,6 +5850,49 @@ CHAPTERS.push({
         "<p><strong>Insertion sort inside every mergesort and quicksort.</strong> Chapter 15 timed insertion sort against mergesort and found the <strong>crossover point</strong> near n = 48: insertion won at 4, 8, 16 and 32 elements and lost at 64 and 128. That threshold is the <strong>insertion-sort cutoff</strong>, and it is visible in every library implementation: Timsort's minrun sits between 32 and 64, and introsort and pdqsort both stop recursing at a small cutoff and finish the subarray with insertion sort.</p>" +
 
         "<p>The cutoff also removes work that has nothing to do with comparisons. A recursive sort that bottoms out at n = 1 makes about twice as many calls as one that stops at n = 32, and each call costs a stack frame, a bounds check and a branch. Chapter 6 measured a Python frame at roughly 144 bytes and a JVM interpreted frame at about 102; a million-element mergesort that recurses to singletons creates two million frames it did not need. The cutoff is buying two things at once, and the second is usually the larger.</p>" +
+        "<p>The cutoff is one comparison at the top of the recursion. Time it at cutoffs of 1, 8, 32 and 128 on your own machine to find your crossover:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def hybrid_sort(a, lo=0, hi=None, cutoff=32):   # sorts a[lo:hi] in place\n" +
+        "    if hi is None:\n" +
+        "        hi = len(a)\n" +
+        "    if hi - lo &lt;= cutoff:                       # small run: insertion sort wins\n" +
+        "        for i in range(lo + 1, hi):\n" +
+        "            x, j = a[i], i - 1\n" +
+        "            while j &gt;= lo and a[j] &gt; x:\n" +
+        "                a[j + 1] = a[j]\n" +
+        "                j -= 1\n" +
+        "            a[j + 1] = x\n" +
+        "        return\n" +
+        "    mid = (lo + hi) // 2\n" +
+        "    hybrid_sort(a, lo, mid, cutoff)\n" +
+        "    hybrid_sort(a, mid, hi, cutoff)\n" +
+        "    left = a[lo:mid]                            # copy only the left half\n" +
+        "    i, j, k = 0, mid, lo\n" +
+        "    while i &lt; len(left) and j &lt; hi:\n" +
+        "        if left[i] &lt;= a[j]:\n" +
+        "            a[k] = left[i]; i += 1\n" +
+        "        else:\n" +
+        "            a[k] = a[j]; j += 1\n" +
+        "        k += 1\n" +
+        "    a[k:k + len(left) - i] = left[i:]           # leftover right elements are in place</code></pre>" +
+        "<pre data-lang='java' hidden><code>static void hybridSort(int[] a, int lo, int hi, int cutoff, int[] buf) {  // a[lo, hi)\n" +
+        "    if (hi - lo &lt;= cutoff) {                    // small run: insertion sort wins\n" +
+        "        for (int i = lo + 1; i &lt; hi; i++) {\n" +
+        "            int x = a[i], j = i - 1;\n" +
+        "            while (j &gt;= lo &amp;&amp; a[j] &gt; x) { a[j + 1] = a[j]; j--; }\n" +
+        "            a[j + 1] = x;\n" +
+        "        }\n" +
+        "        return;\n" +
+        "    }\n" +
+        "    int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "    hybridSort(a, lo, mid, cutoff, buf);\n" +
+        "    hybridSort(a, mid, hi, cutoff, buf);\n" +
+        "    System.arraycopy(a, lo, buf, lo, mid - lo); // copy only the left half\n" +
+        "    int i = lo, j = mid, k = lo;\n" +
+        "    while (i &lt; mid &amp;&amp; j &lt; hi) a[k++] = buf[i] &lt;= a[j] ? buf[i++] : a[j++];\n" +
+        "    while (i &lt; mid) a[k++] = buf[i++];          // leftover right elements are in place\n" +
+        "}\n" +
+        "// hybridSort(a, 0, a.length, 32, new int[a.length])</code></pre></div>" +
         "<p><strong>Linear scan against binary search.</strong> The same shape, at a smaller n. Searching a sorted array 200,000 times:</p>" +
 
         "<ul>" +
@@ -5610,6 +6077,20 @@ CHAPTERS.push({
         "<p>The escape, due to J. Lawrence Carter and Mark Wegman in 1979, is to stop using one hash function and use a <em>family</em> of them, choosing which one at random when the table is created. The adversary can see your source code and your family, but not the coin flips you made at startup, so they cannot compute the keys that beat the specific function you happen to be using. This is <strong>universal hashing</strong>, and it moves the randomness from an assumption about the input &#8212; which you do not control &#8212; to a choice you do control.</p>" +
 
         "<p>A family of functions is called universal if, for any two distinct keys, the probability that a randomly chosen member of the family collides them is at most 1/m &#8212; exactly what you would get from an idealized function that threw each key into a uniformly random slot. The classic construction is <code>h<sub>a,b</sub>(k) = ((a&#183;k + b) mod p) mod m</code>, where p is a prime larger than any key and a, b are chosen at random at startup, a from <code>1 &#8230; p&#8722;1</code> and b from <code>0 &#8230; p&#8722;1</code>.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import random\n" +
+        "P = 2**31 - 1                         # a prime above every key\n" +
+        "\n" +
+        "def random_hash(m):                   # one member of the family, picked at table creation\n" +
+        "    a, b = random.randint(1, P - 1), random.randint(0, P - 1)\n" +
+        "    return lambda k: ((a * k + b) % P) % m</code></pre>" +
+        "<pre data-lang='java' hidden><code>static final long P = (1L &lt;&lt; 31) - 1;               // a prime above every key\n" +
+        "\n" +
+        "static IntUnaryOperator randomHash(int m) {         // picked at table creation\n" +
+        "    long a = ThreadLocalRandom.current().nextLong(1, P);\n" +
+        "    long b = ThreadLocalRandom.current().nextLong(0, P);\n" +
+        "    return k -&gt; (int) ((a * k + b) % P % m);        // a * k &lt; 2^62: no overflow\n" +
+        "}</code></pre></div>" +
 
         "<p>The guarantee is checkable and it holds. Drawing 200,000 random (a, b) pairs and two random distinct keys each time, with m = 101, the measured collision probability is <strong>0.01003</strong> against the guaranteed bound 1/m = 0.00990 &#8212; equal to three decimal places. And the effect on the adversary is total. The thousand multiples-of-101 that put every key in one slot under the fixed function, rehashed under a randomly chosen <code>h<sub>a,b</sub></code>, land with a worst slot of about 13 on average, against the expected n/m = 9.9 &#8212; a normal, healthy spread. Across 500 random choices of the function the worst slot never exceeded 77, a far cry from the 1,000 the fixed function handed the attacker every time. The attacker's carefully chosen keys are now merely a thousand arbitrary numbers to a function they could not predict.</p>" +
 
@@ -5619,6 +6100,94 @@ CHAPTERS.push({
     { title: "Chaining: A Bucket Is a List",
       html:
         "<p>The first family of answers to \"two keys collided\" is the obvious one: let a slot hold more than one key. In <strong>separate chaining</strong> each slot is the head of a linked list &#8212; a <em>bucket</em> &#8212; and a key that hashes to an occupied slot is appended to that slot's list. Lookup hashes to the slot and walks its list; insertion hashes and appends; deletion hashes, walks and unlinks. Every operation is one hash plus a walk of one bucket.</p>" +
+        "<p>In code, with the table doubling whenever the load factor would pass 1:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class ChainedMap:\n" +
+        "    def __init__(self, m=8):\n" +
+        "        self.buckets = [[] for _ in range(m)]   # a Python list stands in for each chain\n" +
+        "        self.n = 0\n" +
+        "\n" +
+        "    def _bucket(self, key):\n" +
+        "        return self.buckets[hash(key) % len(self.buckets)]\n" +
+        "\n" +
+        "    def get(self, key, default=None):\n" +
+        "        for k, v in self._bucket(key):\n" +
+        "            if k == key:\n" +
+        "                return v\n" +
+        "        return default\n" +
+        "\n" +
+        "    def put(self, key, value):\n" +
+        "        b = self._bucket(key)\n" +
+        "        for i, (k, _) in enumerate(b):\n" +
+        "            if k == key:\n" +
+        "                b[i] = (key, value)\n" +
+        "                return\n" +
+        "        b.append((key, value))\n" +
+        "        self.n += 1\n" +
+        "        if self.n &gt; len(self.buckets):          # keep the load factor at most 1\n" +
+        "            self._resize(2 * len(self.buckets))\n" +
+        "\n" +
+        "    def remove(self, key):\n" +
+        "        b = self._bucket(key)\n" +
+        "        for i, (k, _) in enumerate(b):\n" +
+        "            if k == key:\n" +
+        "                b.pop(i)\n" +
+        "                self.n -= 1\n" +
+        "                return True\n" +
+        "        return False\n" +
+        "\n" +
+        "    def _resize(self, m):                       # every key's slot depends on m\n" +
+        "        old, self.buckets = self.buckets, [[] for _ in range(m)]\n" +
+        "        for b in old:\n" +
+        "            for k, v in b:\n" +
+        "                self._bucket(k).append((k, v))</code></pre>" +
+        "<pre data-lang='java' hidden><code>static class ChainedMap&lt;K, V&gt; {\n" +
+        "    static class Node&lt;K, V&gt; {\n" +
+        "        final K key; V val; Node&lt;K, V&gt; next;\n" +
+        "        Node(K k, V v, Node&lt;K, V&gt; n) { key = k; val = v; next = n; }\n" +
+        "    }\n" +
+        "    Node&lt;K, V&gt;[] table = newTable(8);\n" +
+        "    int n;\n" +
+        "\n" +
+        "    @SuppressWarnings(\"unchecked\")\n" +
+        "    static &lt;K, V&gt; Node&lt;K, V&gt;[] newTable(int m) { return (Node&lt;K, V&gt;[]) new Node[m]; }\n" +
+        "    static int slot(Object key, int m) { return Math.floorMod(key.hashCode(), m); }\n" +
+        "\n" +
+        "    V get(K key) {\n" +
+        "        for (Node&lt;K, V&gt; e = table[slot(key, table.length)]; e != null; e = e.next)\n" +
+        "            if (e.key.equals(key)) return e.val;\n" +
+        "        return null;\n" +
+        "    }\n" +
+        "\n" +
+        "    void put(K key, V val) {\n" +
+        "        int s = slot(key, table.length);\n" +
+        "        for (Node&lt;K, V&gt; e = table[s]; e != null; e = e.next)\n" +
+        "            if (e.key.equals(key)) { e.val = val; return; }\n" +
+        "        table[s] = new Node&lt;&gt;(key, val, table[s]);         // prepend to the chain\n" +
+        "        if (++n &gt; table.length) resize(2 * table.length);  // load factor at most 1\n" +
+        "    }\n" +
+        "\n" +
+        "    boolean remove(K key) {\n" +
+        "        int s = slot(key, table.length);\n" +
+        "        for (Node&lt;K, V&gt; e = table[s], prev = null; e != null; prev = e, e = e.next)\n" +
+        "            if (e.key.equals(key)) {\n" +
+        "                if (prev == null) table[s] = e.next; else prev.next = e.next;  // unlink\n" +
+        "                n--;\n" +
+        "                return true;\n" +
+        "            }\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "\n" +
+        "    void resize(int m) {                                   // every slot depends on m\n" +
+        "        Node&lt;K, V&gt;[] old = table;\n" +
+        "        table = newTable(m);\n" +
+        "        for (Node&lt;K, V&gt; head : old)\n" +
+        "            for (Node&lt;K, V&gt; e = head; e != null; e = e.next) {\n" +
+        "                int s = slot(e.key, m);\n" +
+        "                table[s] = new Node&lt;&gt;(e.key, e.val, table[s]);\n" +
+        "            }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>So the cost of every operation is the length of one bucket, and section 3 already told us the expected length: &#945;. A successful search walks half of its bucket on average, giving expected cost <code>1 + &#945;/2</code>; an unsuccessful search walks the whole bucket, giving <code>&#945;</code>. These are not asymptotic hand-waves, they are exact, and the measurements sit on top of the formula. Successful-search probe counts at a spread of load factors:</p>" +
 
@@ -5675,6 +6244,101 @@ CHAPTERS.push({
         "<p>Open addressing has a bug that chaining does not, and it is a good one because the naive fix is invisible in testing. Consider linear probing with three keys that all hash to slot 1: insert them and they occupy slots 1, 2 and 3. Now delete the middle one by clearing its slot to empty. A later lookup for the third key hashes to slot 1, probes to slot 2, finds it <em>empty</em>, and concludes the key is absent &#8212; even though it sits one slot further on. Clearing the slot severed the probe chain.</p>" +
 
         "<p>Measured on exactly that arrangement (keys 1, 9, 17 into a size-8 table): before deletion, searching for 17 succeeds in 3 probes; after clearing slot 2, the search for 17 <strong>returns not-found</strong>. The fix is the <strong>tombstone</strong> &#8212; a third slot state, distinct from empty and occupied, that means \"a key was deleted here.\" A lookup treats a tombstone as occupied and keeps probing; an insertion treats it as empty and may reuse it. With a tombstone in slot 2, the search for 17 walks through it and finds the key in 3 probes again. The cost is that tombstones count toward the probe length until the next resize clears them, which is one more reason section 6's resize is not optional.</p>" +
+        "<p>The whole of linear probing with tombstones fits in one class. The counter that triggers a resize counts tombstones as well as live keys, because a probe has to walk both, and the resize is what finally clears them:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>EMPTY, TOMB = object(), object()      # two sentinels: never used, and deleted\n" +
+        "\n" +
+        "class ProbingMap:\n" +
+        "    def __init__(self, m=8):\n" +
+        "        self.keys, self.vals = [EMPTY] * m, [None] * m\n" +
+        "        self.used = 0                 # live keys + tombstones: what a probe walks\n" +
+        "        self.n = 0                    # live keys only\n" +
+        "\n" +
+        "    def _find(self, key):             # slot holding key, or None\n" +
+        "        m, i = len(self.keys), hash(key) % len(self.keys)\n" +
+        "        while self.keys[i] is not EMPTY:            # a tombstone does not stop the search\n" +
+        "            if self.keys[i] is not TOMB and self.keys[i] == key:\n" +
+        "                return i\n" +
+        "            i = (i + 1) % m\n" +
+        "        return None\n" +
+        "\n" +
+        "    def get(self, key, default=None):\n" +
+        "        i = self._find(key)\n" +
+        "        return default if i is None else self.vals[i]\n" +
+        "\n" +
+        "    def put(self, key, value):\n" +
+        "        i = self._find(key)\n" +
+        "        if i is not None:\n" +
+        "            self.vals[i] = value\n" +
+        "            return\n" +
+        "        if 3 * (self.used + 1) &gt; 2 * len(self.keys):   # keep the walk under 2/3 full\n" +
+        "            self._resize()\n" +
+        "        m, i = len(self.keys), hash(key) % len(self.keys)\n" +
+        "        while self.keys[i] is not EMPTY and self.keys[i] is not TOMB:\n" +
+        "            i = (i + 1) % m\n" +
+        "        if self.keys[i] is EMPTY:\n" +
+        "            self.used += 1            # reusing a tombstone lengthens nothing\n" +
+        "        self.keys[i], self.vals[i] = key, value\n" +
+        "        self.n += 1\n" +
+        "\n" +
+        "    def remove(self, key):\n" +
+        "        i = self._find(key)\n" +
+        "        if i is None:\n" +
+        "            return False\n" +
+        "        self.keys[i], self.vals[i] = TOMB, None     # not EMPTY: that would cut the chain\n" +
+        "        self.n -= 1\n" +
+        "        return True\n" +
+        "\n" +
+        "    def _resize(self):                # grow if mostly live, else just drop the tombstones\n" +
+        "        live = [(k, v) for k, v in zip(self.keys, self.vals) if k is not EMPTY and k is not TOMB]\n" +
+        "        m = 2 * len(self.keys) if 3 * self.n &gt;= len(self.keys) else len(self.keys)\n" +
+        "        self.keys, self.vals, self.used, self.n = [EMPTY] * m, [None] * m, 0, 0\n" +
+        "        for k, v in live:\n" +
+        "            self.put(k, v)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static class ProbingMap&lt;K, V&gt; {\n" +
+        "    static final Object TOMB = new Object();        // deleted; null means never used\n" +
+        "    Object[] keys = new Object[8], vals = new Object[8];\n" +
+        "    int used, n;                                    // used = live keys + tombstones\n" +
+        "\n" +
+        "    static int home(Object key, int m) { return Math.floorMod(key.hashCode(), m); }\n" +
+        "\n" +
+        "    int find(Object key) {                          // slot holding key, or -1\n" +
+        "        int m = keys.length;\n" +
+        "        for (int i = home(key, m); keys[i] != null; i = (i + 1) % m)  // tombstones: keep going\n" +
+        "            if (keys[i] != TOMB &amp;&amp; keys[i].equals(key)) return i;\n" +
+        "        return -1;\n" +
+        "    }\n" +
+        "\n" +
+        "    @SuppressWarnings(\"unchecked\")\n" +
+        "    V get(K key) { int i = find(key); return i &lt; 0 ? null : (V) vals[i]; }\n" +
+        "\n" +
+        "    void put(K key, V val) {\n" +
+        "        int i = find(key);\n" +
+        "        if (i &gt;= 0) { vals[i] = val; return; }\n" +
+        "        if (3 * (used + 1) &gt; 2 * keys.length) resize();   // keep the walk under 2/3 full\n" +
+        "        int m = keys.length;\n" +
+        "        i = home(key, m);\n" +
+        "        while (keys[i] != null &amp;&amp; keys[i] != TOMB) i = (i + 1) % m;\n" +
+        "        if (keys[i] == null) used++;                 // a reused tombstone lengthens nothing\n" +
+        "        keys[i] = key; vals[i] = val; n++;\n" +
+        "    }\n" +
+        "\n" +
+        "    boolean remove(K key) {\n" +
+        "        int i = find(key);\n" +
+        "        if (i &lt; 0) return false;\n" +
+        "        keys[i] = TOMB; vals[i] = null; n--;         // not null: that would cut the chain\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "\n" +
+        "    @SuppressWarnings(\"unchecked\")\n" +
+        "    void resize() {                                  // grow, or just drop the tombstones\n" +
+        "        Object[] oldK = keys, oldV = vals;\n" +
+        "        int m = 3 * n &gt;= keys.length ? 2 * keys.length : keys.length;\n" +
+        "        keys = new Object[m]; vals = new Object[m]; used = n = 0;\n" +
+        "        for (int i = 0; i &lt; oldK.length; i++)\n" +
+        "            if (oldK[i] != null &amp;&amp; oldK[i] != TOMB) put((K) oldK[i], (V) oldV[i]);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p><strong>Insert keys into the machine above and delete one from the middle of a probe chain</strong> without a tombstone; the machine shows you the key that becomes unreachable, and the tombstone that rescues it.</p>",
       viz: "dsaHashTable", vizTitle: "Insert keys and watch collisions resolve — then delete one from the middle of a chain and find the key it strands"
@@ -5747,6 +6411,23 @@ CHAPTERS.push({
         "<p>A large fraction of the problems that look like they need cleverness need a hash table and nothing else. Once you see the structure, the pattern is only \"which question am I asking a dictionary.\"</p>" +
 
         "<p><strong>Frequency maps.</strong> Counting occurrences &#8212; most common element, does any value repeat, is this a permutation of that &#8212; is one pass building a <code>key &#8594; count</code> dictionary. The naive alternative is sorting (O(n log n)) or nested loops (O(n&#178;)); the dictionary is O(n) and usually shorter to write. <strong>Grouping by signature</strong> is the same move with a computed key: to group anagrams, map each word to its sorted letters and use that as the dictionary key, so words that are anagrams collide on purpose into the same bucket. The signature is a hash function you wrote by hand.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import defaultdict\n" +
+        "\n" +
+        "def group_anagrams(words):\n" +
+        "    groups = defaultdict(list)\n" +
+        "    for w in words:\n" +
+        "        groups[''.join(sorted(w))].append(w)   # the signature: anagrams collide on purpose\n" +
+        "    return list(groups.values())</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;List&lt;String&gt;&gt; groupAnagrams(List&lt;String&gt; words) {\n" +
+        "    Map&lt;String, List&lt;String&gt;&gt; groups = new HashMap&lt;&gt;();\n" +
+        "    for (String w : words) {\n" +
+        "        char[] c = w.toCharArray();\n" +
+        "        Arrays.sort(c);                        // the signature: anagrams collide on purpose\n" +
+        "        groups.computeIfAbsent(new String(c), k -&gt; new ArrayList&lt;&gt;()).add(w);\n" +
+        "    }\n" +
+        "    return new ArrayList&lt;&gt;(groups.values());\n" +
+        "}</code></pre></div>" +
 
         "<p><strong>Set membership.</strong> \"Have I seen this before\" &#8212; deduplication, cycle detection over states, marking the visited nodes of a graph traversal &#8212; is a hash <em>set</em>, a table storing keys with no values. Deduplicating a stream is the same one-liner in every language, put everything in a set and read it back, and it is O(n) where the sort-and-scan alternative is O(n log n). Chapter 11's Floyd cycle detection saved memory by refusing to build one; when memory is not the constraint, a visited-set is shorter to write and faster to run.</p>" +
 
@@ -5759,6 +6440,25 @@ CHAPTERS.push({
         "</ul>" +
 
         "<p>The speedup grows because the two solutions are different complexity classes, not the same class with different constants &#8212; the brute force quadruples per doubling, the hash doubles, and the ratio between them doubles every time. This is the shape Chapter 1 opened the course with, the same problem answered across orders of magnitude, and it is why \"could this be a hash lookup\" is the first question to ask of any problem about finding, counting or matching.</p>" +
+        "<p>The one-pass version. Asking before recording is what stops an element pairing with itself:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def two_sum(nums, target):            # indices (i, j) with i &lt; j, or None\n" +
+        "    seen = {}                         # value -&gt; index where it was seen\n" +
+        "    for j, x in enumerate(nums):\n" +
+        "        i = seen.get(target - x)      # has the partner already gone past?\n" +
+        "        if i is not None:\n" +
+        "            return i, j\n" +
+        "        seen[x] = j\n" +
+        "    return None</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] twoSum(int[] nums, int target) {        // {i, j} with i &lt; j, or null\n" +
+        "    Map&lt;Integer, Integer&gt; seen = new HashMap&lt;&gt;();    // value -&gt; index where it was seen\n" +
+        "    for (int j = 0; j &lt; nums.length; j++) {\n" +
+        "        Integer i = seen.get(target - nums[j]);      // has the partner gone past?\n" +
+        "        if (i != null) return new int[]{i, j};\n" +
+        "        seen.put(nums[j], j);\n" +
+        "    }\n" +
+        "    return null;\n" +
+        "}</code></pre></div>" +
 
         "<p>The structure you now understand from the bottom &#8212; a random hash into a small array, collisions resolved by chaining or probing, load factor held below a threshold by amortized resizing, and randomness injected to defeat an adversary &#8212; is the same one behind <code>dict</code>, <code>HashMap</code>, <code>unordered_map</code> and the set literal in every language you will use. When you build one yourself, this is the structure whose test is the hardest to fool, because the correctness is straightforward and the performance is where every one of this chapter's decisions shows up or fails to.</p>"
     },
@@ -5949,6 +6649,48 @@ CHAPTERS.push({
         "</svg><div class='fig-cap'>The recursion visits the leaves left to right; the same eight leaves are the integers 0 through 7 written in binary.</div></div>" +
 
         "<p>There is a second way to read that tree, and it is worth seeing because it recurs throughout the course. Label each element's choice a bit &#8212; 1 for include, 0 for exclude &#8212; and every leaf is an n-bit integer. Subset number 5 in a three-element set is binary 101, meaning take the first and third elements. So the whole enumeration is a single loop from 0 to 2<sup>n</sup>&#8722;1, testing bit j of the counter to decide element j. This <strong>bitmask enumeration</strong> is the same tree the recursion walks, read as integers instead of as a stack of decisions, and for n up to the width of a machine word it is faster and shorter than the recursion because the hardware's increment is doing the tree walk for you. The ceiling is real and hard: a 64-bit word holds a bitmask for at most 64 elements, and 2<sup>64</sup> subsets is already past what any machine will enumerate, so the word-size limit and the running-time limit bite at the same place.</p>" +
+        "<p>Both readings, the recursion and the counter:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def subsets(nums):\n" +
+        "    out, cur = [], []\n" +
+        "    def go(i):\n" +
+        "        if i == len(nums):\n" +
+        "            out.append(cur[:])        # record a copy: cur keeps changing\n" +
+        "            return\n" +
+        "        cur.append(nums[i])           # include: choose\n" +
+        "        go(i + 1)                     #          explore\n" +
+        "        cur.pop()                     #          un-choose\n" +
+        "        go(i + 1)                     # exclude\n" +
+        "    go(0)\n" +
+        "    return out\n" +
+        "\n" +
+        "def subsets_bitmask(nums):            # bit j of mask decides element j\n" +
+        "    n = len(nums)\n" +
+        "    return [[nums[j] for j in range(n) if mask &gt;&gt; j &amp; 1] for mask in range(1 &lt;&lt; n)]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;List&lt;Integer&gt;&gt; subsets(int[] nums) {\n" +
+        "    List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    subsets(nums, 0, new ArrayList&lt;&gt;(), out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static void subsets(int[] nums, int i, List&lt;Integer&gt; cur, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "    if (i == nums.length) { out.add(new ArrayList&lt;&gt;(cur)); return; }   // copy\n" +
+        "    cur.add(nums[i]);                        // include: choose\n" +
+        "    subsets(nums, i + 1, cur, out);          //          explore\n" +
+        "    cur.remove(cur.size() - 1);              //          un-choose\n" +
+        "    subsets(nums, i + 1, cur, out);          // exclude\n" +
+        "}\n" +
+        "\n" +
+        "static List&lt;List&lt;Integer&gt;&gt; subsetsBitmask(int[] nums) {\n" +
+        "    List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int mask = 0; mask &lt; 1 &lt;&lt; nums.length; mask++) {\n" +
+        "        List&lt;Integer&gt; s = new ArrayList&lt;&gt;();\n" +
+        "        for (int j = 0; j &lt; nums.length; j++)\n" +
+        "            if ((mask &gt;&gt; j &amp; 1) == 1) s.add(nums[j]);   // bit j decides element j\n" +
+        "        out.add(s);\n" +
+        "    }\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
 
         "<p>There is even a third ordering worth knowing: enumerate the subsets so that each differs from the last by a single element, a <em>Gray code</em>, which is what you want when moving between subsets is expensive &#8212; adding or removing one item &#8212; and you would rather not rebuild each from scratch. Which reading you reach for is a real decision. The recursive form generalizes &#8212; the moment the choice is more than binary, or a pruning rule enters, the loop-over-integers stops working and the tree is all you have. The bitmask form is unbeatable when the choice truly is include-or-exclude and n is small, which is exactly the setting of Chapter 12's meet-in-the-middle, where enumerating 2<sup>20</sup> subsets as integers was what made the trick fast. <strong>Step the machine above</strong> through the subset tree and watch each leaf complete; then switch it to permutations and see the same three lines produce a different shape.</p>",
       viz: "dsaBacktrackTree", vizTitle: "The tree grows as you step; each leaf is one complete answer. Switch problems and toggle duplicates to watch the shape change"
@@ -5959,8 +6701,66 @@ CHAPTERS.push({
         "<p>Permutations enumerate every ordering of n elements, so the tree has n choices at the root, n&#8722;1 at the next level, and n! leaves. There are two standard ways to write the choice, and they are worth comparing because the difference is a lesson in what state you carry.</p>" +
 
         "<p>The <strong>used-array</strong> method keeps a boolean per element and, at each level, loops over all n elements skipping the ones already used. Choose sets <code>used[i]</code> and appends element i; un-choose clears the flag and pops it. The state is the growing prefix plus the used flags, and both are restored on the way back up. The <strong>swap</strong> method is subtler: to permute the slots from index k onward, it swaps each candidate into position k in turn, recurses on k+1, and swaps back. It carries no auxiliary array at all &#8212; the array itself is the state &#8212; but the swap-back is the un-choose, and forgetting it scrambles the array for every sibling branch.</p>" +
+        "<p>The used-array method, which is the one to write by default:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def permutations(nums):\n" +
+        "    out, cur, used = [], [], [False] * len(nums)\n" +
+        "    def go():\n" +
+        "        if len(cur) == len(nums):\n" +
+        "            out.append(cur[:])\n" +
+        "            return\n" +
+        "        for i in range(len(nums)):\n" +
+        "            if used[i]:\n" +
+        "                continue\n" +
+        "            used[i] = True; cur.append(nums[i])     # choose\n" +
+        "            go()                                     # explore\n" +
+        "            cur.pop(); used[i] = False               # un-choose\n" +
+        "    go()\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;List&lt;Integer&gt;&gt; permutations(int[] nums) {\n" +
+        "    List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    permute(nums, new boolean[nums.length], new ArrayList&lt;&gt;(), out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static void permute(int[] nums, boolean[] used, List&lt;Integer&gt; cur, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "    if (cur.size() == nums.length) { out.add(new ArrayList&lt;&gt;(cur)); return; }\n" +
+        "    for (int i = 0; i &lt; nums.length; i++) {\n" +
+        "        if (used[i]) continue;\n" +
+        "        used[i] = true; cur.add(nums[i]);            // choose\n" +
+        "        permute(nums, used, cur, out);               // explore\n" +
+        "        cur.remove(cur.size() - 1); used[i] = false; // un-choose\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>A third route does not recurse at all. <strong>next_permutation</strong>, the function C++ ships in its standard library, transforms an ordering into the next one in lexicographic order in place: find the rightmost ascent, swap its base with the smallest larger element to its right, and reverse the suffix. Called n! times from the sorted ordering it enumerates every permutation and then reports there is no next, and measured on this machine it does exactly that &#8212; 120 orderings for n = 5, 5,040 for n = 7, 40,320 for n = 8, each in strictly increasing lexicographic order, no duplicates and none missed. A single call can reverse a suffix of length up to n, so it looks like O(n) work, but averaged over a full enumeration it is O(1) per permutation: the long reversals are rare and the short ones common, in the same amortized way Chapter 4's array doubling averaged out its rare expensive resizes.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def next_permutation(a):              # in place; False (and a reset to sorted) at the last\n" +
+        "    i = len(a) - 2\n" +
+        "    while i &gt;= 0 and a[i] &gt;= a[i + 1]:\n" +
+        "        i -= 1                        # find the rightmost ascent a[i] &lt; a[i + 1]\n" +
+        "    if i &lt; 0:\n" +
+        "        a.reverse()\n" +
+        "        return False\n" +
+        "    j = len(a) - 1\n" +
+        "    while a[j] &lt;= a[i]:\n" +
+        "        j -= 1                        # smallest element right of i that beats a[i]\n" +
+        "    a[i], a[j] = a[j], a[i]\n" +
+        "    a[i + 1:] = reversed(a[i + 1:])   # the suffix was descending: make it ascending\n" +
+        "    return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>static boolean nextPermutation(int[] a) {   // false (and a reset to sorted) at the last\n" +
+        "    int i = a.length - 2;\n" +
+        "    while (i &gt;= 0 &amp;&amp; a[i] &gt;= a[i + 1]) i--;  // rightmost ascent\n" +
+        "    if (i &gt;= 0) {\n" +
+        "        int j = a.length - 1;\n" +
+        "        while (a[j] &lt;= a[i]) j--;            // smallest element right of i that beats a[i]\n" +
+        "        int t = a[i]; a[i] = a[j]; a[j] = t;\n" +
+        "    }\n" +
+        "    for (int l = i + 1, r = a.length - 1; l &lt; r; l++, r--) {   // descending suffix -&gt; ascending\n" +
+        "        int t = a[l]; a[l] = a[r]; a[r] = t;\n" +
+        "    }\n" +
+        "    return i &gt;= 0;\n" +
+        "}</code></pre></div>" +
 
         "<div class='callout'>The algorithm inside <code>next_permutation</code> is not from the C++ committee. It is the lexicographic-successor rule written down by the Indian mathematician <strong>Narayana Pandita</strong> in the <em>Ganita Kaumudi</em> of 1356, in the course of enumerating the arrangements of poetic metres and the permutations of a set with repeated elements. The problems in this chapter were being solved, correctly and in the modern order, six centuries before the computers that made them routine.</div>" +
 
@@ -5976,8 +6776,76 @@ CHAPTERS.push({
         "<p>The rule that removes it: <strong>sort the input, then within one level of the tree skip a value equal to the previous one unless that previous one is currently in use.</strong> Written as a guard, <code>if i &gt; 0 and a[i] == a[i-1] and not used[i-1]: continue</code>. The reason it is exactly right, and not merely a heuristic, is what the derivation shows. Among a run of equal values, we permit only the pattern that uses them left to right: the first equal value may be chosen only when the one before it in the sorted order has already been taken. That forces one canonical ordering of the identical copies and forbids the other multiplicity-minus-one orderings that would produce the same leaf. Measured, the guard turns the 6 leaves of <code>[1,1,2]</code> into exactly 3, the 24 of <code>[1,1,2,2]</code> into 6, and the 24 of <code>[2,2,2,2]</code> into 1 &#8212; in every case exactly the distinct count, nothing pruned that should have survived and nothing survived that should have been pruned.</p>" +
 
         "<p>The <code>not used[i-1]</code> half is the part that is wrong in most first drafts, and the failure is instructive. Drop it and write only <code>a[i] == a[i-1]: continue</code>, and you forbid ever placing two equal values in the answer at all &#8212; the guard now fires even when the previous copy is deep in the current prefix rather than a sibling being skipped, so <code>[1,1,2]</code> loses the permutation <code>[1,1,2]</code> itself. The condition has to distinguish \"this equal value is a sibling I already tried at this level\" from \"this equal value is one I chose higher up\", and <code>used[i-1]</code> is exactly that distinction.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def permute_unique(nums):\n" +
+        "    nums = sorted(nums)               # equal values must sit next to each other\n" +
+        "    out, cur, used = [], [], [False] * len(nums)\n" +
+        "    def go():\n" +
+        "        if len(cur) == len(nums):\n" +
+        "            out.append(cur[:])\n" +
+        "            return\n" +
+        "        for i in range(len(nums)):\n" +
+        "            if used[i]:\n" +
+        "                continue\n" +
+        "            if i &gt; 0 and nums[i] == nums[i - 1] and not used[i - 1]:\n" +
+        "                continue              # an equal sibling was already tried at this level\n" +
+        "            used[i] = True; cur.append(nums[i])\n" +
+        "            go()\n" +
+        "            cur.pop(); used[i] = False\n" +
+        "    go()\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;List&lt;Integer&gt;&gt; permuteUnique(int[] nums) {\n" +
+        "    int[] a = nums.clone();\n" +
+        "    Arrays.sort(a);                           // equal values must sit together\n" +
+        "    List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    permuteUnique(a, new boolean[a.length], new ArrayList&lt;&gt;(), out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static void permuteUnique(int[] a, boolean[] used, List&lt;Integer&gt; cur, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "    if (cur.size() == a.length) { out.add(new ArrayList&lt;&gt;(cur)); return; }\n" +
+        "    for (int i = 0; i &lt; a.length; i++) {\n" +
+        "        if (used[i]) continue;\n" +
+        "        if (i &gt; 0 &amp;&amp; a[i] == a[i - 1] &amp;&amp; !used[i - 1]) continue;  // equal sibling tried\n" +
+        "        used[i] = true; cur.add(a[i]);\n" +
+        "        permuteUnique(a, used, cur, out);\n" +
+        "        cur.remove(cur.size() - 1); used[i] = false;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
-        "<p>Subsets with repeated values need the same idea in its other form. The subset builder from section 2 already avoids order-duplicates by only ever moving forward through the array, but a repeated value defeats that: <code>[1, 2, 2]</code> generates 8 leaves for 6 distinct subsets, and <code>[2, 2, 2]</code> generates 8 for 4. The guard is <code>if j &gt; start and a[j] == a[j-1]: continue</code> &#8212; within one level, having already tried a value, skip its equal copies &#8212; and it takes those counts to exactly 6 and 4. It is the sort-then-skip rule again, keyed on the level's start index rather than a used array, because a subset tree never revisits an earlier position and so needs only the weaker test. <strong>Turn duplicates on in the machine from section 2 without either skip rule</strong> and count the repeated leaves; the count is the multiplicity product, every time.</p>"
+        "<p>Subsets with repeated values need the same idea in its other form. The subset builder from section 2 already avoids order-duplicates by only ever moving forward through the array, but a repeated value defeats that: <code>[1, 2, 2]</code> generates 8 leaves for 6 distinct subsets, and <code>[2, 2, 2]</code> generates 8 for 4. The guard is <code>if j &gt; start and a[j] == a[j-1]: continue</code> &#8212; within one level, having already tried a value, skip its equal copies &#8212; and it takes those counts to exactly 6 and 4. It is the sort-then-skip rule again, keyed on the level's start index rather than a used array, because a subset tree never revisits an earlier position and so needs only the weaker test. <strong>Turn duplicates on in the machine from section 2 without either skip rule</strong> and count the repeated leaves; the count is the multiplicity product, every time.</p>" +
+        "<p>Written as a start-index tree, where every node is an answer rather than only the leaves:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def subsets_with_dup(nums):\n" +
+        "    nums = sorted(nums)\n" +
+        "    out, cur = [], []\n" +
+        "    def go(start):\n" +
+        "        out.append(cur[:])            # in this tree every node is a subset\n" +
+        "        for j in range(start, len(nums)):\n" +
+        "            if j &gt; start and nums[j] == nums[j - 1]:\n" +
+        "                continue              # this level already tried that value\n" +
+        "            cur.append(nums[j])\n" +
+        "            go(j + 1)\n" +
+        "            cur.pop()\n" +
+        "    go(0)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;List&lt;Integer&gt;&gt; subsetsWithDup(int[] nums) {\n" +
+        "    int[] a = nums.clone();\n" +
+        "    Arrays.sort(a);\n" +
+        "    List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    subsetsWithDup(a, 0, new ArrayList&lt;&gt;(), out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static void subsetsWithDup(int[] a, int start, List&lt;Integer&gt; cur, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "    out.add(new ArrayList&lt;&gt;(cur));            // every node is a subset\n" +
+        "    for (int j = start; j &lt; a.length; j++) {\n" +
+        "        if (j &gt; start &amp;&amp; a[j] == a[j - 1]) continue;   // level already tried that value\n" +
+        "        cur.add(a[j]);\n" +
+        "        subsetsWithDup(a, j + 1, cur, out);\n" +
+        "        cur.remove(cur.size() - 1);\n" +
+        "    }\n" +
+        "}</code></pre></div>"
     },
 
     { title: "Combinations: The Start Index",
@@ -5985,8 +6853,68 @@ CHAPTERS.push({
         "<p>A combination is a subset of a fixed size k, and it exposes a second kind of duplicate: not equal <em>values</em>, but the same set reached by different <em>orders</em> of choosing. If you generate the k-subsets of <code>{1,2,3,4}</code> by choosing any unused element at each of k levels, you produce <code>{1,2}</code> and <code>{2,1}</code> as separate leaves, because the tree does not know the set is unordered. Enumerating k-subsets of an n-set this way costs n!/(n&#8722;k)! leaves &#8212; the number of ordered sequences &#8212; when there are only \"n choose k\" real answers. For k = 2 out of n = 4 that is 12 ordered pairs against 6 unordered ones, a factor of k! = 2; for k = 3 out of 6 it is 120 against 20, a factor of 6, and the factor is k! at every size because each unordered set has k! orderings that all reach the same leaf.</p>" +
 
         "<p>The fix is one parameter: a <strong>start index</strong> that the recursion threads through, forbidding any level from choosing an element earlier than the one the level above chose. Each call loops <code>for j in range(start, n)</code> and recurses with <code>start = j + 1</code>. That single constraint forces every combination to come out in increasing order and therefore exactly once. It is the same move as the sort-then-skip rule of the previous section &#8212; impose one canonical order on choices that are otherwise interchangeable &#8212; applied to positions rather than to values, and the two together handle every duplicate a backtracking search can generate.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def combinations(n, k):               # the k-subsets of 1..n, each exactly once\n" +
+        "    out, cur = [], []\n" +
+        "    def go(start):\n" +
+        "        if len(cur) == k:\n" +
+        "            out.append(cur[:])\n" +
+        "            return\n" +
+        "        for j in range(start, n + 1): # never look back: increasing order only\n" +
+        "            cur.append(j)\n" +
+        "            go(j + 1)\n" +
+        "            cur.pop()\n" +
+        "    go(1)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;List&lt;Integer&gt;&gt; combinations(int n, int k) {\n" +
+        "    List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    combine(n, k, 1, new ArrayList&lt;&gt;(), out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static void combine(int n, int k, int start, List&lt;Integer&gt; cur, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "    if (cur.size() == k) { out.add(new ArrayList&lt;&gt;(cur)); return; }\n" +
+        "    for (int j = start; j &lt;= n; j++) {        // never look back: increasing order only\n" +
+        "        cur.add(j);\n" +
+        "        combine(n, k, j + 1, cur, out);\n" +
+        "        cur.remove(cur.size() - 1);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>The start index also does something the subset enumeration of section 2 did implicitly and worth naming. The subset tree only ever added element j on the way down and never looked back, which is why its 2<sup>n</sup> leaves were distinct: it was carrying a start index of exactly the current depth. Combinations are that same discipline with an early cutoff once the prefix reaches length k, and the k-subsets for all k from 0 to n are precisely the 2<sup>n</sup> subsets partitioned by size. One parameter unifies three problems: subsets, k-combinations, and the many interview problems &#8212; combination sum, letter combinations of a phone number, palindrome partitioning &#8212; that are a combination enumeration with a problem-specific completeness test at the leaf.</p>" +
+        "<p>Combination sum is the start-index tree with two changes: recursing on j rather than j + 1 lets a value repeat, and a sorted input turns the leaf test into a prune, because once one candidate overshoots, every later one does too:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def combination_sum(candidates, target):   # distinct positives, each reusable\n" +
+        "    cands = sorted(candidates)\n" +
+        "    out, cur = [], []\n" +
+        "    def go(start, remaining):\n" +
+        "        if remaining == 0:\n" +
+        "            out.append(cur[:])\n" +
+        "            return\n" +
+        "        for j in range(start, len(cands)):\n" +
+        "            if cands[j] &gt; remaining:\n" +
+        "                break                 # sorted: every later candidate is too big as well\n" +
+        "            cur.append(cands[j])\n" +
+        "            go(j, remaining - cands[j])   # j, not j + 1: the same value may repeat\n" +
+        "            cur.pop()\n" +
+        "    go(0, target)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;List&lt;Integer&gt;&gt; combinationSum(int[] candidates, int target) {\n" +
+        "    int[] c = candidates.clone();\n" +
+        "    Arrays.sort(c);\n" +
+        "    List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    combinationSum(c, 0, target, new ArrayList&lt;&gt;(), out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static void combinationSum(int[] c, int start, int remaining, List&lt;Integer&gt; cur, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "    if (remaining == 0) { out.add(new ArrayList&lt;&gt;(cur)); return; }\n" +
+        "    for (int j = start; j &lt; c.length &amp;&amp; c[j] &lt;= remaining; j++) {  // sorted: stop early\n" +
+        "        cur.add(c[j]);\n" +
+        "        combinationSum(c, j, remaining - c[j], cur, out);  // j, not j + 1: reuse allowed\n" +
+        "        cur.remove(cur.size() - 1);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
 
         "<p>This is the payoff the chapter keeps promising. Subsets, permutations, and combinations are not three algorithms; they are one template with three answers to \"what is a choice\" and two small devices &#8212; the used array and the start index &#8212; for not counting the same thing twice. Everything remaining in the chapter is about the third question from section 1: how to avoid walking a subtree you can already prove is barren.</p>"
     },
@@ -6020,7 +6948,39 @@ CHAPTERS.push({
 
         "<p>The number that matters is not the ratio at any one n but that the ratio <em>grows</em>: 12.8&#215; at n = 6, 53&#215; at n = 8, 650&#215; at n = 11. A constant-factor speedup would hold steady; a growing one means the two searches are in different complexity classes. The unpruned search visits a number of nodes that tracks n! because it is really enumerating row-permutations and only testing them at the end; the pruned search visits far fewer because most permutations share a bad prefix, and pruning charges for that prefix once instead of once per permutation completing it. This is the general shape: <strong>a pruning rule pays off in proportion to how early and how often it fires</strong>, and the diagonal check fires early and often because most placements conflict. At n = 8 the concrete numbers are 2,057 nodes pruned against 109,601 unpruned for the same 92 solutions; the unpruned figure is close to the 8! = 40,320 leaves plus their internal nodes, confirming it is really a permutation enumeration wearing a chessboard, with the diagonal test demoted from a prune to a final exam that most candidates fail.</p>" +
 
-        "<p>Two properties make a check a legal prune, and both matter. It must be <em>sound</em> &#8212; it may abandon a subtree only when that subtree provably contains no solution, or you will miss real answers &#8212; and it should be <em>cheap</em>, because it runs at every node. The diagonal check is both: two queens share a &#8595;-diagonal exactly when they share the value row&#8722;column, and a &#8593;-diagonal exactly when they share row+column, so the whole test is membership in two integer sets and costs O(1) per placement. That encoding is the trick worth keeping &#8212; it turns a geometric constraint into two hash-set lookups, and the same move (name the invariant a coordinate makes constant, then index on it) reappears whenever a grid problem needs a fast conflict test. <strong>Set the machine above to n = 8, run it with pruning off and then on</strong>, and watch the explored-node counter fall from six figures to four.</p>",
+        "<p>Two properties make a check a legal prune, and both matter. It must be <em>sound</em> &#8212; it may abandon a subtree only when that subtree provably contains no solution, or you will miss real answers &#8212; and it should be <em>cheap</em>, because it runs at every node. The diagonal check is both: two queens share a &#8595;-diagonal exactly when they share the value row&#8722;column, and a &#8593;-diagonal exactly when they share row+column, so the whole test is membership in two integer sets and costs O(1) per placement. That encoding is the trick worth keeping &#8212; it turns a geometric constraint into two hash-set lookups, and the same move (name the invariant a coordinate makes constant, then index on it) reappears whenever a grid problem needs a fast conflict test. <strong>Set the machine above to n = 8, run it with pruning off and then on</strong>, and watch the explored-node counter fall from six figures to four.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def n_queens(n):                      # every solution, as queens[row] = column\n" +
+        "    out, queens = [], []\n" +
+        "    cols, diag, anti = set(), set(), set()\n" +
+        "    def go(r):\n" +
+        "        if r == n:\n" +
+        "            out.append(queens[:])\n" +
+        "            return\n" +
+        "        for c in range(n):\n" +
+        "            if c in cols or r - c in diag or r + c in anti:\n" +
+        "                continue              # prune: an earlier queen attacks this square\n" +
+        "            queens.append(c); cols.add(c); diag.add(r - c); anti.add(r + c)\n" +
+        "            go(r + 1)\n" +
+        "            queens.pop(); cols.remove(c); diag.remove(r - c); anti.remove(r + c)\n" +
+        "    go(0)\n" +
+        "    return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;int[]&gt; nQueens(int n) {           // each solution: queens[row] = column\n" +
+        "    List&lt;int[]&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    place(0, new int[n], new boolean[n], new boolean[2 * n - 1], new boolean[2 * n - 1], out);\n" +
+        "    return out;\n" +
+        "}\n" +
+        "\n" +
+        "static void place(int r, int[] queens, boolean[] cols, boolean[] diag, boolean[] anti, List&lt;int[]&gt; out) {\n" +
+        "    int n = queens.length;\n" +
+        "    if (r == n) { out.add(queens.clone()); return; }\n" +
+        "    for (int c = 0; c &lt; n; c++) {\n" +
+        "        if (cols[c] || diag[r - c + n - 1] || anti[r + c]) continue;   // prune\n" +
+        "        queens[r] = c; cols[c] = diag[r - c + n - 1] = anti[r + c] = true;\n" +
+        "        place(r + 1, queens, cols, diag, anti, out);\n" +
+        "        cols[c] = diag[r - c + n - 1] = anti[r + c] = false;\n" +
+        "    }\n" +
+        "}</code></pre></div>",
       viz: "dsaNQueens", vizTitle: "Place queens column by column; toggle pruning and watch the explored-node counter change"
     },
 
@@ -6033,6 +6993,63 @@ CHAPTERS.push({
         "<p>The measurement is decisive. On Arto Inkala's \"AI Escargot\", built to be hard for solvers, left-to-right ordering tries <strong>8,969</strong> digit placements; most-constrained-first tries <strong>250</strong> &#8212; the same solver, the same pruning, the same puzzle, differing only in which blank cell it picks, and a factor of 36 between them. On a harder puzzle still, left-to-right had not finished after <strong>eight million</strong> placements when most-constrained-first solved it in <strong>2,791</strong>. The heuristic is not chipping at a constant; on the puzzles built to resist, it is the difference between solving and not. It is one of the oldest results in constraint satisfaction &#8212; the general rule is \"assign the most-constrained variable first,\" and every practical solver, from sudoku to timetabling to register allocation, opens with some version of it.</p>" +
 
         "<p>Full constraint propagation goes one step further than choosing the cell: after each placement it repeatedly fills every cell that has been reduced to a single candidate, and every cell those fills reduce to a single candidate, until nothing more forces. When this cascade hits a cell with <em>no</em> candidate it reports the contradiction immediately, pruning the branch far above where the plain solver would have discovered it by trying digits one at a time. This is the distinction worth carrying out of the chapter: <strong>pruning removes a branch after a choice is shown to fail; propagation deduces forced consequences and failures before the next choice is even made.</strong> The most-constrained heuristic is the cheapest slice of propagation &#8212; it uses the candidate counts without acting on them &#8212; and it already buys the factor of 36.</p>" +
+        "<p>A solver with ordinary pruning and the most-constrained-cell rule, which is one extra scan for the smallest candidate list:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def solve_sudoku(board):              # 9x9 lists, 0 = empty; solves in place\n" +
+        "    def candidates(r, c):\n" +
+        "        br, bc = r // 3 * 3, c // 3 * 3\n" +
+        "        used = set(board[r]) | {board[i][c] for i in range(9)} | \\\n" +
+        "               {board[i][j] for i in range(br, br + 3) for j in range(bc, bc + 3)}\n" +
+        "        return [d for d in range(1, 10) if d not in used]\n" +
+        "\n" +
+        "    def solve():\n" +
+        "        best = None                   # the empty cell with the fewest candidates\n" +
+        "        for r in range(9):\n" +
+        "            for c in range(9):\n" +
+        "                if board[r][c] == 0:\n" +
+        "                    cand = candidates(r, c)\n" +
+        "                    if best is None or len(cand) &lt; len(best[2]):\n" +
+        "                        best = (r, c, cand)\n" +
+        "        if best is None:\n" +
+        "            return True               # no empty cell left: solved\n" +
+        "        r, c, cand = best             # zero candidates means the loop never runs: prune\n" +
+        "        for d in cand:\n" +
+        "            board[r][c] = d           # choose\n" +
+        "            if solve():               # explore\n" +
+        "                return True\n" +
+        "            board[r][c] = 0           # un-choose\n" +
+        "        return False\n" +
+        "\n" +
+        "    return solve()</code></pre>" +
+        "<pre data-lang='java' hidden><code>static boolean solveSudoku(int[][] board) {   // 0 = empty; solves in place\n" +
+        "    int br = -1, bc = -1;\n" +
+        "    List&lt;Integer&gt; best = null;                // fewest candidates wins\n" +
+        "    for (int r = 0; r &lt; 9; r++)\n" +
+        "        for (int c = 0; c &lt; 9; c++)\n" +
+        "            if (board[r][c] == 0) {\n" +
+        "                List&lt;Integer&gt; cand = candidates(board, r, c);\n" +
+        "                if (best == null || cand.size() &lt; best.size()) { best = cand; br = r; bc = c; }\n" +
+        "            }\n" +
+        "    if (best == null) return true;            // no empty cell left: solved\n" +
+        "    for (int d : best) {                      // no candidates: loop never runs, prune\n" +
+        "        board[br][bc] = d;                    // choose\n" +
+        "        if (solveSudoku(board)) return true;  // explore\n" +
+        "        board[br][bc] = 0;                    // un-choose\n" +
+        "    }\n" +
+        "    return false;\n" +
+        "}\n" +
+        "\n" +
+        "static List&lt;Integer&gt; candidates(int[][] b, int r, int c) {\n" +
+        "    boolean[] used = new boolean[10];\n" +
+        "    for (int i = 0; i &lt; 9; i++) {\n" +
+        "        used[b[r][i]] = true;\n" +
+        "        used[b[i][c]] = true;\n" +
+        "        used[b[r / 3 * 3 + i / 3][c / 3 * 3 + i % 3]] = true;   // i-th cell of the box\n" +
+        "    }\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int d = 1; d &lt;= 9; d++) if (!used[d]) out.add(d);\n" +
+        "    return out;\n" +
+        "}</code></pre></div>" +
 
         "<p><strong>Switch the heuristic in the machine above</strong> from left-to-right to most-constrained-first and watch the step counter collapse; the cells it chooses to fill are almost always the ones you, solving by hand, would have filled without thinking.</p>",
       viz: "dsaSudoku", vizTitle: "Which empty cell should you fill next? Switch the heuristic and watch the step count collapse"
@@ -6052,7 +7069,45 @@ CHAPTERS.push({
 
         "<p>The overhead shrinks as the tree widens, and for any branching factor above two it is under a doubling. So iterative deepening buys the completeness and shortest-path guarantee of breadth-first search, keeps the O(d) memory of depth-first search, and pays a constant factor that at b = 10 is eleven percent. For a search over a ten-way branching space to depth eight, the breadth-first frontier would hold on the order of a hundred million nodes; iterative deepening holds a stack eight deep. That is the whole trade, and it is why iterative deepening is the default uninformed search when the depth is unknown and memory is finite &#8212; which, outside a textbook, it always is.</p>" +
 
-        "<p>The technique also connects backward to Chapter 6. Each iteration is a plain depth-limited backtracking search &#8212; the same three lines, with one added base case that stops descending at the current limit &#8212; so nothing new is needed to build it. The redundant work is the price of not knowing the depth in advance, and the measurements are the receipt showing the price is small. Where a problem does know its depth, or can afford the frontier, the plain search is right; iterative deepening is the tool for the case where neither of those holds.</p>"
+        "<p>The technique also connects backward to Chapter 6. Each iteration is a plain depth-limited backtracking search &#8212; the same three lines, with one added base case that stops descending at the current limit &#8212; so nothing new is needed to build it. The redundant work is the price of not knowing the depth in advance, and the measurements are the receipt showing the price is small. Where a problem does know its depth, or can afford the frontier, the plain search is right; iterative deepening is the tool for the case where neither of those holds.</p>" +
+        "<p>The whole technique is a loop around the three lines:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def iddfs(start, is_goal, neighbours, max_depth=50):   # a shortest path, or None\n" +
+        "    path = [start]\n" +
+        "    def dls(node, limit):             # plain depth-limited backtracking\n" +
+        "        if is_goal(node):\n" +
+        "            return True\n" +
+        "        if limit == 0:\n" +
+        "            return False\n" +
+        "        for nxt in neighbours(node):\n" +
+        "            path.append(nxt)          # choose\n" +
+        "            if dls(nxt, limit - 1):   # explore\n" +
+        "                return True\n" +
+        "            path.pop()                # un-choose\n" +
+        "        return False\n" +
+        "    for limit in range(max_depth + 1):    # depth 0, then 1, then 2, ...\n" +
+        "        if dls(start, limit):\n" +
+        "            return path\n" +
+        "    return None</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; iddfs(int start, IntPredicate isGoal,\n" +
+        "                           IntFunction&lt;List&lt;Integer&gt;&gt; neighbours, int maxDepth) {\n" +
+        "    List&lt;Integer&gt; path = new ArrayList&lt;&gt;(List.of(start));\n" +
+        "    for (int limit = 0; limit &lt;= maxDepth; limit++)      // depth 0, then 1, then 2, ...\n" +
+        "        if (dls(start, limit, isGoal, neighbours, path)) return path;\n" +
+        "    return null;\n" +
+        "}\n" +
+        "\n" +
+        "static boolean dls(int node, int limit, IntPredicate isGoal,\n" +
+        "                   IntFunction&lt;List&lt;Integer&gt;&gt; neighbours, List&lt;Integer&gt; path) {\n" +
+        "    if (isGoal.test(node)) return true;\n" +
+        "    if (limit == 0) return false;\n" +
+        "    for (int next : neighbours.apply(node)) {\n" +
+        "        path.add(next);                                  // choose\n" +
+        "        if (dls(next, limit - 1, isGoal, neighbours, path)) return true;   // explore\n" +
+        "        path.remove(path.size() - 1);                    // un-choose\n" +
+        "    }\n" +
+        "    return false;\n" +
+        "}</code></pre></div>"
     },
 
     { title: "Exercises",
@@ -6229,17 +7284,49 @@ CHAPTERS.push({
       html:
         "<p>The first answer is the one that changes the least. Take the recursion exactly as Chapter 6 wrote it and give it a dictionary: before computing a subproblem, look in the dictionary; after computing it, store it there. That is <strong>memoization</strong>, and it is <strong>top-down</strong> &#8212; the control flow is still the original recursion, descending from the goal toward the base cases, with the cache intercepting the repeats.</p>" +
 
-        "<pre><code>def fib(n, memo={}):\n" +
-        "    if n < 2: return n\n" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def fib(n, memo={}):\n" +
+        "    if n &lt; 2: return n\n" +
         "    if n in memo: return memo[n]     # the only two\n" +
         "    memo[n] = fib(n-1, memo) + fib(n-2, memo)\n" +
-        "    return memo[n]                   # lines that changed\n</code></pre>" +
+        "    return memo[n]                   # lines that changed</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long fib(int n, Map&lt;Integer, Long&gt; memo) {   // call fib(n, new HashMap&lt;&gt;())\n" +
+        "    if (n &lt; 2) return n;\n" +
+        "    if (memo.containsKey(n)) return memo.get(n);    // the only two\n" +
+        "    memo.put(n, fib(n - 1, memo) + fib(n - 2, memo));\n" +
+        "    return memo.get(n);                             // lines that changed\n" +
+        "}</code></pre></div>" +
 
         "<p>Two lines. The recursion, the base case, the structure &#8212; all identical to the slow version. And the effect is the collapse the last section promised: <code>fib(20)</code> falls from 21,891 calls to <strong>39</strong>, of which only 19 do any arithmetic and the rest are cache hits; <code>fib(30)</code> falls from 2,692,537 to 59. Each distinct subproblem is computed once and read thereafter, so the running time is the number of distinct subproblems times the cost of one transition &#8212; here n subproblems at O(1) each, an exponential algorithm turned linear by a hash table.</p>" +
 
         "<p>Why memoization is correct is worth stating because it is the load-bearing assumption. It relies on the subproblems being <em>pure</em>: <code>fib(3)</code> is the same value no matter who asked for it or when, so the first computed answer is valid for every later caller. That is exactly the overlapping-subproblems property, and it is why a memo is sound here and would be a bug in a function whose result depended on hidden state. The cache key must capture everything the answer depends on &#8212; for Fibonacci that is n alone, but for a grid walk it is the pair of coordinates, and for a subsequence problem it is the pair of prefix lengths. A memo keyed on too little silently returns one subproblem's answer for another.</p>" +
 
         "<p>The grid walk makes the key concrete. Counting paths from the top-left to the bottom-right of a grid, moving only right or down, the honest recursion is <code>paths(i,j) = paths(i-1,j) + paths(i,j-1)</code> &#8212; Fibonacci's tree in two dimensions, re-deriving <code>paths(2,2)</code> from every route that passes through it. The memo key is the pair <code>(i,j)</code>, because the number of ways to reach a cell depends on the cell and nothing else, not on the path that posed the question. Key it on <code>i</code> alone and every column collapses into one, returning a confident wrong number with no error raised. The rule \"the key is exactly the free variables of the subproblem\" is the one that prevents the quietest class of dynamic-programming bug.</p>" +
+        "<p>In Python the dictionary can be the standard library's: <code>functools.cache</code> keys on every argument, which is exactly the rule. In Java the key becomes the index into a two-dimensional array:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from functools import cache\n" +
+        "\n" +
+        "def grid_paths(m, n):                 # right/down paths across an m x n grid\n" +
+        "    @cache                            # the memo, keyed on every argument: (i, j)\n" +
+        "    def paths(i, j):\n" +
+        "        if i &lt; 0 or j &lt; 0:\n" +
+        "            return 0                  # off the grid\n" +
+        "        if i == 0 and j == 0:\n" +
+        "            return 1\n" +
+        "        return paths(i - 1, j) + paths(i, j - 1)\n" +
+        "    return paths(m - 1, n - 1)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long gridPaths(int m, int n) {\n" +
+        "    long[][] memo = new long[m][n];\n" +
+        "    for (long[] row : memo) Arrays.fill(row, -1);   // -1: not computed yet\n" +
+        "    return paths(m - 1, n - 1, memo);\n" +
+        "}\n" +
+        "\n" +
+        "static long paths(int i, int j, long[][] memo) {    // the key is (i, j)\n" +
+        "    if (i &lt; 0 || j &lt; 0) return 0;                   // off the grid\n" +
+        "    if (i == 0 &amp;&amp; j == 0) return 1;\n" +
+        "    if (memo[i][j] &lt; 0) memo[i][j] = paths(i - 1, j, memo) + paths(i, j - 1, memo);\n" +
+        "    return memo[i][j];\n" +
+        "}</code></pre></div>" +
 
         "<p>Memoization is the gentlest on-ramp to dynamic programming precisely because it demands no new plan. You write the honest recursion &#8212; the one that would be right if it were not too slow, which is Chapter 18's backtracking with the answers reused instead of recomputed &#8212; and then you add the cache. This is why the advice \"write the brute-force recursion first\" is not a beginner's crutch but the actual method: the recursion is the hard part, and the memo is mechanical once the recursion is right. <strong>Turn the memo off in the machine above</strong> on <code>fib(20)</code> and watch the call counter climb to 21,891; turn it on and watch it stop at 39.</p>",
       viz: "dsaMemoTable", vizTitle: "Same recursion, one table. Toggle the memo and watch the call counter go from 39 to 21,891"
@@ -6249,11 +7336,18 @@ CHAPTERS.push({
       html:
         "<p>The second answer throws the recursion away and fills a table directly. If you know that <code>fib(n)</code> needs <code>fib(n-1)</code> and <code>fib(n-2)</code>, you can compute the values in order from the base cases upward &#8212; <code>fib(0)</code>, <code>fib(1)</code>, <code>fib(2)</code>, and so on &#8212; each from the two already sitting in the array. This is <strong>tabulation</strong>, and it is <strong>bottom-up</strong>: no recursion, no cache lookups, only a loop that fills cells in an order guaranteeing every cell's dependencies are already done.</p>" +
 
-        "<pre><code>def fib(n):\n" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def fib(n):\n" +
         "    dp = [0, 1]\n" +
         "    for i in range(2, n+1):\n" +
         "        dp.append(dp[i-1] + dp[i-2])\n" +
-        "    return dp[n]\n</code></pre>" +
+        "    return dp[n]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long fib(int n) {\n" +
+        "    long[] dp = new long[Math.max(2, n + 1)];\n" +
+        "    dp[1] = 1;\n" +
+        "    for (int i = 2; i &lt;= n; i++) dp[i] = dp[i - 1] + dp[i - 2];\n" +
+        "    return dp[n];\n" +
+        "}</code></pre></div>" +
 
         "<p>The two forms compute exactly the same values and have the same asymptotic cost, and the choice between them is a set of concrete trade-offs worth knowing rather than a matter of taste.</p>" +
 
@@ -6311,6 +7405,25 @@ CHAPTERS.push({
         "</svg><div class='fig-cap'>The same six rows fit every dynamic program. Filling them in order is the method; the code writes itself from the card.</div></div>" +
 
         "<p>The value of a fixed form is that it makes different problems look the same. Grid paths, in the same six lines: <em>S</em>, <code>P(i,j)</code> = number of right/down paths to cell (i,j); <em>R</em>, <code>P(i,j) = P(i-1,j) + P(i,j-1)</code>; <em>T</em>, increasing i then j; <em>B</em>, <code>P(0,0) = 1</code>, any off-grid cell 0; <em>O</em>, <code>P(m,n)</code>; <em>Time</em>, mn subproblems &#215; O(1) = O(mn). Minimum coins for an amount, again the same form: <em>S</em>, <code>C(a)</code> = fewest coins summing to a; <em>R</em>, <code>C(a) = 1 + min over coins c of C(a-c)</code>; <em>T</em>, increasing a; <em>B</em>, <code>C(0) = 0</code>; <em>O</em>, <code>C(amount)</code>; <em>Time</em>, amount subproblems &#215; O(coins). Three unrelated problems, one procedure, and in each the code is a transcription of the card.</p>" +
+        "<p>The coin card, transcribed line for line, with each line labelled by the question it answers:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_coins(coins, amount):         # fewest coins summing to amount, or -1\n" +
+        "    INF = float('inf')\n" +
+        "    C = [0] + [INF] * amount          # B: C(0) = 0\n" +
+        "    for a in range(1, amount + 1):    # T: increasing a\n" +
+        "        for c in coins:               # R: C(a) = 1 + min over c of C(a - c)\n" +
+        "            if c &lt;= a and C[a - c] + 1 &lt; C[a]:\n" +
+        "                C[a] = C[a - c] + 1\n" +
+        "    return C[amount] if C[amount] &lt; INF else -1   # O: C(amount)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int minCoins(int[] coins, int amount) {      // fewest coins, or -1\n" +
+        "    int INF = Integer.MAX_VALUE;\n" +
+        "    int[] C = new int[amount + 1];\n" +
+        "    Arrays.fill(C, 1, amount + 1, INF);             // B: C(0) = 0\n" +
+        "    for (int a = 1; a &lt;= amount; a++)               // T: increasing a\n" +
+        "        for (int c : coins)                         // R: 1 + min over c of C(a - c)\n" +
+        "            if (c &lt;= a &amp;&amp; C[a - c] != INF &amp;&amp; C[a - c] + 1 &lt; C[a]) C[a] = C[a - c] + 1;\n" +
+        "    return C[amount] == INF ? -1 : C[amount];       // O: C(amount)\n" +
+        "}</code></pre></div>" +
 
         "<p>The Time step earns its keep by catching the error the other five hide. Define, for longest increasing subsequence, <code>x(i)</code> = the length of the longest increasing subsequence among the first i elements. The subproblems number n, which looks like O(n) &#8212; but the recurrence for <code>x(i)</code> has to scan back over all earlier elements to find where the subsequence can extend, so the transition is O(n) and the true time is O(n&#178;). The count did not lie, the transition did, and Time is the step where an O(n) transition surfaces. The fix is to strengthen the subproblem &#8212; redefine it as the longest subsequence <em>ending at</em> i &#8212; which is the standard lesson that a too-weak subproblem shows up as an expensive transition.</p>" +
 
@@ -6325,6 +7438,53 @@ CHAPTERS.push({
         "<p>Take edit distance &#8212; the minimum single-character insertions, deletions and substitutions to turn one string into another. The table gives the number, and to turn <code>kitten</code> into <code>sitting</code> that number is 3. To recover <em>which</em> three edits, you walk backward from the final cell, at each step asking which neighbouring cell the value came from: an equal-character diagonal step is a keep, a diagonal step that cost one is a substitution, a step from above is a deletion, a step from the left is an insertion. Walking <code>kitten</code> to <code>sitting</code> back through the table yields the script exactly: substitute k with s, keep i, t, t, substitute e with i, keep n, insert g.</p>" +
 
         "<p>There are two ways to know which neighbour each value came from, and they are a classic space-versus-time trade. <strong>Parent pointers</strong> store, alongside each cell's value, which predecessor produced it; reconstruction is then an O(m+n) walk following the stored pointers, at the cost of a second table doubling the memory. <strong>Recomputation</strong> stores nothing extra and, at each step of the walk, re-derives which neighbour won by re-checking the recurrence against the values still in the table &#8212; the same O(m+n) walk, no extra memory, provided you kept the value table. The measured walk for <code>kitten</code>/<code>sitting</code> is seven steps for two length-six-and-seven strings, and it reads only cells along one path, never the whole table again.</p>" +
+        "<p>Edit distance with the recomputation walk, the table built first and read back once:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def edit_script(a, b):                # (distance, list of edits turning a into b)\n" +
+        "    m, n = len(a), len(b)\n" +
+        "    D = [[0] * (n + 1) for _ in range(m + 1)]\n" +
+        "    for i in range(m + 1): D[i][0] = i\n" +
+        "    for j in range(n + 1): D[0][j] = j\n" +
+        "    for i in range(1, m + 1):\n" +
+        "        for j in range(1, n + 1):\n" +
+        "            D[i][j] = min(D[i - 1][j] + 1,                            # delete\n" +
+        "                          D[i][j - 1] + 1,                            # insert\n" +
+        "                          D[i - 1][j - 1] + (a[i - 1] != b[j - 1]))   # keep / substitute\n" +
+        "    ops, i, j = [], m, n              # walk back, re-deriving which neighbour won\n" +
+        "    while i &gt; 0 or j &gt; 0:\n" +
+        "        if i &gt; 0 and j &gt; 0 and D[i][j] == D[i - 1][j - 1] + (a[i - 1] != b[j - 1]):\n" +
+        "            ops.append(f'keep {a[i-1]}' if a[i - 1] == b[j - 1] else f'sub {a[i-1]}-&gt;{b[j-1]}')\n" +
+        "            i, j = i - 1, j - 1\n" +
+        "        elif i &gt; 0 and D[i][j] == D[i - 1][j] + 1:\n" +
+        "            ops.append(f'del {a[i-1]}'); i -= 1\n" +
+        "        else:\n" +
+        "            ops.append(f'ins {b[j-1]}'); j -= 1\n" +
+        "    return D[m][n], ops[::-1]\n" +
+        "\n" +
+        "# edit_script('kitten', 'sitting') -&gt; (3, ['sub k-&gt;s', 'keep i', 'keep t', 'keep t',\n" +
+        "#                                         'sub e-&gt;i', 'keep n', 'ins g'])</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;String&gt; editScript(String a, String b) {   // the edits turning a into b\n" +
+        "    int m = a.length(), n = b.length();\n" +
+        "    int[][] D = new int[m + 1][n + 1];\n" +
+        "    for (int i = 0; i &lt;= m; i++) D[i][0] = i;\n" +
+        "    for (int j = 0; j &lt;= n; j++) D[0][j] = j;\n" +
+        "    for (int i = 1; i &lt;= m; i++)\n" +
+        "        for (int j = 1; j &lt;= n; j++)\n" +
+        "            D[i][j] = Math.min(Math.min(D[i - 1][j] + 1, D[i][j - 1] + 1),   // delete, insert\n" +
+        "                D[i - 1][j - 1] + (a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1));\n" +
+        "    List&lt;String&gt; ops = new ArrayList&lt;&gt;();\n" +
+        "    int i = m, j = n;                                  // walk back, re-deriving each step\n" +
+        "    while (i &gt; 0 || j &gt; 0) {\n" +
+        "        if (i &gt; 0 &amp;&amp; j &gt; 0 &amp;&amp; D[i][j] == D[i - 1][j - 1] + (a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1)) {\n" +
+        "            ops.add(a.charAt(i - 1) == b.charAt(j - 1) ? \"keep \" + a.charAt(i - 1)\n" +
+        "                                                       : \"sub \" + a.charAt(i - 1) + \"-&gt;\" + b.charAt(j - 1));\n" +
+        "            i--; j--;\n" +
+        "        } else if (i &gt; 0 &amp;&amp; D[i][j] == D[i - 1][j] + 1) { ops.add(\"del \" + a.charAt(i - 1)); i--; }\n" +
+        "        else { ops.add(\"ins \" + b.charAt(j - 1)); j--; }\n" +
+        "    }\n" +
+        "    Collections.reverse(ops);\n" +
+        "    return ops;                                        // its non-keep count is D[m][n]\n" +
+        "}</code></pre></div>" +
 
         "<p>Which of the two to use is usually settled by whether you were keeping the whole table anyway. If the program already stores every cell &#8212; as edit distance and longest common subsequence do, both being full <code>(m+1)&#215;(n+1)</code> tables &#8212; recomputation is free, because the values are right there and re-checking the recurrence at each of the m+n steps costs a handful of comparisons. Parent pointers earn their second table only when the value computation itself throws cells away, as a space-optimized program does, and you still need the trail; then the pointer table is the price of remembering the path after the values are gone.</p>" +
 
@@ -6338,6 +7498,33 @@ CHAPTERS.push({
         "<p>A dynamic program's table can dominate its memory, and often most of the table is dead. Fibonacci's recurrence reads only the previous two values, so keeping the whole array of n values to return the last one is waste: two variables suffice, and the space drops from O(n) to O(1) with no change to the time. This is the <strong>rolling array</strong> &#8212; keep only as many rows or values as the recurrence actually reads, and let the window roll forward over the table.</p>" +
 
         "<p>The saving is real at scale. A 0/1 knapsack over 200 items and capacity 1,000 fills a full table of 201&#215;1,001 = <strong>201,201</strong> cells, but its recurrence for row i reads only row i&#8722;1, so a single array of 1,001 cells rolled forward computes the identical answer &#8212; a <strong>201&#215;</strong> reduction in memory for exactly the same result. On a table that would not fit in cache or in memory, this is what makes the algorithm usable rather than theoretical. The grid-paths table shrinks the same way &#8212; each row depends only on the row above, so a single array of width n overwritten left to right replaces the full m&#215;n table, O(min(m,n)) space if you roll along the shorter side.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def fib_rolling(n):                   # the window is two values\n" +
+        "    a, b = 0, 1\n" +
+        "    for _ in range(n):\n" +
+        "        a, b = b, a + b\n" +
+        "    return a\n" +
+        "\n" +
+        "def grid_paths_rolling(m, n):         # the window is one row\n" +
+        "    row = [1] * n                     # the top row: one way to reach each cell\n" +
+        "    for _ in range(1, m):\n" +
+        "        for j in range(1, n):\n" +
+        "            row[j] += row[j - 1]      # row[j] is still the cell above; row[j-1] is already this row\n" +
+        "    return row[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long fibRolling(int n) {                     // the window is two values\n" +
+        "    long a = 0, b = 1;\n" +
+        "    for (int i = 0; i &lt; n; i++) { long t = a + b; a = b; b = t; }\n" +
+        "    return a;\n" +
+        "}\n" +
+        "\n" +
+        "static long gridPathsRolling(int m, int n) {        // the window is one row\n" +
+        "    long[] row = new long[n];\n" +
+        "    Arrays.fill(row, 1);                            // the top row\n" +
+        "    for (int i = 1; i &lt; m; i++)\n" +
+        "        for (int j = 1; j &lt; n; j++)\n" +
+        "            row[j] += row[j - 1];   // row[j] is still the cell above; row[j-1] is this row\n" +
+        "    return row[n - 1];\n" +
+        "}</code></pre></div>" +
 
         "<p>The condition to check before collapsing a dimension is mechanical: list, for a general cell, the set of cells its transition reads, and confirm every one of them still lives in the window after the collapse. Fibonacci reads the two prior values &#8212; a window of two. Knapsack row i reads only row i&#8722;1 &#8212; a window of one row. A recurrence that reached back two rows, or across to a cell already overwritten this pass, would need a wider window, and squeezing it too far is the bug that the loop direction below is one instance of. Do the read-set check first and the direction question answers itself.</p>" +
 
@@ -6370,6 +7557,37 @@ CHAPTERS.push({
         "</svg><div class='fig-cap'>Identical arithmetic, identical starting cell, one loop swapped &#8212; and from amount 3 on, two different sequences.</div></div>" +
 
         "<p>The mechanism is exactly the rolling-array lesson of the previous section. With the coin loop outer, by the time amount a is updated with coin c, the table already reflects every coin considered <em>before</em> c and none considered after &#8212; so each combination is built in one fixed coin order and counted once. With the amount loop outer, every coin is offered afresh at every amount, so the sequence 1-then-2 and the sequence 2-then-1 both reach amount 3 by different paths and both are counted. The permutation row &#8212; 1, 1, 2, 3, 5, 9, 15, 26, 44 &#8212; is itself a fast recurrence, each term summing the three coins' worth of earlier terms, which is why it pulls away from the combination row so quickly. Neither is a bug; they are the correct answers to two different questions, and which one you get is decided entirely by which line is outer.</p>" +
+        "<p>The two, side by side. The bodies are identical; only the nesting differs:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def count_combinations(coins, amount):\n" +
+        "    ways = [1] + [0] * amount\n" +
+        "    for c in coins:                   # coin loop outer: each multiset counted once\n" +
+        "        for a in range(c, amount + 1):\n" +
+        "            ways[a] += ways[a - c]\n" +
+        "    return ways[amount]\n" +
+        "\n" +
+        "def count_sequences(coins, amount):\n" +
+        "    ways = [1] + [0] * amount\n" +
+        "    for a in range(1, amount + 1):    # amount loop outer: every order counted\n" +
+        "        for c in coins:\n" +
+        "            if c &lt;= a:\n" +
+        "                ways[a] += ways[a - c]\n" +
+        "    return ways[amount]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long countCombinations(int[] coins, int amount) {\n" +
+        "    long[] ways = new long[amount + 1];\n" +
+        "    ways[0] = 1;\n" +
+        "    for (int c : coins)                             // coin loop outer: multisets\n" +
+        "        for (int a = c; a &lt;= amount; a++) ways[a] += ways[a - c];\n" +
+        "    return ways[amount];\n" +
+        "}\n" +
+        "\n" +
+        "static long countSequences(int[] coins, int amount) {\n" +
+        "    long[] ways = new long[amount + 1];\n" +
+        "    ways[0] = 1;\n" +
+        "    for (int a = 1; a &lt;= amount; a++)               // amount loop outer: sequences\n" +
+        "        for (int c : coins) if (c &lt;= a) ways[a] += ways[a - c];\n" +
+        "    return ways[amount];\n" +
+        "}</code></pre></div>" +
 
         "<p>Which one you actually want is a question about the problem, not the code. Counting the ways to give change wants combinations, because {1, 2} and {2, 1} are the same handful of coins. Counting the ways to climb a staircase one or two steps at a time wants permutations, because one-then-two is a different climb from two-then-one &#8212; and that problem, with steps {1, 2}, is Fibonacci again, which is why its answer is the Fibonacci sequence. Same table, same recurrence, and the outer loop chosen to match whether order is part of what you are counting.</p>" +
 
@@ -6547,6 +7765,45 @@ CHAPTERS.push({
         "</svg><div class='fig-cap'>Each cell is the best value for its items and capacity; following where the value came from recovers the actual subset.</div></div>" +
 
         "<p>The table gives the number, and the item set comes from a <strong>traceback</strong>: start at <code>K(n, W)</code> and, at each row, ask whether the value differs from the row above. If it does, the item was taken; subtract its weight and step to that column in the previous row. If it does not, the item was skipped; step straight up. For the three items above at capacity 50 the optimum is 220, and the traceback recovers the set {B, C} &#8212; weights 20 and 30, exactly filling the bag.</p>" +
+        "<p>The table and the traceback together:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def knapsack(values, weights, W):     # (best value, indices of the items taken)\n" +
+        "    n = len(values)\n" +
+        "    K = [[0] * (W + 1) for _ in range(n + 1)]   # K[i][c]: first i items, capacity c\n" +
+        "    for i in range(1, n + 1):\n" +
+        "        v, w = values[i - 1], weights[i - 1]\n" +
+        "        for c in range(W + 1):\n" +
+        "            K[i][c] = K[i - 1][c]                # leave item i out\n" +
+        "            if w &lt;= c and K[i - 1][c - w] + v &gt; K[i][c]:\n" +
+        "                K[i][c] = K[i - 1][c - w] + v    # or take it\n" +
+        "    taken, c = [], W\n" +
+        "    for i in range(n, 0, -1):                    # traceback from K[n][W]\n" +
+        "        if K[i][c] != K[i - 1][c]:               # the value changed: item i was taken\n" +
+        "            taken.append(i - 1)\n" +
+        "            c -= weights[i - 1]\n" +
+        "    return K[n][W], taken[::-1]\n" +
+        "\n" +
+        "# knapsack([60, 100, 120], [10, 20, 30], 50) -&gt; (220, [1, 2]): items B and C</code></pre>" +
+        "<pre data-lang='java' hidden><code>record Pack(int value, List&lt;Integer&gt; items) {}\n" +
+        "\n" +
+        "static Pack knapsack(int[] values, int[] weights, int W) {\n" +
+        "    int n = values.length;\n" +
+        "    int[][] K = new int[n + 1][W + 1];          // K[i][c]: first i items, capacity c\n" +
+        "    for (int i = 1; i &lt;= n; i++) {\n" +
+        "        int v = values[i - 1], w = weights[i - 1];\n" +
+        "        for (int c = 0; c &lt;= W; c++) {\n" +
+        "            K[i][c] = K[i - 1][c];                              // leave item i out\n" +
+        "            if (w &lt;= c) K[i][c] = Math.max(K[i][c], K[i - 1][c - w] + v);   // or take it\n" +
+        "        }\n" +
+        "    }\n" +
+        "    List&lt;Integer&gt; taken = new ArrayList&lt;&gt;();\n" +
+        "    for (int i = n, c = W; i &gt; 0; i--)          // traceback from K[n][W]\n" +
+        "        if (K[i][c] != K[i - 1][c]) {           // the value changed: item i was taken\n" +
+        "            taken.add(0, i - 1);\n" +
+        "            c -= weights[i - 1];\n" +
+        "        }\n" +
+        "    return new Pack(K[n][W], taken);\n" +
+        "}</code></pre></div>" +
 
         "<p>That result is worth pausing on, because it is why knapsack needs a table at all. The <strong>greedy-by-ratio</strong> instinct is to take the best value-per-weight first: item A has ratio 6, the highest, so greedy grabs it, then B, and is then stuck with 20 capacity too small for C, landing at 160. The optimum <em>skips the best-ratio item entirely</em> and takes B and C for 220. No order of local choices finds that; you have to consider taking A against not taking it with the rest of the bag in view, which is exactly what the table does and what the greedy of Chapter 23 provably cannot. <strong>Fill the table in the machine above and trace it back</strong>; the item the traceback drops is the one greedy would have grabbed first.</p>",
       viz: "dsaKnapsack", vizTitle: "Fill the table cell by cell, then trace back to see which items the answer actually uses"
@@ -6559,6 +7816,31 @@ CHAPTERS.push({
         "<p><strong>Unbounded knapsack</strong> lets you take each item any number of times. The only change is that after taking item i you may take it again, so the recurrence reads from the current row rather than the row above: <code>K(c) = max over items i of K(c - w<sub>i</sub>) + v<sub>i</sub></code>. On the same three items and capacity 50, where 0/1 knapsack scored 220, unbounded scores <strong>300</strong> &#8212; five copies of item A, the best-ratio item, which now that repetition is allowed is the right greedy after all. Same items, same capacity, one word of the rules changed, a different answer.</p>" +
 
         "<p><strong>Subset sum</strong> asks whether some subset hits an exact target &#8212; it is knapsack with value equal to weight and the question \"can we exactly fill capacity T\" instead of \"maximise\". The cell holds a boolean: <code>reachable(c)</code> is true if some subset sums to c. On <code>[3, 34, 4, 12, 5, 2]</code> with target 9 it is true, by 4+5 or by 3+4+2. <strong>The partition problem</strong> &#8212; split the items into two groups of equal sum &#8212; is subset sum with target equal to half the total: <code>[1, 5, 11, 5]</code> partitions because a subset sums to 11, half of 22, while <code>[1, 2, 3, 5]</code> cannot because its total is odd and no target exists. <strong>Coin change</strong>, from Chapter 19, is unbounded knapsack counting or minimising instead of maximising. Minimum coin change makes the minimising cell explicit: <code>C(a) = 1 + min over coins c of C(a - c)</code>, the fewest coins for amount a, with <code>C(0) = 0</code> and unreachable amounts held at infinity &#8212; the same table with the objective and the loop direction swapped. Five problems, one table, and the differences are: value equals weight or not, take-once or take-many, maximise or count or decide.</p>" +
+        "<p>Subset sum and partition, with the boolean cell. The downward loop is explained in the next section:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def subset_sum(nums, target):         # does some subset hit target exactly? (nums &gt;= 0)\n" +
+        "    reach = [True] + [False] * target # reach[c]: some subset so far sums to c\n" +
+        "    for x in nums:\n" +
+        "        for c in range(target, x - 1, -1):     # downward: each number used once\n" +
+        "            reach[c] = reach[c] or reach[c - x]\n" +
+        "    return reach[target]\n" +
+        "\n" +
+        "def can_partition(nums):              # two groups of equal sum\n" +
+        "    total = sum(nums)\n" +
+        "    return total % 2 == 0 and subset_sum(nums, total // 2)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static boolean subsetSum(int[] nums, int target) {  // nums &gt;= 0\n" +
+        "    boolean[] reach = new boolean[target + 1];      // reach[c]: some subset sums to c\n" +
+        "    reach[0] = true;\n" +
+        "    for (int x : nums)\n" +
+        "        for (int c = target; c &gt;= x; c--)           // downward: each number once\n" +
+        "            reach[c] = reach[c] || reach[c - x];\n" +
+        "    return reach[target];\n" +
+        "}\n" +
+        "\n" +
+        "static boolean canPartition(int[] nums) {           // two groups of equal sum\n" +
+        "    int total = Arrays.stream(nums).sum();\n" +
+        "    return total % 2 == 0 &amp;&amp; subsetSum(nums, total / 2);\n" +
+        "}</code></pre></div>" +
 
         "<div class='callout'>Recognising the shape is the entire skill, and it is why this chapter sits where it does. A problem statement about splitting a bill fairly, or fitting jobs in a time budget, or choosing which features ship in a release, is knapsack the moment it has items with a scalar cost, a scalar budget, and a take-or-leave decision. The interview signal is exactly those three: a capacity, per-item costs, and no partial items. When you see them, you are not inventing an algorithm, you are relabelling this one.</div>" +
 
@@ -6574,6 +7856,38 @@ CHAPTERS.push({
         "<p>When you compute <code>dp[c]</code> from <code>dp[c - w<sub>i</sub>]</code>, the question is whether that earlier cell already reflects the current item. Descending, you fill large c before small c, so <code>dp[c - w<sub>i</sub>]</code> &#8212; a smaller index &#8212; has <em>not</em> yet been touched this pass and still holds the previous item's answer: item i is added to a solution that did not contain it, so it is used at most once. Ascending, you fill small c first, so <code>dp[c - w<sub>i</sub>]</code> <em>has</em> already been updated with item i this pass: item i is added to a solution that may already contain it, so it can be taken again and again. The direction of the sweep is the same as choosing whether <code>dp[c - w<sub>i</sub>]</code> means \"before this item\" or \"including this item\", and that choice is the entire distinction between the two problems.</p>" +
 
         "<p>A three-cell trace makes it visible. One item of weight 2 and value 3, capacity 6, ascending: <code>dp[2]</code> becomes 3, then <code>dp[4] = dp[2] + 3 = 6</code> reads the freshly updated cell, then <code>dp[6] = dp[4] + 3 = 9</code> &#8212; three copies of a single item. Run the same fill descending and <code>dp[6]</code> is computed first from the still-zero <code>dp[4]</code>, giving 3, and no cell is read after it has absorbed the item. Nine versus three is the reuse, and it lives entirely in which cell the read lands on.</p>" +
+        "<p>The two side by side. Only the range of the inner loop differs:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def knapsack_01(values, weights, W):\n" +
+        "    dp = [0] * (W + 1)\n" +
+        "    for v, w in zip(values, weights):\n" +
+        "        for c in range(W, w - 1, -1):  # downward: dp[c - w] is still \"before this item\"\n" +
+        "            dp[c] = max(dp[c], dp[c - w] + v)\n" +
+        "    return dp[W]\n" +
+        "\n" +
+        "def knapsack_unbounded(values, weights, W):\n" +
+        "    dp = [0] * (W + 1)\n" +
+        "    for v, w in zip(values, weights):\n" +
+        "        for c in range(w, W + 1):      # upward: dp[c - w] may already include this item\n" +
+        "            dp[c] = max(dp[c], dp[c - w] + v)\n" +
+        "    return dp[W]\n" +
+        "\n" +
+        "# on the three items at capacity 50: knapsack_01 -&gt; 220, knapsack_unbounded -&gt; 300</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int knapsack01(int[] values, int[] weights, int W) {\n" +
+        "    int[] dp = new int[W + 1];\n" +
+        "    for (int i = 0; i &lt; values.length; i++)\n" +
+        "        for (int c = W; c &gt;= weights[i]; c--)      // downward: \"before this item\"\n" +
+        "            dp[c] = Math.max(dp[c], dp[c - weights[i]] + values[i]);\n" +
+        "    return dp[W];\n" +
+        "}\n" +
+        "\n" +
+        "static int knapsackUnbounded(int[] values, int[] weights, int W) {\n" +
+        "    int[] dp = new int[W + 1];\n" +
+        "    for (int i = 0; i &lt; values.length; i++)\n" +
+        "        for (int c = weights[i]; c &lt;= W; c++)      // upward: may already include it\n" +
+        "            dp[c] = Math.max(dp[c], dp[c - weights[i]] + values[i]);\n" +
+        "    return dp[W];\n" +
+        "}</code></pre></div>" +
 
         "<p>This is the concrete form of the lesson Chapter 19 stated abstractly: in a space-optimized dynamic program the loop order and direction are not style, they encode which subproblems are allowed to depend on which. The extra dimension the rolling array removed &#8212; the item index i &#8212; was what kept \"before item i\" and \"including item i\" in separate rows. Take it away and the sweep direction has to enforce the separation by hand, and a flipped <code>range</code> silently solves the other problem. Read any one-dimensional knapsack by checking the direction first; it tells you which member of the family the code actually computes.</p>"
     },
@@ -6635,6 +7949,41 @@ CHAPTERS.push({
         "<p>The pseudopolynomial table fails exactly when the numbers are huge, and it fails hardest in the case where n is small but W is astronomical &#8212; twenty items, a target in the quadrillions. There the O(nW) table has more cells than atoms in reach, but n is small enough that a different exponential is affordable, and Chapter 12's <strong>meet in the middle</strong> is the exact tool.</p>" +
 
         "<p>The brute force over all subsets is O(2<sup>n</sup>), which at n = 40 is a trillion &#8212; too many. Meet in the middle splits the items into two halves of twenty, enumerates the 2<sup>20</sup> = 1,048,576 subset sums of each half, sorts one list, and for each sum in the other binary-searches its complement against the target. The exponential is halved in the exponent: 2<sup>n/2</sup> per side instead of 2<sup>n</sup> overall, which at n = 40 is about a million per side against a trillion for the full enumeration &#8212; a factor of a million saved, turning an impossible search into a one-second one. Measured on forty 50-bit numbers, it finds a target subset in under a second, enumerating 1,048,576 sums per half rather than the trillion the brute force would.</p>" +
+        "<p>Both halves are enumerated by doubling a list, and only the right half is sorted:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_left\n" +
+        "\n" +
+        "def subset_sums(xs):                  # all 2^len(xs) subset sums\n" +
+        "    sums = [0]\n" +
+        "    for x in xs:\n" +
+        "        sums += [s + x for s in sums] # each x doubles the list: in or out\n" +
+        "    return sums\n" +
+        "\n" +
+        "def mitm_subset_sum(nums, target):\n" +
+        "    half = len(nums) // 2\n" +
+        "    left = subset_sums(nums[:half])\n" +
+        "    right = sorted(subset_sums(nums[half:]))\n" +
+        "    for s in left:                    # binary search each complement on the right\n" +
+        "        k = bisect_left(right, target - s)\n" +
+        "        if k &lt; len(right) and right[k] == target - s:\n" +
+        "            return True\n" +
+        "    return False</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long[] subsetSums(long[] xs, int from, int to) {    // all subset sums of xs[from, to)\n" +
+        "    long[] sums = new long[1 &lt;&lt; (to - from)];\n" +
+        "    for (int i = from, size = 1; i &lt; to; i++, size *= 2)\n" +
+        "        for (int k = 0; k &lt; size; k++) sums[size + k] = sums[k] + xs[i];  // in or out\n" +
+        "    return sums;\n" +
+        "}\n" +
+        "\n" +
+        "static boolean mitmSubsetSum(long[] nums, long target) {\n" +
+        "    int half = nums.length / 2;\n" +
+        "    long[] left = subsetSums(nums, 0, half);\n" +
+        "    long[] right = subsetSums(nums, half, nums.length);\n" +
+        "    Arrays.sort(right);\n" +
+        "    for (long s : left)                             // binary search each complement\n" +
+        "        if (Arrays.binarySearch(right, target - s) &gt;= 0) return true;\n" +
+        "    return false;\n" +
+        "}</code></pre></div>" +
 
         "<p>The trade is exactly the one Chapter 12 drew. Meet in the middle costs O(2<sup>n/2</sup>) time and, crucially, O(2<sup>n/2</sup>) <em>space</em> to hold one sorted half, so it is the method for small n and huge numbers &#8212; the corner the pseudopolynomial table cannot reach. The knapsack table is the opposite corner: cheap in space, polynomial in n, and usable only while the numbers stay small. Between them they cover the two ways a subset-selection problem can be tractable, and the axis that decides which to reach for is the same axis this whole chapter has been about &#8212; not how many items there are, but how big the numbers are.</p>" +
 
@@ -6782,7 +8131,39 @@ CHAPTERS.push({
 
         "<p>A short trace fixes the mechanism. On <code>[3, 1, 4, 1, 5, 9, 2, 6]</code> the cells come out 1, 1, 2, 1, 3, 4, 2, 4: the 3 at the 5 builds on the 4, the 4 at the 9 builds on that 5, and the trailing 6 reaches only 4, through the same 5. The answer is 4, ending on the 9 or the 6, never on the last element by any rule &#8212; which is exactly why reconstruction must scan the whole array for its maximum rather than read the final cell.</p>" +
 
-        "<p>Reconstruction follows the Chapter 19 pattern: alongside each <code>x(i)</code>, store which predecessor j achieved the maximum, then walk the parent pointers back from the index where the overall maximum was found. The subtlety unique to \"ending at i\" subproblems is that the answer is not <code>x(n)</code> but the largest cell anywhere in the array, so reconstruction starts by finding that cell &#8212; the longest increasing subsequence rarely ends on the last element, and a program that returns <code>x(n)</code> reports the length of the best subsequence forced to end at the final value, which is a different and smaller number.</p>"
+        "<p>Reconstruction follows the Chapter 19 pattern: alongside each <code>x(i)</code>, store which predecessor j achieved the maximum, then walk the parent pointers back from the index where the overall maximum was found. The subtlety unique to \"ending at i\" subproblems is that the answer is not <code>x(n)</code> but the largest cell anywhere in the array, so reconstruction starts by finding that cell &#8212; the longest increasing subsequence rarely ends on the last element, and a program that returns <code>x(n)</code> reports the length of the best subsequence forced to end at the final value, which is a different and smaller number.</p>" +
+        "<p>With the parent pointers stored alongside, and the walk starting from the best cell anywhere in the array:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lis_quadratic(a):                 # an actual longest increasing subsequence\n" +
+        "    n = len(a)\n" +
+        "    if n == 0:\n" +
+        "        return []\n" +
+        "    x, parent = [1] * n, [-1] * n     # x[i]: the longest run ending exactly at i\n" +
+        "    for i in range(n):\n" +
+        "        for j in range(i):\n" +
+        "            if a[j] &lt; a[i] and x[j] + 1 &gt; x[i]:\n" +
+        "                x[i], parent[i] = x[j] + 1, j\n" +
+        "    i = max(range(n), key=x.__getitem__)   # the best cell anywhere, not x[n - 1]\n" +
+        "    out = []\n" +
+        "    while i != -1:\n" +
+        "        out.append(a[i])\n" +
+        "        i = parent[i]\n" +
+        "    return out[::-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; lisQuadratic(int[] a) {         // an actual LIS\n" +
+        "    int n = a.length;\n" +
+        "    if (n == 0) return new ArrayList&lt;&gt;();\n" +
+        "    int[] x = new int[n], parent = new int[n];       // x[i]: longest ending at i\n" +
+        "    int best = 0;\n" +
+        "    for (int i = 0; i &lt; n; i++) {\n" +
+        "        x[i] = 1; parent[i] = -1;\n" +
+        "        for (int j = 0; j &lt; i; j++)\n" +
+        "            if (a[j] &lt; a[i] &amp;&amp; x[j] + 1 &gt; x[i]) { x[i] = x[j] + 1; parent[i] = j; }\n" +
+        "        if (x[i] &gt; x[best]) best = i;                // the best cell anywhere\n" +
+        "    }\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int i = best; i != -1; i = parent[i]) out.add(0, a[i]);\n" +
+        "    return out;\n" +
+        "}</code></pre></div>"
     },
 
     { title: "LIS in n log n, and the Array That Lies",
@@ -6790,6 +8171,29 @@ CHAPTERS.push({
         "<p>The quadratic scan hides a better structure. Sweep the sequence left to right maintaining one array, <code>tails</code>, where <code>tails[k]</code> is the smallest value that can end an increasing subsequence of length k+1 seen so far. For each new element, find the first entry in <code>tails</code> that is not smaller than it and overwrite that entry; if the element is larger than every entry, append it. The length of the answer is the length of <code>tails</code> at the end. This is <strong>patience sorting</strong>, and because <code>tails</code> is always sorted, \"find the first entry not smaller\" is a binary search &#8212; Chapter 13's lower-bound search, doing the work the quadratic scan did linearly. The result is O(n log n).</p>" +
 
         "<p>One invariant explains why the array stays sorted and why overwriting is correct: a longer increasing subsequence must end on a larger value than a shorter one can, so the smallest achievable tails strictly increase with length. Each new element improves the smallest tail for exactly one length &#8212; the first its value can cap &#8212; and the binary search finds that length. Everything about the method follows from that monotonicity, which is also why the array's length only ever grows or holds, never shrinks.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_left\n" +
+        "\n" +
+        "def lis_length(a):\n" +
+        "    tails = []                        # tails[k]: smallest tail of any run of length k + 1\n" +
+        "    for x in a:\n" +
+        "        k = bisect_left(tails, x)     # the first tail not smaller than x\n" +
+        "        if k == len(tails):\n" +
+        "            tails.append(x)           # x extends the longest run\n" +
+        "        else:\n" +
+        "            tails[k] = x              # x is a smaller tail for length k + 1\n" +
+        "    return len(tails)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int lisLength(int[] a) {\n" +
+        "    int[] tails = new int[a.length];                 // tails[k]: smallest tail, length k+1\n" +
+        "    int len = 0;\n" +
+        "    for (int x : a) {\n" +
+        "        int k = Arrays.binarySearch(tails, 0, len, x);   // tails is strictly increasing\n" +
+        "        if (k &lt; 0) k = -k - 1;                       // insertion point = first not smaller\n" +
+        "        tails[k] = x;\n" +
+        "        if (k == len) len++;                         // x extended the longest run\n" +
+        "    }\n" +
+        "    return len;\n" +
+        "}</code></pre></div>" +
 
         "<p>The speedup is not subtle. On 20,000 random values the quadratic algorithm took <strong>9,186 milliseconds</strong> and the patience-sorting version took <strong>2.2 milliseconds</strong> &#8212; a factor of 4,180 &#8212; and both reported the same length, 273. The gap is a linear scan against a binary search inside the same outer loop, exactly Chapter 13's promise realised on a real workload.</p>" +
 
@@ -6819,7 +8223,40 @@ CHAPTERS.push({
 
         "<p>Here is the trap the machine is built to spring. It is natural to assume the <code>tails</code> array <em>is</em> the longest increasing subsequence, and it is not. On the input <code>[10, 22, 9, 33, 21, 50, 41, 60]</code> the final <code>tails</code> is <code>[9, 21, 33, 41, 60]</code> &#8212; length 5, the correct answer &#8212; but that is not a subsequence of the input at all: 33 appears at index 3, before 21 at index 4, so <code>[..., 21, 33, ...]</code> violates the order. An actual longest increasing subsequence is <code>[10, 22, 33, 50, 60]</code>. Each <code>tails</code> entry is the smallest tail achievable for a subsequence of that length, gathered from different subsequences, so the array is a table of records and not one increasing run.</p>" +
 
-        "<p>The consequence is practical: the n log n method gives the length directly, but recovering the actual subsequence needs the parent-pointer bookkeeping of the previous section layered on top, remembering for each element which <code>tails</code> position it filled and which element preceded it there. If you need only the length &#8212; which is what most callers want &#8212; the tails array alone suffices; if you need the subsequence, you cannot read it off the array and must reconstruct. <strong>Run both algorithms in the machine above</strong> and watch the tails array: on the right input its contents are not the answer they appear to be, and the machine is there to make that impossible to forget.</p>",
+        "<p>The consequence is practical: the n log n method gives the length directly, but recovering the actual subsequence needs the parent-pointer bookkeeping of the previous section layered on top, remembering for each element which <code>tails</code> position it filled and which element preceded it there. If you need only the length &#8212; which is what most callers want &#8212; the tails array alone suffices; if you need the subsequence, you cannot read it off the array and must reconstruct. <strong>Run both algorithms in the machine above</strong> and watch the tails array: on the right input its contents are not the answer they appear to be, and the machine is there to make that impossible to forget.</p>" +
+        "<p>The bookkeeping is one extra array: record the index that sits in each tails slot, and when an element lands in slot k, point it at whatever occupies slot k&#8722;1 at that moment:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lis(a):                           # an actual LIS in O(n log n)\n" +
+        "    tails, tail_at, parent = [], [], [-1] * len(a)   # tail_at[k]: index in a of tails[k]\n" +
+        "    for i, x in enumerate(a):\n" +
+        "        k = bisect_left(tails, x)\n" +
+        "        if k &gt; 0:\n" +
+        "            parent[i] = tail_at[k - 1]    # x extends the best run one shorter\n" +
+        "        if k == len(tails):\n" +
+        "            tails.append(x); tail_at.append(i)\n" +
+        "        else:\n" +
+        "            tails[k], tail_at[k] = x, i\n" +
+        "    out, i = [], tail_at[-1] if tail_at else -1\n" +
+        "    while i != -1:\n" +
+        "        out.append(a[i])\n" +
+        "        i = parent[i]\n" +
+        "    return out[::-1]\n" +
+        "\n" +
+        "# lis([10, 22, 9, 33, 21, 50, 41, 60]) -&gt; [10, 22, 33, 41, 60], where tails ends as [9, 21, 33, 41, 60]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;Integer&gt; lis(int[] a) {                  // an actual LIS in O(n log n)\n" +
+        "    int[] tails = new int[a.length], tailAt = new int[a.length], parent = new int[a.length];\n" +
+        "    int len = 0;\n" +
+        "    for (int i = 0; i &lt; a.length; i++) {\n" +
+        "        int k = Arrays.binarySearch(tails, 0, len, a[i]);\n" +
+        "        if (k &lt; 0) k = -k - 1;\n" +
+        "        parent[i] = k &gt; 0 ? tailAt[k - 1] : -1;      // extends the best run one shorter\n" +
+        "        tails[k] = a[i]; tailAt[k] = i;\n" +
+        "        if (k == len) len++;\n" +
+        "    }\n" +
+        "    List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "    for (int i = len &gt; 0 ? tailAt[len - 1] : -1; i != -1; i = parent[i]) out.add(0, a[i]);\n" +
+        "    return out;\n" +
+        "}</code></pre></div>",
       viz: "dsaLIS", vizTitle: "Two algorithms, same length; watch the tails array — it is not the subsequence it looks like"
     },
 
@@ -6833,7 +8270,44 @@ CHAPTERS.push({
 
         "<p>The application that made this algorithm ubiquitous is <code>diff</code>. The lines two files share, in order, are their longest common subsequence; the lines one file has and the other lacks are the insertions and deletions between them, which is why a version-control diff is a longest-common-subsequence computation over lines rather than characters, and why a three-way merge is two such comparisons against a common ancestor. The same O(mn) grid that lines up two short strings lines up two files, a line playing the role of a character, and the traceback is the patch. The granularity is a free choice: diff lines to review a code change, characters to highlight a typo, tokens to compare two sentences &#8212; the grid does not care what a \"character\" is, only that two of them can be tested for equality.</p>" +
 
-        "<p>Reconstruction is a traceback through the grid, and it reads the moves in reverse: from the last cell, a diagonal step on equal characters emits that character; otherwise you step toward whichever neighbour holds the value the cell was built from. The path from corner to corner spells the subsequence backwards, and it touches only the cells along one route, so it costs O(m+n) once the O(mn) table exists. For <code>AGGTAB</code> against <code>GXTXAYB</code> the route takes four diagonal steps, one per shared letter, spelling <code>GTAB</code>. Chapter 19 met this traceback in passing, on edit distance; here it is the same walk on the same kind of grid, which is the first hint that these two problems are relatives.</p>"
+        "<p>Reconstruction is a traceback through the grid, and it reads the moves in reverse: from the last cell, a diagonal step on equal characters emits that character; otherwise you step toward whichever neighbour holds the value the cell was built from. The path from corner to corner spells the subsequence backwards, and it touches only the cells along one route, so it costs O(m+n) once the O(mn) table exists. For <code>AGGTAB</code> against <code>GXTXAYB</code> the route takes four diagonal steps, one per shared letter, spelling <code>GTAB</code>. Chapter 19 met this traceback in passing, on edit distance; here it is the same walk on the same kind of grid, which is the first hint that these two problems are relatives.</p>" +
+        "<p>The table and the traceback:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lcs(s, t):                        # one longest common subsequence\n" +
+        "    m, n = len(s), len(t)\n" +
+        "    L = [[0] * (n + 1) for _ in range(m + 1)]\n" +
+        "    for i in range(1, m + 1):\n" +
+        "        for j in range(1, n + 1):\n" +
+        "            if s[i - 1] == t[j - 1]:\n" +
+        "                L[i][j] = L[i - 1][j - 1] + 1          # match: the diagonal adds one\n" +
+        "            else:\n" +
+        "                L[i][j] = max(L[i - 1][j], L[i][j - 1])\n" +
+        "    out, i, j = [], m, n              # traceback: the moves in reverse\n" +
+        "    while i &gt; 0 and j &gt; 0:\n" +
+        "        if s[i - 1] == t[j - 1]:\n" +
+        "            out.append(s[i - 1]); i -= 1; j -= 1\n" +
+        "        elif L[i - 1][j] &gt;= L[i][j - 1]:\n" +
+        "            i -= 1\n" +
+        "        else:\n" +
+        "            j -= 1\n" +
+        "    return ''.join(reversed(out))\n" +
+        "\n" +
+        "# lcs('AGGTAB', 'GXTXAYB') -&gt; 'GTAB'</code></pre>" +
+        "<pre data-lang='java' hidden><code>static String lcs(String s, String t) {              // one longest common subsequence\n" +
+        "    int m = s.length(), n = t.length();\n" +
+        "    int[][] L = new int[m + 1][n + 1];\n" +
+        "    for (int i = 1; i &lt;= m; i++)\n" +
+        "        for (int j = 1; j &lt;= n; j++)\n" +
+        "            L[i][j] = s.charAt(i - 1) == t.charAt(j - 1) ? L[i - 1][j - 1] + 1   // diagonal\n" +
+        "                                                         : Math.max(L[i - 1][j], L[i][j - 1]);\n" +
+        "    StringBuilder out = new StringBuilder();\n" +
+        "    for (int i = m, j = n; i &gt; 0 &amp;&amp; j &gt; 0; ) {       // traceback: the moves in reverse\n" +
+        "        if (s.charAt(i - 1) == t.charAt(j - 1)) { out.append(s.charAt(i - 1)); i--; j--; }\n" +
+        "        else if (L[i - 1][j] &gt;= L[i][j - 1]) i--;\n" +
+        "        else j--;\n" +
+        "    }\n" +
+        "    return out.reverse().toString();\n" +
+        "}</code></pre></div>"
     },
 
     { title: "Edit Distance",
@@ -6931,7 +8405,36 @@ CHAPTERS.push({
 
         "<p>The base cases carry more meaning than they look. <code>D(i, 0) = i</code> says turning a prefix of s into the empty string costs one deletion per character, and <code>D(0, j) = j</code> says building t's prefix from nothing costs one insertion each &#8212; the top row and left column are pure delete and insert runs, and the interior is where matches and substitutions let the path cut the diagonal and save moves. Reading the first row and column first is the way to sanity-check any edit-distance code: they must be the identity 0, 1, 2, 3, and a bug there means the recurrence never had correct boundaries to build on.</p>" +
 
-        "<p>The three edits need not cost the same, and changing their weights changes the answer in a way the machine makes vivid. Turning k into s by substitution is one edit; doing it by deleting k and inserting s is two. So while substitution costs 1, the traceback uses it; but raise the substitution cost to 3 and delete-plus-insert, at cost 2, becomes cheaper &#8212; the distance for <code>kitten</code> to <code>sitting</code> rises from 3 to 5 and the traceback abandons substitution entirely, doing two deletions and three insertions where it once did two substitutions and an insertion. The weights are not decoration; they encode which operations your domain considers cheap, and a fuzzy matcher that treats a typo-substitution as cheaper than a delete-and-retype is choosing exactly this weighting.</p>"
+        "<p>The three edits need not cost the same, and changing their weights changes the answer in a way the machine makes vivid. Turning k into s by substitution is one edit; doing it by deleting k and inserting s is two. So while substitution costs 1, the traceback uses it; but raise the substitution cost to 3 and delete-plus-insert, at cost 2, becomes cheaper &#8212; the distance for <code>kitten</code> to <code>sitting</code> rises from 3 to 5 and the traceback abandons substitution entirely, doing two deletions and three insertions where it once did two substitutions and an insertion. The weights are not decoration; they encode which operations your domain considers cheap, and a fuzzy matcher that treats a typo-substitution as cheaper than a delete-and-retype is choosing exactly this weighting.</p>" +
+        "<p>With the substitution cost as a parameter, so the weighting experiment is one argument:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def edit_distance(s, t, sub=1):       # insert and delete cost 1; substitution costs sub\n" +
+        "    m, n = len(s), len(t)\n" +
+        "    D = [[0] * (n + 1) for _ in range(m + 1)]\n" +
+        "    for i in range(m + 1): D[i][0] = i          # delete every character\n" +
+        "    for j in range(n + 1): D[0][j] = j          # insert every character\n" +
+        "    for i in range(1, m + 1):\n" +
+        "        for j in range(1, n + 1):\n" +
+        "            if s[i - 1] == t[j - 1]:\n" +
+        "                D[i][j] = D[i - 1][j - 1]       # the free diagonal\n" +
+        "            else:\n" +
+        "                D[i][j] = min(D[i - 1][j] + 1,          # delete\n" +
+        "                              D[i][j - 1] + 1,          # insert\n" +
+        "                              D[i - 1][j - 1] + sub)    # substitute\n" +
+        "    return D[m][n]\n" +
+        "\n" +
+        "# edit_distance('kitten', 'sitting') -&gt; 3; with sub=3 -&gt; 5</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int editDistance(String s, String t, int sub) {   // insert/delete 1, substitute sub\n" +
+        "    int m = s.length(), n = t.length();\n" +
+        "    int[][] D = new int[m + 1][n + 1];\n" +
+        "    for (int i = 0; i &lt;= m; i++) D[i][0] = i;            // delete every character\n" +
+        "    for (int j = 0; j &lt;= n; j++) D[0][j] = j;            // insert every character\n" +
+        "    for (int i = 1; i &lt;= m; i++)\n" +
+        "        for (int j = 1; j &lt;= n; j++)\n" +
+        "            D[i][j] = s.charAt(i - 1) == t.charAt(j - 1) ? D[i - 1][j - 1]    // free diagonal\n" +
+        "                    : Math.min(Math.min(D[i - 1][j] + 1, D[i][j - 1] + 1), D[i - 1][j - 1] + sub);\n" +
+        "    return D[m][n];\n" +
+        "}</code></pre></div>"
     },
 
     { title: "One Family: It Is All Alignment",
@@ -6954,6 +8457,51 @@ CHAPTERS.push({
         "<p>The alignment grid is O(mn) in both time and space, and for long strings the space is the wall you hit first: two sequences of a hundred thousand characters need a table of ten billion cells, tens of gigabytes, while the time is merely seconds. Scale to two sequences of a hundred million bases and the full table is 10<sup>16</sup> cells, utterly impossible, while two rows are 2&#215;10<sup>8</sup> &#8212; a few hundred megabytes &#8212; and Hirschberg fits the whole recovered alignment inside that same budget. Computing the <em>length</em> in linear space is already straightforward &#8212; each row depends only on the row above, so two rows suffice: a <strong>linear-space DP</strong>, the rolling array of Chapter 19. The hard part is that the rolling array throws away the trail the traceback needs, so it gives the number and not the alignment.</p>" +
 
         "<p><strong>Hirschberg's algorithm</strong>, from 1975, recovers the alignment in linear space by divide and conquer over the table. Split the first string in half. Compute, in two rows, the alignment-length row from the top-left corner to the midline, and separately from the bottom-right corner backward to the midline. Added together, these two rows say, for each column, the best total score of an alignment that crosses the midline at that column &#8212; so the column maximising the sum is where the optimal alignment crosses. That single crossing point splits the problem into two independent halves, top-left and bottom-right of it, and the algorithm recurses into each. The alignment is assembled from the split points the recursion finds, and no full row of the table is ever stored.</p>" +
+        "<p>Written for the longest common subsequence, the version whose output is easiest to check:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def lcs_row(s, t):                    # the last row of the LCS table, two rows of memory\n" +
+        "    prev = [0] * (len(t) + 1)\n" +
+        "    for ch in s:\n" +
+        "        cur = [0]\n" +
+        "        for j, tc in enumerate(t, 1):\n" +
+        "            cur.append(prev[j - 1] + 1 if ch == tc else max(prev[j], cur[j - 1]))\n" +
+        "        prev = cur\n" +
+        "    return prev\n" +
+        "\n" +
+        "def hirschberg(s, t):                 # an LCS of s and t in linear space\n" +
+        "    if not s:\n" +
+        "        return ''\n" +
+        "    if len(s) == 1:\n" +
+        "        return s if s in t else ''\n" +
+        "    mid, n = len(s) // 2, len(t)\n" +
+        "    top = lcs_row(s[:mid], t)                     # forward to the midline\n" +
+        "    bottom = lcs_row(s[mid:][::-1], t[::-1])      # backward to the midline\n" +
+        "    k = max(range(n + 1), key=lambda j: top[j] + bottom[n - j])   # where the optimum crosses\n" +
+        "    return hirschberg(s[:mid], t[:k]) + hirschberg(s[mid:], t[k:])</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int[] lcsRow(String s, String t) {            // last LCS row, two rows of memory\n" +
+        "    int[] prev = new int[t.length() + 1];\n" +
+        "    for (int i = 0; i &lt; s.length(); i++) {\n" +
+        "        int[] cur = new int[t.length() + 1];\n" +
+        "        for (int j = 1; j &lt;= t.length(); j++)\n" +
+        "            cur[j] = s.charAt(i) == t.charAt(j - 1) ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);\n" +
+        "        prev = cur;\n" +
+        "    }\n" +
+        "    return prev;\n" +
+        "}\n" +
+        "\n" +
+        "static String hirschberg(String s, String t) {       // an LCS in linear space\n" +
+        "    if (s.isEmpty()) return \"\";\n" +
+        "    if (s.length() == 1) return t.indexOf(s.charAt(0)) &gt;= 0 ? s : \"\";\n" +
+        "    int mid = s.length() / 2, n = t.length();\n" +
+        "    int[] top = lcsRow(s.substring(0, mid), t);                          // forward\n" +
+        "    int[] bottom = lcsRow(new StringBuilder(s.substring(mid)).reverse().toString(),\n" +
+        "                          new StringBuilder(t).reverse().toString());   // backward\n" +
+        "    int k = 0;\n" +
+        "    for (int j = 1; j &lt;= n; j++)                     // where the optimum crosses the midline\n" +
+        "        if (top[j] + bottom[n - j] &gt; top[k] + bottom[n - k]) k = j;\n" +
+        "    return hirschberg(s.substring(0, mid), t.substring(0, k))\n" +
+        "         + hirschberg(s.substring(mid), t.substring(k));\n" +
+        "}</code></pre></div>" +
 
         "<p>The trade is measured and clean. Aligning two 1,000-character strings, the full table holds 1,002,001 cells while Hirschberg keeps two rows of 2,002 &#8212; a <strong>500-fold</strong> reduction in memory &#8212; and the running time went from 108 milliseconds to 157, about <strong>1.5&#215;</strong>. The factor is the price of the recomputation: each level of the recursion re-scans its subrectangle, and the halving series sums to roughly twice the work of a single pass, the same b/(b&#8722;1)-flavoured bounded overhead that iterative deepening paid in Chapter 18. Linear space for double the time is the trade, and for genomes it is the difference between an alignment that runs and one that cannot be allocated.</p>" +
 
@@ -6969,6 +8517,33 @@ CHAPTERS.push({
         "<p>The <strong>longest palindromic substring</strong> is a different problem, because contiguity cannot be reversed away. Its dynamic program is two-dimensional over intervals: <code>P(i, j)</code> is true when the substring from i to j is a palindrome, which holds when the ends match and the inside <code>P(i+1, j-1)</code> is already a palindrome. That is O(n&#178;) time and O(n&#178;) space, and it finds <code>geeksskeeg</code> inside <code>forgeeksskeegfor</code>. But there is a lighter way that needs no table at all: every palindrome has a centre, so <strong>expand around centre</strong> walks outward from each of the 2n&#8722;1 possible centres &#8212; each character and each gap between characters &#8212; growing the palindrome while the mirror characters match. It examines the same O(n&#178;) pairs but in O(1) space, and it returns the identical answer on every test. The table buys nothing here, and the centre method is the one to reach for.</p>" +
 
         "<p>One detail the centre count hides: a palindrome can have even length, centred between two characters rather than on one, so there are 2n&#8722;1 centres &#8212; n single characters and n&#8722;1 gaps &#8212; not n. An implementation that expands only from characters silently misses every even-length palindrome, reporting <code>bb</code> as two separate single-character palindromes. Handling both centre kinds is the one place the O(1)-space method needs care, and it is the bug the interval table cannot have, because it indexes the intervals directly and never has to guess a centre.</p>" +
+        "<p>Both, with the centre loop running over characters and gaps alike, which is what a single index c from 0 to 2n&#8722;2 gives for free:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def longest_palindromic_subsequence(s):\n" +
+        "    return len(lcs(s, s[::-1]))       # a known problem after one transformation\n" +
+        "\n" +
+        "def longest_palindromic_substring(s):\n" +
+        "    best = ''\n" +
+        "    for c in range(2 * len(s) - 1):   # 2n - 1 centres: n characters and n - 1 gaps\n" +
+        "        lo, hi = c // 2, (c + 1) // 2 # equal for a character, adjacent for a gap\n" +
+        "        while lo &gt;= 0 and hi &lt; len(s) and s[lo] == s[hi]:\n" +
+        "            lo, hi = lo - 1, hi + 1   # grow while the mirror characters match\n" +
+        "        if hi - lo - 1 &gt; len(best):\n" +
+        "            best = s[lo + 1:hi]\n" +
+        "    return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int longestPalindromicSubsequence(String s) {\n" +
+        "    return lcs(s, new StringBuilder(s).reverse().toString()).length();\n" +
+        "}\n" +
+        "\n" +
+        "static String longestPalindromicSubstring(String s) {\n" +
+        "    String best = \"\";\n" +
+        "    for (int c = 0; c &lt; 2 * s.length() - 1; c++) {  // n characters and n - 1 gaps\n" +
+        "        int lo = c / 2, hi = (c + 1) / 2;            // equal for a character, adjacent for a gap\n" +
+        "        while (lo &gt;= 0 &amp;&amp; hi &lt; s.length() &amp;&amp; s.charAt(lo) == s.charAt(hi)) { lo--; hi++; }\n" +
+        "        if (hi - lo - 1 &gt; best.length()) best = s.substring(lo + 1, hi);\n" +
+        "    }\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
 
         "<p>The centre method is also the doorway to the one genuinely cleverer algorithm in this territory: Manacher's, which shares work between overlapping centres to find the longest palindromic substring in O(n) time. It is worth knowing it exists and rarely worth writing &#8212; the O(n&#178;) centre expansion is fast enough for typical text, though not for long repetitive input, as Chapter 42 measures, and the linear algorithm's bookkeeping is the kind of cleverness Chapter 13 warned takes years to get right. The lesson the two palindrome problems leave is the chapter's thesis in miniature: know which known problem you are looking at &#8212; a common subsequence, an interval table, a set of centres &#8212; and the algorithm is already written.</p>"
     },
@@ -7111,6 +8686,57 @@ CHAPTERS.push({
         "<p>The answer has a closed form &#8212; a monotone path is a sequence of choices, right or down, so the count is the binomial coefficient <code>C(m+n-2, n-1)</code> &#8212; and the dynamic program agrees exactly: a 10&#215;10 grid has 48,620 paths, which is <code>C(18, 9)</code> to the digit. That the table reproduces a formula you already know is the point of starting here: the grid recurrence is trustworthy, and now you can bend it in ways the formula cannot follow.</p>" +
 
         "<p>Two bends cover most of what interviews ask. <strong>Obstacles</strong>: a blocked cell contributes zero paths, and the recurrence routes around it untouched. The machine's discovery is worth pausing on &#8212; a single obstacle rarely drops the count to zero, because paths route around it; on a 3&#215;3 grid one central wall takes the six paths down to two, not to none. To reach zero you must block an entire <em>cut</em>: every monotone path crosses each anti-diagonal exactly once, so walling off a whole anti-diagonal &#8212; the three cells where <code>i + j</code> equals a constant &#8212; stops every path at once. Zeroing a grid is a min-cut, not a lucky obstacle. <strong>Minimum path sum</strong>: replace addition with \"take the cheaper predecessor and add this cell's cost\", turning the counter into an optimiser over the same two predecessors. The table's structure never changes; only the operation in the cell does, from a sum for counting to a minimum for cost, which is the single most reused shift in dynamic programming.</p>" +
+        "<p>Both bends, on the same two-predecessor table:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def unique_paths(grid):               # grid[i][j] == 1 is a wall\n" +
+        "    m, n = len(grid), len(grid[0])\n" +
+        "    P = [[0] * n for _ in range(m)]\n" +
+        "    for i in range(m):\n" +
+        "        for j in range(n):\n" +
+        "            if grid[i][j]:\n" +
+        "                continue              # a wall holds zero paths\n" +
+        "            if i == 0 and j == 0:\n" +
+        "                P[i][j] = 1\n" +
+        "            else:\n" +
+        "                P[i][j] = (P[i - 1][j] if i else 0) + (P[i][j - 1] if j else 0)\n" +
+        "    return P[m - 1][n - 1]\n" +
+        "\n" +
+        "def min_path_sum(cost):               # same two predecessors, a minimum instead of a sum\n" +
+        "    m, n = len(cost), len(cost[0])\n" +
+        "    S = [[0] * n for _ in range(m)]\n" +
+        "    for i in range(m):\n" +
+        "        for j in range(n):\n" +
+        "            if i == 0 and j == 0: best = 0\n" +
+        "            elif i == 0:          best = S[i][j - 1]\n" +
+        "            elif j == 0:          best = S[i - 1][j]\n" +
+        "            else:                 best = min(S[i - 1][j], S[i][j - 1])\n" +
+        "            S[i][j] = best + cost[i][j]\n" +
+        "    return S[m - 1][n - 1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long uniquePaths(int[][] grid) {              // grid[i][j] == 1 is a wall\n" +
+        "    int m = grid.length, n = grid[0].length;\n" +
+        "    long[][] P = new long[m][n];\n" +
+        "    for (int i = 0; i &lt; m; i++)\n" +
+        "        for (int j = 0; j &lt; n; j++) {\n" +
+        "            if (grid[i][j] == 1) continue;           // a wall holds zero paths\n" +
+        "            if (i == 0 &amp;&amp; j == 0) P[i][j] = 1;\n" +
+        "            else P[i][j] = (i &gt; 0 ? P[i - 1][j] : 0) + (j &gt; 0 ? P[i][j - 1] : 0);\n" +
+        "        }\n" +
+        "    return P[m - 1][n - 1];\n" +
+        "}\n" +
+        "\n" +
+        "static int minPathSum(int[][] cost) {                // a minimum instead of a sum\n" +
+        "    int m = cost.length, n = cost[0].length;\n" +
+        "    int[][] S = new int[m][n];\n" +
+        "    for (int i = 0; i &lt; m; i++)\n" +
+        "        for (int j = 0; j &lt; n; j++) {\n" +
+        "            int best = i == 0 &amp;&amp; j == 0 ? 0\n" +
+        "                     : i == 0 ? S[i][j - 1]\n" +
+        "                     : j == 0 ? S[i - 1][j]\n" +
+        "                     : Math.min(S[i - 1][j], S[i][j - 1]);\n" +
+        "            S[i][j] = best + cost[i][j];\n" +
+        "        }\n" +
+        "    return S[m - 1][n - 1];\n" +
+        "}</code></pre></div>" +
 
         "<p>The shape to carry away is that grid DP is the sequence problems of the last chapter with two predecessors instead of one and a two-dimensional base case &#8212; an edge rather than a corner. The moment a problem is about reaching positions in a grid by restricted moves, whether the cells are map tiles, string indices, or the (i, j) of an alignment, the recurrence is some version of \"the ways in are the ways to my predecessors,\" and the only real work is naming the predecessors and the edge. An obstacle grid is counted the same way with blocked cells pinned to zero, which is how a real routing grid &#8212; streets with closures, a warehouse floor with racks &#8212; is counted: the walls are the zeros, and every open corner still sums its two neighbours. <strong>Toggle obstacles in the machine above</strong> and watch the counts refill from the corner; the wall that zeroes the corner is the one that completes an anti-diagonal.</p>",
       viz: "dsaGridDP", vizTitle: "Click cells to add walls; watch the path counts fill in from the corner"
@@ -7165,8 +8791,61 @@ CHAPTERS.push({
         "</svg><div class='fig-cap'>The dependency of dp[i][j] on shorter sub-intervals is why the table fills along diagonals, shortest first.</div></div>" +
 
         "<p>The stakes are not small. On the six-matrix chain with dimensions 30, 35, 15, 5, 10, 20, 25 the optimal order costs 15,125 scalar multiplications and the worst order costs 58,000, nearly four times more; on the alternating dimensions 1, 50, 1, 50, 1, 50, 1, 50 the best parenthesization costs 202 and the worst costs 260,000, a factor of <strong>1,287</strong>. Same matrices, same product, three orders of magnitude of difference in the work, decided entirely by where the parentheses go &#8212; which is exactly what the table finds.</p>" +
+        "<p>The table fills by interval length, so every sub-range is ready before the range that splits into it:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def matrix_chain(dims):               # matrix k is dims[k] x dims[k + 1]\n" +
+        "    n = len(dims) - 1\n" +
+        "    M = [[0] * n for _ in range(n)]   # a single matrix costs nothing\n" +
+        "    for length in range(2, n + 1):    # shortest ranges first\n" +
+        "        for i in range(n - length + 1):\n" +
+        "            j = i + length - 1\n" +
+        "            M[i][j] = min(M[i][k] + M[k + 1][j] + dims[i] * dims[k + 1] * dims[j + 1]\n" +
+        "                          for k in range(i, j))   # k: where the last product splits\n" +
+        "    return M[0][n - 1]\n" +
+        "\n" +
+        "# matrix_chain([30, 35, 15, 5, 10, 20, 25]) -&gt; 15125</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long matrixChain(int[] dims) {                // matrix k is dims[k] x dims[k+1]\n" +
+        "    int n = dims.length - 1;\n" +
+        "    long[][] M = new long[n][n];                     // a single matrix costs nothing\n" +
+        "    for (int len = 2; len &lt;= n; len++)               // shortest ranges first\n" +
+        "        for (int i = 0; i + len - 1 &lt; n; i++) {\n" +
+        "            int j = i + len - 1;\n" +
+        "            M[i][j] = Long.MAX_VALUE;\n" +
+        "            for (int k = i; k &lt; j; k++)              // k: where the last product splits\n" +
+        "                M[i][j] = Math.min(M[i][j], M[i][k] + M[k + 1][j] + (long) dims[i] * dims[k + 1] * dims[j + 1]);\n" +
+        "        }\n" +
+        "    return M[0][n - 1];\n" +
+        "}</code></pre></div>" +
 
         "<p>The move that makes interval DP click is <strong>choosing the last action, not the first</strong>. A left-to-right recurrence asks \"what do I do first,\" which for a range does not decompose cleanly; the interval recurrence asks \"what is the final combination,\" which splits the range into two independent sub-ranges. Burst balloons &#8212; pop a line of balloons to maximise a score that depends on each balloon's surviving neighbours &#8212; is the problem that teaches this, because deciding which balloon to pop <em>first</em> couples the two sides through the neighbour that vanishes, while deciding which to pop <em>last</em> leaves it with two fixed boundaries and two independent sub-ranges. Whenever a range problem will not decompose, try fixing the last action rather than the first; it is the interval-DP move, and it is the reason the table fills by diagonals from the shortest range to the whole.</p>" +
+        "<p>Burst balloons, with k as the last balloon popped in the range, so its neighbours at that moment are the range's two fixed ends:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def burst_balloons(nums):             # popping k scores left * k * right of its survivors\n" +
+        "    v = [1] + nums + [1]              # two fixed boundaries that are never popped\n" +
+        "    n = len(v)\n" +
+        "    B = [[0] * n for _ in range(n)]   # B[i][j]: best for the balloons strictly between i and j\n" +
+        "    for length in range(2, n):\n" +
+        "        for i in range(n - length):\n" +
+        "            j = i + length\n" +
+        "            B[i][j] = max(B[i][k] + B[k][j] + v[i] * v[k] * v[j]\n" +
+        "                          for k in range(i + 1, j))   # k is popped LAST, so i and j are its neighbours\n" +
+        "    return B[0][n - 1]\n" +
+        "\n" +
+        "# burst_balloons([3, 1, 5, 8]) -&gt; 167</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int burstBalloons(int[] nums) {\n" +
+        "    int n = nums.length + 2;\n" +
+        "    int[] v = new int[n];\n" +
+        "    v[0] = v[n - 1] = 1;                             // fixed boundaries, never popped\n" +
+        "    for (int i = 0; i &lt; nums.length; i++) v[i + 1] = nums[i];\n" +
+        "    int[][] B = new int[n][n];                       // best strictly between i and j\n" +
+        "    for (int len = 2; len &lt; n; len++)\n" +
+        "        for (int i = 0; i + len &lt; n; i++) {\n" +
+        "            int j = i + len;\n" +
+        "            for (int k = i + 1; k &lt; j; k++)          // k popped last: i and j are its neighbours\n" +
+        "                B[i][j] = Math.max(B[i][j], B[i][k] + B[k][j] + v[i] * v[k] * v[j]);\n" +
+        "        }\n" +
+        "    return B[0][n - 1];\n" +
+        "}</code></pre></div>" +
 
         "<p>The same last-action framing solves a surprising range of problems: the minimum cost to cut a stick at given positions (choose the last cut), the maximum score of merging a row of stones (choose the last merge), the ways to triangulate a polygon (choose the last triangle on a fixed edge). Each looks different and each is <code>M(i, j) = </code> the best over a split point of two sub-ranges plus a joining cost, filled shortest-range first. Interval DP is not a family of tricks but one recurrence wearing costumes, and the costume is always the joining cost.</p>"
     },
@@ -7214,6 +8893,43 @@ CHAPTERS.push({
         "<p>The travelling salesman problem &#8212; visit every city once and return, minimising total distance &#8212; is the standard demonstration of bitmask DP, and it is also a chance to be honest about what \"solved\" means for an NP-hard problem. The naive search is over tours, of which there are (n-1)! for n cities. The <strong>Held-Karp algorithm</strong>, from 1962, is the bitmask version.</p>" +
 
         "<p>The state is exactly <strong>(mask, last)</strong>: the set of cities already visited and the city you are currently in. <code>dp[mask][last]</code> is the shortest path that starts at city 0, visits precisely the cities in mask, and ends at last. The transition extends a path by one unvisited city, and the answer closes the loop back to the start. There are 2<sup>n</sup>&#183;n states and each has O(n) transitions, so Held-Karp is <strong>O(2<sup>n</sup>&#183;n&#178;)</strong>, and the tour it returns is exactly optimal &#8212; no approximation, the true shortest cycle.</p>" +
+        "<p>The state is a mask and a city, and the answer adds the edge home:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def held_karp(dist):                  # length of the shortest tour through every city\n" +
+        "    n, INF = len(dist), float('inf')\n" +
+        "    dp = [[INF] * n for _ in range(1 &lt;&lt; n)]   # dp[mask][last]\n" +
+        "    dp[1][0] = 0                      # start at city 0, having visited only city 0\n" +
+        "    for mask in range(1 &lt;&lt; n):        # a subset is always a smaller integer: order is safe\n" +
+        "        for last in range(n):\n" +
+        "            if dp[mask][last] == INF:\n" +
+        "                continue\n" +
+        "            for nxt in range(n):\n" +
+        "                if mask &gt;&gt; nxt &amp; 1:\n" +
+        "                    continue          # already visited\n" +
+        "                new = mask | 1 &lt;&lt; nxt\n" +
+        "                dp[new][nxt] = min(dp[new][nxt], dp[mask][last] + dist[last][nxt])\n" +
+        "    full = (1 &lt;&lt; n) - 1\n" +
+        "    return min(dp[full][last] + dist[last][0] for last in range(n))   # close the loop</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long heldKarp(int[][] dist) {                 // shortest tour through every city\n" +
+        "    int n = dist.length;\n" +
+        "    long INF = Long.MAX_VALUE / 4;\n" +
+        "    long[][] dp = new long[1 &lt;&lt; n][n];               // dp[mask][last]\n" +
+        "    for (long[] row : dp) Arrays.fill(row, INF);\n" +
+        "    dp[1][0] = 0;                                    // start at city 0\n" +
+        "    for (int mask = 1; mask &lt; 1 &lt;&lt; n; mask++)        // subsets are smaller integers\n" +
+        "        for (int last = 0; last &lt; n; last++) {\n" +
+        "            if (dp[mask][last] == INF) continue;\n" +
+        "            for (int next = 0; next &lt; n; next++) {\n" +
+        "                if ((mask &gt;&gt; next &amp; 1) == 1) continue;   // already visited\n" +
+        "                int nm = mask | 1 &lt;&lt; next;\n" +
+        "                dp[nm][next] = Math.min(dp[nm][next], dp[mask][last] + dist[last][next]);\n" +
+        "            }\n" +
+        "        }\n" +
+        "    long best = INF;\n" +
+        "    for (int last = 0; last &lt; n; last++)             // close the loop back to city 0\n" +
+        "        best = Math.min(best, dp[(1 &lt;&lt; n) - 1][last] + dist[last][0]);\n" +
+        "    return best;\n" +
+        "}</code></pre></div>" +
 
         "<p>Now the honesty. O(2<sup>n</sup>&#183;n&#178;) is still exponential, so Held-Karp does not make the travelling salesman tractable; it moves the wall from n around 12 to n around 20, and no further. What it buys is measurable and worth having. As n rises from 8 to 10, the number of tours a brute-force search examines multiplies by 72, while the number of Held-Karp states multiplies by only 5 &#8212; the factorial's savage growth against the exponential's merely fast one. Measured, solving a random 10-city instance took 269 milliseconds by brute force and 2.4 by Held-Karp; at 11 cities it was 2,832 milliseconds against 4.8; at 12 cities the brute force was abandoned while Held-Karp finished in 12; at 13 cities, where brute force would sift 479 million tours, Held-Karp is still under a hundred milliseconds. It is the difference between exact answers for a dozen cities and exact answers for twenty, which for many real routing problems &#8212; a technician's daily stops, a circuit board's drill holes &#8212; is exactly the range that matters.</p>" +
 
@@ -7225,6 +8941,34 @@ CHAPTERS.push({
         "<p>The same state idea solves a problem that sounds different and is worth contrasting with the last one. The <strong>assignment problem</strong> is to match n people to n jobs, each person to one job, minimising the total cost of the assignment given a cost for every person-job pair. The naive search is over the n! ways to match them.</p>" +
 
         "<p>The bitmask insight is that once you decide to assign people in a fixed order &#8212; person 0 first, then person 1, and so on &#8212; the only state you need is <em>which jobs are already taken</em>. <code>dp[mask]</code> is the cheapest way to assign the first <code>popcount(mask)</code> people to exactly the jobs in mask, and the next person &#8212; whose index is that population count &#8212; tries each still-free job. This is O(2<sup>n</sup>&#183;n): 2<sup>n</sup> masks, n job choices each, and the person index comes free from the mask's size, so there is no second dimension. Measured, a 10-person assignment solved in under a millisecond by bitmask against 1.8 seconds of brute-force permutation, and at 12 people the bitmask ran in 4 milliseconds while the 479-million-permutation brute force was hopeless.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_assignment(cost):             # cost[p][j]: person p doing job j\n" +
+        "    n, INF = len(cost), float('inf')\n" +
+        "    dp = [INF] * (1 &lt;&lt; n)             # dp[mask]: first popcount(mask) people on these jobs\n" +
+        "    dp[0] = 0\n" +
+        "    for mask in range(1 &lt;&lt; n):\n" +
+        "        p = bin(mask).count('1')      # the next person comes free from the mask's size\n" +
+        "        if p == n or dp[mask] == INF:\n" +
+        "            continue\n" +
+        "        for j in range(n):\n" +
+        "            if not mask &gt;&gt; j &amp; 1:     # job j is still free\n" +
+        "                new = mask | 1 &lt;&lt; j\n" +
+        "                dp[new] = min(dp[new], dp[mask] + cost[p][j])\n" +
+        "    return dp[(1 &lt;&lt; n) - 1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long minAssignment(int[][] cost) {            // cost[p][j]: person p, job j\n" +
+        "    int n = cost.length;\n" +
+        "    long[] dp = new long[1 &lt;&lt; n];                    // first bitCount(mask) people\n" +
+        "    Arrays.fill(dp, Long.MAX_VALUE);\n" +
+        "    dp[0] = 0;\n" +
+        "    for (int mask = 0; mask &lt; 1 &lt;&lt; n; mask++) {\n" +
+        "        int p = Integer.bitCount(mask);              // the next person, free from the mask\n" +
+        "        if (p == n || dp[mask] == Long.MAX_VALUE) continue;\n" +
+        "        for (int j = 0; j &lt; n; j++)\n" +
+        "            if ((mask &gt;&gt; j &amp; 1) == 0)                // job j is still free\n" +
+        "                dp[mask | 1 &lt;&lt; j] = Math.min(dp[mask | 1 &lt;&lt; j], dp[mask] + cost[p][j]);\n" +
+        "    }\n" +
+        "    return dp[(1 &lt;&lt; n) - 1];\n" +
+        "}</code></pre></div>" +
 
         "<div class='callout'>Here the contrast with Held-Karp matters. The travelling salesman is NP-hard, so its 2<sup>n</sup>&#183;n<sup>2</sup> is the best exact algorithm known and the exponential is unavoidable. The assignment problem is <em>not</em> hard: it has a polynomial algorithm, the Hungarian method, that Chapter 39 develops from bipartite matching and that solves it in O(n<sup>3</sup>) for any n. So the bitmask solution here is the <em>small-n</em> answer to a problem that is fully solved for large n &#8212; a convenience when n is tiny and you would rather write ten lines than implement the Hungarian algorithm, not a necessity. Knowing which of the two you face &#8212; genuinely hard, or merely not-yet-implemented-the-fast-way &#8212; is the difference between reaching for a bitmask because you must and because it is quick.</div>" +
 
@@ -7242,6 +8986,45 @@ CHAPTERS.push({
         "<p><strong>Digit DP</strong> is the counting technique that placement and competitive rounds ask for by name, and it answers questions of the form \"how many integers from 0 to N have some digit property?\" The trick is to build the number digit by digit from the most significant end, carrying only the state it needs: the position, whether the prefix so far is still equal to N's prefix (the <em>tight</em> flag, which bounds the next digit), and whatever the property needs &#8212; the previous digit, a running sum, a remainder. The count is a walk over these states, and there are only about (digits)&#215;(state) of them, so a bound with eighteen digits is a few hundred states regardless of how astronomically large N is.</p>" +
 
         "<p>The tight flag is the subtle part. While the prefix built so far still equals N's prefix, the next digit is capped at N's digit and only some choices are legal; the instant a smaller digit is chosen the prefix drops below N and every later digit is free, 0 through 9. Almost the entire count comes from those freed suffixes, each a subproblem computed once and reused across every prefix that reaches it &#8212; which is what collapses a quintillion numbers into a walk over a few hundred states.</p>" +
+        "<p>The state is the position, the previous digit, the tight flag and whether the number has started yet, since leading zeros are not digits of the number:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from functools import cache\n" +
+        "\n" +
+        "def count_no_equal_adjacent(N):       # integers in [0, N] with no two equal adjacent digits\n" +
+        "    digits = list(map(int, str(N)))\n" +
+        "\n" +
+        "    @cache\n" +
+        "    def go(pos, prev, tight, started):\n" +
+        "        if pos == len(digits):\n" +
+        "            return 1                  # one complete number\n" +
+        "        limit = digits[pos] if tight else 9     # tight: still equal to N's prefix\n" +
+        "        total = 0\n" +
+        "        for d in range(limit + 1):\n" +
+        "            if started and d == prev:\n" +
+        "                continue              # the property: never repeat the previous digit\n" +
+        "            total += go(pos + 1, d, tight and d == limit, started or d != 0)\n" +
+        "        return total\n" +
+        "\n" +
+        "    return go(0, -1, True, False)     # leading zeros are not digits yet: started=False\n" +
+        "\n" +
+        "# count_no_equal_adjacent(10**18) -&gt; 168856464709124011</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long countNoEqualAdjacent(long N) {           // [0, N], no two equal adjacent digits\n" +
+        "    char[] d = Long.toString(N).toCharArray();\n" +
+        "    return go(d, 0, 10, true, false, new Long[d.length][11][2][2]);   // prev 10: none yet\n" +
+        "}\n" +
+        "\n" +
+        "static long go(char[] d, int pos, int prev, boolean tight, boolean started, Long[][][][] memo) {\n" +
+        "    if (pos == d.length) return 1;                   // one complete number\n" +
+        "    int t = tight ? 1 : 0, s = started ? 1 : 0;\n" +
+        "    if (memo[pos][prev][t][s] != null) return memo[pos][prev][t][s];\n" +
+        "    int limit = tight ? d[pos] - '0' : 9;            // tight: still equal to N's prefix\n" +
+        "    long total = 0;\n" +
+        "    for (int x = 0; x &lt;= limit; x++) {\n" +
+        "        if (started &amp;&amp; x == prev) continue;          // never repeat the previous digit\n" +
+        "        total += go(d, pos + 1, x, tight &amp;&amp; x == limit, started || x != 0, memo);\n" +
+        "    }\n" +
+        "    return memo[pos][prev][t][s] = total;\n" +
+        "}</code></pre></div>" +
 
         "<p>The power is the scale it reaches. Counting the integers up to N with no two equal adjacent digits, the digit DP agrees with brute force exactly &#8212; 91 up to 100, 820 up to 1,000, 8,304 up to 12,345 &#8212; and then keeps going where brute force cannot: up to 10<sup>18</sup> it counts 168,856,464,709,124,011 valid numbers in a quarter of a millisecond, a computation that by enumeration would take longer than the age of the universe. That is the signature of a counting DP done right: the answer is astronomically large, the input is a handful of digits, and the work is proportional to the digits and not to the answer. It is the counting cousin of the whole course's thesis &#8212; the size of the thing you are counting is not the size of the work to count it.</p>"
     },
@@ -7393,7 +9176,25 @@ CHAPTERS.push({
         "<text x='30' y='115' fill='#c9d6ea' font-size='12'>shortest interval first</text><text x='430' y='115' text-anchor='end' fill='#c9d6ea' font-size='12'>3666 / 20000</text><text x='700' y='115' text-anchor='end' fill='#ff5d73' font-size='12'>18.33%</text>" +
         "</svg></div>" +
         "<p>Only earliest-finish is always optimal. Shortest-first, the rule most people reach for, is optimal on fewer than one instance in five. And the counterexample that kills it needs only three intervals: given [0,3], [2,4] and [3,6], the shortest is [2,4], which overlaps both of the others, so shortest-first selects one interval where the optimum selects two. The short interval sits in the middle and blocks a longer one on each side. You cannot see that by inspection; you see it by construction, which is what the machine above is for.</p>" +
-        "<p>This is the pattern for the whole chapter. Writing a greedy rule is free. Knowing whether it is correct is the entire difficulty, and \"it worked on my examples\" is worth exactly what the 18% column says it is. The rest of this chapter is two proof techniques that settle the question, one structure that explains it, and two problems that look greedy-solvable and are not.</p>" + "<p>Walk the winning rule once by hand. The <strong>earliest-finish-time rule</strong> sorts the intervals by finishing time and scans, taking the first and thereafter any whose start is at least the last taken finish. On [0,3], [1,4], [4,8], [6,10], [11,14] the finishes are 3, 4, 8, 10, 14: it takes [0,3], skips [1,4] because 1 is below 3, takes [4,8], skips [6,10], and takes [11,14] &mdash; three intervals, and no selection does better. The rule never looks back, and it never needs to.</p>" + "<p>Earliest-start fails for a reason worth seeing, because it explains the 71% rather than merely recording it. Give it [0,10], [1,2], [3,4], [5,6]: it takes the interval that starts first, the long [0,10], which alone blocks the other three, and finishes with one interval where the optimum takes the three short ones. A single greedy commitment to an early but long interval costs everything after it &mdash; the same failure mode as shortest-first, arriving from the opposite direction.</p>"
+        "<p>This is the pattern for the whole chapter. Writing a greedy rule is free. Knowing whether it is correct is the entire difficulty, and \"it worked on my examples\" is worth exactly what the 18% column says it is. The rest of this chapter is two proof techniques that settle the question, one structure that explains it, and two problems that look greedy-solvable and are not.</p>" + "<p>Walk the winning rule once by hand. The <strong>earliest-finish-time rule</strong> sorts the intervals by finishing time and scans, taking the first and thereafter any whose start is at least the last taken finish. On [0,3], [1,4], [4,8], [6,10], [11,14] the finishes are 3, 4, 8, 10, 14: it takes [0,3], skips [1,4] because 1 is below 3, takes [4,8], skips [6,10], and takes [11,14] &mdash; three intervals, and no selection does better. The rule never looks back, and it never needs to.</p>" +
+        "<p>In code it is a sort and a scan:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def max_nonoverlapping(intervals):    # earliest finish first; touching endpoints are fine\n" +
+        "    taken, last = [], float('-inf')\n" +
+        "    for s, f in sorted(intervals, key=lambda iv: iv[1]):\n" +
+        "        if s &gt;= last:                 # starts no earlier than the last finish taken\n" +
+        "            taken.append((s, f))\n" +
+        "            last = f\n" +
+        "    return taken</code></pre>" +
+        "<pre data-lang='java' hidden><code>static List&lt;int[]&gt; maxNonOverlapping(int[][] intervals) {   // earliest finish first\n" +
+        "    int[][] byFinish = intervals.clone();\n" +
+        "    Arrays.sort(byFinish, Comparator.comparingInt(iv -&gt; iv[1]));\n" +
+        "    List&lt;int[]&gt; taken = new ArrayList&lt;&gt;();\n" +
+        "    long last = Long.MIN_VALUE;\n" +
+        "    for (int[] iv : byFinish)\n" +
+        "        if (iv[0] &gt;= last) { taken.add(iv); last = iv[1]; }  // no earlier than last finish\n" +
+        "    return taken;\n" +
+        "}</code></pre></div>" + "<p>Earliest-start fails for a reason worth seeing, because it explains the 71% rather than merely recording it. Give it [0,10], [1,2], [3,4], [5,6]: it takes the interval that starts first, the long [0,10], which alone blocks the other three, and finishes with one interval where the optimum takes the three short ones. A single greedy commitment to an early but long interval costs everything after it &mdash; the same failure mode as shortest-first, arriving from the opposite direction.</p>"
     },
 
     { title: "Two Ways to Prove a Greedy Correct",
@@ -7411,13 +9212,80 @@ CHAPTERS.push({
       html:
         "<p>The same two techniques settle a family of scheduling problems, and two more are worth doing because their proofs have a different shape. The first is <strong>interval partitioning</strong>: you have all the lectures and unlimited rooms, and you want the <em>minimum</em> number of rooms so that no two overlapping lectures share one. The greedy rule is to sort by start time and put each lecture in any room that is currently free, opening a new room only when none is.</p>" +
         "<p>This one has a lower bound built into it. At the busiest instant, some number of lectures are all in progress at once; call that the <strong>depth</strong>, the maximum number of intervals that overlap a single point. Every one of those lectures needs its own room, so no schedule can use fewer rooms than the depth. And the greedy rule never uses more: it opens a new room only when every existing one is busy, which happens only when the depth at that moment already equals the room count. So greedy uses exactly depth rooms, the lower bound is met, and the algorithm is optimal by a counting argument rather than an exchange. Measured over twenty thousand random instances, the greedy room count equalled the maximum overlap depth every single time &mdash; twenty thousand out of twenty thousand. The depth is computed by the sweep-line technique of Chapter 12: sort the endpoints, add one at each start and subtract one at each finish, and track the running maximum.</p>" +
+        "<p>Keeping the rooms' finish times in a heap makes \"is any room free\" one look at the smallest:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "def min_rooms(lectures):              # (start, finish) pairs; a room frees at its finish\n" +
+        "    ends = []                         # finish times of the rooms in use, soonest on top\n" +
+        "    for s, f in sorted(lectures):     # by start time\n" +
+        "        if ends and ends[0] &lt;= s:\n" +
+        "            heapq.heapreplace(ends, f)   # the soonest-freed room is free again: reuse it\n" +
+        "        else:\n" +
+        "            heapq.heappush(ends, f)      # every room is busy: open a new one\n" +
+        "    return len(ends)</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int minRooms(int[][] lectures) {              // (start, finish) pairs\n" +
+        "    int[][] byStart = lectures.clone();\n" +
+        "    Arrays.sort(byStart, Comparator.comparingInt(iv -&gt; iv[0]));\n" +
+        "    PriorityQueue&lt;Integer&gt; ends = new PriorityQueue&lt;&gt;();   // finish times, soonest first\n" +
+        "    for (int[] iv : byStart) {\n" +
+        "        if (!ends.isEmpty() &amp;&amp; ends.peek() &lt;= iv[0]) ends.poll();   // reuse a free room\n" +
+        "        ends.add(iv[1]);                             // (or open a new one)\n" +
+        "    }\n" +
+        "    return ends.size();\n" +
+        "}</code></pre></div>" +
         "<p>The second problem is <strong>minimising maximum lateness</strong>. Each job has a processing time and a deadline; you run them one at a time on a single machine in some order, each job's lateness is how far past its deadline it finishes, and you want to minimise the largest lateness over all jobs. The greedy rule is <strong>earliest deadline first</strong>: ignore the processing times entirely and sort by deadline. That the durations do not matter is the surprise, and it is provable by exchange. If a schedule ever runs a later-deadline job before an earlier-deadline one &mdash; an <em>inversion</em> &mdash; swapping those two adjacent jobs never increases the maximum lateness, and repeatedly removing inversions turns any schedule into the earliest-deadline one. So earliest-deadline-first is optimal.</p>" +
+        "<p>The durations are read only to add up the clock; they play no part in the order:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def min_max_lateness(jobs):           # jobs: (duration, deadline) -&gt; (order, max lateness)\n" +
+        "    order = sorted(range(len(jobs)), key=lambda i: jobs[i][1])   # earliest deadline first\n" +
+        "    t, worst = 0, float('-inf')\n" +
+        "    for i in order:\n" +
+        "        t += jobs[i][0]\n" +
+        "        worst = max(worst, t - jobs[i][1])    # this job's lateness\n" +
+        "    return order, worst</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long minMaxLateness(int[][] jobs) {           // jobs: {duration, deadline}\n" +
+        "    int[][] byDeadline = jobs.clone();\n" +
+        "    Arrays.sort(byDeadline, Comparator.comparingInt(j -&gt; j[1]));   // earliest deadline first\n" +
+        "    long t = 0, worst = Long.MIN_VALUE;\n" +
+        "    for (int[] j : byDeadline) {\n" +
+        "        t += j[0];\n" +
+        "        worst = Math.max(worst, t - j[1]);           // this job's lateness\n" +
+        "    }\n" +
+        "    return worst;\n" +
+        "}</code></pre></div>" +
         "<p>The measurements make the point that the plausible alternatives are not merely occasionally worse but usually wrong. Against the brute-force optimum over four thousand instances, earliest-deadline-first was optimal 100% of the time; sorting by shortest processing time was optimal 31.85%; sorting by smallest slack &mdash; deadline minus duration, which sounds cleverer than either &mdash; managed 70.50%. The smallest counterexample for shortest-processing-first has two jobs: a one-unit job due at 100 and a ten-unit job due at 10. Shortest-first runs the tiny job first and finishes the big one at time 11, one unit late; earliest-deadline-first runs the urgent job first and finishes both on time, for a maximum lateness of zero.</p>" + "<p>The inversion swap is worth doing once with numbers, because it is the whole proof. Run job X (four units, deadline 8) before job Y (two units, deadline 4): X finishes at 4 for lateness -4, Y finishes at 6 for lateness 2, so the maximum is 2. That ordering is an inversion, since Y's deadline is the earlier one. Swap them: Y finishes at 2 for lateness -2, X finishes at 6 for lateness -2, and the maximum drops to -2. The swap pulled the earlier deadline forward and left no job finishing later than the pair's common end time, which is why it can never raise the maximum. Interval partitioning takes the same hand-check: on lectures [0,4], [1,3], [2,6], [5,7] the busiest instant is time 2, where three overlap, so the depth is 3, and the greedy opens its third room exactly when it reaches [2,6] and finds the first two busy &mdash; three rooms, matching the bound.</p>"
     },
 
     { title: "Fractional Versus 0/1 Knapsack",
       html:
         "<p>Chapter 20 proved that the 0/1 knapsack &mdash; take an item whole or leave it &mdash; needs a dynamic program and is pseudopolynomial. Change one word in the problem and a greedy solves it exactly. In the <strong>fractional knapsack</strong> you may take any fraction of an item, paying a proportional part of its weight for a proportional part of its value. Now the rule \"take the item with the best value-to-weight ratio, and when it no longer fits take as much of it as you can\" is optimal, and the proof is an exchange: if any optimal solution differs from the ratio-greedy one, there is a heavier-loaded low-ratio item and a lighter-loaded high-ratio item, and moving weight from the first to the second raises the value without changing the total weight.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def fractional_knapsack(values, weights, W):\n" +
+        "    total = 0.0\n" +
+        "    for v, w in sorted(zip(values, weights), key=lambda it: it[0] / it[1], reverse=True):\n" +
+        "        take = min(w, W)              # the whole item, or whatever still fits\n" +
+        "        total += v * take / w\n" +
+        "        W -= take\n" +
+        "        if W == 0:\n" +
+        "            break\n" +
+        "    return total\n" +
+        "\n" +
+        "# fractional_knapsack([60, 100, 120], [10, 20, 30], 50) -&gt; 240.0</code></pre>" +
+        "<pre data-lang='java' hidden><code>static double fractionalKnapsack(int[] values, int[] weights, int W) {\n" +
+        "    Integer[] idx = new Integer[values.length];\n" +
+        "    for (int i = 0; i &lt; idx.length; i++) idx[i] = i;\n" +
+        "    Arrays.sort(idx, (a, b) -&gt; Double.compare((double) values[b] / weights[b],\n" +
+        "                                              (double) values[a] / weights[a]));  // best ratio first\n" +
+        "    double total = 0;\n" +
+        "    for (int i : idx) {\n" +
+        "        if (W == 0) break;\n" +
+        "        int take = Math.min(weights[i], W);          // whole item, or what still fits\n" +
+        "        total += (double) values[i] * take / weights[i];\n" +
+        "        W -= take;\n" +
+        "    }\n" +
+        "    return total;\n" +
+        "}</code></pre></div>" +
         "<p>Set the two versions side by side on the same items. With A worth 60 at weight 10, B worth 100 at weight 20, C worth 120 at weight 30, and a capacity of 50, the fractional greedy takes all of A and B and then two-thirds of C for a value of 240, and that is exactly the linear-programming optimum. The 0/1 optimum is 220 &mdash; the set {B, C} &mdash; and the same ratio rule applied to the 0/1 problem returns only 160, the set {A, B}, because after committing to the best-ratio item A there is no room left for the pair that actually wins. The identical rule that is provably optimal for one version is provably suboptimal for the other.</p>" +
         "<p>How bad can the ratio rule be on the 0/1 problem? Arbitrarily bad. Take one item worth 2 at weight 1, and a second worth W at weight W, with capacity W. The first item has the better ratio, so ratio-greedy takes it and stops, collecting 2; the optimum takes the second item alone for W. As W grows the ratio of greedy to optimum runs 0.20, 0.02, 0.002, 0.0002 &mdash; it goes to zero. A single wrong commitment leaves almost all of the value on the table.</p>" +
         "<p>The lesson generalises past knapsacks. Whether a greedy is correct depends on the shape of the feasible region, not on how sensible the rule sounds, and the fractional-versus-0/1 pair is the cleanest case where the same rule is exactly right and catastrophically wrong under a change that looks cosmetic. Section 6 gives that shape a name. The measured fact worth carrying is that fractional greedy matched or exceeded the 0/1 optimum on all twenty thousand random instances &mdash; because the fractional relaxation is an upper bound on the 0/1 answer, which is precisely why solvers use it to prune.</p>" + "<p>Trace the fractional greedy on the same items, taken in descending ratio order &mdash; A at 6, B at 5, C at 4 per unit weight. Capacity 50: take A whole for 60, leaving 40; take B whole for 100, leaving 20; C weighs 30 and will not fit whole, so take twenty of its thirty units, paying weight 20 for two-thirds of its value, 80. Total 240, capacity exactly filled, one item split. That single split is the whole difference from the 0/1 problem, where an item is all or nothing. And the upper-bound property is not a curiosity: a branch-and-bound knapsack solver computes this fractional value at every node of its search and prunes any branch whose fractional bound already falls below the best whole-item solution found so far, so the greedy that cannot solve the 0/1 problem is the engine that makes solving it exactly tractable.</p>"
@@ -7431,6 +9299,53 @@ CHAPTERS.push({
         "<div class='fig'><svg viewBox='0 0 760 292' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='18' fill='#2de2ff' font-size='12'>Huffman tree: merge the two smallest; each leaf's depth is its code length</text><line x1='295' y1='54' x2='140' y2='85' stroke='#334a6a' stroke-width='1.5'/><text x='236' y='59' fill='#8fa3c4' font-size='11'>0</text><line x1='295' y1='54' x2='450' y2='85' stroke='#334a6a' stroke-width='1.5'/><text x='349' y='59' fill='#8fa3c4' font-size='11'>1</text><line x1='450' y1='114' x2='302' y2='143' stroke='#334a6a' stroke-width='1.5'/><text x='394' y='119' fill='#8fa3c4' font-size='11'>0</text><line x1='450' y1='114' x2='599' y2='143' stroke='#334a6a' stroke-width='1.5'/><text x='502' y='119' fill='#8fa3c4' font-size='11'>1</text><line x1='302' y1='172' x2='248' y2='199' stroke='#334a6a' stroke-width='1.5'/><text x='276' y='176' fill='#8fa3c4' font-size='11'>0</text><line x1='302' y1='172' x2='356' y2='199' stroke='#334a6a' stroke-width='1.5'/><text x='323' y='176' fill='#8fa3c4' font-size='11'>1</text><line x1='599' y1='172' x2='518' y2='199' stroke='#334a6a' stroke-width='1.5'/><text x='564' y='176' fill='#8fa3c4' font-size='11'>0</text><line x1='599' y1='172' x2='680' y2='199' stroke='#334a6a' stroke-width='1.5'/><text x='629' y='176' fill='#8fa3c4' font-size='11'>1</text><line x1='518' y1='228' x2='464' y2='255' stroke='#334a6a' stroke-width='1.5'/><text x='492' y='232' fill='#8fa3c4' font-size='11'>0</text><line x1='518' y1='228' x2='572' y2='255' stroke='#334a6a' stroke-width='1.5'/><text x='539' y='232' fill='#8fa3c4' font-size='11'>1</text><circle cx='295' cy='40' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='295' y='44' text-anchor='middle' fill='#2de2ff' font-size='11'>100</text><rect x='123' y='86' width='34' height='31' rx='4' fill='#12233f' stroke='#3ddc97' stroke-width='1.5'/><text x='140' y='99' text-anchor='middle' fill='#3ddc97' font-size='12'>a:45</text><text x='140' y='112' text-anchor='middle' fill='#c9d6ea' font-size='9'>0</text><circle cx='450' cy='100' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='450' y='104' text-anchor='middle' fill='#2de2ff' font-size='11'>55</text><circle cx='302' cy='158' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='302' y='162' text-anchor='middle' fill='#2de2ff' font-size='11'>25</text><circle cx='599' cy='158' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='599' y='162' text-anchor='middle' fill='#2de2ff' font-size='11'>30</text><rect x='231' y='200' width='34' height='31' rx='4' fill='#12233f' stroke='#3ddc97' stroke-width='1.5'/><text x='248' y='213' text-anchor='middle' fill='#3ddc97' font-size='12'>c:12</text><text x='248' y='226' text-anchor='middle' fill='#c9d6ea' font-size='9'>100</text><rect x='339' y='200' width='34' height='31' rx='4' fill='#12233f' stroke='#3ddc97' stroke-width='1.5'/><text x='356' y='213' text-anchor='middle' fill='#3ddc97' font-size='12'>b:13</text><text x='356' y='226' text-anchor='middle' fill='#c9d6ea' font-size='9'>101</text><circle cx='518' cy='214' r='14' fill='#182842' stroke='#2de2ff' stroke-width='1.3'/><text x='518' y='218' text-anchor='middle' fill='#2de2ff' font-size='11'>14</text><rect x='663' y='200' width='34' height='31' rx='4' fill='#12233f' stroke='#3ddc97' stroke-width='1.5'/><text x='680' y='213' text-anchor='middle' fill='#3ddc97' font-size='12'>d:16</text><text x='680' y='226' text-anchor='middle' fill='#c9d6ea' font-size='9'>111</text><rect x='447' y='256' width='34' height='31' rx='4' fill='#12233f' stroke='#3ddc97' stroke-width='1.5'/><text x='464' y='269' text-anchor='middle' fill='#3ddc97' font-size='12'>f:5</text><text x='464' y='282' text-anchor='middle' fill='#c9d6ea' font-size='9'>1100</text><rect x='555' y='256' width='34' height='31' rx='4' fill='#12233f' stroke='#3ddc97' stroke-width='1.5'/><text x='572' y='269' text-anchor='middle' fill='#3ddc97' font-size='12'>e:9</text><text x='572' y='282' text-anchor='middle' fill='#c9d6ea' font-size='9'>1101</text></svg></div>" +
         "<p>The frequent a sits one branch from the root and gets a single bit; the rare e and f sit four branches deep. The total is 45&#183;1 + 13&#183;3 + 12&#183;3 + 16&#183;3 + 9&#183;4 + 5&#183;4 = 224 bits, against 300 for a fixed three-bit code &mdash; a quarter smaller, and the saving grows as the distribution skews. Push it to the limit in the machine above by making one character dominant: with frequencies 1000 against a handful of 1s, that character's codeword collapses to a single bit.</p>" +
         "<p>Two properties make the tree a code you can actually decode. Because every character is a <em>leaf</em>, no codeword is a prefix of another &mdash; a <strong>prefix-free code</strong> &mdash; so a decoder walks the tree bit by bit and knows a character has ended the instant it reaches a leaf, with no separators needed. And the construction is optimal: the two rarest characters can always be taken to be siblings at the greatest depth in some optimal tree, which is the exchange argument again, and induction on the merged node finishes it. The two-smallest lookup is a priority queue, the heap of Chapter 27, so the whole build is O(n log n).</p>" +
+        "<p>The merge loop is a priority queue popped twice and pushed once, and the codes are read off by walking the finished tree:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "from itertools import count\n" +
+        "\n" +
+        "def huffman_codes(freq):              # {symbol: frequency} -&gt; {symbol: bit string}\n" +
+        "    tick = count()                    # a tie-breaker, so heapq never compares two subtrees\n" +
+        "    heap = [(f, next(tick), sym) for sym, f in freq.items()]\n" +
+        "    heapq.heapify(heap)\n" +
+        "    if len(heap) == 1:\n" +
+        "        return {heap[0][2]: '0'}\n" +
+        "    while len(heap) &gt; 1:\n" +
+        "        f1, _, left = heapq.heappop(heap)          # the two least frequent ...\n" +
+        "        f2, _, right = heapq.heappop(heap)\n" +
+        "        heapq.heappush(heap, (f1 + f2, next(tick), (left, right)))   # ... become one node\n" +
+        "    codes = {}\n" +
+        "    def walk(node, path):             # a leaf is a symbol, an inner node is a pair\n" +
+        "        if isinstance(node, tuple):\n" +
+        "            walk(node[0], path + '0')\n" +
+        "            walk(node[1], path + '1')\n" +
+        "        else:\n" +
+        "            codes[node] = path\n" +
+        "    walk(heap[0][2], '')\n" +
+        "    return codes</code></pre>" +
+        "<pre data-lang='java' hidden><code>static class HNode {\n" +
+        "    final long freq; final char sym; final HNode left, right;\n" +
+        "    HNode(long f, char s, HNode l, HNode r) { freq = f; sym = s; left = l; right = r; }\n" +
+        "}\n" +
+        "\n" +
+        "static Map&lt;Character, String&gt; huffmanCodes(Map&lt;Character, Long&gt; freq) {\n" +
+        "    PriorityQueue&lt;HNode&gt; heap = new PriorityQueue&lt;&gt;(Comparator.comparingLong(n -&gt; n.freq));\n" +
+        "    freq.forEach((s, f) -&gt; heap.add(new HNode(f, s, null, null)));\n" +
+        "    Map&lt;Character, String&gt; codes = new HashMap&lt;&gt;();\n" +
+        "    if (heap.size() == 1) { codes.put(heap.peek().sym, \"0\"); return codes; }\n" +
+        "    while (heap.size() &gt; 1) {\n" +
+        "        HNode a = heap.poll(), b = heap.poll();      // the two least frequent ...\n" +
+        "        heap.add(new HNode(a.freq + b.freq, '\\0', a, b));   // ... become one node\n" +
+        "    }\n" +
+        "    walk(heap.poll(), \"\", codes);\n" +
+        "    return codes;\n" +
+        "}\n" +
+        "\n" +
+        "static void walk(HNode n, String path, Map&lt;Character, String&gt; codes) {\n" +
+        "    if (n.left == null) { codes.put(n.sym, path); return; }   // a leaf\n" +
+        "    walk(n.left, path + \"0\", codes);\n" +
+        "    walk(n.right, path + \"1\", codes);\n" +
+        "}</code></pre></div>" +
         "<p>How close to the theoretical floor does it land? Shannon's entropy sets the lower bound on bits per character for any code. On the frequencies above the entropy is 2.2199 bits per character; Huffman spends 2.24, inside the guaranteed window of one bit above entropy. Run it on real text &mdash; the measurement script for this chapter, 14,261 characters over 87 distinct symbols &mdash; and Huffman uses 73,689 bits against 114,088 for a flat eight-bit encoding, 0.646 times the size, and sits only 0.045 bits per character above entropy. The gap to the floor is the price of insisting each character get a whole number of bits, and closing even that is what arithmetic coding does.</p>" + "<p>Decoding shows why prefix-freeness is the point. Read 0101100 against the tree: the first 0 reaches a's leaf, so emit a; 101 walks right-left-right to b; 100 walks right-left-left to c &mdash; the string abc, recovered with no separators because each walk stops the instant it hits a leaf. The degenerate case sharpens the intuition: with one symbol at frequency 1000 against four symbols at frequency 1, the common symbol takes a single bit and the four rare ones share the deep branches, so a thousand-character run of the common symbol costs about a thousand bits where a flat three-bit code would spend three thousand. Skew is exactly what Huffman turns into saving.</p>"
     },
 
@@ -7439,6 +9354,40 @@ CHAPTERS.push({
         "<p>By now the question is nagging: is there a property that says, in advance, whether a greedy rule will be optimal? There is, and it is one of the quiet triumphs of the subject. The structure is the <strong>matroid</strong>, defined by Hassler Whitney in 1935, and the theorem, due to Jack Edmonds in 1971 building on Rado, is that the obvious weight-greedy algorithm is optimal on a set system <em>exactly</em> when that system is a matroid.</p>" +
         "<p>A matroid abstracts the notion of independence. You have a ground set and a family of subsets called <strong>independent</strong>, forming an <strong>independence system</strong> with two rules. First, every subset of an independent set is independent &mdash; independence is hereditary. Second, the <strong>exchange property</strong>: if A and B are both independent and A is smaller, then some element of B can be added to A while keeping it independent. That second rule is the whole content; it guarantees that all maximal independent sets have the same size and, more to the point, that a greedy which sorts elements by weight and adds each one whose addition keeps the set independent will find the maximum-weight independent set. The exchange property in the definition is what makes the exchange argument in the proof go through.</p>" +
         "<p>The canonical example is the <strong>graphic matroid</strong>: the ground set is a graph's edges, and a set of edges is independent when it contains no cycle &mdash; that is, when it is a forest. The maximum-weight independent set problem becomes, with weights negated, the <strong>minimum spanning tree</strong>, and the weight-greedy algorithm becomes Kruskal's: sort edges, add each that does not close a cycle. Because forests form a matroid, Kruskal is optimal, and Chapter 36 develops this into the cut property. Measured against a brute-force minimum over every spanning tree on small random graphs, Kruskal's greedy matched the optimum on all 4,527 connected instances tested. The cycle test is the union-find of Chapter 7.</p>" +
+        "<p>Kruskal is the matroid greedy with union-find as the independence test:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def kruskal(n, edges):                # edges: (weight, u, v) -&gt; (total, edges kept)\n" +
+        "    parent = list(range(n))\n" +
+        "    def find(x):\n" +
+        "        while parent[x] != x:\n" +
+        "            parent[x] = parent[parent[x]]   # path halving\n" +
+        "            x = parent[x]\n" +
+        "        return x\n" +
+        "    total, kept = 0, []\n" +
+        "    for w, u, v in sorted(edges):     # the weight-greedy: cheapest first\n" +
+        "        ru, rv = find(u), find(v)\n" +
+        "        if ru != rv:                  # still a forest: the set stays independent\n" +
+        "            parent[ru] = rv\n" +
+        "            total += w\n" +
+        "            kept.append((u, v, w))\n" +
+        "    return total, kept</code></pre>" +
+        "<pre data-lang='java' hidden><code>static long kruskal(int n, int[][] edges) {          // edges: {weight, u, v}\n" +
+        "    int[] parent = new int[n];\n" +
+        "    for (int i = 0; i &lt; n; i++) parent[i] = i;\n" +
+        "    int[][] byWeight = edges.clone();\n" +
+        "    Arrays.sort(byWeight, Comparator.comparingInt(e -&gt; e[0]));   // cheapest first\n" +
+        "    long total = 0;\n" +
+        "    for (int[] e : byWeight) {\n" +
+        "        int ru = find(parent, e[1]), rv = find(parent, e[2]);\n" +
+        "        if (ru != rv) { parent[ru] = rv; total += e[0]; }        // still a forest\n" +
+        "    }\n" +
+        "    return total;\n" +
+        "}\n" +
+        "\n" +
+        "static int find(int[] parent, int x) {\n" +
+        "    while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }   // halving\n" +
+        "    return x;\n" +
+        "}</code></pre></div>" +
         "<p>The theorem earns its keep by what it excludes. Maximum-weight <em>matching</em> &mdash; pairing up vertices along edges so no vertex is used twice &mdash; looks similar and is not a matroid: on a path of three edges with weights 2, 3, 2, the weight-greedy takes the middle edge worth 3 and is then blocked, for a total of 3, while the optimum takes the two outer edges for 4. Across five thousand random instances, greedy matching found the optimum only 3,838 times, because matchings violate the exchange property. Matching is solved instead by the augmenting-path methods of Chapter 39. The matroid is the line between the problems where committing greedily is safe and the ones where it is a trap, and it is a real theorem rather than a rule of thumb.</p>" + "<p>Check the two axioms on a small graph to see they are not empty. Take a triangle on vertices 1, 2, 3 with edges a, b, c. Hereditary: every subset of a forest is a forest, and dropping any edge from an acyclic set leaves it acyclic. Exchange: the forest {a} has one edge and {b, c} has two, and since any two edges of a triangle are acyclic, at least one of b, c joins {a} without closing the cycle &mdash; here either does, because only all three edges together form it. Those are the axioms Kruskal leans on. Run it on four edges of weight 1, 2, 3, 4: sort ascending, add weight 1, add weight 2, reject weight 3 if it would close a cycle, add weight 4 &mdash; the running union-find of Chapter 7 answers whether an edge closes a cycle in near-constant time, which is why the whole build is dominated by the sort.</p>"
     },
 
@@ -7447,7 +9396,47 @@ CHAPTERS.push({
       html:
         "<p>End on the greedy everyone trusts. To make an amount with the fewest coins, take the largest coin that fits and repeat. On the coins of most real currencies this is optimal, and that is the trap: it is optimal so reliably that you stop asking why. The reason it works on {1, 5, 10, 25} is a property of those particular denominations, a <strong>canonical coin system</strong>, and not a property of greedy.</p>" +
         "<p>Change the coins and greedy breaks. On {1, 3, 4}, the amount 6 is where it first fails: greedy takes the 4, then two 1s, for three coins, while two 3s make it in two. On {1, 7, 10}, the amount 14 fails: greedy spends 10 + 1 + 1 + 1 + 1, five coins, where two 7s suffice. On {1, 15, 25}, greedy needs six coins for 30 where two 15s do it. None of these coin sets looks pathological, and none announces its failure &mdash; you find the counterexample only by searching, which is what the machine above lets you do.</p>" +
-        "<p>How common is the failure? Among twenty thousand random three-coin systems of the form {1, a, b}, only 36.5% were canonical &mdash; greedy is wrong on the majority of coin systems, and right on the ones in your pocket by design, because currencies are chosen to be canonical. There is a theorem that bounds the search: Kozen and Zaks proved that if a system fails at all, its smallest counterexample lies below the sum of its two largest coins, so testing every amount up to that bound decides canonicity exactly. For {1, 3, 4} the counterexample 6 sits below 3 + 4 = 7, as promised.</p>" + "<p>Deciding canonicity outright, rather than sampling, is a solved problem: Pearson's 2005 algorithm tests a coin system in time cubic in the number of coins, checking only the small set of candidate amounts the theory singles out rather than every amount up to the bound. When the answer is that the system is not canonical &mdash; the common case &mdash; the dynamic-programming coin-change of Chapter 19 fills a table indexed by every amount from zero to the target, each cell holding the fewest coins for that amount, in time proportional to the target times the number of coins. It is slower than the greedy's handful of divisions, and it is always right, which is the trade the chapter closes on.</p>" +
+        "<p>How common is the failure? Among twenty thousand random three-coin systems of the form {1, a, b}, only 36.5% were canonical &mdash; greedy is wrong on the majority of coin systems, and right on the ones in your pocket by design, because currencies are chosen to be canonical. There is a theorem that bounds the search: Kozen and Zaks proved that if a system fails at all, its smallest counterexample lies below the sum of its two largest coins, so testing every amount up to that bound decides canonicity exactly. For {1, 3, 4} the counterexample 6 sits below 3 + 4 = 7, as promised.</p>" +
+        "<p>The bound turns canonicity into a finite check: fill the coin-change table up to the sum of the two largest coins and compare greedy against it at every amount:</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def greedy_coins(coins, amount):      # largest coin first; -1 if it gets stuck\n" +
+        "    used = 0\n" +
+        "    for c in sorted(coins, reverse=True):\n" +
+        "        used += amount // c\n" +
+        "        amount %= c\n" +
+        "    return used if amount == 0 else -1\n" +
+        "\n" +
+        "def first_counterexample(coins):      # smallest amount greedy gets wrong, or None (1 in coins)\n" +
+        "    coins = sorted(coins)\n" +
+        "    bound = coins[-1] + coins[-2] if len(coins) &gt; 1 else 0   # Kozen and Zaks\n" +
+        "    best = [0] * max(bound, 1)        # fewest coins per amount: Chapter 19's table\n" +
+        "    for a in range(1, bound):\n" +
+        "        best[a] = 1 + min(best[a - c] for c in coins if c &lt;= a)\n" +
+        "        if greedy_coins(coins, a) != best[a]:\n" +
+        "            return a\n" +
+        "    return None\n" +
+        "\n" +
+        "# first_counterexample([1, 3, 4]) -&gt; 6;  first_counterexample([1, 5, 10, 25]) -&gt; None</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int greedyCoins(int[] coins, int amount) {    // largest first; -1 if stuck\n" +
+        "    int[] c = coins.clone();\n" +
+        "    Arrays.sort(c);\n" +
+        "    int used = 0;\n" +
+        "    for (int i = c.length - 1; i &gt;= 0; i--) { used += amount / c[i]; amount %= c[i]; }\n" +
+        "    return amount == 0 ? used : -1;\n" +
+        "}\n" +
+        "\n" +
+        "static int firstCounterexample(int[] coins) {        // smallest failing amount, or -1\n" +
+        "    int[] c = coins.clone();                         // assumes 1 is a coin\n" +
+        "    Arrays.sort(c);\n" +
+        "    int bound = c.length &gt; 1 ? c[c.length - 1] + c[c.length - 2] : 0;   // Kozen and Zaks\n" +
+        "    int[] best = new int[Math.max(bound, 1)];       // fewest coins: Chapter 19's table\n" +
+        "    for (int a = 1; a &lt; bound; a++) {\n" +
+        "        best[a] = Integer.MAX_VALUE;\n" +
+        "        for (int coin : c) if (coin &lt;= a) best[a] = Math.min(best[a], best[a - coin] + 1);\n" +
+        "        if (greedyCoins(c, a) != best[a]) return a;\n" +
+        "    }\n" +
+        "    return -1;\n" +
+        "}</code></pre></div>" + "<p>Deciding canonicity outright, rather than sampling, is a solved problem: Pearson's 2005 algorithm tests a coin system in time cubic in the number of coins, checking only the small set of candidate amounts the theory singles out rather than every amount up to the bound. When the answer is that the system is not canonical &mdash; the common case &mdash; the dynamic-programming coin-change of Chapter 19 fills a table indexed by every amount from zero to the target, each cell holding the fewest coins for that amount, in time proportional to the target times the number of coins. It is slower than the greedy's handful of divisions, and it is always right, which is the trade the chapter closes on.</p>" +
         "<p>The correct algorithm when the coins are arbitrary is the coin-change dynamic program of Chapter 19, which is the honest fallback whenever a greedy's optimality is in doubt: greedy if you can prove it with an exchange argument or a matroid, and the dynamic program if you cannot. That is the discipline this chapter has been building toward. A greedy is the easiest algorithm to write, the hardest to justify, and the one most likely to be quietly wrong on an input you did not think to test &mdash; and the exchange argument, the two proof templates, and the matroid are the difference between hoping it is right and knowing.</p>"
     },
 
