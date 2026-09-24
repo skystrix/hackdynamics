@@ -34,9 +34,11 @@
   function saveProgress() { store.write(progress); updateProgressBar(); renderTOC(); }
 
   // Overall progress = half for visiting a chapter, half for passing its quiz.
+  // Optional chapters are extra reading, so they neither add to nor block 100%.
   function updateProgressBar() {
-    var total = CHAPTERS.length * 2, done = 0;
-    CHAPTERS.forEach(function (ch) {
+    var core = CHAPTERS.filter(function (ch) { return !ch.optional; });
+    var total = core.length * 2, done = 0;
+    core.forEach(function (ch) {
       if (progress.visited[ch.num]) done++;
       if (progress.quiz[ch.num] !== undefined) done++;
     });
@@ -59,6 +61,7 @@
         if (ch.locked) cls.push("locked");
         html += '<a href="#/ch/' + ch.num + '" class="' + cls.join(" ") + '">' +
                 '<span class="n">' + ch.num + "</span>" + ch.title +
+                (ch.optional ? ' <span class="toc-opt">optional</span>' : "") +
                 (ch.locked ? ' <span class="toc-lock">🔒</span>' : "") + "</a>";
       });
     });
@@ -152,6 +155,7 @@
                 "<h3>" + ch.title + "</h3>" +
                 "<p>" + ch.blurb + "</p>" +
                 '<div class="badges">' +
+                (ch.optional ? '<span class="badge optional">optional · advanced</span>' : "") +
                 (vizCount ? '<span class="badge viz">⚡ ' + vizCount + " interactive</span>" : "") +
                 '<span class="badge">' + quizCount + " quiz questions</span>" +
                 (ch.locked ? '<span class="badge locked">🔒 premium</span>' : "") +
@@ -176,6 +180,7 @@
         '<div class="kicker">PART ' + part.num + " · " + part.title.toUpperCase() + " · CHAPTER " + ch.num + "</div>" +
         "<h1>" + ch.title + " 🔒</h1>" +
         '<p class="intro">' + ch.blurb + "</p>" +
+        (ch.optional ? '<p class="optional-note">Optional, advanced reading. Interviews rarely go this deep, so skip it on a first pass and come back when you want the depth.</p>' : "") +
         "</div>" +
         '<div id="chapter-upgrade"></div>';
       var lprev = CHAPTERS.find(function (c) { return c.num === num - 1; });
@@ -197,6 +202,7 @@
       '<div class="kicker">PART ' + part.num + " · " + part.title.toUpperCase() + " · CHAPTER " + ch.num + "</div>" +
       "<h1>" + ch.title + "</h1>" +
       '<p class="intro">' + ch.blurb + "</p>" +
+      (ch.optional ? '<p class="optional-note">Optional, advanced reading. Interviews rarely go this deep, so skip it on a first pass and come back when you want the depth.</p>' : "") +
       "</div>";
 
     ch.sections.forEach(function (sec, i) {

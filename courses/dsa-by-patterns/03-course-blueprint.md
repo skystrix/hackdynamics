@@ -2,7 +2,7 @@
 
 **Status:** Phase 3 complete, awaiting owner approval. **Approval freezes chapter numbers** —
 the platform keys progress and links on them (§4 Phase 3).
-**Date:** 2026-09-20. Phases 0, 1 and 2 gated 2026-09-20. **Amended 2026-09-24:** Part 7 (the capstone) removed by owner decision; see §3.
+**Date:** 2026-09-20. Phases 0, 1 and 2 gated 2026-09-20. **Amended 2026-09-24:** Part 7 (the capstone) removed by owner decision; see §3. **Also 2026-09-24:** Chapters 37–45 marked optional, advanced reading (owner decision): interviews rarely reach them. They carry `optional: true` in the chapter data, are badged in the TOC, cards and chapter hero, and are left out of the progress bar; Chapter 1's map tells interview readers to go from Chapter 36 to Chapter 46.
 
 **Shape:** 6 parts · **49 chapters** · **134 machines** · 3 free chapters ·
 Python + Java throughout. Orphan list **empty**, verified mechanically (§6).

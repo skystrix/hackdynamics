@@ -541,6 +541,7 @@ CHAPTERS.push({
         "<li><strong>Part 5, Graphs (32–39).</strong> One traversal, one relaxation step, one residual network. Shortest paths, spanning trees, strongly connected components, max-flow, and the modelling skill that turns problems which mention no graph into graph problems.</li>" +
         "<li><strong>Part 6, The Edges and the Engineer (40–49).</strong> Bits, strings, numbers, geometry, and the boundary where problems stop being tractable. Then the recognition procedure, the working engineer's handbook, and a field guide to everything this course names without teaching.</li>" +
         "</ul>" +
+        "<p><strong>Chapters 37 to 45 are optional, advanced reading.</strong> Strongly connected components, max-flow and matching, bit manipulation, the string algorithms, suffix arrays, number theory and geometry are real subjects, but interviews rarely go this deep. If you are preparing for interviews, read Parts 1 to 4 and Chapters 32 to 36, then go straight to Chapter 46; come back to the optional chapters when you want the depth. They are marked in the contents and on each chapter.</p>" +
         "<p>Hover the parts in the machine above to see which structures each one builds and which chapters are free. One thing worth noticing while you are there: Chapter 4 has more arrows out of it than any other chapter in Part 1. That is not decoration. If you skip it, Chapters 8, 10 and 11 become templates again.</p>" +
         "<p>The reading order is the chapter order, and cross-references point backwards except where a chapter says explicitly what to expect and when. You can read Part 6's handbook chapters early if you are preparing for something next week; they will make more sense afterwards, and they say so where it matters.</p>"
     },
@@ -13039,7 +13040,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 37 ======================= */
 CHAPTERS.push({
-  num: 37, part: 5, title: "Structure from DFS: SCCs, Bridges and 2-SAT",
+  num: 37, part: 5, title: "Structure from DFS: SCCs, Bridges and 2-SAT", optional: true,
   blurb: "Chapter 33 promised that depth-first entry and exit times encode a graph's structure; this is where you collect. Strongly connected components, bridges and articulation points all fall out of one pass with one extra number per vertex. Then 2-SAT, a problem about boolean formulas with no visible graph in it, is solved in linear time by building the implication graph and running the component algorithm. The chapter closes with the two oldest questions in graph theory, two-colouring and Euler's bridges of K\u00f6nigsberg, and a De Bruijn sequence built from an Euler circuit.",
   sections: [
 
@@ -13398,7 +13399,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 38 ======================= */
 CHAPTERS.push({
-  num: 38, part: 5, title: "Max-Flow and Min-Cut",
+  num: 38, part: 5, title: "Max-Flow and Min-Cut", optional: true,
   blurb: "The maximum amount you can push through a network equals the cheapest set of pipes you could cut to stop it entirely. This chapter builds the machinery behind that theorem: residual graphs with backward edges that let an algorithm undo itself, and the three algorithms that differ only in how they pick the next augmenting path &mdash; measured from a million augmentations down to three phases on the same network. It proves max-flow min-cut from the algorithm's stopping condition, adds costs with Chapter 35's potentials, and closes with global cuts that have no source or sink.",
   sections: [
 
@@ -13685,7 +13686,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 39 ======================= */
 CHAPTERS.push({
-  num: 39, part: 5, title: "Flow Modelling and Bipartite Matching",
+  num: 39, part: 5, title: "Flow Modelling and Bipartite Matching", optional: true,
   blurb: "This is the chapter that justifies the last one. Max-flow is seldom implemented and often recognised, and the skill that matters is turning a problem that says nothing about networks into one. Bipartite matching, K\u00f6nig's and Hall's theorems, the Hungarian method for weighted assignment, disjoint paths, path covers and project selection are the same engine wired different ways, each checked against brute force. Stable marriage closes the chapter as the counterexample: it looks like matching and is not a flow problem at all.",
   sections: [
 
@@ -13973,7 +13974,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 40 ======================= */
 CHAPTERS.push({
-  num: 40, part: 6, title: "Bit Manipulation",
+  num: 40, part: 6, title: "Bit Manipulation", optional: true,
   blurb: "Bits are how the machine stores everything, and a handful of operations on them replace whole data structures: a set becomes an integer, a subset enumeration becomes a loop, and counting the ones in a word costs a few instructions. This chapter starts from two's complement and the shift and sign-extension bugs it causes in Java and Python, proves the standard tricks, measures popcount down to the compiled instructions, shows why the submask loop costs 3^n and not 4^n, collapses three XOR classics into one identity, builds the XOR basis over GF(2), and ends on Gray code.",
   sections: [
 
@@ -14289,7 +14290,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 41 ======================= */
 CHAPTERS.push({
-  num: 41, part: 6, title: "String Matching: KMP, Z and Rabin-Karp",
+  num: 41, part: 6, title: "String Matching: KMP, Z and Rabin-Karp", optional: true,
   blurb: "Finding a pattern in a text is the oldest string problem, and the naive algorithm is quadratic on exactly the inputs an adversary chooses; Java's own indexOf took 22 seconds on one here. The fixes are some of the most elegant algorithms in the subject. KMP is usually taught as failure links, a mechanism with no meaning. Taught from borders, the prefix function derives itself, KMP follows, and periods, repetitions and rotations come free. The Z-function reads the same facts from the other end, Rabin-Karp trades comparisons for hashes and an anti-hash input breaks the careless version, and Boyer-Moore skips most of the text.",
   sections: [
 
@@ -14645,7 +14646,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 42 ======================= */
 CHAPTERS.push({
-  num: 42, part: 6, title: "Automata and Palindromes: Aho-Corasick and Manacher",
+  num: 42, part: 6, title: "Automata and Palindromes: Aho-Corasick and Manacher", optional: true,
   blurb: "Chapter 41 found one pattern. This one finds a thousand at once, in a single pass, by building the trie from Chapter 28 and adding KMP's border idea to it: that is Aho-Corasick, the algorithm behind fgrep and network intrusion detection. Then Manacher's algorithm finds every palindrome in linear time with the same already-computed-information trick, measured against the quadratic method on the input that breaks it. The chapter closes on regular expressions as automata, the exponential blowup of backtracking engines that has taken real services down, and compression as a question of what repeats.",
   sections: [
 
@@ -14984,7 +14985,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 43 ======================= */
 CHAPTERS.push({
-  num: 43, part: 6, title: "Suffix Arrays and What They Answer",
+  num: 43, part: 6, title: "Suffix Arrays and What They Answer", optional: true,
   blurb: "Sort every suffix of a string and you have a structure that answers questions no other string structure can: how many distinct substrings there are, what the longest substring appearing twice is, what two strings have in common, and where any pattern occurs in O(m log n). This chapter measures what the one-line naive construction really costs, builds the suffix array by prefix doubling, adds the LCP array in linear time with Kasai's short algorithm, and spends the pair. It closes on the suffix automaton, suffix trees, the Burrows-Wheeler transform behind bzip2 and DNA aligners, and the string sorts that suffix construction depends on.",
   sections: [
 
@@ -15336,7 +15337,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 44 ======================= */
 CHAPTERS.push({
-  num: 44, part: 6, title: "Numbers, Counting and Games",
+  num: 44, part: 6, title: "Numbers, Counting and Games", optional: true,
   blurb: "The number theory and combinatorics every algorithm course needs and few teach together. It starts from the arithmetic hazards Java and Python fall into differently, proves Euclid's worst case with Fibonacci numbers, counts the sieve's strikes to show why it is O(n log log n), and explains why 10^9 + 7 is in every contest solution and how an inverse makes division work. Then it counts without enumerating, with binomials, Catalan numbers and inclusion-exclusion, computes expectations, and ends on Nim and Sprague-Grundy, the theorem that turns a whole class of who-wins problems into a single XOR.",
   sections: [
 
@@ -15671,7 +15672,7 @@ CHAPTERS.push({
 
 /* ======================= CHAPTER 45 ======================= */
 CHAPTERS.push({
-  num: 45, part: 6, title: "Geometry",
+  num: 45, part: 6, title: "Geometry", optional: true,
   blurb: "Computational geometry is where floating point goes to die, and the first lesson is to avoid it: the orientation test, the primitive every algorithm here is built from, is an exact integer determinant when the inputs are integers, and 18% of nearly collinear inputs got the wrong sign in doubles. From it come segment intersection with the collinear case everyone omits, polygon area and point location, the convex hull as a monotonic stack, a sweep-line rectangle union, the 45-degree rotation that turns Manhattan distance into Chebyshev, the geometry behind the convex hull trick with a Li Chao tree, and linear programming as a picture and a certificate.",
   sections: [
 

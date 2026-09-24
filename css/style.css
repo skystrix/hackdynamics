@@ -232,6 +232,9 @@ body.sidebar-toggled #toc-backdrop { opacity: 1; pointer-events: auto; }
 }
 .badge.viz { color: var(--primary); }
 .badge.quiz-done { color: var(--green); }
+.badge.optional { color: var(--text-dim); border-style: dashed; }
+.toc-opt { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; opacity: .6; }
+.ch-hero .optional-note { margin-top: 10px; font-size: 14px; color: var(--text-dim); border-left: 2px dashed var(--line); padding-left: 10px; }
 
 /* ---------- Chapter page ---------- */
 .ch-hero { padding: 30px 0 10px; }

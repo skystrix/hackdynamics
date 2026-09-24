@@ -30,7 +30,7 @@
 import "./_data/_shim.js";
 
 export type Chapter = {
-  num: number; part: number; title: string; blurb: string; free?: boolean;
+  num: number; part: number; title: string; blurb: string; free?: boolean; optional?: boolean;
   sections?: { viz?: string }[]; quiz?: unknown[]; terms?: unknown[];
 };
 
@@ -40,7 +40,7 @@ export type Chapter = {
 export function toPreview(chapters: Chapter[]): unknown[] {
   return chapters.map((ch) =>
     ch.free ? ch : {
-      num: ch.num, part: ch.part, title: ch.title, blurb: ch.blurb,
+      num: ch.num, part: ch.part, title: ch.title, blurb: ch.blurb, optional: ch.optional,
       locked: true,
       vizCount: (ch.sections ?? []).filter((s) => s.viz).length,
       quizCount: (ch.quiz ?? []).length,
