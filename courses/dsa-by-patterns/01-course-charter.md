@@ -150,7 +150,7 @@ in Phase 6.
 - **O4.** Write a fuzzer that compares your solution against a brute force on random small inputs, shrink the first failing case to something you can read, and fix from the shrunk case.
 - **O5.** Benchmark two implementations honestly on your own machine — warmed up, repeated, with the conditions stated — and exhibit a real case where the asymptotically worse one wins.
 - **O6.** Choose the right standard-library structure in both Python and Java knowing what each actually costs, including the ones that surprise people: `list.insert(0, x)`, `dict` ordering guarantees, Java's `HashMap` treeification, `ArrayList.remove`, autoboxing in a `PriorityQueue<Integer>`.
-- **O7.** Avoid the language traps that cost interview rounds: Python's recursion limit and floor division on negatives; Java's silent `int` overflow, `Arrays.sort` on primitives being attackable, and `==` on boxed integers.
+- **O7.** Avoid the language traps that cost interview rounds: Python's recursion limit and floor division on negatives; Java's silent `int` overflow, `Arrays.sort` on primitives being unstable, and `==` on boxed integers. *(Corrected 2026-09-24: "attackable" was true of older JDKs; OpenJDK 21's primitive sort falls back to heapsort past a depth limit, as Chapter 16 now says.)*
 - **O8.** Present a solution the way the mechanism was taught — invariant, cost, edge cases, then code — which is also the order an interviewer scores.
 
 ### Build (in the body chapters' Build exercises, Python + Java)
@@ -167,9 +167,9 @@ B1, B2, B7 and B9 were delivered only by the capstone and are **retired** with i
 - **B8.** Implement a trie and Aho-Corasick, fuzzed against a naive multi-pattern scan.
 - ~~**B9.** Benchmark the finished library against both standard libraries, explain every gap with a mechanism from the course rather than with a shrug, and write the confession table of everything simplified.~~ *Retired.*
 
-**48 outcomes, 44 active after the four capstone retirements.** §4 of the guide asks for 15–30. *RAG In Depth* shipped 39 and *LLM In Depth*
+**47 outcomes (originally stated as 48; the list has always held 47, corrected 2026-09-24 by the Phase 6 map), 43 active after the four capstone retirements.** §4 of the guide asks for 15–30. *RAG In Depth* shipped 39 and *LLM In Depth*
 40 against the same §1 bar; this course carries ~50 chapters against that range's 24–36, and
-48 is proportionate to the chapter budget the owner already approved. The alternative is not
+47 is proportionate to the chapter budget the owner already approved. The alternative is not
 consolidation, it is dropping testable claims. Flagged here for the gate rather than quietly
 exceeded.
 
@@ -294,7 +294,7 @@ Chapter 48 and used in the Build exercises throughout.
 
 ## 8. Charter self-check against §11
 
-- 48 outcomes, grouped explain / analyze / operate / build, each an observable action; the overrun on the 15–30 guidance is declared in §4 with its reason and its proportion to the approved chapter budget.
+- 47 outcomes (43 active), grouped explain / analyze / operate / build, each an observable action; the overrun on the 15–30 guidance is declared in §4 with its reason and its proportion to the approved chapter budget.
 - Prerequisites are minimal and honest, each with a pointer, and no prior course on this site is assumed — this is the roster's earliest entry point.
 - Track position stated: a new CS Fundamentals track with this course as 01, and `COURSE_PLAN.md` amended in the same commit because §2's "out because it belongs to course X" rule depends on course 02 existing.
 - The concurrency "out" decision is recorded with the location of its mandatory orientation paragraph and forward pointer, and the one ambiguous row is handed to Phase 2 rather than silently decided.

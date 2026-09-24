@@ -955,9 +955,9 @@ CHAPTERS.push({
       opts: [
         "That the word-RAM model is flatly wrong, since its predictions fail by more than five orders of magnitude on ordinary arithmetic performed by an ordinary, widely used language",
         "That CPython is a poor implementation, since a correctly written interpreter would keep arithmetic constant-time by delegating to hardware instructions",
-        "That the model's constant-time arithmetic holds only while operands fit in a word, and past that its central assumption no longer describes the machine",
-        "That multiplication is inherently more expensive than the model allows, which is why the model lists only addition and comparison as single steps"
-      ], a: 2,
+        "That multiplication is inherently more expensive than the model allows, which is why the model lists only addition and comparison as single steps",
+        "That the model's constant-time arithmetic holds only while operands fit in a word, and past that its central assumption no longer describes the machine"
+      ], a: 3,
       why: "The word-RAM assumes arithmetic on a word costs one step, and 262,144 bits is four thousand words. The model has not been refuted; it has been used outside its stated domain. This matters in practice whenever a running value grows without being reduced, which is why Chapter 41's rolling hash takes a modulus at every step rather than at the end." },
 
     { type: "mc",
@@ -1203,11 +1203,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "A recursion tree's level costs are n, 2n, 4n, 8n going down, and the tree has log₂ n levels. Which shape is this and what is the total?",
       opts: [
-        "The leaves dominate, and since the last level's cost is the largest term of an increasing geometric series the total is Θ of that term",
+        "The shape cannot be determined from level costs alone without also knowing the branching factor a and the shrink factor b separately",
         "Every level contributes equally to the sum, so the total is the level cost multiplied by the number of levels, giving Θ(n log n) as it does for mergesort",
         "The root dominates, because the first level is the one the recursion pays before it has divided the problem into any smaller pieces at all",
-        "The shape cannot be determined from level costs alone without also knowing the branching factor a and the shrink factor b separately"
-      ], a: 0,
+        "The leaves dominate, and since the last level's cost is the largest term of an increasing geometric series the total is Θ of that term"
+      ], a: 3,
       why: "Costs growing down the tree make an increasing geometric series, which is dominated by its last term, so the leaves do essentially all the work. With a = 4 and b = 2 there are 4^(log₂ n) = n² leaves and the total is Θ(n²). You do not need a and b separately: the direction the level costs move is the whole answer, which is why the tree is the technique to reach for first." },
 
     { type: "mc",
@@ -1862,10 +1862,10 @@ CHAPTERS.push({
       q: "Why must a comparison sort's decision tree have at least n! leaves?",
       opts: [
         "Because the tree must be complete in order for every root-to-leaf path to correspond to a valid execution of the algorithm on some input",
-        "Because every one of the n! orderings must be reachable; two orderings sharing a leaf would receive the same output and one would be wrong",
+        "Because the algorithm must distinguish all n! inputs before it makes its first comparison, which requires that many distinct starting states",
         "Because each comparison has two outcomes and there are n! inputs, so the count of leaves and the count of inputs are necessarily equal",
-        "Because the algorithm must distinguish all n! inputs before it makes its first comparison, which requires that many distinct starting states"
-      ], a: 1,
+        "Because every one of the n! orderings must be reachable; two orderings sharing a leaf would receive the same output and one would be wrong"
+      ], a: 3,
       why: "A leaf is where the algorithm commits to an output permutation. If two distinct input orderings traced to the same leaf, they would get the same output, and since they need different outputs the algorithm would be incorrect on at least one of them. So the leaves must number at least n!, and a binary tree with that many leaves has height at least log₂(n!), which Stirling turns into Ω(n log n)." },
 
     { type: "mc",
@@ -2260,9 +2260,9 @@ CHAPTERS.push({
       opts: [
         "The base case must be reachable by the sequence of reductions the function performs",
         "The induction must be the strong form whenever the function calls itself more than once",
-        "Every recursive call must be on a strictly smaller instance under a measure that cannot decrease forever",
-        "The combining step must be associative so the order of the merge cannot change the outcome"
-      ], a: 2,
+        "The combining step must be associative so the order of the merge cannot change the outcome",
+        "Every recursive call must be on a strictly smaller instance under a measure that cannot decrease forever"
+      ], a: 3,
       why: "Correctness splits into three obligations and termination is the third. A function can have a right base case and a right combination and still loop, because nothing so far says the recursion ever arrives at the base case. The measure has to be well-founded &mdash; a non-negative integer that strictly decreases is the usual one &mdash; and this is the obligation that the classic binary search off-by-one violates." },
 
     { type: "blank",
@@ -2632,11 +2632,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "Under random unions the measured maximum depth with union by rank was 7 at n = 100,000, against a proved bound of log\u2082(100,000) \u2248 16.6. What is the right reading of the gap?",
       opts: [
-        "The bound describes what an adversary can force, and the measurement describes what a typical caller gets; the two answer different questions and neither is wrong",
+        "The bound is loose because the induction proves only 2\u02b3 \u2264 n rather than the tight count, and a sharper argument gives a ceiling near the measured value",
         "The bound is stated for union by rank without compression, and the measured structure had compression enabled, which accounts for roughly halving the observed depth",
         "The bound counts links traversed while the measurement counts levels of the tree, an off-by-one that compounds multiplicatively over the sequence of merges",
-        "The bound is loose because the induction proves only 2\u02b3 \u2264 n rather than the tight count, and a sharper argument gives a ceiling near the measured value"
-      ], a: 0,
+        "The bound describes what an adversary can force, and the measurement describes what a typical caller gets; the two answer different questions and neither is wrong"
+      ], a: 3,
       why: "The same gap appeared in Chapter 3's closest-pair strip, where a proved limit of 7 comparisons per point was never approached. A worst-case bound survives an adversary choosing the input; a measurement reports one distribution of inputs. Quoting either as though it were the other is how performance claims go wrong in both directions." },
 
     { type: "blank",
@@ -3401,10 +3401,10 @@ CHAPTERS.push({
       q: "Kadane's algorithm written as <code>run = max(0, run + v)</code> with <code>best</code> starting at 0 was wrong on 2,306 of 2,306 all-negative test arrays. What is it actually computing?",
       opts: [
         "The maximum suffix sum rather than the maximum subarray, since clamping at zero discards the prefix and leaves only the trailing run",
-        "The maximum subarray under the convention that permits the empty subarray, whose sum is 0 and which therefore wins whenever every element is negative",
+        "Nothing coherent, because clamping at zero breaks the recurrence and the result no longer corresponds to any subarray of the input",
         "The maximum subarray of the array's positive elements alone, which coincides with the true answer whenever at least one element is positive",
-        "Nothing coherent, because clamping at zero breaks the recurrence and the result no longer corresponds to any subarray of the input"
-      ], a: 1,
+        "The maximum subarray under the convention that permits the empty subarray, whose sum is 0 and which therefore wins whenever every element is negative"
+      ], a: 3,
       why: "It is not a bug so much as a different specification. Bentley's original formulation allowed the empty subarray, making 0 a legal answer and the clamping version correct. Every interview variant and library function requires at least one element, which makes it wrong \u2014 on [\u22125, \u22122, \u22129] it answers 0 where the answer is \u22122. Initialising both variables to a[0] implements the non-empty convention with no branch." },
 
     { type: "mc",
@@ -5473,11 +5473,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "Galloping beat a linear merge by 32.9× on a 10,000-element run against 10 elements, but lost — 20,135 comparisons against 19,998 — when both runs were 10,000. Why does Timsort still use it?",
       opts: [
-        "Because the losing case costs under one percent while the winning case saves an order of magnitude, and Timsort enters galloping only after one run wins seven times in a row",
+        "Because galloping's worst case is bounded by the same n log n as the linear merge, so adopting it unconditionally cannot make the asymptotic behaviour any worse",
         "Because real inputs are almost always lopsided, so the even case measured here does not arise often enough in practice to affect the overall running time",
         "Because the comparison count understates linear merging's true cost, which also pays for the element moves that galloping performs in bulk using a block copy",
-        "Because galloping's worst case is bounded by the same n log n as the linear merge, so adopting it unconditionally cannot make the asymptotic behaviour any worse"
-      ], a: 0,
+        "Because the losing case costs under one percent while the winning case saves an order of magnitude, and Timsort enters galloping only after one run wins seven times in a row"
+      ], a: 3,
       why: "The gate is the design. An unconditional switch would pay the small penalty on every even merge; a streak detector pays it only after evidence that one run is dominating, and abandons galloping when the streak breaks. That asymmetry — a bounded loss against an unbounded gain — is the general shape of an adaptive optimisation, and the measurement showing the loss is what justifies the gate rather than the switch." },
 
     { type: "mc",
@@ -6194,6 +6194,7 @@ CHAPTERS.push({
         "</ul>" +
 
         "<p>Which is to say the textbook description “Java uses dual-pivot quicksort for primitives” is true and incomplete: it uses dual-pivot quicksort <em>on the inputs that need it</em>, after checking whether they do. Every algorithm in this chapter has acquired that shape.</p>" +
+        "<p>It has acquired introsort's insurance as well. In the OpenJDK 21 source, <code>DualPivotQuicksort</code> counts its recursion depth and finishes any range that goes past a fixed limit with heapsort, so the worst case on <code>int[]</code> is O(n log n): an input built to drive a quicksort quadratic, the classic attack on library sorts (McIlroy, 1999), no longer does. The object sort was never exposed, because Timsort has no bad input. Section 3 explains the depth counter, which is older than either.</p>" +
         "<p>The split shows up in everyday code. Only the object sort takes a comparator, so descending order on an <code>int[]</code> means sorting ascending and reversing, where Python has one sort for everything:</p>" +
         "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
         "<pre data-lang='python'><code>def descending(a):\n" +
@@ -6262,7 +6263,7 @@ CHAPTERS.push({
         "<text x='20' y='100' fill='#c9d6ea' font-size='10'>dual-pivot quicksort</text>" +
         "<text x='190' y='100' text-anchor='middle' fill='#ff5d73' font-size='10'>no</text>" +
         "<text x='330' y='100' text-anchor='middle' fill='#3ddc97' font-size='10'>O(log n)</text>" +
-        "<text x='470' y='100' text-anchor='middle' fill='#ff5d73' font-size='10'>n&#178;</text>" +
+        "<text x='470' y='100' text-anchor='middle' fill='#3ddc97' font-size='10'>n log n</text>" +
         "<text x='640' y='100' text-anchor='middle' fill='#7d8fb0' font-size='9'>primitives, where stability is moot</text>" +
         "<text x='20' y='128' fill='#c9d6ea' font-size='10'>introsort</text>" +
         "<text x='190' y='128' text-anchor='middle' fill='#ff5d73' font-size='10'>no</text>" +
@@ -6515,19 +6516,19 @@ CHAPTERS.push({
       opts: [
         "The Java measurement is unreliable because the JIT may have vectorised the sorted case, and the Python result is the one that reflects the true instruction cost",
         "Branch prediction affects compiled code and not interpreted code, so the effect is a property of the language being used rather than of the hardware underneath it",
-        "The effect is real but only visible when it is not dominated by a larger cost — the interpreter's per-element overhead swamps a pipeline flush entirely",
-        "Python's integers are boxed objects, so every comparison is a method call whose cost is data-independent, which removes the branch from the loop entirely"
-      ], a: 2,
+        "Python's integers are boxed objects, so every comparison is a method call whose cost is data-independent, which removes the branch from the loop entirely",
+        "The effect is real but only visible when it is not dominated by a larger cost — the interpreter's per-element overhead swamps a pipeline flush entirely"
+      ], a: 3,
       why: "The same hardware runs both. A mispredicted branch costs on the order of ten to twenty cycles, which is decisive next to a few cycles of compiled loop body and invisible next to hundreds of cycles of interpreter dispatch. The lesson is to identify the dominant layer before optimising: this constant factor is worth chasing in C, pointless in pure Python, and decisive again inside a C extension." },
 
     { type: "mc",
       q: "Binary search performs fewer comparisons than a linear scan at every size above about four, yet measured slower until n = 16. Why?",
       opts: [
         "The bisect implementation has a constant setup cost per call that a simple scan avoids, and that overhead only amortises away once the array is large enough",
-        "A linear scan is sequential and predictable, so the prefetcher keeps up and the branch is well predicted, while binary search jumps by halves and is unpredictable in both respects",
+        "Small arrays fit entirely in cache, so both algorithms have the same memory cost and the comparison is decided purely by the number of instructions each executes",
         "Comparison counts understate binary search's work because each step also computes a midpoint, which is an arithmetic operation the linear scan does not perform",
-        "Small arrays fit entirely in cache, so both algorithms have the same memory cost and the comparison is decided purely by the number of instructions each executes"
-      ], a: 1,
+        "A linear scan is sequential and predictable, so the prefetcher keeps up and the branch is well predicted, while binary search jumps by halves and is unpredictable in both respects"
+      ], a: 3,
       why: "Fewer operations, more expensive operations. Every probe in a binary search lands at an address the prefetcher did not predict and takes a branch the predictor cannot learn, while a scan walks straight through memory the hardware has already fetched. It is the clearest case in the chapter of the word-RAM model of Chapter 2 — one unit per access — giving the wrong answer for a real machine." },
 
     { type: "mc",
@@ -8204,6 +8205,7 @@ CHAPTERS.push({
         "<li><strong>Investigate.</strong> Count the ways to make change for amount 8 with coins {1, 2, 5} under both loop orders, printing the whole table. <em>What you should find:</em> the two rows agree through amount 2 and split at amount 3 (2 versus 3), and the amount-outer row grows far faster because it counts every ordering of the coins separately.</li>" +
         "<li><strong>Build.</strong> Compute the edit distance between two words, then reconstruct the actual edit script by walking backward through the table. <em>What you should find:</em> the number needs the full O(mn) table but the script is an O(m+n) walk along one path, and turning <code>kitten</code> into <code>sitting</code> costs three edits: two substitutions and one insertion.</li>" +
         "<li><strong>Build.</strong> Write 0/1 knapsack as a rolling one-dimensional array, then run the inner capacity loop once descending and once ascending on the same items. <em>What you should find:</em> descending gives the 0/1 answer and ascending gives a larger number, because the upward sweep lets each item be taken repeatedly &#8212; the same code solving unbounded knapsack by the direction of one loop.</li>" +
+        "<li><strong>Build.</strong> Solve decode ways and house robber, each with two rolling variables, and check both against a brute force that enumerates every decoding and every non-adjacent choice on random short inputs. <em>What you should find:</em> exact agreement, 3 decodings for <code>226</code> and none for <code>06</code>, 12 for the houses 2, 7, 9, 3, 1, and a largest-first greedy for the houses that is wrong on roughly one random row in six.</li>" +
         "</ol>"
     }
   ],
@@ -8625,11 +8627,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "For items A(v60,w10), B(v100,w20), C(v120,w30) and capacity 50, greedy-by-ratio scores 160 but the optimum is 220. What does the optimum do that greedy cannot?",
       opts: [
-        "It skips item A, the highest-ratio item that greedy grabs first, and takes B and C instead &#8212; a choice no sequence of locally best picks can reach",
+        "It runs greedy twice, once by ratio and once by raw value, and returns the better of the two results, which for this instance is the value-ordered one",
         "It sorts the items by value rather than by value-per-weight ratio, which for this instance happens to select the two heaviest items and fill the bag exactly",
         "It splits item A into a fraction that exactly fills the capacity left after B and C, recovering the value greedy left on the table",
-        "It runs greedy twice, once by ratio and once by raw value, and returns the better of the two results, which for this instance is the value-ordered one"
-      ], a: 0,
+        "It skips item A, the highest-ratio item that greedy grabs first, and takes B and C instead &#8212; a choice no sequence of locally best picks can reach"
+      ], a: 3,
       why: "Greedy takes A (ratio 6) first, then B, then cannot fit C, landing at 160. The optimum takes B and C for 220 and never touches A. Reaching it requires weighing A against the whole rest of the bag, which is what the table does; no ordering of one-at-a-time choices finds it, and 0/1 forbids the fractional split that one distractor proposes." },
 
     { type: "mc",
@@ -9189,6 +9191,7 @@ CHAPTERS.push({
         "<li><strong>Investigate.</strong> Build the edit-distance grid for <code>kitten</code> and <code>sitting</code>, then raise the substitution cost from 1 to 3 and refill. <em>What you should find:</em> the distance rises from 3 to 5 and the traceback stops substituting, replacing each substitution with a deletion and an insertion once those two together are cheaper than one substitution.</li>" +
         "<li><strong>Build.</strong> Compute the longest common subsequence length in two rows, then use it to check the identity that the insert-delete edit distance equals <code>m + n &#8722; 2&#183;LCS</code>. <em>What you should find:</em> for <code>kitten</code> and <code>sitting</code>, LCS 4 gives 6 + 7 &#8722; 8 = 5, matching the substitution-priced-out edit distance and confirming the two problems are one alignment.</li>" +
         "<li><strong>Build.</strong> Find the longest palindromic substring two ways &#8212; the O(n&#178;) interval table and expand-around-centre &#8212; and the longest palindromic subsequence as <code>LCS(s, reverse(s))</code>. <em>What you should find:</em> the two substring methods agree on <code>geeksskeeg</code> inside <code>forgeeksskeegfor</code> while the centre method uses no table, and the subsequence length equals the LCS against the reversed string.</li>" +
+        "<li><strong>Build.</strong> Compute the fewest cuts that split a string into palindromes, from the interval table plus one pass over prefixes, and check it against a recursive brute force on random strings over two letters. <em>What you should find:</em> exact agreement, 1 cut for <code>aab</code> and for <code>banana</code>, 2 for <code>noonabbad</code> and 0 for any palindrome, at O(n&#178;) where the brute force grows exponentially.</li>" +
         "</ol>"
     }
   ],
@@ -9227,19 +9230,19 @@ CHAPTERS.push({
       opts: [
         "It is missing the element 22, which belongs to the actual longest subsequence, so the array is one element short of the true answer despite its correct length",
         "It is sorted, whereas the real subsequence appears in input order, so the array must be un-sorted back into position before it can be read",
-        "It is not a subsequence of the input at all &#8212; 33 sits at index 3, before 21 at index 4 &#8212; because each entry is the smallest tail for its length, drawn from different subsequences",
-        "It contains values that never appeared in the input, since patience sorting averages adjacent tails when it inserts, so its entries are synthetic"
-      ], a: 2,
+        "It contains values that never appeared in the input, since patience sorting averages adjacent tails when it inserts, so its entries are synthetic",
+        "It is not a subsequence of the input at all &#8212; 33 sits at index 3, before 21 at index 4 &#8212; because each entry is the smallest tail for its length, drawn from different subsequences"
+      ], a: 3,
       why: "Each tails entry is the smallest value that can end an increasing subsequence of its length, and those come from different subsequences, so the array is a set of records, not one run. Here 33 (index 3) precedes 21 (index 4) in the array, violating input order, so it is no subsequence at all - yet its length is the right answer. Recovering an actual LIS needs separate parent pointers." },
 
     { type: "mc",
       q: "LIS in O(n log n) replaces the quadratic version's inner linear scan with what, and measured how much faster at n = 20,000?",
       opts: [
         "A hash lookup of the previously seen values, roughly 40&#215; faster, since the scan for a smaller predecessor becomes a single constant-time membership test against a set of them",
-        "A binary search over the sorted tails array, about 4,000&#215; faster (9,186 ms to 2.2 ms), since finding the first tail not smaller than the element is a lower-bound search",
+        "A monotonic stack that amortises the scan to O(1), about 4&#215; faster, since each element is pushed and popped at most once across the whole run",
         "A segment tree over value ranges, about 400&#215; faster, since the maximum earlier length below a value is a range query rather than a scan",
-        "A monotonic stack that amortises the scan to O(1), about 4&#215; faster, since each element is pushed and popped at most once across the whole run"
-      ], a: 1,
+        "A binary search over the sorted tails array, about 4,000&#215; faster (9,186 ms to 2.2 ms), since finding the first tail not smaller than the element is a lower-bound search"
+      ], a: 3,
       why: "The tails array is kept sorted, so 'find the first entry not smaller than x' is Chapter 13's lower-bound binary search, turning the O(n) inner scan into O(log n) and the whole algorithm into O(n log n). Measured, 20,000 random values fell from 9,186 ms to 2.2 ms, about 4,180x, both reporting length 273. A segment tree also works but is not what the tails method uses." },
 
     { type: "mc",
@@ -9687,6 +9690,7 @@ CHAPTERS.push({
         "<li><strong>Investigate.</strong> Solve a random travelling-salesman instance by brute force over tours and by Held-Karp, for n from 8 to 11, timing both. <em>What you should find:</em> identical optimal tours, brute-force time growing by the factorial while Held-Karp grows by a factor near five per two cities, and a crossover after which only Held-Karp finishes.</li>" +
         "<li><strong>Build.</strong> Write the O(2<sup>n</sup>&#183;n) bitmask assignment DP and check it against brute-force permutations for n up to 10, then run it at n = 12. <em>What you should find:</em> agreement on the minimum cost, the bitmask finishing in milliseconds where the permutation search takes seconds, and the person index falling out of the mask's population count with no second dimension needed.</li>" +
         "<li><strong>Build.</strong> Write a digit DP that counts integers from 0 to N with no two equal adjacent digits, check it against a brute-force loop for N up to a few thousand, then run it at N = 10<sup>18</sup>. <em>What you should find:</em> exact agreement on the small cases and an instant answer at 10<sup>18</sup> &#8212; the work is proportional to the eighteen digits, not to the quintillion numbers, because the tight flag and the previous digit are all the state the count needs.</li>" +
+        "<li><strong>Investigate.</strong> Run the submask loop <code>sub = (sub - 1) &amp; mask</code> over every mask for n from 1 to 16, counting steps, and compare the totals with 3<sup>n</sup> and 4<sup>n</sup>. <em>What you should find:</em> the count is exactly 3<sup>n</sup> at every n, 59,049 at n = 10, because each element is outside the mask, in the mask only, or in both.</li>" +
         "</ol>"
     }
   ],
@@ -10194,6 +10198,7 @@ CHAPTERS.push({
         "<li><strong>Knapsack, both versions.</strong> On the items A(60,10), B(100,20), C(120,30) at capacity 50, compute the fractional greedy value, the 0/1 optimum, and the 0/1 ratio-greedy value, and reproduce 240, 220 and 160. Then drive the ratio of ratio-greedy to optimum toward zero with the item pair from Section 4.</li>" +
         "<li><strong>Build a Huffman code.</strong> Implement the two-smallest merge with a priority queue, encode a real file, and report total bits, the fixed-width size, and Shannon's entropy times the length. Confirm your bits-per-character lands between the entropy and one bit above it.</li>" +
         "<li><strong>Coins that fail.</strong> Write the greedy and the dynamic-programming coin-change, and search for the smallest amount where they disagree on {1, 3, 4}, {1, 7, 10} and {1, 15, 25}. Then estimate the fraction of random {1, a, b} systems that are canonical, testing amounts up to the Kozen&ndash;Zaks bound.</li>" +
+        "<li><strong>Four greedies, four sentences.</strong> Implement jump game, gas station, candy and partition labels, test each against a brute force on a few thousand random instances, and write beside each the sentence that makes it safe, naming which of the chapter's two proof templates, the exchange argument or greedy stays ahead, that sentence is. Then change three of the rules and find an input where each change fails: always jump as far as the current position allows, start the loop at the station with the most gas, and give candy in a single left-to-right pass.</li>" +
         "</ol>"
     }
 
@@ -10557,11 +10562,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "On a perfect tree of height 17, depth-first traversal holds a stack of at most 17 while breadth-first holds 65,536 nodes in its queue. On a long skewed chain the danger flips. What is the correct general statement?",
       opts: [
-        "Depth-first cost scales with the tree's height and breadth-first cost with its maximum level width, so a bushy tree punishes breadth-first and a deep skewed tree punishes depth-first",
+        "Depth-first is always cheaper because a stack reuses the same frames over and over, whereas a queue is obliged to allocate a fresh slot for every one of the nodes that it has not yet gotten around to processing",
         "Breadth-first is always cheaper in memory than depth-first, because a queue only ever holds a single level at a time while a stack must hold an entire root-to-leaf path together with all of its siblings",
         "Both traversals use memory proportional to the total number of nodes, and the apparent difference seen on the perfect tree is merely an artefact of the moment at which each structure happens to reach its own peak",
-        "Depth-first is always cheaper because a stack reuses the same frames over and over, whereas a queue is obliged to allocate a fresh slot for every one of the nodes that it has not yet gotten around to processing"
-      ], a: 0,
+        "Depth-first cost scales with the tree's height and breadth-first cost with its maximum level width, so a bushy tree punishes breadth-first and a deep skewed tree punishes depth-first"
+      ], a: 3,
       why: "Depth-first memory tracks the height (the path being explored), breadth-first memory tracks the widest level; a perfect tree is wide at the bottom so breadth-first pays 65,536 while depth-first pays 17, and a skewed chain is tall and narrow so the recursive depth-first form is the one that overflows. Neither is universally cheaper, and neither is proportional to the whole node count." },
 
     { type: "mc",
@@ -10594,9 +10599,9 @@ CHAPTERS.push({
       opts: [
         "It lacks the total node count, so preorder and postorder cannot tell a tree apart from a larger tree that happens to share their prefixes, whereas inorder pins down the size",
         "It lacks the position of the root, which both preorder and postorder hide but which inorder places in the middle of the sequence for every subtree",
-        "For a node with a single child, it lacks whether that child is a left or a right child; the root is unambiguous in both orders, but only inorder records left-versus-right",
-        "It lacks the depths of the leaves, so the two orders agree on the overall shape while disagreeing on how far down the single-child chains reach"
-      ], a: 2,
+        "It lacks the depths of the leaves, so the two orders agree on the overall shape while disagreeing on how far down the single-child chains reach",
+        "For a node with a single child, it lacks whether that child is a left or a right child; the root is unambiguous in both orders, but only inorder records left-versus-right"
+      ], a: 3,
       why: "Both preorder and postorder make the root unambiguous, but a single-child node's child could hang left or right and neither order distinguishes the two &mdash; the root-with-left and root-with-right trees share preorder 1,2 and postorder 2,1. Inorder is the one order that records that left-or-right bit. The node count and leaf depths are not the missing information." },
 
     { type: "order",
@@ -10857,10 +10862,10 @@ CHAPTERS.push({
       q: "The recursive lowest common ancestor uses no separate accumulator, unlike diameter or path sum. Why not?",
       opts: [
         "Because the lowest common ancestor is by definition always the root of the whole tree, so the answer is already known before the traversal even begins and so needs no accumulation at all",
-        "Because the answer is itself a return value &mdash; the first node to receive a found target from both of its sides &mdash; so the return channel carries the whole state up to the root",
+        "Because it visits the nodes in inorder rather than postorder, and inorder traversals cannot maintain a running accumulator across the two subtrees",
         "Because it performs two separate downward passes, one per target, and intersects their paths, which replaces the accumulator with a set operation",
-        "Because it visits the nodes in inorder rather than postorder, and inorder traversals cannot maintain a running accumulator across the two subtrees"
-      ], a: 1,
+        "Because the answer is itself a return value &mdash; the first node to receive a found target from both of its sides &mdash; so the return channel carries the whole state up to the root"
+      ], a: 3,
       why: "A node returns a target if it is one, the single find if only one side reports, and itself once both sides report &mdash; that node is the lowest common ancestor, and it flows up the return channel. No side accumulator is needed because the answer is a return value; the LCA is not always the root, the recursive version is a single postorder pass, and it does not intersect two path walks." },
 
     { type: "blank",
@@ -11544,9 +11549,9 @@ CHAPTERS.push({
       opts: [
         "Because the trie prunes cells that no word uses, while separate searches must visit every cell of the grid once for each word regardless of the letters",
         "Because the trie stores the grid positions of each word after the first search, so later words are then found by a lookup rather than by walking the grid again",
-        "Because a dead prefix &mdash; a run of letters no word continues &mdash; is abandoned once by the trie, whereas each separate search re-walks the shared 'st' prefix from scratch",
-        "Because the trie search is able to run all of the neighbours in parallel while the separate searches are strictly sequential, so the visit count reflects concurrency rather than any pruning"
-      ], a: 2,
+        "Because the trie search is able to run all of the neighbours in parallel while the separate searches are strictly sequential, so the visit count reflects concurrency rather than any pruning",
+        "Because a dead prefix &mdash; a run of letters no word continues &mdash; is abandoned once by the trie, whereas each separate search re-walks the shared 'st' prefix from scratch"
+      ], a: 3,
       why: "The words share the prefix 'st', and the trie walks that shared path once: a grid path spelling a dead prefix has no trie edge to follow and is abandoned immediately, for all words at once. Separate searches re-explore the common prefix for every word, doing about nine times the cell-visits. It is not about visiting every cell, caching positions, or parallelism." },
 
     { type: "blank",
@@ -11557,11 +11562,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "Word break decides whether a string splits into dictionary words, as a dynamic program. What does a trie replace, and how?",
       opts: [
-        "It replaces the inner loop that tests every dictionary word at a position with one forward walk down the trie, which finds every word starting there as it passes terminal nodes",
+        "It replaces the dp array with the trie's terminal flags, so the reachable positions are read directly off the trie without a separate table",
         "It replaces the entire dynamic program, since walking the trie forward from the very start already tries every possible split without needing any dp array indexed over the positions",
         "It replaces the O(n squared) position pairs with O(n log n) by binary-searching the sorted dictionary for each candidate substring encountered",
-        "It replaces the dp array with the trie's terminal flags, so the reachable positions are read directly off the trie without a separate table"
-      ], a: 0,
+        "It replaces the inner loop that tests every dictionary word at a position with one forward walk down the trie, which finds every word starting there as it passes terminal nodes"
+      ], a: 3,
       why: "The dynamic program still supplies the subproblem order over positions; the trie replaces its transition, the inner 'try every dictionary word from here' loop. A single forward walk from a position, marking a cut wherever it passes a terminal node, discovers every dictionary word starting there in one pass instead of one lookup per word. The dp array is still needed." },
 
     { type: "mc",
@@ -11770,10 +11775,10 @@ CHAPTERS.push({
       q: "Once a subtree is a contiguous range in the Euler-flattened array, subtree queries become range queries. What does this buy over a fresh subtree traversal, and what handles updates?",
       opts: [
         "It removes the need for the original tree entirely, since the flattened array alone answers every possible subtree question and the tree's pointers can safely be discarded",
-        "It turns each subtree aggregate into a range aggregate &mdash; O(1) with a prefix sum when static, or O(log n) with a Fenwick or segment tree when the values change",
+        "It converts each subtree query into an ancestor query, which binary lifting then answers in O(log n) without needing any range structure over the array at all",
         "It guarantees constant-time subtree queries in every case, because a prefix sum answers any range in O(1) whether or not the underlying values are being updated between queries",
-        "It converts each subtree query into an ancestor query, which binary lifting then answers in O(log n) without needing any range structure over the array at all"
-      ], a: 1,
+        "It turns each subtree aggregate into a range aggregate &mdash; O(1) with a prefix sum when static, or O(log n) with a Fenwick or segment tree when the values change"
+      ], a: 3,
       why: "A fresh traversal costs O(subtree size); the range encoding makes it a range aggregate instead &mdash; O(1) via prefix sums when the values are static, and O(log n) via a Fenwick or segment tree when they change. The tree structure is re-encoded, not discarded; prefix sums do not survive updates; and it is subtree, not ancestor, queries that are served." },
 
     { type: "mc",
@@ -12516,9 +12521,9 @@ CHAPTERS.push({
       opts: [
         "That eight-neighbour search is faster, since it finishes each island in fewer steps and therefore stops early and reports fewer islands overall",
         "That one of the two counts must contain a bug, since the same set of land cells cannot have two different numbers of islands",
-        "That the choice of edge set is part of the problem, because diagonal contacts merge islands the four-neighbour edges keep apart",
-        "That randomly generated grids are too noisy to count reliably, and only a fixed test grid should be trusted"
-      ], a: 2,
+        "That randomly generated grids are too noisy to count reliably, and only a fixed test grid should be trusted",
+        "That the choice of edge set is part of the problem, because diagonal contacts merge islands the four-neighbour edges keep apart"
+      ], a: 3,
       why: "The vertices are the same but the edge set differs, and components depend on the edges; diagonals join cells that four-neighbour adjacency leaves separate, so the count drops twentyfold. Both counts are correct for their own definition of adjacent, and speed has nothing to do with it." },
 
     { type: "blank",
@@ -12899,21 +12904,21 @@ CHAPTERS.push({
     { type: "mc",
       q: "A directed cycle check that marks vertices only 'visited' raised false alarms on 163 of 500 random graphs. What does three-colour marking add?",
       opts: [
-        "It distinguishes grey vertices, open on the current path, from black ones, already finished; only an edge to a grey vertex is a cycle",
+        "It colours edges rather than vertices, so that parallel edges running between the same two vertices are no longer mistaken for a cycle",
         "It lets the search visit each vertex up to three times, which is enough repetition to confirm a suspected cycle before it is finally reported",
         "It records three timestamps per vertex instead of two, so the order of discovery along each path is known more precisely than it was before",
-        "It colours edges rather than vertices, so that parallel edges running between the same two vertices are no longer mistaken for a cycle"
-      ], a: 0,
+        "It distinguishes grey vertices, open on the current path, from black ones, already finished; only an edge to a grey vertex is a cycle"
+      ], a: 3,
       why: "An edge to a black vertex is a forward or cross edge &mdash; a second route into finished territory, not a cycle; an edge to a grey vertex is a back edge to an ancestor on the current path. The visited-only check cannot tell them apart. No revisiting, extra timestamps or edge colours are involved." },
 
     { type: "mc",
       q: "A recursive DFS on a path overflowed Java's default thread stack at a depth near 23,700 and at 17,649 with -Xint, and varied between identical runs. Why?",
       opts: [
         "Because the JVM randomises the thread stack size on each single launch as a security measure, so the depth limit comes out different every time",
-        "Because JIT-compiled frames differ in size from interpreted ones, so the depth reached depends on when compilation happened during the run",
+        "Because Java counts recursion depth against its own configurable limit, which the -Xint flag lowers to make interpreted code run more safely",
         "Because the garbage collector reclaims finished stack frames during the recursion, and the timing of each collection differs between separate runs",
-        "Because Java counts recursion depth against its own configurable limit, which the -Xint flag lowers to make interpreted code run more safely"
-      ], a: 1,
+        "Because JIT-compiled frames differ in size from interpreted ones, so the depth reached depends on when compilation happened during the run"
+      ], a: 3,
       why: "The stack is a fixed number of bytes; how many frames fit depends on frame size, and compiled frames differ from interpreted ones, so the limit moves with JIT timing and is constant under -Xint. A 256 MB thread stack reached a million. The stack size is not randomised, frames are not garbage-collected mid-call, and Java has no recursion-count limit." },
 
     { type: "order",
@@ -13720,9 +13725,9 @@ CHAPTERS.push({
       opts: [
         "A depth-first search from one endpoint looking for the other, costing time proportional to the current forest for every edge examined",
         "A hash set of chosen edges, which rejects an edge exactly when it has already been chosen before",
-        "Union-find: an edge closes a cycle exactly when its endpoints are already in the same component, an almost-constant check",
-        "A priority queue of components ordered by size, which always merges the smallest component first"
-      ], a: 2,
+        "A priority queue of components ordered by size, which always merges the smallest component first",
+        "Union-find: an edge closes a cycle exactly when its endpoints are already in the same component, an almost-constant check"
+      ], a: 3,
       why: "Two endpoints in the same component means a path already joins them, so the edge would close a cycle; union-find with path compression and union by rank answers that in effectively constant time, leaving the sort as Kruskal's cost. A DFS per edge would be far slower, a hash set of edges does not detect cycles, and no size-ordered queue is involved." },
 
     { type: "mc",
@@ -14384,11 +14389,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "After a maximum flow, S is the set of vertices reachable from s in the residual graph. Why is the cut around S minimum?",
       opts: [
-        "Because every edge leaving S is saturated and every edge entering S carries no flow, so the flow equals the cut's capacity, and no flow exceeds any cut",
+        "Because the residual graph removes every edge crossing S, so the cut has zero capacity in the final network",
         "Because S always contains exactly half of the vertices, and a balanced cut has the smallest possible capacity",
         "Because S is chosen to contain the vertices with the most outgoing capacity, which are the ones any cut must separate",
-        "Because the residual graph removes every edge crossing S, so the cut has zero capacity in the final network"
-      ], a: 0,
+        "Because every edge leaving S is saturated and every edge entering S carries no flow, so the flow equals the cut's capacity, and no flow exceeds any cut"
+      ], a: 3,
       why: "An unsaturated edge out of S or a flow-carrying edge into S would give a residual edge extending S; so flow across the cut equals its capacity, matching the weak-duality bound. S need not be balanced or chosen by capacity, and the cut's original capacity (13 in the figure) is positive." },
 
     { type: "blank",
@@ -14638,10 +14643,10 @@ CHAPTERS.push({
       q: "On 20,000 vertices per side, Kuhn's augmenting-path matching took 3.81 s and Hopcroft-Karp 0.08 s. What makes the second faster?",
       opts: [
         "It uses breadth-first search to find the alternating paths, whereas Kuhn's algorithm uses depth-first search to find each of them",
-        "It finds many shortest alternating paths per phase, needing only a handful of phases, instead of one search per left vertex",
+        "It returns an approximate matching that is within one pair of the maximum, which avoids the final expensive searches",
         "It ignores left vertices of degree one, which Kuhn's algorithm wastes time trying to match first",
-        "It returns an approximate matching that is within one pair of the maximum, which avoids the final expensive searches"
-      ], a: 1,
+        "It finds many shortest alternating paths per phase, needing only a handful of phases, instead of one search per left vertex"
+      ], a: 3,
       why: "Hopcroft-Karp batches a maximal set of shortest alternating paths per phase (4 phases here, against a bound near 200), which is Dinic on the unit network; Kuhn runs a separate search for each of 20,000 left vertices. Both found 19,816 pairs, so it is exact, and BFS alone is not the speedup." },
 
     { type: "mc",
@@ -14965,9 +14970,9 @@ CHAPTERS.push({
       opts: [
         "A single popcount instruction on every target, confirming the usual claim that it always compiles to one instruction",
         "A call into a library function, because the compiler never inlines builtins at the default optimisation level",
-        "The parallel bit count on baseline x86-64, one popcntl only with -mpopcnt, and four instructions on ARM",
-        "Kernighan's loop, because the compiler selects the method with the fewest iterations for typical inputs"
-      ], a: 2,
+        "Kernighan's loop, because the compiler selects the method with the fewest iterations for typical inputs",
+        "The parallel bit count on baseline x86-64, one popcntl only with -mpopcnt, and four instructions on ARM"
+      ], a: 3,
       why: "Baseline x86-64 lacks POPCNT, so clang emits the 0x55555555 / 0x33333333 / 0x0F0F0F0F masks and the multiply by 0x01010101; -mpopcnt gives one popcntl; on the M1 it is fmov, cnt, addv, fmov. One instruction is a property of the target, not the language." },
 
     { type: "blank",
@@ -15991,21 +15996,21 @@ CHAPTERS.push({
     { type: "mc",
       q: "The one-line naive suffix sort in Python used 202 MB at n = 20,000. Where does the memory go?",
       opts: [
-        "The key function builds every suffix as its own string, n\u00b2/2 characters in total, before sorting begins",
+        "The sort keeps a copy of the whole list at every comparison, which it needs in order to guarantee stability",
         "Timsort allocates a fresh merge buffer the size of the whole input for every level of its merge recursion",
         "Python stores each integer index as a separate object of 28 bytes, and there are n such objects alive at once",
-        "The sort keeps a copy of the whole list at every comparison, which it needs in order to guarantee stability"
-      ], a: 0,
+        "The key function builds every suffix as its own string, n\u00b2/2 characters in total, before sorting begins"
+      ], a: 3,
       why: "key=lambda i: s[i:] materializes all n suffixes, whose lengths sum to n(n+1)/2: 200 million characters at n = 20,000, matching the measured peak. Timsort's buffer is at most n/2 references, n integer objects are about half a megabyte, and stability needs no copies." },
 
     { type: "mc",
       q: "Why is the naive suffix sort fast on a string of one repeated letter but slow on a periodic string?",
       opts: [
         "Timsort recognises runs of repeated characters inside the strings and compares each such run with a single memory operation",
-        "The suffixes of a^n arrive already sorted in descending order, and Timsort detects and reverses that run in linear time",
+        "The periodic string has more distinct characters, and each distinct character adds a pass to the sort",
         "Suffixes of a^n are all distinct lengths, so Python compares their lengths before their characters",
-        "The periodic string has more distinct characters, and each distinct character adds a pass to the sort"
-      ], a: 1,
+        "The suffixes of a^n arrive already sorted in descending order, and Timsort detects and reverses that run in linear time"
+      ], a: 3,
       why: "In index order a^n's suffixes are longest to shortest, which is descending sorted order, so Timsort finds one run. The periodic string's long prefixes arrive in no useful order: 17.4 million character comparisons at n = 4,000 against 74,905 on random text." },
 
     { type: "mc",
@@ -16063,9 +16068,9 @@ CHAPTERS.push({
       opts: [
         "That character inspections are not a meaningful cost measure for strings, since memory comparison is effectively free",
         "That the radix quicksort must contain a bug, since an algorithm doing fewer operations cannot be slower",
-        "That the comparison is between a Python implementation and one in C, so the operation count argues for the algorithm and C collects on it",
-        "That URLs are a best case for Timsort, which detects the shared prefix and skips it in every comparison"
-      ], a: 2,
+        "That URLs are a best case for Timsort, which detects the shared prefix and skips it in every comparison",
+        "That the comparison is between a Python implementation and one in C, so the operation count argues for the algorithm and C collects on it"
+      ], a: 3,
       why: "The counts, 778,445 against 6.8 million, favour radix quicksort; the wall clock compares interpreted Python with C. Character reads are real work, the code is correct, and Timsort has no shared-prefix detection." },
 
     { type: "order",
@@ -17162,10 +17167,10 @@ CHAPTERS.push({
       q: "With n = 10^5 and one second, which classes did the measured budgets admit in pure Python but not beyond, and what more did Java admit?",
       opts: [
         "Python admits n^2 but not n^3, and Java adds n^3 on top of that, because Java's JIT compiler removes the constant factor entirely",
-        "Python admits up to n log n; Java also admits n log^2 n and n sqrt n, because its loop rate was about 120 times higher",
+        "Python admits only linear time, and Java adds n log n, because Python cannot call a compiled sort routine",
         "Both admit exactly the same classes, since complexity classes do not depend on the language used",
-        "Python admits only linear time, and Java adds n log n, because Python cannot call a compiled sort routine"
-      ], a: 1,
+        "Python admits up to n log n; Java also admits n log^2 n and n sqrt n, because its loop rate was about 120 times higher"
+      ], a: 3,
       why: "At 1.5 x 10^7 operations per second, n log n (1.7 x 10^6) fits and n log^2 n (2.8 x 10^7) does not; at 10^9 Java fits n sqrt n (3.2 x 10^7) but not n^2 (10^10). Library calls such as sort run at C speed in Python." },
 
     { type: "mc",
@@ -17196,11 +17201,11 @@ CHAPTERS.push({
     { type: "mc",
       q: "Why is sliding window rejected for counting subarrays with sum divisible by k?",
       opts: [
-        "Because values can be negative, so extending the window can decrease the sum and the window's validity is not monotone",
+        "Because a sliding window needs the array sorted first, and sorting would change which contiguous subarrays exist at all",
         "Because a sliding window can only ever report the single best subarray it has seen, and has no way to count all of them",
         "Because the sum has to be taken modulo k, and a sliding window cannot keep a running remainder as elements enter and leave",
-        "Because a sliding window needs the array sorted first, and sorting would change which contiguous subarrays exist at all"
-      ], a: 0,
+        "Because values can be negative, so extending the window can decrease the sum and the window's validity is not monotone"
+      ], a: 3,
       why: "A window needs extending and shrinking to move validity in one direction; negatives break that. Prefix sums with a hash map of remainders count in O(n). Windows can count, can track remainders, and do not need sorting." },
 
     { type: "mc",
@@ -17450,7 +17455,7 @@ CHAPTERS.push({
         "<ol>" +
         "<li><strong>Measure the table.</strong> Time each row of the container table at 10<sup>4</sup>, 10<sup>5</sup> and 10<sup>6</sup> elements in both languages, and mark which rows grow by about 100 across that range.</li>" +
         "<li><strong>Find where LinkedList wins.</strong> Compare LinkedList and ArrayList for inserting after every even element while iterating, and for get(i), at several sizes.</li>" +
-        "<li><strong>Hit the traps.</strong> Reproduce the boxed Integer comparison at 127 and 128, the HashMap iteration order, and the mutated-key lookup, and fix each.</li>" +
+        "<li><strong>Hit the traps.</strong> Reproduce the boxed Integer comparison at 127 and 128, the HashMap iteration order, the mutated-key lookup, and a grid built as <code>[[0] * m] * n</code> whose one write changes a whole column, and fix each.</li>" +
         "<li><strong>Recursion limits.</strong> Find the depth at which Python's default limit and Java's default stack fail, then raise each and measure again.</li>" +
         "<li><strong>Doubling test.</strong> Run the doubling test on de-duplication with a list and with a set, on sum(lists, []) and on recursion with slices, and classify each.</li>" +
         "<li><strong>Shrink a bug.</strong> Plant an off-by-one in a lower-bound search, find it with random tests against an oracle, and shrink the failing case to its minimum.</li>" +
@@ -17511,9 +17516,9 @@ CHAPTERS.push({
       opts: [
         "Because 128 overflows a byte, and == compares only the low eight bits of each value",
         "Because == on Integer objects is undefined, and the result depends on the garbage collector",
-        "Because == compares references, and Java caches boxed values only from -128 to 127, so 128 gives two distinct objects",
-        "Because Java converts 128 to a Long automatically, and an Integer never equals a Long"
-      ], a: 2,
+        "Because Java converts 128 to a Long automatically, and an Integer never equals a Long",
+        "Because == compares references, and Java caches boxed values only from -128 to 127, so 128 gives two distinct objects"
+      ], a: 3,
       why: "Within the cache, both variables point to one shared object, so reference equality happens to hold; above it, two objects are created. equals compares values and returns true for both. Nothing is truncated or converted." },
 
     { type: "blank",
