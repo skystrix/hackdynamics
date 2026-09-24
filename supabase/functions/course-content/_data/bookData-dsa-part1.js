@@ -14503,3 +14503,335 @@ CHAPTERS.push({
       why: "Constraints come first because they are cheap and eliminate early; object and question produce the candidate set; the test confirms one; the rejections justify the choice." }
   ]
 });
+
+/* ======================= CHAPTER 48 ======================= */
+CHAPTERS.push({
+  num: 48, part: 6, title: "The Working Engineer's Handbook",
+  blurb: "What changes in your daily work once you understand the mechanisms. This chapter is about the code you actually write: which container to reach for in Python and in Java and what it measured, the traps that silently make code quadratic or wrong, the limits each language imposes, how to find an accidental quadratic, how to test an algorithm with an oracle and a shrinker, how to benchmark without fooling yourself, caching and other design questions as online problems with a provable competitive ratio, the randomized structures whose bugs only counting catches, and the order to present a solution in an interview.",
+  sections: [
+
+    { title: "The Container Cost Tables",
+      viz: "dsaContainerCosts", vizTitle: "Pick an operation. The asymptotic cost is one row; the measured time is another",
+      html:
+        "<p>This chapter is about the code you write on an ordinary day, once the mechanisms of the previous forty-seven are in your head. It starts where most of that code starts, with a choice of container. Every standard container in Python and Java is one of the structures this course built, and its costs are that structure's costs: nothing in the container cost table below is a rule to memorise, because each row follows from a mechanism you have already seen measured.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 330' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Per-operation cost at n = 1,000,000, measured on this machine; * marks amortized</text><text x='20' y='40' text-anchor='start' fill='#ffd166' font-size='10'>operation</text><text x='146' y='40' text-anchor='start' fill='#ffd166' font-size='10'>Python</text><text x='292' y='40' text-anchor='start' fill='#ffd166' font-size='10'>cost</text><text x='352' y='40' text-anchor='start' fill='#ffd166' font-size='10'>time</text><text x='420' y='40' text-anchor='start' fill='#ffd166' font-size='10'>Java</text><text x='578' y='40' text-anchor='start' fill='#ffd166' font-size='10'>cost</text><text x='640' y='40' text-anchor='start' fill='#ffd166' font-size='10'>time</text><rect x='14' y='46' width='732' height='19' rx='3' fill='#141f33'/><text x='20' y='60' text-anchor='start' fill='#c9d6ea' font-size='10'>append at end</text><text x='146' y='60' text-anchor='start' fill='#c9d6ea' font-size='9.5'>list.append</text><text x='292' y='60' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)*</text><text x='352' y='60' text-anchor='start' fill='#8fa3c4' font-size='10'>37 ns</text><text x='420' y='60' text-anchor='start' fill='#c9d6ea' font-size='9.5'>ArrayList.add</text><text x='578' y='60' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)*</text><text x='640' y='60' text-anchor='start' fill='#8fa3c4' font-size='10'>21 ns</text><rect x='14' y='67' width='732' height='19' rx='3' fill='#1a1530'/><text x='20' y='81' text-anchor='start' fill='#c9d6ea' font-size='10'>read index i</text><text x='146' y='81' text-anchor='start' fill='#c9d6ea' font-size='9.5'>list[i]</text><text x='292' y='81' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)</text><text x='352' y='81' text-anchor='start' fill='#8fa3c4' font-size='10'>33 ns</text><text x='420' y='81' text-anchor='start' fill='#c9d6ea' font-size='9.5'>ArrayList.get</text><text x='578' y='81' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)</text><text x='640' y='81' text-anchor='start' fill='#8fa3c4' font-size='10'>4 ns</text><rect x='14' y='88' width='732' height='19' rx='3' fill='#141f33'/><text x='20' y='102' text-anchor='start' fill='#c9d6ea' font-size='10'>insert at front</text><text x='146' y='102' text-anchor='start' fill='#c9d6ea' font-size='9.5'>list.insert(0,x)</text><text x='292' y='102' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='352' y='102' text-anchor='start' fill='#8fa3c4' font-size='10'>475 \u00b5s</text><text x='420' y='102' text-anchor='start' fill='#c9d6ea' font-size='9.5'>ArrayList.add(0,x)</text><text x='578' y='102' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='640' y='102' text-anchor='start' fill='#8fa3c4' font-size='10'>99 \u00b5s</text><rect x='14' y='109' width='732' height='19' rx='3' fill='#1a1530'/><text x='20' y='123' text-anchor='start' fill='#c9d6ea' font-size='10'>remove at front</text><text x='146' y='123' text-anchor='start' fill='#c9d6ea' font-size='9.5'>list.pop(0)</text><text x='292' y='123' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='352' y='123' text-anchor='start' fill='#8fa3c4' font-size='10'>158 \u00b5s</text><text x='420' y='123' text-anchor='start' fill='#c9d6ea' font-size='9.5'>ArrayList.remove(0)</text><text x='578' y='123' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='640' y='123' text-anchor='start' fill='#8fa3c4' font-size='10'>97 \u00b5s</text><rect x='14' y='130' width='732' height='19' rx='3' fill='#141f33'/><text x='20' y='144' text-anchor='start' fill='#c9d6ea' font-size='10'>front of a queue</text><text x='146' y='144' text-anchor='start' fill='#c9d6ea' font-size='9.5'>deque.popleft</text><text x='292' y='144' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)</text><text x='352' y='144' text-anchor='start' fill='#8fa3c4' font-size='10'>42 ns</text><text x='420' y='144' text-anchor='start' fill='#c9d6ea' font-size='9.5'>ArrayDeque.pollFirst</text><text x='578' y='144' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)</text><text x='640' y='144' text-anchor='start' fill='#8fa3c4' font-size='10'>3 ns</text><rect x='14' y='151' width='732' height='19' rx='3' fill='#1a1530'/><text x='20' y='165' text-anchor='start' fill='#c9d6ea' font-size='10'>search unsorted</text><text x='146' y='165' text-anchor='start' fill='#c9d6ea' font-size='9.5'>x in list</text><text x='292' y='165' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='352' y='165' text-anchor='start' fill='#8fa3c4' font-size='10'>5.7 ms</text><text x='420' y='165' text-anchor='start' fill='#c9d6ea' font-size='9.5'>ArrayList.contains</text><text x='578' y='165' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='640' y='165' text-anchor='start' fill='#8fa3c4' font-size='10'>633 \u00b5s</text><rect x='14' y='172' width='732' height='19' rx='3' fill='#141f33'/><text x='20' y='186' text-anchor='start' fill='#c9d6ea' font-size='10'>hash insert</text><text x='146' y='186' text-anchor='start' fill='#c9d6ea' font-size='9.5'>dict[k] = v</text><text x='292' y='186' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)*</text><text x='352' y='186' text-anchor='start' fill='#8fa3c4' font-size='10'>96 ns</text><text x='420' y='186' text-anchor='start' fill='#c9d6ea' font-size='9.5'>HashMap.put</text><text x='578' y='186' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)*</text><text x='640' y='186' text-anchor='start' fill='#8fa3c4' font-size='10'>9 ns</text><rect x='14' y='193' width='732' height='19' rx='3' fill='#1a1530'/><text x='20' y='207' text-anchor='start' fill='#c9d6ea' font-size='10'>hash lookup</text><text x='146' y='207' text-anchor='start' fill='#c9d6ea' font-size='9.5'>k in dict</text><text x='292' y='207' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)</text><text x='352' y='207' text-anchor='start' fill='#8fa3c4' font-size='10'>44 ns</text><text x='420' y='207' text-anchor='start' fill='#c9d6ea' font-size='9.5'>HashMap.get</text><text x='578' y='207' text-anchor='start' fill='#3ddc97' font-size='10'>O(1)</text><text x='640' y='207' text-anchor='start' fill='#8fa3c4' font-size='10'>10 ns</text><rect x='14' y='214' width='732' height='19' rx='3' fill='#141f33'/><text x='20' y='228' text-anchor='start' fill='#c9d6ea' font-size='10'>sorted insert</text><text x='146' y='228' text-anchor='start' fill='#c9d6ea' font-size='9.5'>bisect.insort</text><text x='292' y='228' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='352' y='228' text-anchor='start' fill='#8fa3c4' font-size='10'>478 \u00b5s</text><text x='420' y='228' text-anchor='start' fill='#c9d6ea' font-size='9.5'>TreeMap.put</text><text x='578' y='228' text-anchor='start' fill='#3ddc97' font-size='10'>O(log n)</text><text x='640' y='228' text-anchor='start' fill='#8fa3c4' font-size='10'>78 ns</text><rect x='14' y='235' width='732' height='19' rx='3' fill='#1a1530'/><text x='20' y='249' text-anchor='start' fill='#c9d6ea' font-size='10'>heap push</text><text x='146' y='249' text-anchor='start' fill='#c9d6ea' font-size='9.5'>heappush</text><text x='292' y='249' text-anchor='start' fill='#3ddc97' font-size='10'>O(log n)</text><text x='352' y='249' text-anchor='start' fill='#8fa3c4' font-size='10'>121 ns</text><text x='420' y='249' text-anchor='start' fill='#c9d6ea' font-size='9.5'>PriorityQueue.offer</text><text x='578' y='249' text-anchor='start' fill='#3ddc97' font-size='10'>O(log n)</text><text x='640' y='249' text-anchor='start' fill='#8fa3c4' font-size='10'>14 ns</text><rect x='14' y='256' width='732' height='19' rx='3' fill='#141f33'/><text x='20' y='270' text-anchor='start' fill='#c9d6ea' font-size='10'>heap pop</text><text x='146' y='270' text-anchor='start' fill='#c9d6ea' font-size='9.5'>heappop</text><text x='292' y='270' text-anchor='start' fill='#3ddc97' font-size='10'>O(log n)</text><text x='352' y='270' text-anchor='start' fill='#8fa3c4' font-size='10'>1.3 \u00b5s</text><text x='420' y='270' text-anchor='start' fill='#c9d6ea' font-size='9.5'>PriorityQueue.poll</text><text x='578' y='270' text-anchor='start' fill='#3ddc97' font-size='10'>O(log n)</text><text x='640' y='270' text-anchor='start' fill='#8fa3c4' font-size='10'>312 ns</text><rect x='14' y='277' width='732' height='19' rx='3' fill='#1a1530'/><text x='20' y='291' text-anchor='start' fill='#c9d6ea' font-size='10'>middle of a list</text><text x='146' y='291' text-anchor='start' fill='#c9d6ea' font-size='9.5'>(no linked list)</text><text x='292' y='291' text-anchor='start' fill='#8fa3c4' font-size='10'></text><text x='352' y='291' text-anchor='start' fill='#8fa3c4' font-size='10'></text><text x='420' y='291' text-anchor='start' fill='#c9d6ea' font-size='9.5'>LinkedList.get(n/2)</text><text x='578' y='291' text-anchor='start' fill='#ff5d73' font-size='10'>O(n)</text><text x='640' y='291' text-anchor='start' fill='#8fa3c4' font-size='10'>888 \u00b5s</text><text x='20' y='320' text-anchor='start' fill='#8fa3c4' font-size='9.5'>red: O(n) operations that hide in loops; bisect.insort pairs an O(log n) search with an O(n) shift</text></svg></div>" +
+        "<p>Read the rows as consequences. Appending to <code>list</code> or <code>ArrayList</code> is the <strong>amortized append</strong>, O(1) on average, because both are the dynamic array of Chapter 4, growing by a constant factor. Inserting or removing at the front is O(n) because every element must shift, and the measurement confirms it: at a million elements, <code>list.insert(0, x)</code> took 475 &#181;s where <code>append</code> took 37 ns. A queue that pops from the front belongs in <code>deque</code> or <code>ArrayDeque</code>, Chapter 10's circular buffer, where both ends are O(1). Hash lookups are O(1) expected, Chapter 17's result, with the flooding caveat from the same chapter. <code>TreeMap</code> is Chapter 26's red-black tree, O(log n) for everything and ordered. <code>heapq</code> and <code>PriorityQueue</code> are Chapter 27's array heap.</p>" +
+        "<p>Two rows deserve a second look. Python has no balanced tree in its standard library, and the tempting substitute, <code>bisect.insort</code> on a sorted list, finds the position in O(log n) and then shifts in O(n): at a million elements it took 478 &#181;s per insert, and growing n a hundredfold multiplied its cost by 113. When a Python program needs an ordered map with fast updates, the honest options are a third-party sorted container, a heap if only the minimum matters, or a different design. And <code>LinkedList</code> in Java is slow at nearly everything, <code>get(n/2)</code> took 888 &#181;s, because each node is a separate object reached by a pointer, Chapter 11's cache argument. It wins in one situation: inserting while walking with a <code>ListIterator</code>. Inserting after every even element of an 80,000-element list took 5.2 ms with <code>LinkedList</code> and 146 ms with <code>ArrayList</code>, whose every insert shifts the tail.</p>" +
+        "<p>The two languages differ by constant factors that are worth knowing. Java's <code>HashMap.get</code> ran at 10 ns against 44 ns for a Python dictionary lookup, and <code>ArrayList.contains</code> scanned a million elements in 0.63 ms against 5.7 ms for <code>in</code> on a Python list. None of this changes which row to choose: a factor of four between languages is noise next to the factor of ten thousand between an O(1) and an O(n) operation inside a loop.</p>" +
+        "<p>A few API facts round out the table. Python's <code>heapq</code> is a min-heap over a plain list, so a max-heap stores negated keys, and ties in tuples fall through to comparing the next field, which fails if that field is not comparable; add a counter as a tie-breaker. Java's <code>PriorityQueue</code> takes a comparator instead, and its iterator does <em>not</em> return elements in priority order, only <code>poll</code> does. For a stack in Java, use <code>ArrayDeque</code>, not the legacy <code>Stack</code> class, which extends <code>Vector</code> and synchronises every call. And both languages' sorts are stable for objects, Chapter 16's Timsort, so sorting by a secondary key and then a primary key gives the combined order, while Java's primitive <code>Arrays.sort</code> is the dual-pivot quicksort and is not stable, which only matters once values carry identity.</p>"
+    },
+
+    { title: "Traps and Language Limits",
+      html:
+        "<p>Most slow code is correct code with one wrong container operation inside a loop. The standard traps, each measured:</p>" +
+        "<p><strong>Front operations on arrays.</strong> <code>list.pop(0)</code> as a queue turns a linear BFS quadratic; use <code>deque</code>. <strong>Removing by index in a loop.</strong> Deleting every even element of a Java <code>ArrayList</code> with <code>remove(i)</code> took 110 ms at 100,000 elements and 471 ms at 200,000, quadratic, while <code>removeIf</code> did it in 12 ms. <strong>String building.</strong> Concatenation in a loop is quadratic in Java and quadratic in Python whenever the in-place optimisation is defeated, Chapter 41's measurement; use <code>StringBuilder</code> or <code>join</code>. <strong>Autoboxing.</strong> A <code>PriorityQueue&lt;Integer&gt;</code> stores a pointer to a heap-allocated object per element: two million pushes and pops took 926 ms, against 249 ms for the same heap over an <code>int[]</code>.</p>" +
+        "<p>Three traps are about equality and identity rather than speed. <strong>Boxed equality.</strong> In Java, <code>==</code> on two <code>Integer</code> objects compares references, and the <strong>Integer cache</strong> shares the boxed values from &#8722;128 to 127, so <code>127 == 127</code> is true and <code>128 == 128</code> is false; use <code>equals</code>. <strong>Iteration order.</strong> Java's <code>HashMap</code> iterates in bucket order: seven fruit names inserted alphabetically came back as banana, date, apple, cherry, fig, grape, elderberry. Python's <code>dict</code> has kept insertion order since 3.7, so code ported between them can change behaviour silently; use <code>LinkedHashMap</code> when order matters. <strong>A mutable key.</strong> A key's hash is computed when it is inserted. Put a Java <code>ArrayList</code> into a <code>HashMap</code>, append to it, and the entry becomes unreachable: <code>get</code> returned null while <code>size</code> still said 1. Python refuses lists as keys for exactly this reason, but a custom class with a mutable field in its <code>__hash__</code> fails the same way. <strong>Aliased rows.</strong> <code>[[0] * m] * n</code> builds a grid whose n rows are one list referenced n times, so writing one cell writes the whole column: after <code>a[0][0] = 1</code> every row starts with 1. Every grid DP from Chapter 22 must build its table with a comprehension, <code>[[0] * m for _ in range(n)]</code>.</p>" +
+        "<p>The languages also differ in their limits. Python's recursion limit defaults to 1,000 frames, so a recursive DFS on a path of 5,000 vertices raises <code>RecursionError</code>. Raising it with <code>sys.setrecursionlimit</code> works for pure Python recursion in current CPython: with the limit at a million, recursion 500,000 deep ran in 0.04 s, because since 3.11 Python-to-Python calls no longer consume the C stack. Recursion that passes through C code still does, and can crash the interpreter, which is why Chapter 6's explicit stack remains the robust answer. Java's default thread stack overflowed at 42,984 frames of a trivial recursive method; a thread created with a 512 MB stack reached about 32 million, and that constructor argument is the standard fix. Integer overflow and floor division, where the languages disagree most, were Chapters 40 and 44's subject.</p>"
+    },
+
+    { title: "Finding the Accidental Quadratic",
+      html:
+        "<p>An <strong>accidental quadratic</strong> is an O(n<sup>2</sup>) algorithm hiding inside code that reads as linear: one innocent call that is itself O(n), inside a loop over n. It is the most common performance bug in real systems, because it is invisible at test sizes and catastrophic at production sizes. The discipline for finding one is to profile first, since intuition about where time goes is usually wrong: <code>python -m cProfile -s cumulative</code> or a sampling profiler such as py-spy in Python, and Java Flight Recorder or async-profiler on the JVM, each of which names the function where the time goes, and then to run a <strong>doubling test</strong>: time the code at n, 2n and 4n. A ratio near 2 per doubling is linear, near 4 is quadratic, near 8 is cubic, and the ratio is visible long before the absolute time becomes a problem.</p>" +
+        "<p>The shapes to look for are few. Membership tests on a list inside a loop, which the doubling test caught at ratios of 3.5 and 3.8 for de-duplicating with <code>not in out</code>, against 2.0 for the same code with a set. Concatenating lists with <code>sum(lists, [])</code>, which copies the growing result at every step: ratios of 4.2 and 3.8, while a comprehension flattened the same input at 2.0 and 2.1. Slicing in recursion, <code>f(a[1:])</code>, which copies the remaining array at every level: ratios of 8.4 and 4.6. And anything shaped like \"for each item, search all items\", whether the search is written out or hidden in a library call such as <code>index</code>, <code>remove</code> or <code>contains</code>.</p>" +
+        "<p>Three real examples show the stakes. In 2021 a player who profiled Grand Theft Auto Online's six-minute load time found two of these shapes in one routine: the JSON parser called a C library function that measured the length of the entire remaining 10 MB input for every token it read, and a de-duplication step searched a list of about 63,000 items linearly for each new item. Fixing both cut the load time by roughly 70%, and the developer patched it and paid a bug bounty. In 2016 Stack Overflow was down for 34 minutes because a whitespace-trimming regular expression was quadratic on a post with about 20,000 consecutive whitespace characters, the case Chapter 42 measured. And the third you can reproduce from Chapter 41: Python's <code>s += c</code> is linear until one other reference to <code>s</code> exists, and then 400,000 appends take 1.6 s instead of 0.02 s.</p>" +
+        "<p>A doubling test is a few lines and worth keeping in a utilities file. Take the minimum of a few repetitions at each size, since noise only ever adds time, and read the ratios rather than the times.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import time\n" +
+        "def doubling(f, make_input, n, steps=3, reps=3):\n" +
+        "    times = []\n" +
+        "    for k in range(steps):\n" +
+        "        arg = make_input(n * 2 ** k)\n" +
+        "        best = min(_timed(f, arg) for _ in range(reps))\n" +
+        "        times.append(best)\n" +
+        "    return [round(b / a, 1) for a, b in zip(times, times[1:])]   # ~2 linear, ~4 quadratic\n" +
+        "\n" +
+        "def _timed(f, arg):\n" +
+        "    t = time.perf_counter(); f(arg); return time.perf_counter() - t</code></pre>" +
+        "<pre data-lang='java' hidden><code>static double[] doubling(java.util.function.Consumer&lt;int[]&gt; f,\n" +
+        "                         java.util.function.IntFunction&lt;int[]&gt; make, int n, int steps) {\n" +
+        "    double[] t = new double[steps];\n" +
+        "    for (int k = 0; k &lt; steps; k++) {\n" +
+        "        int[] arg = make.apply(n &lt;&lt; k);\n" +
+        "        long best = Long.MAX_VALUE;\n" +
+        "        for (int r = 0; r &lt; 5; r++) {                 // after warmup, keep the fastest run\n" +
+        "            long s = System.nanoTime(); f.accept(arg); best = Math.min(best, System.nanoTime() - s);\n" +
+        "        }\n" +
+        "        t[k] = best;\n" +
+        "    }\n" +
+        "    double[] ratios = new double[steps - 1];\n" +
+        "    for (int k = 1; k &lt; steps; k++) ratios[k - 1] = t[k] / t[k - 1];\n" +
+        "    return ratios;                                   // ~2 linear, ~4 quadratic\n" +
+        "}</code></pre></div>" +
+        "<p>The fix is almost always a change of container, a set instead of a list, a builder instead of concatenation, an index instead of a slice, and almost never a cleverer algorithm. What matters is finding it, and the doubling test is cheap enough to run on every function that handles user-sized data.</p>"
+    },
+
+    { title: "Testing and Benchmarking Honestly",
+      html:
+        "<p>Every claim in this course was checked the same way, and the method is worth stating as a tool of its own. Write a <strong>brute-force oracle</strong>, the slowest solution whose correctness is evident, and compare the real implementation against it on thousands of <strong>random small inputs</strong>. Small inputs matter because they reach the edge cases, empty arrays, single elements, all-equal values, far more often than large ones. When a comparison fails, <strong>shrink</strong> the failing input: repeatedly try removing an element or making a value smaller, keeping any change that still fails, until nothing smaller fails. A shrunk case is small enough to trace by hand.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import random\n" +
+        "def check(solution, oracle, make_input, trials=10_000):\n" +
+        "    for _ in range(trials):\n" +
+        "        args = make_input()\n" +
+        "        if solution(*args) != oracle(*args):\n" +
+        "            return shrink(solution, oracle, args)       # a readable counterexample\n" +
+        "    return None\n" +
+        "\n" +
+        "def shrink(solution, oracle, args):\n" +
+        "    a, x = args                                      # a list and a scalar, as in the example\n" +
+        "    fails = lambda a, x: solution(a, x) != oracle(a, x)\n" +
+        "    while True:\n" +
+        "        smaller = ([(a[:i] + a[i+1:], x) for i in range(len(a))] +\n" +
+        "                   [(sorted(a[:i] + [v] + a[i+1:]), x) for i in range(len(a)) for v in range(a[i])] +\n" +
+        "                   [(a, v) for v in range(x)])\n" +
+        "        nxt = next((c for c in smaller if fails(*c)), None)\n" +
+        "        if nxt is None:\n" +
+        "            return a, x\n" +
+        "        a, x = nxt</code></pre>" +
+        "<pre data-lang='java' hidden><code>// The shrinking half in Java: repeatedly try removing one element or lowering the target,\n" +
+        "// keeping any change that still fails. (The Python version also lowers array values.)\n" +
+        "static int[][] shrink(java.util.function.BiPredicate&lt;int[], Integer&gt; fails, int[] a, int x) {\n" +
+        "    boolean changed = true;\n" +
+        "    while (changed) {\n" +
+        "        changed = false;\n" +
+        "        for (int i = 0; i &lt; a.length &amp;&amp; !changed; i++) {\n" +
+        "            int[] b = new int[a.length - 1];\n" +
+        "            for (int j = 0, k = 0; j &lt; a.length; j++) if (j != i) b[k++] = a[j];\n" +
+        "            if (fails.test(b, x)) { a = b; changed = true; }\n" +
+        "        }\n" +
+        "        for (int v = 0; v &lt; x &amp;&amp; !changed; v++) if (fails.test(a, v)) { x = v; changed = true; }\n" +
+        "    }\n" +
+        "    return new int[][]{a, {x}};\n" +
+        "}</code></pre></div>" +
+        "<p>On a lower-bound binary search with an off-by-one, returning the last index instead of the length when the target exceeds every element, 10,000 random tests on arrays of up to eight values found 2,293 failures, the first on trial 1 with [1, 7] and target 10. Shrinking reduced it in three steps to the array [0] with target 1: the buggy code answers 0, the oracle 1, and the bug is obvious. This is property-based testing, introduced by Claessen and Hughes's QuickCheck in 2000 and available as Hypothesis in Python and jqwik in Java; the capstone chapters of Part 7 test every structure this way against the language's own library. Two additions make the harness stronger. Assert the structure's invariant after every operation while testing, the heap property, the balance of a tree, the sortedness of a suffix array, so that a failure is reported where it happens rather than three operations later. And when two implementations exist, in two languages or two algorithms, test them against each other: differential testing needs no oracle at all.</p>" +
+        "<p>Benchmarking has its own traps, and the JVM shows all of them. <strong>JIT warmup</strong>: the first call of a method runs interpreted, so timing it measures the compiler. A loop over a million elements took 2.58 ms on its first call, 3.63 ms on its third while the compiler was replacing it, and settled at 0.72 ms by the tenth. <strong>Dead-code elimination</strong>: if a result is never used, the compiler may delete the computation. A loop of 500 million iterations whose result was discarded \"took\" 0.006 ms; the same loop with its result returned took 682 ms. <strong>Variance</strong>: one timing is an anecdote, so repeat and report the median with the spread; 31 steady-state runs spread from 0.713 to 0.725 ms. The standard tool for Java is JMH, the Java Microbenchmark Harness, which handles warmup, forks fresh JVMs and consumes results so that nothing is eliminated; use it whenever a claim depends on a difference smaller than a factor of two. In Python, <code>timeit</code> repeats and reports the minimum, as in <code>python -m timeit -s \"a = list(range(10**6))\" \"a.insert(0, 1)\"</code>, which states its own setup. In both, state the machine, the input and the language version, as every measurement in this course has.</p>"
+    },
+
+    { title: "Design Problems as Online Problems",
+      html:
+        "<p>Chapter 11 measured LRU caching failing on cyclic scans and promised to make the comparison precise. The precise framework is <strong>online algorithms</strong>: requests arrive one at a time, and each decision must be made before the future is known. The benchmark is the best possible offline decision, made with the whole request sequence in hand. For caching that is <strong>Belady's algorithm</strong> (1966), also called MIN: on a miss with a full cache, evict the item whose next use is furthest in the future. It is optimal, and I checked it against exhaustive search over every eviction choice on 300 small request sequences, where it always matched.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>def belady_misses(requests, k):                  # optimal offline caching (MIN)\n" +
+        "    import heapq, math\n" +
+        "    next_use, last = [0] * len(requests), {}\n" +
+        "    for i in range(len(requests) - 1, -1, -1):\n" +
+        "        next_use[i] = last.get(requests[i], math.inf)\n" +
+        "        last[requests[i]] = i\n" +
+        "    cache, heap, misses = {}, [], 0              # heap of (-next use, key), lazy deletion\n" +
+        "    for i, x in enumerate(requests):\n" +
+        "        if x not in cache:\n" +
+        "            misses += 1\n" +
+        "            if len(cache) == k:\n" +
+        "                while True:\n" +
+        "                    nu, y = heapq.heappop(heap)\n" +
+        "                    if cache.get(y) == -nu:\n" +
+        "                        del cache[y]; break      # evict the furthest next use\n" +
+        "        cache[x] = next_use[i]\n" +
+        "        heapq.heappush(heap, (-next_use[i], x))\n" +
+        "    return misses</code></pre>" +
+        "<pre data-lang='java' hidden><code>static int beladyMisses(int[] req, int k) {        // optimal offline caching (MIN)\n" +
+        "    int n = req.length; int[] next = new int[n]; Map&lt;Integer, Integer&gt; last = new HashMap&lt;&gt;();\n" +
+        "    for (int i = n - 1; i &gt;= 0; i--) { next[i] = last.getOrDefault(req[i], Integer.MAX_VALUE); last.put(req[i], i); }\n" +
+        "    Map&lt;Integer, Integer&gt; cache = new HashMap&lt;&gt;();\n" +
+        "    PriorityQueue&lt;int[]&gt; heap = new PriorityQueue&lt;&gt;((p, q) -&gt; Integer.compare(q[0], p[0]));\n" +
+        "    int misses = 0;\n" +
+        "    for (int i = 0; i &lt; n; i++) {\n" +
+        "        int x = req[i];\n" +
+        "        if (!cache.containsKey(x)) {\n" +
+        "            misses++;\n" +
+        "            if (cache.size() == k)\n" +
+        "                while (true) {\n" +
+        "                    int[] top = heap.poll();\n" +
+        "                    if (cache.getOrDefault(top[1], -1) == top[0]) { cache.remove(top[1]); break; }\n" +
+        "                }\n" +
+        "        }\n" +
+        "        cache.put(x, next[i]); heap.add(new int[]{next[i], x});\n" +
+        "    }\n" +
+        "    return misses;\n" +
+        "}</code></pre></div>" +
+        "<p>An online algorithm is <strong>c-competitive</strong> if, on every request sequence, its cost is at most c times the optimum plus a constant; its <strong>competitive ratio</strong> is the smallest such c. Sleator and Tarjan proved in 1985 that LRU is k-competitive for a cache of size k, and that no deterministic policy does better than k. The cyclic scan from Chapter 11 is the sequence that meets the bound. On k + 1 keys in a loop, LRU missed every one of 20,000 requests for every k, while MIN missed about one request in k: the measured ratios were 2.00, 4.00, 7.98 and 15.81 for k = 2, 4, 8 and 16. \"LRU is bad at scans\" is that theorem. On a Zipf-distributed workload over 100 keys with a cache of 20, the hit rates were 57% for LRU, 68% for LFU and 76% for MIN, which says how much room any practical policy leaves.</p>" +
+        "<p>Randomness changes the bound. Against a sequence fixed in advance, a randomized policy can be O(log k)-competitive, the marking algorithm of Fiat and colleagues (1991), because the adversary can no longer arrange for the evicted item to be the next one requested. The cyclic scan shows the effect directly: evicting at random missed 3,981 of 10,000 requests with k = 4, where LRU, FIFO and LFU each missed all 10,000. That is why some real caches add randomness to their eviction, and why the scan-resistant variants of LRU that databases use protect newly loaded pages from evicting the working set.</p>" +
+        "<p>The same lens explains other design questions. <strong>Ski rental</strong>, the rent-or-buy problem that CLRS's online-algorithms chapter presents as waiting for a lift versus taking the stairs, asks whether to rent at 1 a day or buy for B without knowing how long you will ski; renting until the rent paid would reach B and then buying is (2 &#8722; 1/B)-competitive, 1.9 at B = 10, and no deterministic strategy does better. It is the model for every \"keep paying or commit\" decision: reserved versus on-demand servers, spin versus block. A rate limiter is either a queue of recent request times, popping those older than the window and refusing when the queue is full, exact but O(limit) memory per client, or a token bucket, two numbers per client, refilled at a fixed rate on each request and refusing when empty, which allows short bursts by design. A hit counter over the last five minutes is Chapter 10's circular buffer of 300 per-second counts, updated in O(1) and summed in O(300). The running median is Chapter 27's two heaps, the fourth problem of Chapter 47. LFU with O(1) operations, a map of frequency lists, was published by Shah, Mitra and Matani in 2010, and is the answer to the harder form of the interview question.</p>"
+    },
+
+    { title: "Randomized Structures in Practice",
+      html:
+        "<p>Three randomized techniques come up often enough to have standard forms, and each has a classic bug.</p>" +
+        "<p><strong>Insert, delete and get-random in O(1).</strong> A set that also returns a uniformly random element cannot be a hash set alone, which has no random access, or an array alone, which cannot delete in O(1). Combine them: an array of elements for random access and a map from element to index. Delete by moving the last element into the deleted slot and updating its index. Against a real set over 100,000 random operations it never disagreed, and the three operations together cost 630 ns at 10<sup>4</sup> elements and 1.1 &#181;s at 10<sup>6</sup>, the growth coming from cache misses rather than from the algorithm.</p>" +
+        "<p><strong>Reservoir sampling</strong> keeps a uniform random sample of k items from a stream of unknown length in O(k) memory. Keep the first k; for the i-th item after that, counting from zero, draw j uniformly from 0 to i and replace slot j if j is below k. Each item ends up in the sample with probability exactly k/n, by induction on the stream. Vitter's 1985 paper gave it the name Algorithm R and faster variants. Sampling 3 of 10 items 200,000 times, every item's inclusion rate was within 0.003 of 0.3.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import random\n" +
+        "def fisher_yates(a):                     # uniform: each of n! orders has probability 1/n!\n" +
+        "    for i in range(len(a) - 1, 0, -1):\n" +
+        "        j = random.randint(0, i)         # 0..i inclusive; 0..i-1 gives only cycles\n" +
+        "        a[i], a[j] = a[j], a[i]\n" +
+        "\n" +
+        "def reservoir(stream, k):                # uniform k-sample of a stream of unknown length\n" +
+        "    sample = []\n" +
+        "    for i, x in enumerate(stream):\n" +
+        "        if i &lt; k:\n" +
+        "            sample.append(x)\n" +
+        "        else:\n" +
+        "            j = random.randint(0, i)\n" +
+        "            if j &lt; k:\n" +
+        "                sample[j] = x\n" +
+        "    return sample</code></pre>" +
+        "<pre data-lang='java' hidden><code>static void fisherYates(int[] a, Random rnd) {          // uniform shuffle\n" +
+        "    for (int i = a.length - 1; i &gt; 0; i--) {\n" +
+        "        int j = rnd.nextInt(i + 1);                      // 0..i inclusive\n" +
+        "        int t = a[i]; a[i] = a[j]; a[j] = t;\n" +
+        "    }\n" +
+        "}\n" +
+        "static int[] reservoir(Iterator&lt;Integer&gt; stream, int k, Random rnd) {\n" +
+        "    int[] sample = new int[k];\n" +
+        "    for (int i = 0; stream.hasNext(); i++) {\n" +
+        "        int x = stream.next();\n" +
+        "        if (i &lt; k) sample[i] = x;\n" +
+        "        else { int j = rnd.nextInt(i + 1); if (j &lt; k) sample[j] = x; }\n" +
+        "    }\n" +
+        "    return sample;\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Shuffling</strong> has the most famous off-by-one in the subject. The correct algorithm, the <strong>Fisher-Yates shuffle</strong>, from Fisher and Yates (1938) and in computer form Durstenfeld (1964), swaps each position i, from the end, with a uniformly random position from 0 to i inclusive. Two plausible variants are wrong. Swapping each position with <em>any</em> position produces n<sup>n</sup> equally likely execution paths, which cannot divide evenly among n! permutations: for three elements, 27 paths land 4, 5, 5, 5, 4 and 4 times on the six orders. Excluding i itself, choosing from 0 to i &#8722; 1, is Sattolo's algorithm, which produces only cyclic permutations. The figure shows 600,000 shuffles of each.</p>" +
+        "<div class='fig'><svg viewBox='0 0 760 278' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'><text x='20' y='16' text-anchor='start' fill='#2de2ff' font-size='12'>Three shuffles of [1, 2, 3], 600,000 runs each: how often each permutation appears</text><line x1='34' y1='210' x2='250' y2='210' stroke='#334a6a'/><line x1='34' y1='160' x2='250' y2='160' stroke='#ffd166' stroke-dasharray='4 3'/><rect x='40' y='160' width='26' height='50' rx='2' fill='#3ddc97' opacity='0.85'/><text x='53' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>123</text><rect x='74' y='160' width='26' height='50' rx='2' fill='#3ddc97' opacity='0.85'/><text x='87' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>132</text><rect x='108' y='160' width='26' height='50' rx='2' fill='#3ddc97' opacity='0.85'/><text x='121' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>213</text><rect x='142' y='160' width='26' height='50' rx='2' fill='#3ddc97' opacity='0.85'/><text x='155' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>231</text><rect x='176' y='160' width='26' height='50' rx='2' fill='#3ddc97' opacity='0.85'/><text x='189' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>312</text><rect x='210' y='160' width='26' height='50' rx='2' fill='#3ddc97' opacity='0.85'/><text x='223' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>321</text><text x='140' y='244' text-anchor='middle' fill='#c9d6ea' font-size='11'>Fisher-Yates</text><line x1='274' y1='210' x2='490' y2='210' stroke='#334a6a'/><line x1='274' y1='160' x2='490' y2='160' stroke='#ffd166' stroke-dasharray='4 3'/><rect x='280' y='165' width='26' height='45' rx='2' fill='#ff5d73' opacity='0.85'/><text x='293' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>123</text><rect x='314' y='154' width='26' height='56' rx='2' fill='#ff5d73' opacity='0.85'/><text x='327' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>132</text><rect x='348' y='155' width='26' height='55' rx='2' fill='#ff5d73' opacity='0.85'/><text x='361' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>213</text><rect x='382' y='154' width='26' height='56' rx='2' fill='#ff5d73' opacity='0.85'/><text x='395' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>231</text><rect x='416' y='166' width='26' height='44' rx='2' fill='#ff5d73' opacity='0.85'/><text x='429' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>312</text><rect x='450' y='166' width='26' height='44' rx='2' fill='#ff5d73' opacity='0.85'/><text x='463' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>321</text><text x='380' y='244' text-anchor='middle' fill='#c9d6ea' font-size='11'>swap with any index</text><line x1='514' y1='210' x2='730' y2='210' stroke='#334a6a'/><line x1='514' y1='160' x2='730' y2='160' stroke='#ffd166' stroke-dasharray='4 3'/><rect x='520' y='210' width='26' height='0' rx='2' fill='#ff5d73' opacity='0.85'/><text x='533' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>123</text><rect x='554' y='210' width='26' height='0' rx='2' fill='#ff5d73' opacity='0.85'/><text x='567' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>132</text><rect x='588' y='210' width='26' height='0' rx='2' fill='#ff5d73' opacity='0.85'/><text x='601' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>213</text><rect x='622' y='60' width='26' height='150' rx='2' fill='#ff5d73' opacity='0.85'/><text x='635' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>231</text><text x='635' y='55' text-anchor='middle' fill='#ff5d73' font-size='9'>0.5</text><rect x='656' y='60' width='26' height='150' rx='2' fill='#ff5d73' opacity='0.85'/><text x='669' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>312</text><text x='669' y='55' text-anchor='middle' fill='#ff5d73' font-size='9'>0.5</text><rect x='690' y='210' width='26' height='0' rx='2' fill='#ff5d73' opacity='0.85'/><text x='703' y='224' text-anchor='middle' fill='#8fa3c4' font-size='9'>321</text><text x='620' y='244' text-anchor='middle' fill='#c9d6ea' font-size='11'>j from [0, i-1]</text><text x='30' y='156.0' text-anchor='end' fill='#ffd166' font-size='9'>1/6</text><text x='20' y='268' text-anchor='start' fill='#8fa3c4' font-size='9.5'>swap with any index: 27 paths onto 6 orders, so 5/27 or 4/27 each; j from [0, i-1] gives only cycles</text></svg></div>" +
+        "<p>The correct shuffle's six frequencies stayed within 0.001 of 1/6, with a chi-squared statistic of 8 on 5 degrees of freedom, ordinary for a fair process. The swap-with-anything version showed 0.149 against 0.185, a statistic of 7,501, and the exclusive version produced the two cyclic orders half the time each and the other four never. None of these bugs crashes or produces a visibly wrong output on any single run, which is why they ship; only counting catches them.</p>" +
+        "<p>The generator matters as well as the algorithm. Python's <code>random</code> is the Mersenne Twister and Java's <code>java.util.Random</code> a 48-bit linear congruential generator; both are fine for simulation and testing and both are predictable from their output, so anything an adversary must not guess, tokens, keys, the random pivot of Chapter 17's flooding defence when the attacker sees timings, needs <code>secrets</code> in Python or <code>SecureRandom</code> in Java. Seed the generator explicitly in tests, as every measurement in this course did, so that a failure can be replayed.</p>"
+    },
+
+    { title: "The Interview Protocol",
+      html:
+        "<p>Chapter 47 gave the procedure for choosing a technique. This section is about presenting the choice, and the order that gets scored is <strong>invariant, cost, edge cases, then code</strong>. State the invariant first, the property the algorithm maintains, such as \"the stack holds indices of a decreasing run\" or \"dist is final for every vertex popped\", because the invariant is the proof, and an interviewer who hears it knows the code will be right before it is written. State the cost next, time and space, derived from the invariant rather than guessed. Then the edge cases: empty input, one element, all equal, overflow at the largest values, negative numbers, disconnected graphs. Only then write the code, which by now is a transcription.</p>" +
+        "<p>The order matters because it front-loads the parts that are hard to fake. Code can be memorised; an invariant with a cost and a list of edge cases cannot be recited without understanding. It also protects the candidate: if the approach is wrong, the interviewer can say so at the invariant, after one minute, rather than after twenty minutes of code.</p>" +
+        "<p>When stuck, say the brute force aloud and its cost, then apply Chapter 47's no-match moves out loud, starting with what the brute force recomputes. Silence is the one answer that cannot be scored. When the interviewer is wrong, and sometimes they are, disagree with evidence rather than assertion: a small counterexample or a measurement settles it without a contest. \"Greedy fails on coins 1, 3 and 4 with amount 6: it pays 4 + 1 + 1, the optimum is 3 + 3\" ends a disagreement about a greedy algorithm in one sentence. The same habit that has run through this course, check the claim on a case small enough to see, is also the most persuasive thing to say in the room.</p>" +
+        "<p>For Chapter 47's first problem, counting subarrays whose sum is divisible by k, the protocol sounds like this. \"Invariant: after reading position i, the map holds how many prefix sums so far have each remainder, and the answer counts earlier prefixes with the current remainder. Cost: O(n) time, O(k) space. Edge cases: negative values, where I need a non-negative remainder, which Java's <code>%</code> does not give; k equal to 1, where every subarray counts; the empty prefix, which I seed with a count of one.\" Then the code, eight lines, written in under two minutes because nothing in it is still a decision.</p>" +
+        "<p>Finish the way this course has finished every claim: test. Trace the code by hand on the smallest input that exercises the interesting case, one where a remainder repeats, and then on each edge case named earlier, saying the expected output before reading off the actual one. If a bug appears, the invariant says where to look, since some line must be breaking it. And when the interviewer asks whether it can be faster, the answer starts from step 1 of Chapter 47: the input must be read, so O(n) is a lower bound, and the solution already meets it. Knowing when you are done is part of the protocol too.</p>"
+    },
+
+    { title: "Exercises",
+      html:
+        "<ol>" +
+        "<li><strong>Measure the table.</strong> Time each row of the container table at 10<sup>4</sup>, 10<sup>5</sup> and 10<sup>6</sup> elements in both languages, and mark which rows grow by about 100 across that range.</li>" +
+        "<li><strong>Find where LinkedList wins.</strong> Compare LinkedList and ArrayList for inserting after every even element while iterating, and for get(i), at several sizes.</li>" +
+        "<li><strong>Hit the traps.</strong> Reproduce the boxed Integer comparison at 127 and 128, the HashMap iteration order, and the mutated-key lookup, and fix each.</li>" +
+        "<li><strong>Recursion limits.</strong> Find the depth at which Python's default limit and Java's default stack fail, then raise each and measure again.</li>" +
+        "<li><strong>Doubling test.</strong> Run the doubling test on de-duplication with a list and with a set, on sum(lists, []) and on recursion with slices, and classify each.</li>" +
+        "<li><strong>Shrink a bug.</strong> Plant an off-by-one in a lower-bound search, find it with random tests against an oracle, and shrink the failing case to its minimum.</li>" +
+        "<li><strong>Belady against LRU.</strong> Implement MIN, check it against exhaustive search on tiny inputs, and measure the LRU to MIN miss ratio on cyclic scans for k = 2 to 16.</li>" +
+        "<li><strong>Count the shuffles.</strong> Shuffle [1, 2, 3] 600,000 times with Fisher-Yates, with swap-with-any-index and with j from [0, i-1], and compute the chi-squared statistic for each.</li>" +
+        "</ol>"
+    }
+
+  ],
+
+  terms: [
+    { t: "container cost table", d: "The per-operation costs of a language's standard containers, each derived from the structure it implements." },
+    { t: "amortized append", d: "O(1) average append to a dynamic array growing by a constant factor, although a single append can cost O(n)." },
+    { t: "autoboxing", d: "Java's automatic wrapping of primitives in objects, costing an allocation and a pointer per element in generic collections." },
+    { t: "Integer cache", d: "Java's shared boxed Integers from -128 to 127, which make == appear to work on small values and fail above them." },
+    { t: "mutable key", d: "A hash-table key changed after insertion, whose stored hash no longer matches, making the entry unreachable." },
+    { t: "recursion limit", d: "Python's cap on call depth, 1,000 by default; raisable, but an explicit stack is the robust fix." },
+    { t: "accidental quadratic", d: "An O(n^2) algorithm hidden in code that reads as linear, usually an O(n) call inside a loop." },
+    { t: "doubling test", d: "Timing code at n, 2n and 4n: ratios near 2 mean linear, near 4 quadratic, near 8 cubic." },
+    { t: "brute-force oracle", d: "The slowest solution whose correctness is evident, used to check a real implementation on random inputs." },
+    { t: "shrinking", d: "Reducing a failing test input step by step while it still fails, until it is small enough to read." },
+    { t: "JIT warmup", d: "The period before a JVM method is compiled, during which timings measure the interpreter and the compiler." },
+    { t: "dead-code elimination", d: "A compiler deleting computation whose result is unused, which makes naive benchmarks report near-zero times." },
+    { t: "JMH", d: "The Java Microbenchmark Harness, which handles warmup, forking and result consumption for reliable Java benchmarks." },
+    { t: "online algorithm", d: "An algorithm that must act on each request before seeing the future ones." },
+    { t: "Belady's algorithm", d: "Optimal offline caching (MIN): on a miss, evict the item whose next use is furthest in the future." },
+    { t: "competitive ratio", d: "The worst-case ratio of an online algorithm's cost to the offline optimum; k for LRU with a cache of size k." },
+    { t: "reservoir sampling", d: "Keeping a uniform k-sample of a stream of unknown length by replacing slot j when a random j below i+1 is below k." },
+    { t: "Fisher-Yates shuffle", d: "Swapping each position i with a uniform position in 0..i; every permutation has probability 1/n!." }
+  ],
+
+  quiz: [
+    { type: "mc",
+      q: "bisect.insort on a sorted Python list grew 113 times in cost as n grew 100 times. Why?",
+      opts: [
+        "It finds the position by binary search in O(log n), but inserting into the list shifts every later element, which is O(n)",
+        "It re-sorts the whole list after each insertion, which costs O(n log n) per call",
+        "Its binary search degrades to a linear scan when the list contains duplicate values",
+        "It allocates a new list for every insertion and copies the old one into it"
+      ], a: 0,
+      why: "The search is logarithmic and the array shift is linear, so the operation is O(n): 478 microseconds at a million elements. It does not re-sort, duplicates do not break the search, and it inserts in place. Python has no balanced tree in its standard library." },
+
+    { type: "mc",
+      q: "Why did a PriorityQueue<Integer> take 926 ms where a heap over an int[] took 249 ms for the same two million operations?",
+      opts: [
+        "Because PriorityQueue uses a different and slower heap algorithm than the array version, with more comparisons per operation",
+        "Because each Integer is a separate heap-allocated object, so the queue stores and compares pointers to scattered memory",
+        "Because PriorityQueue is synchronised, and acquiring a lock on every operation dominates the cost",
+        "Because the JIT cannot compile generic classes, so PriorityQueue always runs in the interpreter"
+      ], a: 1,
+      why: "Autoboxing costs an allocation per element and a pointer dereference per comparison; the algorithm is the same binary heap. PriorityQueue is not synchronised (PriorityBlockingQueue is), and generics compile like any other code." },
+
+    { type: "mc",
+      q: "In Java, Integer a = 128, b = 128; why is a == b false while the same test with 127 is true?",
+      opts: [
+        "Because 128 overflows a byte, and == compares only the low eight bits of each value",
+        "Because == on Integer objects is undefined, and the result depends on the garbage collector",
+        "Because == compares references, and Java caches boxed values only from -128 to 127, so 128 gives two distinct objects",
+        "Because Java converts 128 to a Long automatically, and an Integer never equals a Long"
+      ], a: 2,
+      why: "Within the cache, both variables point to one shared object, so reference equality happens to hold; above it, two objects are created. equals compares values and returns true for both. Nothing is truncated or converted." },
+
+    { type: "blank",
+      q: "Timing code at n, 2n and 4n and reading the ratios, near 2 for linear and near 4 for quadratic, is the ____ test.",
+      a: ["doubling", "doubling ratio"],
+      why: "It exposes an accidental quadratic before the absolute time is a problem: de-duplicating with a list gave ratios of 3.5 and 3.8, the same code with a set 2.0." },
+
+    { type: "mc",
+      q: "A JVM loop of 500 million iterations took 0.006 ms when its result was discarded and 682 ms when returned. What happened?",
+      opts: [
+        "The first run hit a warm cache, so the loop ran from L1 memory and finished almost instantly instead of in hundreds of milliseconds",
+        "The JIT parallelised the discarded loop across all available cores, which returning the result prevents from happening",
+        "The timer overflowed on the long run, so the second figure is only an artefact of the measurement and not a real cost",
+        "The compiler proved the result unused and deleted the loop, so the benchmark measured nothing at all"
+      ], a: 3,
+      why: "Dead-code elimination removes computation with no observable effect. JMH's Blackhole exists to consume results so this cannot happen. No cache makes 5 x 10^8 iterations take 6 microseconds, loops are not auto-parallelised, and nanoTime does not overflow here." },
+
+    { type: "mc",
+      q: "On cyclic scans of k + 1 keys, LRU's misses divided by MIN's came out at 2.00, 4.00, 7.98 and 15.81 for k = 2, 4, 8 and 16. What does that show?",
+      opts: [
+        "The scan meets Sleator and Tarjan's bound: LRU is k-competitive, and this sequence makes it exactly k times worse",
+        "LRU is broken for cyclic workloads and should be replaced by MIN in every production cache that sees sequential scans",
+        "MIN's advantage comes from its larger effective cache, since it keeps k + 1 keys where LRU keeps k",
+        "The ratio grows with k because LRU's bookkeeping costs more for larger caches"
+      ], a: 0,
+      why: "LRU misses every request while MIN misses about one in k, matching the theorem's worst case. MIN needs the future, so it cannot be deployed; it uses the same cache size; and the ratio counts misses, not bookkeeping." },
+
+    { type: "mc",
+      q: "Why is swapping each position with a uniformly random position from 0 to n - 1 a biased shuffle?",
+      opts: [
+        "Because the random number generator is not uniform over large ranges, so high indices are chosen less often",
+        "Because it produces n^n equally likely paths, which cannot divide evenly among the n! permutations",
+        "Because it can swap an element with itself, and a self-swap is counted as a separate permutation in the final tally of outcomes",
+        "Because the last element is never moved, so it stays in place more often than chance"
+      ], a: 1,
+      why: "For n = 3, 27 paths fall 4, 5, 5, 5, 4, 4 times on the six orders; 600,000 runs showed 0.149 against 0.185, chi-squared 7,501. The generator is fine, self-swaps are legitimate in Fisher-Yates too, and every position is moved." },
+
+    { type: "blank",
+      q: "Belady's optimal caching policy, which evicts the item whose next use is furthest in the future, is also called ____.",
+      a: ["MIN", "min", "OPT"],
+      why: "It needs the whole request sequence, so it is the offline benchmark for online policies; it matched exhaustive search on 300 small sequences and reached a 76% hit rate where LRU reached 57%." },
+
+    { type: "mc",
+      q: "Why does the interview protocol put the invariant before the code?",
+      opts: [
+        "Because interviewers are formally required to grade the invariant separately from the code, before any of it is written",
+        "Because stating the invariant first saves typing later, since the code can then be made shorter by leaving out its checks",
+        "Because the invariant is the proof: it shows the code will be right and lets a wrong approach be caught in a minute",
+        "Because the invariant determines which programming language to use, and that decision must be settled before anything else"
+      ], a: 2,
+      why: "Invariant, cost, edge cases, then code front-loads what cannot be recited without understanding, and exposes a wrong approach before twenty minutes are spent writing it." },
+
+    { type: "order",
+      q: "Order these Java operations at a million elements by measured time, fastest first:",
+      items: [
+        "ArrayDeque.pollFirst: 3 ns",
+        "HashMap.get: 10 ns",
+        "TreeMap.get: 67 ns",
+        "ArrayList.add(0, x): 99 microseconds"
+      ],
+      why: "A circular-buffer pop and a hash lookup are O(1); the red-black tree is O(log n) with pointer chasing; inserting at the front of an array shifts a million elements." }
+  ]
+});
