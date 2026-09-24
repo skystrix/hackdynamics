@@ -217,6 +217,6 @@ and no banned words in every edited chapter, `figcheck` passes (Ch 16's correcte
 
 ## 6. Gate
 
-Owner approves the map, and decides §3.2: tag E14, E17 and the named halves of E12, E19 and B8 as
-advanced outcomes in the Charter (recommended), or promote assessment of them into core chapters.
-Next: **Phase 5 (machines)** or **Phase 7 (whole-course QA)**, whichever the owner schedules first.
+**Decided 2026-09-24:** owner chose the recommendation for §3.2. E14, E17 and the named halves of
+E12, E19 and B8 are tagged *advanced (optional chapters)* in the Charter.
+Next: **Phase 7 (whole-course QA)**, then Phase 5 (machines).

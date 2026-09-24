@@ -119,14 +119,14 @@ in Phase 6.
 - **E9.** Explain the balanced-search-tree family — AVL, red-black, treap, B-tree — as four answers to one question, with the rotation or invariant that each maintains, and name which real system chose which and why.
 - **E10.** Explain binary heaps: sift up and sift down, why `build-heap` is O(n) and not O(n log n), and what a Fibonacci heap buys Dijkstra in theory and why essentially nobody ships one.
 - **E11.** Explain union-find: what union by rank and what path compression each contribute separately, and why the combined bound is the inverse Ackermann function rather than a constant.
-- **E12.** Explain BFS and DFS as one traversal with two queues, explain the DFS tree and its edge classification, and show how entry and exit times alone yield bridges, articulation points and strongly connected components.
+- **E12.** Explain BFS and DFS as one traversal with two queues, explain the DFS tree and its edge classification, and show how entry and exit times alone yield bridges, articulation points and strongly connected components. *Advanced (optional chapters): the bridges, articulation points and SCCs half is assessed only in Chapter 37.*
 - **E13.** Explain every shortest-path algorithm as the same edge-relaxation step under a different ordering — BFS, 0-1 BFS, Dijkstra, Bellman-Ford, Floyd-Warshall, Johnson — and say precisely, with a three-node counterexample, why Dijkstra breaks on a negative edge.
-- **E14.** Explain max-flow and min-cut: the residual graph, augmenting paths, why the theorem holds, and the **modelling** step that turns bipartite matching, project selection or disjoint paths into a flow network.
+- **E14.** Explain max-flow and min-cut: the residual graph, augmenting paths, why the theorem holds, and the **modelling** step that turns bipartite matching, project selection or disjoint paths into a flow network. *Advanced (optional chapters): assessed only in Chapters 38–39.*
 - **E15.** Specify any dynamic program by executing MIT 6.006's SRTBOT procedure — subproblems, relate, topological order, base cases, original problem, time — rather than by recognizing it.
 - **E16.** Explain why a greedy algorithm is ever correct: the exchange argument, greedy-stays-ahead, and the matroid structure that makes greedy provably optimal — and demonstrate a greedy that looks correct and is not.
-- **E17.** Explain string matching: why naive matching is quadratic, what the prefix function actually computes (borders and periods, not "the longest thing that matched"), and how KMP, Z, Rabin-Karp and Aho-Corasick each exploit that structure.
+- **E17.** Explain string matching: why naive matching is quadratic, what the prefix function actually computes (borders and periods, not "the longest thing that matched"), and how KMP, Z, Rabin-Karp and Aho-Corasick each exploit that structure. *Advanced (optional chapters): assessed only in Chapters 41–43.*
 - **E18.** Explain the range-query family — prefix sums, sparse table, Fenwick tree, segment tree, lazy propagation, sqrt decomposition, Mo's algorithm — as points on one update-cost/query-cost trade-off curve rather than as seven unrelated structures.
-- **E19.** Explain bitmask reasoning: integers as sets, submask enumeration in O(3ⁿ) and why the exponent is three, the XOR basis over GF(2), and why popcount is one instruction on your CPU.
+- **E19.** Explain bitmask reasoning: integers as sets, submask enumeration in O(3ⁿ) and why the exponent is three, the XOR basis over GF(2), and why popcount is one instruction on your CPU. *Advanced (optional chapters): the XOR basis and popcount half is assessed only in Chapter 40.*
 - **E20.** Explain P, NP, reduction and NP-hardness as a working skill — recognize that a problem is hard so you stop searching for a polynomial algorithm and start choosing between exponential search, approximation and heuristics.
 - **E21.** State the strongest argument *against* pattern-based learning — that recognition without derivation produces no transfer — and state this course's answer to it, which is the reason every pattern here is taught with its proof and its failure case.
 
@@ -164,7 +164,7 @@ B1, B2, B7 and B9 were delivered only by the capstone and are **retired** with i
 - **B5.** Implement union-find with union by rank and path compression, plus a rollback variant, and plot the measured near-constant cost curve.
 - **B6.** Implement a segment tree with lazy propagation over a general monoid, and a Fenwick tree, both fuzzed against a naive array over a random operation stream.
 - ~~**B7.** Implement a graph engine — adjacency structures, Dijkstra on your own heap, Dinic's max-flow — with Dijkstra cross-checked against Bellman-Ford and the flow cross-checked against a brute-force min-cut.~~ *Retired.*
-- **B8.** Implement a trie and Aho-Corasick, fuzzed against a naive multi-pattern scan.
+- **B8.** Implement a trie and Aho-Corasick, fuzzed against a naive multi-pattern scan. *Advanced (optional chapters): the Aho-Corasick half is assessed only in Chapter 42; the trie half is core (Chapter 28).*
 - ~~**B9.** Benchmark the finished library against both standard libraries, explain every gap with a mechanism from the course rather than with a shrug, and write the confession table of everything simplified.~~ *Retired.*
 
 **47 outcomes (originally stated as 48; the list has always held 47, corrected 2026-09-24 by the Phase 6 map), 43 active after the four capstone retirements.** §4 of the guide asks for 15–30. *RAG In Depth* shipped 39 and *LLM In Depth*
