@@ -471,7 +471,7 @@ CHAPTERS.push({
         "</svg><div class='fig-cap'>Notice the ratios, not the numbers: doubling n multiplies the cubic column by roughly 8, the quadratic column by roughly 4, and the last column by 2.</div></div>" +
 
         "<p>Read the rows rather than the cells. From n = 400 to n = 800 the cubic column grows by a factor of about ten, which is what a cubic does when you double its input. The quadratic column roughly quadruples. Kadane's column doubles. Those three factors are an <strong>order of growth</strong> showing itself in measurements, and they are the entire content of Chapter 2, visible before any notation has been defined.</p>" +
-        "<p>The machine above runs all four on an array you control and counts the operations as it goes. Set the input to <em>all negative</em> and compare the answers. Two of the four will disagree with what you expect, and the disagreement is not a bug: it is a question about what the problem means when every choice is bad. Bentley's published version of the problem does not allow the empty subarray, so on an all-negative input it must return the least-negative single element. The code above allows it, so it returns 0. Neither is wrong; one of them is unstated, and this <strong>empty subarray convention</strong> is how a correct-looking solution fails a test case.</p>" +
+        "<p>The machine above runs all four on an array you control and counts the operations as it goes. Set the input to <em>all negative</em> and compare the answers. Three of the four return 0 and Shamos's returns the least-negative element, and the disagreement is not a bug: it is a question about what the problem means when every choice is bad. Bentley's published version of the problem does not allow the empty subarray, so on an all-negative input it must return the least-negative single element. The code above allows it, so it returns 0. Neither is wrong; one of them is unstated, and this <strong>empty subarray convention</strong> is how a correct-looking solution fails a test case.</p>" +
         "<div class='callout'><strong>The interview lens.</strong> Maximum subarray is asked constantly, and the follow-up is almost never \"can you go faster\". It is \"what does your solution return for an all-negative array?\" The question is testing whether you noticed there was a decision to make.</div>"
     },
 
@@ -542,7 +542,7 @@ CHAPTERS.push({
         "<li><strong>Part 6, The Edges and the Engineer (40–49).</strong> Bits, strings, numbers, geometry, and the boundary where problems stop being tractable. Then the recognition procedure, the working engineer's handbook, and a field guide to everything this course names without teaching.</li>" +
         "</ul>" +
         "<p><strong>Chapters 37 to 45 are optional, advanced reading.</strong> Strongly connected components, max-flow and matching, bit manipulation, the string algorithms, suffix arrays, number theory and geometry are real subjects, but interviews rarely go this deep. If you are preparing for interviews, read Parts 1 to 4 and Chapters 32 to 36, then go straight to Chapter 46; come back to the optional chapters when you want the depth. They are marked in the contents and on each chapter.</p>" +
-        "<p>Hover the parts in the machine above to see which structures each one builds and which chapters are free. One thing worth noticing while you are there: Chapter 4 has more arrows out of it than any other chapter in Part 1. That is not decoration. If you skip it, Chapters 8, 10 and 11 become templates again.</p>" +
+        "<p>Hover the parts in the machine above to see which structures each one builds and which chapters are free. One thing worth noticing while you are there: Chapter 4 has more arrows out of it than any other chapter in Part 1. That is not decoration. If you skip it, Chapters 8 and 10 become templates again.</p>" +
         "<p>The reading order is the chapter order, and cross-references point backwards except where a chapter says explicitly what to expect and when. You can read Part 6's handbook chapters early if you are preparing for something next week; they will make more sense afterwards, and they say so where it matters.</p>"
     },
 
@@ -2511,7 +2511,7 @@ CHAPTERS.push({
         "<p><strong>And the structure is provably not O(1) amortized.</strong> Fredman and Saks proved a matching lower bound in 1989: in the cell-probe model, &#937;(m&#945;(n)) is required, so no cleverer implementation of these operations can reach constant amortized time. &#945; is not an artefact of Tarjan's proof technique that a better analysis might remove. It is the true answer, and union\u2013find is the standard example of a problem whose exact complexity is a function nobody expected to meet.</p>" +
 
         "<div class='callout'>The useful way to hold this: &#945;(n) &#8804; 4 is a fact you may rely on when estimating work, and \u201cunion\u2013find is constant time\u201d is a sentence to avoid saying, because it is false, and because the person who corrects you will be right for the interesting reason rather than the pedantic one.</div>",
-      viz: "dsaAckermann", vizTitle: "Drag n as far as it goes and find a value for which \u03b1(n) reaches 5"
+      viz: "dsaAckermann", vizTitle: "Drag n as far as it goes and watch \u03b1(n) refuse to reach 5"
     },
 
     { title: "What It Is For",

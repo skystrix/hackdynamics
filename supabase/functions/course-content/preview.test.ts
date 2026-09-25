@@ -20,6 +20,7 @@ Deno.test("toPreview drops paid bodies from locked chapters, keeps free ones who
   assertEquals(locked.locked, true);
   assertEquals(locked.title, "Paid one");
   assertEquals(locked.vizCount, 1); // one of two sections has a viz
+  assertEquals(locked.vizNames, ["y"]); // names only, so the page can badge built machines
   assertEquals(locked.quizCount, 3);
   assert(!("sections" in locked), "locked chapter must not expose sections");
   assert(!("quiz" in locked), "locked chapter must not expose quiz");

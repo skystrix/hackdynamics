@@ -145,7 +145,7 @@
         // Machines live in the course shell's viz scripts; a course that
         // ships none (window.VIZ absent) shows no interactive badge.
         var vizCount = !window.VIZ ? 0
-          : ch.locked ? (ch.vizCount || 0)
+          : ch.locked ? (ch.vizNames ? ch.vizNames.filter(function (n) { return VIZ[n]; }).length : (ch.vizCount || 0))
           : ch.sections.filter(function (s) { return s.viz && VIZ[s.viz]; }).length;
         var quizCount = ch.locked ? (ch.quizCount || 0) : ch.quiz.length;
         var quizDone = progress.quiz[ch.num] !== undefined;

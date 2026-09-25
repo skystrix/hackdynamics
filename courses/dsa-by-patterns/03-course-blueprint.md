@@ -98,7 +98,7 @@ keep, and get the map of the machine you are about to descend into.
 5. *How to use this course* — machines, quizzes, exercises, the two language tabs, and checking your own code against a brute force.
 
 **Machines**
-- `dsaFourSolutions` — **comparator** — state: array of 24 values, chosen algorithm, step index, operation counter. Controls: pick algorithm (4 buttons), input shape (random / all-negative / one-big-positive), step / run / reset. **Discovery:** set the input to all-negative and find the two solutions that return 0 instead of the right answer. Note: "Four algorithms, one problem. Run each on the same array and watch the operation counter."
+- `dsaFourSolutions` — **comparator** — state: array of 24 values, chosen algorithm, step index, operation counter. Controls: pick algorithm (4 buttons), input shape (random / all-negative / one-big-positive), step / run / reset. **Discovery:** set the input to all-negative and find that three solutions return 0 (the empty subarray, as the chapter's code allows) while divide and conquer returns the least-negative element. *(Built 2026-09-25; the original spec said "two", which the chapter's code contradicts.)* Note: "Four algorithms, one problem. Run each on the same array and watch the operation counter."
 - `dsaCourseMap` — **inspector** — state: hovered part. Controls: hover or tab to each of the six parts. **Discovery:** find the three chapters that are free. Note: "Hover a part to see what it teaches and which structures it builds."
 
 **Figures**
@@ -282,7 +282,7 @@ change bought.
 
 **Machines**
 - `dsaUnionFind` — **builder** — state: n=16 elements as a forest, chosen variant, operation counter, tree depths. Controls: union(a,b) by clicking two nodes, find(a), reset, variant picker (quick-find / quick-union / by-rank / by-rank + compression), "adversarial sequence" button. **Discovery:** run the adversarial sequence on quick-union and watch the tree become a path; switch on union-by-rank and watch the same sequence stay shallow. Note: "Click two nodes to union them. Switch variants and run the adversarial sequence on each."
-- `dsaAckermann` — **tuner** — state: n slider up to 2^65536 (symbolic). Controls: n slider; toggle log* and α(n). **Discovery:** find an n for which α(n) is 5. Note: "α(n) grows so slowly it is hard to believe. Drag n as far as it goes and watch."
+- `dsaAckermann` — **tuner** — state: n slider up to 2^65536 (symbolic). Controls: n slider; toggle log* and α(n). **Discovery:** drag n to its last stop, A₄(1), and see α(n) still at 4 while log* n has passed 2,048; α = 5 needs an n no arrangement of matter can write. Note: "α(n) grows so slowly it is hard to believe. Drag n as far as it goes and watch α(n) refuse to reach 5." *(Built 2026-09-25; the original discovery, "find an n for which α(n) is 5", is impossible, as the chapter itself says.)*
 
 **Figures**
 - The four variants' forests after the same operation sequence, side by side.

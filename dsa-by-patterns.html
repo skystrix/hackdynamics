@@ -63,13 +63,15 @@ window.HD_COURSE = {
     Function (?course=dsa), which returns full chapters to premium members and
     free chapters + locked stubs to everyone else.
 
-    Machines: none are built yet (Phase 5). app.js hides a section's machine
-    when window.VIZ lacks it and shows no interactive badges when window.VIZ
-    is absent, so this page loads no viz script. Add js/viz-dsa*.js here,
-    after the kit, when they exist.
+    Machines are built in stages (Phase 5). js/viz-dsa1.js holds stage 1, the
+    six in the free chapters; the kit it draws with is viz-rag-kit.js, which is
+    course-neutral. app.js hides any section machine that is not registered
+    yet, and counts only registered ones in the chapter badges.
   -->
+  <script src="js/viz-rag-kit.js"></script>
+  <script src="js/viz-dsa1.js"></script>
   <script src="js/quiz.js"></script>
-  <script src="js/app.js?v=2"></script>
+  <script src="js/app.js?v=3"></script>
   <!-- Paywall: must run after the DOM and HDAuth exist -->
   <script src="js/gate.js"></script>
 </body>

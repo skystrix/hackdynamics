@@ -44,6 +44,8 @@ export function toPreview(chapters: Chapter[]): unknown[] {
       num: ch.num, part: ch.part, title: ch.title, blurb: ch.blurb, optional: ch.optional,
       locked: true,
       vizCount: (ch.sections ?? []).filter((s) => s.viz).length,
+      // Names, not bodies: lets the page badge only the machines it has built.
+      vizNames: (ch.sections ?? []).filter((s) => s.viz).map((s) => s.viz),
       quizCount: (ch.quiz ?? []).length,
     }
   );
