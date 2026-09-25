@@ -169,10 +169,10 @@ tools/deploy-content.sh
 - Verify it's up: Dashboard → **Edge Functions** → `course-content` should be listed.
 - Quick check it's gating correctly (anonymous gets the preview, not the full text):
   ```bash
-  curl -s "https://gfmeewpztjxhuemrymzi.supabase.co/functions/v1/course-content?course=dsa" | head -c 300
+  curl -s "https://gfmeewpztjxhuemrymzi.supabase.co/functions/v1/course-content?course=dsa" | grep -o '"locked":true' | wc -l
   ```
-  Locked chapters come back as `"locked":true` stubs with no `sections`; a logged-in
-  premium browser gets every chapter in full.
+  Prints the number of locked chapters (46 for `dsa`): they come back as stubs with no
+  `sections`. A logged-in premium browser gets every chapter in full.
 
 > **Re-run B2 whenever a course is added or a chapter changes.** The function
 > builds every course's payload at cold start from `_packed.ts`, so a
