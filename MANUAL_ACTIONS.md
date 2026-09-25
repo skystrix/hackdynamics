@@ -173,8 +173,8 @@ supabase functions deploy course-content
 > builds every course's payload at cold start from the files in `_data/`, so a
 > new course is invisible until it is redeployed — the symptom is the reader
 > page loading, the machines registering, and the content call returning
-> `404 {"error":"Unknown course"}`. As of 2026-09-12 the map has three entries:
-> `db`, `rag` and `llm`.
+> `404 {"error":"Unknown course"}`. As of 2026-09-25 the map has four entries:
+> `db`, `rag`, `llm` and `dsa`.
 
 ### B3. Get your Razorpay webhook secret (needed for the next step)
 See PART C step C2 below — it's created in the Razorpay dashboard. Come back here

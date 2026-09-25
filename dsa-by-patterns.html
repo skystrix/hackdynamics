@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSA By Patterns — Data Structures and Algorithms as Mechanisms</title>
+<meta name="description" content="An interactive, depth-first course on data structures and algorithms: the patterns every interview problem is built from, taught as mechanisms rather than recipes — why each one works, when it silently doesn't, and what to do when nothing matches. Every routine in Python and Java.">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/style.css?v=3">
+<script src="js/theme.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<!-- Razorpay Standard Checkout — used by the upgrade wall in js/gate.js -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<!--
+  Which course this shell serves. gate.js asks the course-content function for
+  it (?course=dsa) and app.js keys progress and hero copy off it.
+-->
+<script>
+window.HD_COURSE = {
+  key: "dsa",
+  title: "DSA By Patterns",
+  heroTitle: "Why the Pattern Works",
+  heroSub: "Data structures and algorithms as mechanisms rather than recipes — why two " +
+           "pointers touches each element once, why a hash table goes quadratic on inputs " +
+           "an adversary picked, why build-heap is linear, why knapsack is not polynomial — " +
+           "and what to do when the problem in front of you matches no pattern at all.",
+  heroCta: "Start with chapter 1 ↓",
+  unlockLine: "all 49 chapters, every routine in Python and Java, and 492 quiz questions"
+};
+</script>
+<script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
+</head>
+<body class="gated">
+  <!-- Loading overlay: gate.js fetches the course, then reveals the page for
+       everyone. Free chapters render in full; locked ones show an upgrade CTA. -->
+  <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
+
+  <!-- Top bar: brand, global progress, TOC toggle -->
+  <header id="topbar">
+    <button id="toc-toggle" aria-label="Toggle table of contents">☰</button>
+    <a href="#/" id="brand">DSA<span>·</span>BY PATTERNS</a>
+    <a href="index.html" id="home-link">← Home</a>
+    <div id="progress-wrap" title="Your journey progress">
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <span id="progress-label">0%</span>
+    </div>
+    <div id="account"></div>
+    <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
+  </header>
+
+  <!-- Sidebar: always-accessible table of contents -->
+  <nav id="toc" aria-label="Table of contents">
+    <div id="toc-inner"></div>
+  </nav>
+  <div id="toc-backdrop"></div>
+
+  <!-- Main content area: the SPA renders here -->
+  <main id="app"></main>
+
+  <!--
+    Book content is NOT loaded here. It's served by the `course-content` Edge
+    Function (?course=dsa), which returns full chapters to premium members and
+    free chapters + locked stubs to everyone else.
+
+    Machines: none are built yet (Phase 5). app.js hides a section's machine
+    when window.VIZ lacks it and shows no interactive badges when window.VIZ
+    is absent, so this page loads no viz script. Add js/viz-dsa*.js here,
+    after the kit, when they exist.
+  -->
+  <script src="js/quiz.js"></script>
+  <script src="js/app.js?v=2"></script>
+  <!-- Paywall: must run after the DOM and HDAuth exist -->
+  <script src="js/gate.js"></script>
+</body>
+</html>

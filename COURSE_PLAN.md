@@ -160,7 +160,7 @@ structures and Big-O as a prerequisite — so this track feeds them both.
 
 | # | Course | Status | Shell | What it owns |
 |---|---|---|---|---|
-| 01 | **DSA By Patterns** | In production (Phase 4: chapters 1–49 written; machines not built) | `dsa-by-patterns.html` | Complexity, the word-RAM model and amortized analysis; every core data structure and algorithm from arrays to max-flow and suffix structures; the pattern-recognition procedure; lower bounds and NP-hardness as a working skill. No capstone: an interview course, it ends at Chapter 49 with the field guide. |
+| 01 | **DSA By Patterns** | Live (Phases 4–8 done 2026-09-25: 49 chapters, 111 figures, 492 quiz questions; machines not built) | `dsa-by-patterns.html` | Complexity, the word-RAM model and amortized analysis; every core data structure and algorithm from arrays to max-flow and suffix structures; the pattern-recognition procedure; lower bounds and NP-hardness as a working skill. No capstone: an interview course, it ends at Chapter 49 with the field guide. |
 | 02 | **Operating Systems in Depth** | Planned | — | Processes and threads; **concurrency, synchronization, lock-free structures and parallel algorithms**; scheduling; virtual memory and paging; file systems; I/O and the syscall boundary. |
 | 03 | **Computer Networks in Depth** | Planned | — | The stack from the wire up: framing, IP and routing, TCP's state machine and congestion control, TLS, HTTP/1.1 through HTTP/3, DNS. |
 | 04 | **System Design in Depth** | Planned | — | The design interview taught from mechanism rather than from diagrams: load balancing, caching, partitioning, replication, queues, consistency. Rests on tracks 1 and 2 and on *Databases in Depth*. |
