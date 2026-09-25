@@ -2,7 +2,8 @@
    course-content — serves a course's text, gated by entitlement.
 
    The chapter content (js/bookData-*.js) used to be static files anyone could
-   fetch. It now lives here, bundled with this function and NOT in the public
+   fetch. It now lives in _data/, packed into _packed.ts by
+   tools/pack-content.mjs and bundled with this function, NOT in the public
    site — so the ONLY thing protecting a paid chapter is that its text never
    leaves this function unless the caller is entitled to it.
 
@@ -15,7 +16,7 @@
    requests — gets PREVIEW. Paid chapter bodies are simply absent from PREVIEW,
    so there is nothing in the browser to unlock.
 
-   Which course: `?course=<key>` (default `db`), matching COURSES below.
+   Which course: `?course=<key>` (default `db`), a key in tools/pack-content.mjs.
 
    How premium is checked: we query `profiles?select=is_premium,premium_until`
    with the CALLER's token. Supabase RLS returns their own row only, and only if
@@ -27,7 +28,7 @@
    end for the monthly subscription — a past date means the membership lapsed.
    ========================================================================== */
 
-import "./_data/_shim.js";
+import packed from "./_packed.ts";
 
 export type Chapter = {
   num: number; part: number; title: string; blurb: string; free?: boolean; optional?: boolean;
@@ -48,47 +49,23 @@ export function toPreview(chapters: Chapter[]): unknown[] {
   );
 }
 
-const g = globalThis as unknown as { PARTS: unknown[]; CHAPTERS: Chapter[] };
-
-// Every bookData file assigns to the same window.PARTS / window.CHAPTERS, so
-// courses must be loaded ONE AT A TIME and the globals snapshotted between
-// them. Static imports would all run before any of this code, so the loaders
-// are awaited dynamic imports — literal specifiers, so they still bundle.
-async function build(loaders: (() => Promise<unknown>)[]) {
-  g.PARTS = undefined as unknown as unknown[];
-  g.CHAPTERS = undefined as unknown as Chapter[];
-  for (const load of loaders) await load();
-  const course = { PARTS: g.PARTS, CHAPTERS: g.CHAPTERS };
+// Course text arrives pre-evaluated from tools/pack-content.mjs (which holds the
+// course list): base64(gzip(JSON)) per course, so the upload stays small.
+async function build(b64: string) {
+  const gz = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const json = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  const course = JSON.parse(json) as { PARTS: unknown[]; CHAPTERS: Chapter[] };
   return {
-    full: JSON.stringify(course),
+    full: json,
     preview: JSON.stringify({ PARTS: course.PARTS, CHAPTERS: toPreview(course.CHAPTERS) }),
   };
 }
 
 // Built once per warm instance; each payload is identical for every caller in
-// its tier, so we stringify them at cold start and reuse the strings.
-const COURSES: Record<string, { full: string; preview: string }> = {
-  db: await build([
-    () => import("./_data/bookData-part1.js"),
-    () => import("./_data/bookData-part2.js"),
-    () => import("./_data/bookData-additions1.js"),
-    () => import("./_data/bookData-additions2.js"),
-    () => import("./_data/bookData-additions3.js"),
-    () => import("./_data/bookData-part5.js"),
-  ]),
-  rag: await build([
-    () => import("./_data/bookData-rag-part1.js"),
-    () => import("./_data/bookData-rag-part2.js"),
-    () => import("./_data/bookData-rag-part3.js"),
-    () => import("./_data/bookData-rag-part4.js"),
-  ]),
-  llm: await build([
-    () => import("./_data/bookData-llm-part1.js"),
-  ]),
-  dsa: await build([
-    () => import("./_data/bookData-dsa-part1.js"),
-  ]),
-};
+// its tier, so we build the strings at cold start and reuse them.
+const COURSES: Record<string, { full: string; preview: string }> = Object.fromEntries(
+  await Promise.all(Object.entries(packed).map(async ([key, b64]) => [key, await build(b64)])),
+);
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";

@@ -20,7 +20,9 @@ shared and keyed off `window.HD_COURSE` set by the page.
 Chapter text is no longer static: it is served by the `course-content` Edge Function
 (`supabase/functions/course-content/`), which returns full chapters to premium members
 and free chapters plus locked stubs to everyone else. Registering a new course means
-adding a loader to its `COURSES` map and a page that sets `HD_COURSE.key` to match.
+adding its data files to `tools/pack-content.mjs` and a page that sets `HD_COURSE.key` to
+match; deploy with `tools/deploy-content.sh`, which packs the data (gzip, ~2.6 MB instead of
+~7 MB) before uploading.
 
 > The sections below describe the original databases course and predate that move; the
 > `js/bookData-*.js` paths in them now live under the Edge Function's `_data/`.

@@ -159,21 +159,26 @@ Dashboard → **Settings → Database → Reset database password**, then use th
 
 ### B2. Deploy the content function (do this now)
 ```bash
-supabase functions deploy course-content
+tools/deploy-content.sh
 ```
+- The script packs `_data/` into `_packed.ts` (`tools/pack-content.mjs`), then runs
+  `supabase functions deploy course-content`. Don't run the deploy on its own: the
+  function serves whatever `_packed.ts` holds, and the raw files (~7 MB) exceed the
+  Docker-less upload limit (`413 request entity too large`).
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected automatically — set nothing.
 - Verify it's up: Dashboard → **Edge Functions** → `course-content` should be listed.
-- Quick check it's gating correctly (should return **401**, not the content):
+- Quick check it's gating correctly (anonymous gets the preview, not the full text):
   ```bash
-  curl -i https://gfmeewpztjxhuemrymzi.supabase.co/functions/v1/course-content
+  curl -s "https://gfmeewpztjxhuemrymzi.supabase.co/functions/v1/course-content?course=dsa" | head -c 300
   ```
-  A logged-in premium browser gets the JSON; an anonymous `curl` must not.
+  Locked chapters come back as `"locked":true` stubs with no `sections`; a logged-in
+  premium browser gets every chapter in full.
 
 > **Re-run B2 whenever a course is added or a chapter changes.** The function
-> builds every course's payload at cold start from the files in `_data/`, so a
-> new course is invisible until it is redeployed — the symptom is the reader
+> builds every course's payload at cold start from `_packed.ts`, so a
+> new course is invisible until it is added to `tools/pack-content.mjs` and redeployed — the symptom is the reader
 > page loading, the machines registering, and the content call returning
-> `404 {"error":"Unknown course"}`. As of 2026-09-25 the map has four entries:
+> `404 {"error":"Unknown course"}`. As of 2026-09-25 the pack script has four:
 > `db`, `rag`, `llm` and `dsa`.
 
 ### B3. Get your Razorpay webhook secret (needed for the next step)
