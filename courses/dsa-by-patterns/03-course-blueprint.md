@@ -1746,6 +1746,39 @@ Vitter 1985 (reservoir sampling) · Fisher & Yates 1938 and Durstenfeld 1964 (sh
 Flajolet et al. 2007 (HyperLogLog) · Cormode & Muthukrishnan 2005 (Count-Min) · Lucene's FST ·
 `grep`'s matcher.
 
+**Added in Phase 7 (2026-09-25).** A mechanical pass matched every capitalised name within a
+sentence before a year in the delivered text against the lists above; these are named in the
+chapters but were missing here. Names cited without a year were not caught by that pass.
+
+- *Part 1:* Bachmann 1894 (O notation) · Kislitsyn 1964 · Wells 1965 (sorting twelve needs 30
+  comparisons) · Babai 1979 (Las Vegas) · Galler & Fischer 1964 (union–find) · Hopcroft & Ullman
+  1973 (log\* bound) · Tarjan & van Leeuwen 1984 (path halving) · Fredman & Saks 1989 (union–find
+  lower bound) · Burks, Warren & Wright 1954 and Hamblin 1957 (RPN) · Horowitz & Sahni 1974
+  (meet in the middle).
+- *Part 2:* Bloch 2006 (the binary-search overflow, by name) · von Neumann 1945 (mergesort) ·
+  Klink & Wälde 2011 (hash flooding across web frameworks) · Aumasson & Bernstein 2012 (SipHash).
+- *Part 3:* Korf 1985 (iterative deepening) · Pearson 2005 (canonical coin systems).
+- *Part 4:* Ryabko 1989 (Fenwick's precursor) · Driscoll, Sarnak, Sleator & Tarjan 1989
+  (persistence).
+- *Part 5:* Flajolet & Odlyzko 1990 (random mappings) · Brightwell & Winkler 1991 (counting
+  linear extensions) · Dial 1969 · Borůvka 1926 · Karger, Klein & Tarjan 1995 · Chazelle 2000 ·
+  Chvátal & Reed 1992 (random 2-SAT) · Zwick 1995 · Elias, Feinstein & Shannon 1956 · Munkres
+  1957 · Dilworth 1950 · Picard 1976 (closure) · Dubins & Freedman 1981 and Roth 1982 · Ronn 1990
+  (couples) · Irving 1985 (stable roommates).
+- *Part 6:* Wegner 1960 (popcount) · Fine & Wilf 1965 · Gusfield 1997 (Z algorithm) ·
+  Crochemore & Perrin 1991 (two-way) · Horspool 1980 · Cole 1991 · Galil 1979 · Haertel 2010
+  (GNU grep) · Lempel & Ziv 1977 · Welch 1984 (LZW) · Nong, Zhang & Chan 2009 (SA-IS) · Burrows
+  & Wheeler 1994 · Ferragina & Manzini 2000 (FM-index) · Lamé 1844 · Gries & Misra 1978 (linear
+  sieve) · Jarvis 1973 · Chan 1996 · Dantzig 1947 · Klee & Minty 1972 · Khachiyan 1979 ·
+  Karmarkar 1984 · Levin 1973 · Garey & Johnson 1979 · Christofides 1976 · Turing 1936 · Rice
+  1953 · Rohrer & Taylor 2007 · Claessen & Hughes 2000 (QuickCheck) · Belady 1966 · Fiat et al.
+  1991 (marking) · Shah, Mitra & Matani 2010 (O(1) LFU) · Kirkpatrick, Gelatt & Vecchi 1983 ·
+  Aggarwal & Vitter 1988 · Frigo, Leiserson, Prokop & Ramachandran 1999 · Fredman, Komlós &
+  Szemerédi 1984 · van Emde Boas 1975 · Karger & Stein 1996 · Gomory & Hu 1961 · Edmonds 1965
+  (blossom) · Kirchhoff 1847 · Prüfer 1918 · Karatsuba 1962 · Montgomery 1985 · Garner 1959 ·
+  Shanks 1971 · Voronoi 1908 · Delaunay 1934 · Fortune 1987 · the Stack Overflow outage
+  postmortem, 20 July 2016.
+
 ---
 
 ## 6. Coverage check — computed, not asserted
