@@ -62,6 +62,9 @@
     });
   }
 
+  /* Shared with the later viz-dsa*.js files. */
+  window.DSAKIT = { clear: clear, commas: commas, sup: sup, fmtLog: fmtLog, focusable: focusable, REDUCED: REDUCED };
+
   /* ------------------------------------------------------------------------
      dsaFourSolutions — ch1 §1. The four algorithms exactly as the chapter
      gives them: cubic, quadratic and Kadane start best at 0 (the empty
