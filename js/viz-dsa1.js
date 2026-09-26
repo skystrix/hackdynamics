@@ -62,8 +62,52 @@
     });
   }
 
+  /* back / step / reset over a precomputed trace. `draw(k)` shows state k
+     (0 = before the first step). Returns an object to reload the trace. */
+  function stepper(f, getLen, draw, onReset) {
+    var pos = 0;
+    function go(k) { pos = Math.max(0, Math.min(getLen(), k)); draw(pos); }
+    f.btn("◂ back", function () { go(pos - 1); });
+    f.btn("step ▸", function () { go(pos + 1); });
+    f.btn("to end ⏭", function () { go(getLen()); });
+    f.btn("reset", function () { go(0); if (onReset) onReset(); });
+    return { reload: function () { go(0); }, pos: function () { return pos; }, go: go };
+  }
+  function row(parent) {
+    var s = document.createElement("span");
+    s.style.cssText = "display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center";
+    parent.appendChild(s);
+    return s;
+  }
+  /* Seeded integers in [0, k): machines replay the same "random" input. */
+  function lcg(seed) {
+    return function (k) { seed = (seed * 1103515245 + 12345) % 2147483648; return Math.floor(seed / 2147483648 * k); };
+  }
+  /* A row of value boxes across a 760-wide viewBox; returns the x centre of box i. */
+  function boxes(svg, a, y, opts) {
+    opts = opts || {};
+    var n = a.length, W = Math.min(56, 720 / n), X0 = (760 - W * n) / 2;
+    a.forEach(function (v, i) {
+      var st = opts.style ? opts.style(i) : {};
+      rect(svg, X0 + i * W + 3, y, W - 6, 34, { rx: 6, fill: st.fill || C.card, stroke: st.stroke || C.line, sw: st.sw || 1.2, op: st.op == null ? 1 : st.op });
+      T(svg, X0 + i * W + W / 2, y + 17.5, String(v), { size: W < 40 ? 11 : 14, weight: 600, fill: st.col || C.text });
+      if (!opts.noIndex) T(svg, X0 + i * W + W / 2, y + 46, String(i), { size: 8.5, fill: C.faint });
+    });
+    return { x: function (i) { return X0 + i * W + W / 2; }, left: function (i) { return X0 + i * W; }, W: W };
+  }
+  /* A text box that calls fn(value) on Enter. */
+  function input(parent, value, label, width, fn) {
+    var inp = document.createElement("input");
+    inp.type = "text"; inp.value = value; inp.setAttribute("aria-label", label);
+    inp.style.cssText = "width:" + width + ";font:14px ui-monospace,Menlo,monospace";
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter") fn(inp.value); });
+    parent.appendChild(inp);
+    return inp;
+  }
+
   /* Shared with the later viz-dsa*.js files. */
-  window.DSAKIT = { clear: clear, commas: commas, sup: sup, fmtLog: fmtLog, focusable: focusable, REDUCED: REDUCED };
+  window.DSAKIT = { clear: clear, commas: commas, sup: sup, fmtLog: fmtLog, focusable: focusable, REDUCED: REDUCED,
+    stepper: stepper, row: row, lcg: lcg, boxes: boxes, input: input };
 
   /* ------------------------------------------------------------------------
      dsaFourSolutions — ch1 §1. The four algorithms exactly as the chapter

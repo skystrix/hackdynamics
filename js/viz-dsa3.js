@@ -19,38 +19,8 @@
   var K = window.RAGKIT, D = window.DSAKIT;
   if (!K || !D) throw new Error("viz-dsa3.js needs viz-rag-kit.js and viz-dsa1.js loaded first");
   var C = K.C, S = K.S, T = K.T, rect = K.rect, line = K.line, frame = K.frame;
-  var clear = D.clear, commas = D.commas, focusable = D.focusable;
-
-  function stepper(f, getLen, draw) {
-    var pos = 0;
-    function go(k) { pos = Math.max(0, Math.min(getLen(), k)); draw(pos); }
-    f.btn("◂ back", function () { go(pos - 1); });
-    f.btn("step ▸", function () { go(pos + 1); });
-    f.btn("to end ⏭", function () { go(getLen()); });
-    f.btn("reset", function () { go(0); });
-    return { reload: function () { go(0); }, go: go };
-  }
-  function row(parent) {
-    var s = document.createElement("span");
-    s.style.cssText = "display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center";
-    parent.appendChild(s);
-    return s;
-  }
-  function lcg(seed) {
-    return function (k) { seed = (seed * 1103515245 + 12345) % 2147483648; return Math.floor(seed / 2147483648 * k); };
-  }
-  /* A row of value boxes; returns the x centre of box i. */
-  function boxes(svg, a, y, opts) {
-    opts = opts || {};
-    var n = a.length, W = Math.min(56, 720 / n), X0 = (760 - W * n) / 2;
-    a.forEach(function (v, i) {
-      var st = opts.style ? opts.style(i) : {};
-      rect(svg, X0 + i * W + 3, y, W - 6, 34, { rx: 6, fill: st.fill || C.card, stroke: st.stroke || C.line, sw: st.sw || 1.2, op: st.op == null ? 1 : st.op });
-      T(svg, X0 + i * W + W / 2, y + 17.5, String(v), { size: W < 40 ? 11 : 14, weight: 600, fill: st.col || C.text });
-      if (!opts.noIndex) T(svg, X0 + i * W + W / 2, y + 46, String(i), { size: 8.5, fill: C.faint });
-    });
-    return { x: function (i) { return X0 + i * W + W / 2; }, left: function (i) { return X0 + i * W; }, W: W };
-  }
+  var clear = D.clear, commas = D.commas, focusable = D.focusable,
+    stepper = D.stepper, row = D.row, lcg = D.lcg, boxes = D.boxes;
 
   /* ------------------------------------------------------------------------
      dsaPotential — ch4 §4. The array: Φ = 2·size − capacity, doubling from

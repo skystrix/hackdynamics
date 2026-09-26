@@ -23,25 +23,8 @@
   var K = window.RAGKIT, D = window.DSAKIT;
   if (!K || !D) throw new Error("viz-dsa2.js needs viz-rag-kit.js and viz-dsa1.js loaded first");
   var C = K.C, S = K.S, T = K.T, rect = K.rect, line = K.line, frame = K.frame;
-  var clear = D.clear, commas = D.commas, focusable = D.focusable;
+  var clear = D.clear, commas = D.commas, focusable = D.focusable, stepper = D.stepper, row = D.row;
 
-  /* back / step / reset over a precomputed trace. `draw(k)` shows state k
-     (0 = before the first step). Returns an object to reload the trace. */
-  function stepper(f, getLen, draw, onReset) {
-    var pos = 0;
-    function go(k) { pos = Math.max(0, Math.min(getLen(), k)); draw(pos); }
-    f.btn("◂ back", function () { go(pos - 1); });
-    f.btn("step ▸", function () { go(pos + 1); });
-    f.btn("to end ⏭", function () { go(getLen()); });
-    f.btn("reset", function () { go(0); if (onReset) onReset(); });
-    return { reload: function () { go(0); }, pos: function () { return pos; }, go: go };
-  }
-  function row(parent) {
-    var s = document.createElement("span");
-    s.style.cssText = "display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center";
-    parent.appendChild(s);
-    return s;
-  }
   function numFmt(v) {
     if (v >= 1e6) return v.toExponential(2).replace("e+", "×10^");
     return Math.abs(v - Math.round(v)) < 1e-9 ? commas(v) : v.toFixed(1);
