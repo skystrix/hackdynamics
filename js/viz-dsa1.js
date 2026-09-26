@@ -105,9 +105,24 @@
     return inp;
   }
 
+  /* Text broken into lines that fit `width` viewBox units (a sans glyph is
+     taken as 0.55 of the font size). Returns the y below the last line. */
+  function wrap(parent, x, y, str, width, opts) {
+    opts = opts || {};
+    var size = opts.size || 11, per = Math.max(10, Math.floor(width / (size * 0.55))), lines = [], cur = "";
+    String(str).split(" ").forEach(function (w) {
+      if (cur && (cur + " " + w).length > per) { lines.push(cur); cur = w; } else cur = cur ? cur + " " + w : w;
+    });
+    if (cur) lines.push(cur);
+    var o = {}; for (var k in opts) o[k] = opts[k];
+    o.anchor = o.anchor || "start"; if (o.mono === undefined) o.mono = false;
+    lines.forEach(function (l, i) { T(parent, x, y + i * size * 1.35, l, o); });
+    return y + lines.length * size * 1.35;
+  }
+
   /* Shared with the later viz-dsa*.js files. */
   window.DSAKIT = { clear: clear, commas: commas, sup: sup, fmtLog: fmtLog, focusable: focusable, REDUCED: REDUCED,
-    stepper: stepper, row: row, lcg: lcg, boxes: boxes, input: input };
+    stepper: stepper, row: row, lcg: lcg, boxes: boxes, input: input, wrap: wrap };
 
   /* ------------------------------------------------------------------------
      dsaFourSolutions — ch1 §1. The four algorithms exactly as the chapter
