@@ -11,7 +11,8 @@ better next time.
 **Who reads it.** The author (AI or human) reads all of it before writing a word. The
 course owner uses §4 to run the process and §11 to accept deliverables.
 
-**Status.** Living document. Version 1.1, 2026-09-03 (added §3.6–3.7). Update it whenever a course teaches us
+**Status.** Living document. Version 1.2, 2026-09-27 (added §5.8 beginner on-ramp and §8.4
+practice problems). Version 1.1, 2026-09-03 (added §3.6–3.7). Update it whenever a course teaches us
 something new about how to make courses.
 
 ---
@@ -54,6 +55,8 @@ Concretely, "no other material required" means all of the following are true:
 | Build a working version of the thing | A build-it capstone (§9) |
 | Read the primary literature afterwards | Papers and RFCs named inline where a concept originates; a reading map at the end |
 | Pass a university final in the subject | Coverage audit against at least three university syllabi (§4.2) |
+| Start from zero, with only the stated prerequisites | The beginner on-ramp (§5.8): intuition and a tiny example before formalism, brute force before the clever version, proofs layered so they can be skimmed |
+| Solve the problems the subject is examined on, not only explain them | Graded practice problems with hidden, original solutions in every chapter where the subject is examined by problem-solving (§8.4) |
 
 The bar is high on purpose. If a topic feels "too deep for most readers," it goes in with a
 clear on-ramp, it does not get cut. If a topic feels "too basic," it goes in short, it does
@@ -80,6 +83,7 @@ subject clearly demands otherwise (then say why in the syllabus deliverable).
 | Key terms per chapter | 10–18 | 10–20 |
 | Quiz questions per chapter | 8 | 8–12 |
 | Exercises | inline in capstone chapters only | every chapter (§8.3) |
+| Practice problems | none | 8–15 per chapter where the subject is examined by problem-solving (§8.4) |
 | Free (ungated) chapters | first 3 | first 3, chosen to show the machines |
 | Capstone build | 6 chapters (PocketDB, Java + Go) | 5–8 chapters, two languages |
 
@@ -234,7 +238,8 @@ A two-page document:
 - **Who it is for.** Two or three personas with their current knowledge and their goal
   (for Databases: the backend engineer who uses Postgres daily but has never seen a page
   layout; the student preparing for a systems interview; the engineer moving into
-  infrastructure). Reuse the personas in `marketing/PLAN.md` where they fit.
+  infrastructure). Reuse the personas in `marketing/PLAN.md` where they fit. One persona
+  is always the **beginner**: someone who meets the prerequisites and nothing more (§5.8).
 - **Prerequisites**, stated honestly and minimally, with a pointer to where a reader can
   get each one. A Hack Dynamics course assumes an engineer who can program and has taken
   or can follow an undergraduate CS curriculum. It does not assume the previous course
@@ -294,6 +299,9 @@ The Blueprint is the contract for the whole course. It contains:
    - Which outcomes from the Charter it delivers.
    - Which Topic Universe rows it covers (so nothing core is orphaned).
    - Prerequisite chapters, so the reading order is explicit.
+   - Level: **core** or **advanced** (§5.8).
+   - Practice problems (§8.4), where the subject is examined by problem-solving: judge,
+     number, title, difficulty for each.
    - Estimated body word count.
 3. **The capstone plan** (§9): what is built, in which two languages, one chapter per
    layer, the test that proves each layer, the honest benchmark at the end, and the
@@ -304,6 +312,10 @@ The Blueprint is the contract for the whole course. It contains:
 6. **Coverage check**: every core row of the Topic Universe appears in some chapter's
    list. Every supporting row appears in a section or a named callout. Print the
    orphan list; it must be empty.
+7. **On-ramp check** (§5.8): the chapter in which the learner first writes working code
+   for a real problem (no later than Chapter 3), and the core-only first-pass path.
+8. **Problem coverage check** (§8.4), where it applies: every problem on the named
+   interview lists maps to exactly one chapter or has a stated reason for exclusion.
 
 Gate: the owner approves. After approval, chapter numbers are frozen (the platform keys
 progress and links on them).
@@ -457,6 +469,42 @@ interviewer or a university final would examine) must reach rung 9.
   Say what it does.
 - No claims about performance without a condition attached.
 
+### 5.8 The beginner on-ramp (added 2026-09-27, from DSA By Patterns)
+
+*DSA By Patterns* met the depth rules of this guide and was still hard to get into. Its
+Charter assumed a reader who had already solved hundreds of problems, Part 1 put seven
+chapters of orientation and analysis before the first pattern, and many sections opened with an invariant
+or a proof. The depth was not the problem; the order was. Every course is written so that
+a reader with only the Charter's prerequisites can enter every core chapter. The bottom of
+the §5.3 ladder is still reached; the on-ramp changes the order in which the rungs appear,
+not how far down they go.
+
+- **Write for the least-prepared persona.** The Charter always includes a beginner persona
+  (§4 Phase 1), and every chapter is checked against them (§11.1).
+- **Intuition and a tiny example before formalism.** In every section, rung 1 (a picture
+  and a sentence, or an everyday analogy) and rung 4 (a worked example small enough to do
+  on paper, around 5–8 items) come before the definition, the algorithm, and the proof.
+  A section never opens with notation, a theorem, or a proof.
+- **Simplest correct version first.** Before the clever solution, show the brute force
+  that works, state its cost on a concrete input size, and let the reader see why it is
+  too slow. The optimized version then improves on something they already understand.
+  This is §5.2's naive attempt, made mandatory wherever code is shown.
+- **Layer the proofs, do not remove them.** The correctness argument and the cost
+  derivation go in their own `<h3>` subsection after the code and the example, under a
+  heading that tells a beginner it is safe to skim on a first read ("Why it is correct").
+  The rest of the section must make sense without it.
+- **Re-explain terms in place.** Every term gets a plain-words explanation the first time
+  a chapter uses it, even when an earlier chapter defined it; a one-clause reminder is
+  enough.
+- **Code early.** The learner writes or runs working code for a real problem by the end
+  of Chapter 3. Theory a beginner does not need yet (formal analysis, lower bounds, proof
+  techniques) is taught in place, where a pattern first needs it, or later.
+- **Label the level.** The Blueprint marks each chapter core or advanced. The first
+  sentence of an advanced chapter's blurb says so, and the Orientation chapter gives a
+  first-pass path through the core chapters only.
+- **End with a recap.** The last body section ends with a callout of 3–5 plain-words
+  bullets: what to remember from this chapter.
+
 ---
 
 ## 6. Chapter blueprint
@@ -473,9 +521,11 @@ interviewer or a university final would examine) must reach rung 9.
 3. **Key terms**: 10–20, each with a one-sentence definition that would be correct if
    read in isolation.
 4. **Knowledge check**: 8–12 quiz questions (§8.1).
-5. **Exercises**: 3–6, in a final section titled "Exercises" or inline per section in
+5. **Practice problems** (§8.4), where the subject is examined by problem-solving: a
+   section titled "Practice Problems" after the body sections and before Exercises.
+6. **Exercises**: 3–6, in a final section titled "Exercises" or inline per section in
    capstone chapters (§8.3).
-6. **Navigation** is automatic (previous/next).
+7. **Navigation** is automatic (previous/next).
 
 ### 6.2 Where machines and figures go
 
@@ -675,6 +725,73 @@ Each exercise states what the learner should have found or measured, so it is
 self-checkable. The platform does not yet render solutions; write the expected result
 into the exercise text itself in a "what you should see" sentence.
 
+### 8.4 Practice problems (added 2026-09-27, from DSA By Patterns)
+
+Some subjects are examined by solving problems, not by explaining mechanisms: DSA on
+LeetCode-style judges, SQL on query exercises. For these, understanding the mechanism is
+necessary and not sufficient; the learner has to practise applying it to problems they
+have not seen. §1 promises no other material is needed, so the course carries that
+practice itself. The Blueprint names the chapters this applies to (for DSA: every pattern
+chapter; analysis-only chapters are exempt).
+
+**How many.** 8–15 per chapter, graded: about 3 Easy that apply the pattern directly,
+about 5 Medium that disguise it, and 2–4 Hard that combine it with an earlier chapter's
+pattern. Across the course, the widely used interview lists are covered (for DSA: Blind 75
+and NeetCode 150 in full, LeetCode's Top Interview 150 checked for gaps). Each listed
+problem lands in exactly one chapter, the one whose pattern solves it, or the Blueprint
+says why it is excluded.
+
+**What each problem gets**, in this order:
+
+1. **The problem**: judge, number, title, difficulty, and a link to the problem page, plus
+   one line in our own words saying what is asked. Never reproduce the statement, its
+   examples, or its constraints; the judge owns them (§3.4).
+2. **The cue**: what in the statement signals this chapter's pattern ("sorted array, find
+   a pair" → two pointers).
+3. **Brute force**: the obvious solution and its cost, in one or two sentences.
+4. **The approach**: the key idea or invariant in plain words, pointing back to the
+   section of the chapter that taught it.
+5. **Solution**: code in the course's languages (`code-tabs`), original, and run before
+   it is published: against the judge's sample cases plus a brute-force fuzz harness on
+   random small inputs. An AI author cannot submit to the judge; the owner spot-checks a
+   sample of solutions there at Phase 7.
+6. **Complexity**: time and space, with the reason.
+7. **The trap**: the edge case or wrong turn that fails most first submissions.
+
+Items 2–7 sit inside `<details class='solution'>` so the learner attempts the problem
+before seeing anything. The section opens by telling the learner how: attempt each
+problem for a fixed time (15 minutes for Easy, 25 for Medium, 40 for Hard), then open the
+cue first, and the full solution only if the cue did not unlock it.
+
+**Mixed practice.** Pattern-labelled practice teaches the pattern but not how to pick it,
+and picking it is what an interview tests. The course's recognition or review chapter (for
+DSA, "The Recognition Procedure") carries a mixed set of 20–30 problems drawn from every
+part, with the pattern hidden inside the solution.
+
+**Rules.**
+
+- Free problems only. A premium-only problem is listed only when no free problem teaches
+  the same thing, and is marked "(Premium)".
+- Numbers, titles, difficulties, and links are checked against the judge, never written
+  from memory, and re-checked at Phase 7.
+- Solutions are original writing and original code, never adapted from an editorial or a
+  discussion post (§3.4).
+- Naming the judge and linking to it is fine; nothing on the page suggests the course is
+  affiliated with it.
+
+```js
+{ title: "Practice Problems",
+  html: "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) before opening the cue.</p>" +
+        "<h3>1. Two Sum II (LeetCode 167, Medium)</h3>" +
+        "<p><a href='https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/' target='_blank' rel='noopener'>Open on LeetCode</a>. " +
+        "Find two numbers in a sorted array that add to a target.</p>" +
+        "<details class='solution'><summary>Cue, approach and solution</summary>" +
+        "<p><strong>Cue.</strong> …</p><p><strong>Brute force.</strong> …</p><p><strong>Approach.</strong> …</p>" +
+        "<div class='code-tabs'>…</div>" +
+        "<p><strong>Complexity.</strong> …</p><p><strong>The trap.</strong> …</p>" +
+        "</details>" }
+```
+
 ---
 
 ## 9. Capstone standard: build it
@@ -779,6 +896,8 @@ Only these elements and classes are styled; use nothing else.
 | Code block (single language) | `<pre><code>…</code></pre>` (escape `<`, use `\n` for newlines) |
 | Code block (two languages) | `<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='java'>Java</button><button class='code-tab' data-lang='go'>Go</button></div><pre data-lang='java'><code>…</code></pre><pre data-lang='go' hidden><code>…</code></pre></div>` |
 | Callout | `<div class='callout'>…</div>` |
+| External link | `<a href='…' target='_blank' rel='noopener'>…</a>` (practice problems and primary sources only) |
+| Hidden solution | `<details class='solution'><summary>…</summary>…</details>` (native HTML, no JS; add styling to `css/style.css` when a course first uses it) |
 | Static figure with caption | `<div class='fig'><svg viewBox='0 0 760 H' xmlns='http://www.w3.org/2000/svg' font-family='Menlo,monospace'>…</svg><div class='fig-cap'>What to notice.</div></div>` |
 | Table | Not styled by the site yet. Use a `<ul>` of `<strong>label</strong> — value` lines, or draw a table as an SVG figure (see the `table()` helper in `js/viz4.js`). Add `<table>` styling to `css/style.css` at integration if a course needs many tables. |
 
@@ -837,6 +956,17 @@ A chapter is accepted only when every line is true.
 - [ ] 3–6 exercises across trace / investigate / build, each self-checkable.
 - [ ] The text tells the learner what to do with each machine and what they will discover.
 
+**Beginner on-ramp** (§5.8)
+- [ ] Every section opens with intuition or a tiny worked example, never with notation or a proof.
+- [ ] Wherever code is shown, the brute force comes first, with its cost.
+- [ ] Proofs and derivations sit in their own skimmable subsection; the section reads without them.
+- [ ] Every term is explained in plain words on its first use in this chapter.
+- [ ] Level (core or advanced) matches the Blueprint; the recap callout is present.
+
+**Practice problems** (§8.4, where the Blueprint assigns them)
+- [ ] 8–15 problems, graded Easy / Medium / Hard, each with all seven parts, items 2–7 hidden in `<details>`.
+- [ ] Every number, title, difficulty, and link checked against the judge; every solution passed its fuzz harness; no statement text reproduced.
+
 **Prose**
 - [ ] Voice per §5.1; none of the avoided words.
 - [ ] No acronym unexpanded on first use in the chapter.
@@ -872,6 +1002,8 @@ A chapter is accepted only when every line is true.
 - [ ] Every machine and quiz exercised in a browser in both themes, desktop and 375 px.
 - [ ] Gate verified: anonymous sees preview with locked stubs; premium sees full.
 - [ ] `README.md`, `COURSE_PLAN.md`, landing page, and marketing assets updated.
+- [ ] Beginner read: someone with only the Charter's prerequisites (or the author reading strictly as that persona) worked through the core path; every place they got stuck is logged in the QA Report and fixed.
+- [ ] Problem coverage (§8.4): every problem on the named interview lists maps to a chapter or has a stated exclusion; all problem links resolve.
 - [ ] An engineer who finished the course could sit the university final, the interview, and the on-call rotation for this subject. If any of the three is doubtful, the course is not done.
 
 ---
@@ -911,7 +1043,8 @@ Feed these in order, one per phase, along with this guide and the source files.
 > §10 data format, as one complete JavaScript file fragment. Before writing, re-read the
 > Blueprint entry, the Source Map rows it covers, and at least one primary source and one
 > real-system source; name them in the header comment. Follow §5 for prose, §6 for shape,
-> §8 for terms/quiz/exercises. Include static SVG figures inline. Reference machines by
+> §8 for terms/quiz/exercises, §5.8 for the beginner on-ramp, and §8.4 for the practice
+> problems the Blueprint lists. Include static SVG figures inline. Reference machines by
 > the `viz` keys from the Blueprint. Self-check against §11.1 and list any item you could
 > not satisfy and why.
 
@@ -925,8 +1058,9 @@ Feed these in order, one per phase, along with this guide and the source files.
 > not tested by any quiz question or exercise, and write the missing questions.
 
 **Phase 7**
-> Read the whole course in order as a learner. Produce the QA Report against §11.4 with
-> evidence per item and a list of fixes applied.
+> Read the whole course in order as a learner, then read the core path again as the
+> beginner persona (§5.8). Produce the QA Report against §11.4 with evidence per item and
+> a list of fixes applied.
 
 ---
 
