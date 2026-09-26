@@ -1,5 +1,7 @@
 # DSA By Patterns — Phase 7 Deliverable: Whole-Course QA Report
 
+> **Update 2026-09-26:** the machines item is closed. All 88 machines the text references are built (js/viz-dsa1.js … viz-dsa8.js), so §2.3 and §2.6 no longer fail on machines. Deviations from the Blueprint specs are recorded inline in 03-course-blueprint.md as *(Built …)* notes; chapter 18 (sudoku 250 → 217) and chapter 19 (fib memo hits) were corrected where a machine disagreed with the text.
+
 **Status:** Phase 7 complete. **Not release-clean:** machines (§2.3, §2.6) and integration (§2.7,
 §2.8) stay open, and one of them needs the owner (§4).
 **Date:** 2026-09-25 (read begun 2026-09-24). Phase 6 map: `06-outcome-assessment-map.md`.
