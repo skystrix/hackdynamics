@@ -19400,6 +19400,540 @@ CHAPTERS.push({
         "<p>At eight nodes, fourteen hundred and thirty distinct trees produce only a hundred and twenty-seven distinct postorders when preorder is held fixed &mdash; the pair throws away better than nine trees in ten. The lost information is precisely one bit per single-child node, the left-or-right that only inorder records. A pair of traversals rebuilds a tree exactly when, between them, they answer that question for every node, and the interview's real content is knowing which pair does.</p>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Binary Tree Inorder Traversal</h3>" +
+        "<p><strong>LeetCode 94 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/binary-tree-inorder-traversal/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return a binary tree's values in inorder: left subtree, node, right subtree. The follow-up asks for it without recursion.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Iterative Traversal section: recursion keeps the path from the root on the call stack, so an explicit stack can hold it instead.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> The recursive version, three lines: correct and O(n), and exactly what the follow-up asks you to replace.</p>" +
+        "<p><strong>Approach.</strong> Walk left from the current node, pushing every node on the way. When you can go no further left, pop a node: that is the next value in inorder. Record it, then move to its right child and repeat. Stop when the stack is empty and there is no current node.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def inorderTraversal(self, root: Optional[TreeNode]) -&gt; list[int]:\n" +
+        "        out, stack, node = [], [], root\n" +
+        "        while stack or node:\n" +
+        "            while node:                # go left, remembering the path\n" +
+        "                stack.append(node)\n" +
+        "                node = node.left\n" +
+        "            node = stack.pop()\n" +
+        "            out.append(node.val)       # recorded when popped: left subtree is done\n" +
+        "            node = node.right\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;Integer&gt; inorderTraversal(TreeNode root) {\n" +
+        "        List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        ArrayDeque&lt;TreeNode&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "        TreeNode node = root;\n" +
+        "        while (!stack.isEmpty() || node != null) {\n" +
+        "            while (node != null) { stack.push(node); node = node.left; }   // go left\n" +
+        "            node = stack.pop();\n" +
+        "            out.add(node.val);         // recorded when popped: left subtree is done\n" +
+        "            node = node.right;\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) space for a tree of height h.</p>" +
+        "<p><strong>The trap.</strong> Recording a node when it is pushed. That is preorder. In inorder a node's value is recorded only when it is popped, after its whole left subtree.</p></details>" +
+        "<h3>2. Binary Tree Postorder Traversal</h3>" +
+        "<p><strong>LeetCode 145 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/binary-tree-postorder-traversal/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return a binary tree's values in postorder (left subtree, right subtree, node), without recursion.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Postorder is the hardest of the three to do with a stack, because a node is finished only after both children. The Iterative Traversal section's shortcut: node, right, left is an easy preorder-style walk, and reversing it gives left, right, node.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> The recursive version, as short as inorder's.</p>" +
+        "<p><strong>Approach.</strong> Run a preorder with a stack, but push the left child before the right, so the right child is popped first. That records node, right subtree, left subtree. Reverse the list at the end.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def postorderTraversal(self, root: Optional[TreeNode]) -&gt; list[int]:\n" +
+        "        out, stack = [], [root] if root else []\n" +
+        "        while stack:\n" +
+        "            node = stack.pop()\n" +
+        "            out.append(node.val)       # node, then right, then left\n" +
+        "            if node.left:\n" +
+        "                stack.append(node.left)\n" +
+        "            if node.right:\n" +
+        "                stack.append(node.right)   # pushed last, popped first\n" +
+        "        return out[::-1]               # reversed: left, right, node</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;Integer&gt; postorderTraversal(TreeNode root) {\n" +
+        "        LinkedList&lt;Integer&gt; out = new LinkedList&lt;&gt;();\n" +
+        "        ArrayDeque&lt;TreeNode&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "        if (root != null) stack.push(root);\n" +
+        "        while (!stack.isEmpty()) {\n" +
+        "            TreeNode node = stack.pop();\n" +
+        "            out.addFirst(node.val);    // prepending reverses node, right, left\n" +
+        "            if (node.left != null) stack.push(node.left);\n" +
+        "            if (node.right != null) stack.push(node.right);   // popped first\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(n) space for the output and the stack.</p>" +
+        "<p><strong>The trap.</strong> Believing the reversed walk is a genuine iterative postorder. It produces the right list, but it never visits a node after its children, so it cannot be used for work that must happen at that moment (freeing children, combining their results). That needs a stack with a \"last visited\" check.</p></details>" +
+        "<h3>3. Invert Binary Tree</h3>" +
+        "<p><strong>LeetCode 226 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/invert-binary-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Mirror a binary tree: swap every node's left and right children.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Every node does the same small job (swap its two children) and trusts the recursion to handle the subtrees: the Three Depth-First Orders section's shape with the work at the node.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> There is nothing to brute-force; the only question is doing each node once.</p>" +
+        "<p><strong>Approach.</strong> If the node is empty, return it. Otherwise invert its left and right subtrees, then swap them, and return the node.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def invertTree(self, root: Optional[TreeNode]) -&gt; Optional[TreeNode]:\n" +
+        "        if root:\n" +
+        "            root.left, root.right = self.invertTree(root.right), self.invertTree(root.left)\n" +
+        "        return root</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public TreeNode invertTree(TreeNode root) {\n" +
+        "        if (root == null) return null;\n" +
+        "        TreeNode left = invertTree(root.left);\n" +
+        "        root.left = invertTree(root.right);\n" +
+        "        root.right = left;\n" +
+        "        return root;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) recursion depth.</p>" +
+        "<p><strong>The trap.</strong> Swapping and then recursing into node.left and node.right as if they had not moved. That works either way here because both get inverted, but in problems that treat the sides differently, the order of swap and recursion matters.</p></details>" +
+        "<h3>4. Same Tree</h3>" +
+        "<p><strong>LeetCode 100 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/same-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether two binary trees have the same shape and the same values.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two trees are equal when their roots match and their left subtrees and right subtrees are equal: a definition that is already a recursion.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compare their inorder listings. That fails: different shapes can share an inorder listing, as [1, 2] and [2, null, 1] do.</p>" +
+        "<p><strong>Approach.</strong> If both nodes are empty, they are equal. If only one is empty, or their values differ, they are not. Otherwise both pairs of subtrees must be equal.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isSameTree(self, p: Optional[TreeNode], q: Optional[TreeNode]) -&gt; bool:\n" +
+        "        if not p or not q:\n" +
+        "            return p is q              # both empty, or one is not\n" +
+        "        return p.val == q.val and self.isSameTree(p.left, q.left) and self.isSameTree(p.right, q.right)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isSameTree(TreeNode p, TreeNode q) {\n" +
+        "        if (p == null || q == null) return p == q;   // both empty, or one is not\n" +
+        "        return p.val == q.val &amp;&amp; isSameTree(p.left, q.left) &amp;&amp; isSameTree(p.right, q.right);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(min(m, n)) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> The brute force above: one traversal does not determine a tree, which the Which Traversals Determine the Tree section proves. Compare the structure itself.</p></details>" +
+        "<h3>5. Symmetric Tree</h3>" +
+        "<p><strong>LeetCode 101 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/symmetric-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a binary tree is a mirror image of itself around its centre.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Same Tree with one twist: compare the left subtree with the right subtree mirrored, so a node's left child is compared with the other node's right child.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Build the inverted tree and compare it with the original: O(n) extra memory.</p>" +
+        "<p><strong>Approach.</strong> A helper compares two nodes a and b: both empty is a match, one empty is not, otherwise their values must be equal and a.left must mirror b.right and a.right must mirror b.left. Call it on the root's two children.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isSymmetric(self, root: Optional[TreeNode]) -&gt; bool:\n" +
+        "        def mirror(a, b):\n" +
+        "            if not a or not b:\n" +
+        "                return a is b\n" +
+        "            return a.val == b.val and mirror(a.left, b.right) and mirror(a.right, b.left)   # crossed\n" +
+        "        return mirror(root.left, root.right)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isSymmetric(TreeNode root) {\n" +
+        "        return mirror(root.left, root.right);\n" +
+        "    }\n" +
+        "\n" +
+        "    private boolean mirror(TreeNode a, TreeNode b) {\n" +
+        "        if (a == null || b == null) return a == b;\n" +
+        "        return a.val == b.val &amp;&amp; mirror(a.left, b.right) &amp;&amp; mirror(a.right, b.left);   // crossed\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Comparing a.left with b.left, which tests whether the two halves are equal, not mirrored.</p></details>" +
+        "<h3>6. Subtree of Another Tree</h3>" +
+        "<p><strong>LeetCode 572 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/subtree-of-another-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether one tree contains a node whose whole subtree is identical to a second tree.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Visit every node of the big tree and ask Same Tree about it.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> That is the brute force, and it is the expected answer at these sizes: O(m \u00d7 n) in the worst case, 2 \u00d7 10\u2076 at the limits.</p>" +
+        "<p><strong>Approach.</strong> If the big tree is empty, answer false. If it is the same tree as subRoot, answer true. Otherwise look in its left and right subtrees.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isSubtree(self, root: Optional[TreeNode], subRoot: Optional[TreeNode]) -&gt; bool:\n" +
+        "        def same(p, q):\n" +
+        "            if not p or not q:\n" +
+        "                return p is q\n" +
+        "            return p.val == q.val and same(p.left, q.left) and same(p.right, q.right)\n" +
+        "\n" +
+        "        if not root:\n" +
+        "            return False\n" +
+        "        return same(root, subRoot) or self.isSubtree(root.left, subRoot) or self.isSubtree(root.right, subRoot)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isSubtree(TreeNode root, TreeNode subRoot) {\n" +
+        "        if (root == null) return false;\n" +
+        "        return same(root, subRoot) || isSubtree(root.left, subRoot) || isSubtree(root.right, subRoot);\n" +
+        "    }\n" +
+        "\n" +
+        "    private boolean same(TreeNode p, TreeNode q) {\n" +
+        "        if (p == null || q == null) return p == q;\n" +
+        "        return p.val == q.val &amp;&amp; same(p.left, q.left) &amp;&amp; same(p.right, q.right);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(h) depth. Serializing both trees with null markers and running a string search (Chapter 41) gets O(m + n).</p>" +
+        "<p><strong>The trap.</strong> Checking only whether subRoot's values appear as a connected part. A subtree must include everything below the node, so [1, 2] is not a subtree of [1, 2, 3] rooted at 1 because that node also has a 3.</p></details>" +
+        "<h3>7. Binary Tree Level Order Traversal</h3>" +
+        "<p><strong>LeetCode 102 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/binary-tree-level-order-traversal/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return a tree's values level by level, left to right, as a list of lists.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Level Order section: breadth-first search with a queue. To know where each level ends, process the queue in rounds, one round per level.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compute each node's depth recursively and bucket the values by depth: also O(n), with recursion.</p>" +
+        "<p><strong>Approach.</strong> Start the queue with the root. While it is not empty, note its current size: that many nodes form this level. Pop exactly that many, record their values, and push their children, which form the next level.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def levelOrder(self, root: Optional[TreeNode]) -&gt; list[list[int]]:\n" +
+        "        out, q = [], deque([root] if root else [])\n" +
+        "        while q:\n" +
+        "            level = []\n" +
+        "            for _ in range(len(q)):    # exactly this level's nodes\n" +
+        "                node = q.popleft()\n" +
+        "                level.append(node.val)\n" +
+        "                if node.left:\n" +
+        "                    q.append(node.left)\n" +
+        "                if node.right:\n" +
+        "                    q.append(node.right)\n" +
+        "            out.append(level)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; levelOrder(TreeNode root) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        ArrayDeque&lt;TreeNode&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "        if (root != null) q.add(root);\n" +
+        "        while (!q.isEmpty()) {\n" +
+        "            List&lt;Integer&gt; level = new ArrayList&lt;&gt;();\n" +
+        "            for (int k = q.size(); k &gt; 0; k--) {   // exactly this level's nodes\n" +
+        "                TreeNode node = q.poll();\n" +
+        "                level.add(node.val);\n" +
+        "                if (node.left != null) q.add(node.left);\n" +
+        "                if (node.right != null) q.add(node.right);\n" +
+        "            }\n" +
+        "            out.add(level);\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(w) space for the widest level.</p>" +
+        "<p><strong>The trap.</strong> Popping until the queue is empty in one loop. The children you push join the same loop, and the level boundaries are lost. Freezing the size at the start of each round is what separates levels.</p></details>" +
+        "<h3>8. Binary Tree Right Side View</h3>" +
+        "<p><strong>LeetCode 199 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/binary-tree-right-side-view/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Standing to the right of a tree, list the values you can see from top to bottom: the rightmost node of each level.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Level order, keeping only the last node of each round.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Collect all levels as in Level Order Traversal and take each level's last value: the same idea with more memory.</p>" +
+        "<p><strong>Approach.</strong> Run the level-by-level BFS, pushing each node's right child before its left. Then the first node popped in each round is the rightmost on its level; record its value.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def rightSideView(self, root: Optional[TreeNode]) -&gt; list[int]:\n" +
+        "        out, q = [], deque([root] if root else [])\n" +
+        "        while q:\n" +
+        "            for i in range(len(q)):\n" +
+        "                node = q.popleft()\n" +
+        "                if i == 0:\n" +
+        "                    out.append(node.val)   # the first popped when pushing right child first\n" +
+        "                if node.right:\n" +
+        "                    q.append(node.right)\n" +
+        "                if node.left:\n" +
+        "                    q.append(node.left)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;Integer&gt; rightSideView(TreeNode root) {\n" +
+        "        List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        ArrayDeque&lt;TreeNode&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "        if (root != null) q.add(root);\n" +
+        "        while (!q.isEmpty()) {\n" +
+        "            for (int i = 0, k = q.size(); i &lt; k; i++) {\n" +
+        "                TreeNode node = q.poll();\n" +
+        "                if (i == 0) out.add(node.val);   // right child pushed first: rightmost comes first\n" +
+        "                if (node.right != null) q.add(node.right);\n" +
+        "                if (node.left != null) q.add(node.left);\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(w) space.</p>" +
+        "<p><strong>The trap.</strong> Following right children only. A level's rightmost node can sit in the left subtree when the right subtree is shorter, as in [1, 2, 3, 4], where 4 is visible from the right.</p></details>" +
+        "<h3>9. Binary Tree Zigzag Level Order Traversal</h3>" +
+        "<p><strong>LeetCode 103 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/binary-tree-zigzag-level-order-traversal/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the values level by level, alternating left-to-right and right-to-left.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Level Order Traversal with the recorded level reversed on every other round. The queue itself does not change direction.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Collect all levels and reverse every second one afterwards: the same thing in two passes.</p>" +
+        "<p><strong>Approach.</strong> Run the level-by-level BFS, collecting each level left to right. Before appending a level, reverse it if its index is odd.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def zigzagLevelOrder(self, root: Optional[TreeNode]) -&gt; list[list[int]]:\n" +
+        "        out, q = [], deque([root] if root else [])\n" +
+        "        while q:\n" +
+        "            level = []\n" +
+        "            for _ in range(len(q)):\n" +
+        "                node = q.popleft()\n" +
+        "                level.append(node.val)\n" +
+        "                if node.left:\n" +
+        "                    q.append(node.left)\n" +
+        "                if node.right:\n" +
+        "                    q.append(node.right)\n" +
+        "            out.append(level[::-1] if len(out) % 2 else level)   # reverse the record, not the queue\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; zigzagLevelOrder(TreeNode root) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        ArrayDeque&lt;TreeNode&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "        if (root != null) q.add(root);\n" +
+        "        while (!q.isEmpty()) {\n" +
+        "            LinkedList&lt;Integer&gt; level = new LinkedList&lt;&gt;();\n" +
+        "            boolean reversed = out.size() % 2 == 1;\n" +
+        "            for (int k = q.size(); k &gt; 0; k--) {\n" +
+        "                TreeNode node = q.poll();\n" +
+        "                if (reversed) level.addFirst(node.val); else level.addLast(node.val);   // the record, not the queue\n" +
+        "                if (node.left != null) q.add(node.left);\n" +
+        "                if (node.right != null) q.add(node.right);\n" +
+        "            }\n" +
+        "            out.add(level);\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(w) space.</p>" +
+        "<p><strong>The trap.</strong> Trying to push children in a different order on alternate levels. That scrambles the order of the level after next, because the children of a reversed level come out reversed too. Reverse the recorded list, not the queue.</p></details>" +
+        "<h3>10. Construct Binary Tree from Preorder and Inorder Traversal</h3>" +
+        "<p><strong>LeetCode 105 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/construct-binary-tree-from-preorder-and-inorder-traversal/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Rebuild a tree of distinct values from its preorder and inorder listings.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Which Traversals Determine the Tree section. Preorder's first value is the root; finding it in inorder splits inorder into the left subtree (before it) and the right subtree (after it), and their sizes tell you how to split the rest of preorder.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Search inorder for the root with a linear scan at every step: O(n\u00b2) on a skewed tree, 4.5 million steps at n = 3,000.</p>" +
+        "<p><strong>Approach.</strong> Map each value to its inorder position. Recurse on an inorder range [lo, hi): the next unused preorder value is this subtree's root; build its left subtree from [lo, root position) and then its right subtree from (root position, hi). A single pointer walks preorder, because preorder lists the root, then the whole left subtree, then the right.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def buildTree(self, preorder: list[int], inorder: list[int]) -&gt; Optional[TreeNode]:\n" +
+        "        where = {v: i for i, v in enumerate(inorder)}\n" +
+        "        nxt = iter(preorder)           # preorder: root, whole left, whole right\n" +
+        "\n" +
+        "        def build(lo, hi):             # the subtree whose inorder is inorder[lo:hi]\n" +
+        "            if lo &gt;= hi:\n" +
+        "                return None\n" +
+        "            root = TreeNode(next(nxt))\n" +
+        "            mid = where[root.val]\n" +
+        "            root.left = build(lo, mid) # left first: it comes first in preorder\n" +
+        "            root.right = build(mid + 1, hi)\n" +
+        "            return root\n" +
+        "\n" +
+        "        return build(0, len(inorder))</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final Map&lt;Integer, Integer&gt; where = new HashMap&lt;&gt;();\n" +
+        "    private int next = 0;              // preorder: root, whole left, whole right\n" +
+        "    private int[] preorder;\n" +
+        "\n" +
+        "    public TreeNode buildTree(int[] preorder, int[] inorder) {\n" +
+        "        this.preorder = preorder;\n" +
+        "        for (int i = 0; i &lt; inorder.length; i++) where.put(inorder[i], i);\n" +
+        "        return build(0, inorder.length);\n" +
+        "    }\n" +
+        "\n" +
+        "    private TreeNode build(int lo, int hi) {   // the subtree whose inorder is [lo, hi)\n" +
+        "        if (lo &gt;= hi) return null;\n" +
+        "        TreeNode root = new TreeNode(preorder[next++]);\n" +
+        "        int mid = where.get(root.val);\n" +
+        "        root.left = build(lo, mid);    // left first: it comes first in preorder\n" +
+        "        root.right = build(mid + 1, hi);\n" +
+        "        return root;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time with the position map, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Building the right subtree before the left. The preorder pointer must consume the left subtree's values first, in the order preorder lists them.</p></details>" +
+        "<h3>11. Construct Binary Tree from Inorder and Postorder Traversal</h3>" +
+        "<p><strong>LeetCode 106 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/construct-binary-tree-from-inorder-and-postorder-traversal/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Rebuild a tree of distinct values from its inorder and postorder listings.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The previous problem mirrored: postorder's last value is the root, and read backwards postorder lists the root, then the whole right subtree, then the left.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Linear search for each root in inorder: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Map values to inorder positions and walk postorder from the end. For an inorder range, the next value from the end is the root; build the right subtree first, then the left, because that is the order backwards postorder produces them.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def buildTree(self, inorder: list[int], postorder: list[int]) -&gt; Optional[TreeNode]:\n" +
+        "        where = {v: i for i, v in enumerate(inorder)}\n" +
+        "        nxt = reversed(postorder)      # backwards: root, whole right, whole left\n" +
+        "\n" +
+        "        def build(lo, hi):\n" +
+        "            if lo &gt;= hi:\n" +
+        "                return None\n" +
+        "            root = TreeNode(next(nxt))\n" +
+        "            mid = where[root.val]\n" +
+        "            root.right = build(mid + 1, hi)   # right first, backwards\n" +
+        "            root.left = build(lo, mid)\n" +
+        "            return root\n" +
+        "\n" +
+        "        return build(0, len(inorder))</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final Map&lt;Integer, Integer&gt; where = new HashMap&lt;&gt;();\n" +
+        "    private int next;                  // walks postorder backwards\n" +
+        "    private int[] postorder;\n" +
+        "\n" +
+        "    public TreeNode buildTree(int[] inorder, int[] postorder) {\n" +
+        "        this.postorder = postorder;\n" +
+        "        next = postorder.length - 1;\n" +
+        "        for (int i = 0; i &lt; inorder.length; i++) where.put(inorder[i], i);\n" +
+        "        return build(0, inorder.length);\n" +
+        "    }\n" +
+        "\n" +
+        "    private TreeNode build(int lo, int hi) {\n" +
+        "        if (lo &gt;= hi) return null;\n" +
+        "        TreeNode root = new TreeNode(postorder[next--]);\n" +
+        "        int mid = where.get(root.val);\n" +
+        "        root.right = build(mid + 1, hi);   // right first, backwards\n" +
+        "        root.left = build(lo, mid);\n" +
+        "        return root;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Building the left subtree first, as in the previous problem. Walking postorder backwards meets the right subtree's values before the left's.</p></details>" +
+        "<h3>12. Binary Search Tree Iterator</h3>" +
+        "<p><strong>LeetCode 173 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/binary-search-tree-iterator/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Build an iterator over a BST's values in increasing order, with next and hasNext, using O(h) memory.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The iterative inorder of Binary Tree Inorder Traversal, paused between values. The stack is exactly the state that must survive between calls.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Flatten the whole tree into a sorted list in the constructor: O(1) per call but O(n) memory, which the follow-up rules out.</p>" +
+        "<p><strong>Approach.</strong> Keep a stack of the path of nodes still waiting to be visited. The constructor pushes the root and all its left descendants. next pops the top (the smallest remaining value), then pushes its right child and that child's left descendants. hasNext checks whether the stack is empty.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class BSTIterator:\n" +
+        "    def __init__(self, root: Optional[TreeNode]):\n" +
+        "        self.stack = []\n" +
+        "        self._push_left(root)\n" +
+        "\n" +
+        "    def _push_left(self, node):        # the path to the smallest value below node\n" +
+        "        while node:\n" +
+        "            self.stack.append(node)\n" +
+        "            node = node.left\n" +
+        "\n" +
+        "    def next(self) -&gt; int:\n" +
+        "        node = self.stack.pop()\n" +
+        "        self._push_left(node.right)\n" +
+        "        return node.val\n" +
+        "\n" +
+        "    def hasNext(self) -&gt; bool:\n" +
+        "        return bool(self.stack)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.ArrayDeque;\n" +
+        "\n" +
+        "class BSTIterator {\n" +
+        "    private final ArrayDeque&lt;TreeNode&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "\n" +
+        "    public BSTIterator(TreeNode root) { pushLeft(root); }\n" +
+        "\n" +
+        "    private void pushLeft(TreeNode node) {   // the path to the smallest value below node\n" +
+        "        for (; node != null; node = node.left) stack.push(node);\n" +
+        "    }\n" +
+        "\n" +
+        "    public int next() {\n" +
+        "        TreeNode node = stack.pop();\n" +
+        "        pushLeft(node.right);\n" +
+        "        return node.val;\n" +
+        "    }\n" +
+        "\n" +
+        "    public boolean hasNext() { return !stack.isEmpty(); }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(1) amortized per next (each node is pushed and popped once over the whole iteration), O(h) memory.</p>" +
+        "<p><strong>The trap.</strong> Worrying that next is O(h) in the worst case. A single call can push a whole left spine, but across all n calls every node is pushed once: Chapter 4's aggregate argument gives O(1) on average.</p></details>" +
+        "<h3>13. Serialize and Deserialize Binary Tree</h3>" +
+        "<p><strong>LeetCode 297 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/serialize-and-deserialize-binary-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Design a Codec that turns a binary tree into a string and back into the same tree.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Serialisation section: one traversal plus explicit markers for missing children does determine the tree, even though a plain traversal does not. Level order with \"null\" markers, the format LeetCode itself uses, round-trips with two queues and no recursion.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> There is no slower correct way; the question is choosing a format that is unambiguous.</p>" +
+        "<p><strong>Approach.</strong> serialize: BFS from the root, writing each node's value or \"#\" for a missing child, separated by commas. deserialize: read the first value as the root and put it in a queue; for each node taken from the queue, the next two values are its left and right children (or \"#\"), and every real child joins the queue.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "class Codec:\n" +
+        "    def serialize(self, root):\n" +
+        "        out, q = [], deque([root])\n" +
+        "        while q:                       # level order, \"#\" for a missing child\n" +
+        "            node = q.popleft()\n" +
+        "            if node:\n" +
+        "                out.append(str(node.val))\n" +
+        "                q.append(node.left)\n" +
+        "                q.append(node.right)\n" +
+        "            else:\n" +
+        "                out.append(\"#\")\n" +
+        "        return \",\".join(out)\n" +
+        "\n" +
+        "    def deserialize(self, data):\n" +
+        "        vals = data.split(\",\")\n" +
+        "        if vals[0] == \"#\":\n" +
+        "            return None\n" +
+        "        root = TreeNode(int(vals[0]))\n" +
+        "        q, i = deque([root]), 1\n" +
+        "        while q:                       # each node takes the next two values\n" +
+        "            node = q.popleft()\n" +
+        "            for side in (\"left\", \"right\"):\n" +
+        "                if vals[i] != \"#\":\n" +
+        "                    child = TreeNode(int(vals[i]))\n" +
+        "                    setattr(node, side, child)\n" +
+        "                    q.append(child)\n" +
+        "                i += 1\n" +
+        "        return root</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "public class Codec {\n" +
+        "    public String serialize(TreeNode root) {\n" +
+        "        StringBuilder out = new StringBuilder();\n" +
+        "        ArrayDeque&lt;TreeNode&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "        List&lt;TreeNode&gt; order = new ArrayList&lt;&gt;();\n" +
+        "        order.add(root);\n" +
+        "        for (int i = 0; i &lt; order.size(); i++) {   // level order, \"#\" for a missing child\n" +
+        "            TreeNode node = order.get(i);\n" +
+        "            if (i &gt; 0) out.append(',');\n" +
+        "            if (node == null) out.append('#');\n" +
+        "            else { out.append(node.val); order.add(node.left); order.add(node.right); }\n" +
+        "        }\n" +
+        "        return out.toString();\n" +
+        "    }\n" +
+        "\n" +
+        "    public TreeNode deserialize(String data) {\n" +
+        "        String[] vals = data.split(\",\");\n" +
+        "        if (vals[0].equals(\"#\")) return null;\n" +
+        "        TreeNode root = new TreeNode(Integer.parseInt(vals[0]));\n" +
+        "        ArrayDeque&lt;TreeNode&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "        q.add(root);\n" +
+        "        int i = 1;\n" +
+        "        while (!q.isEmpty()) {         // each node takes the next two values\n" +
+        "            TreeNode node = q.poll();\n" +
+        "            if (!vals[i].equals(\"#\")) { node.left = new TreeNode(Integer.parseInt(vals[i])); q.add(node.left); }\n" +
+        "            i++;\n" +
+        "            if (!vals[i].equals(\"#\")) { node.right = new TreeNode(Integer.parseInt(vals[i])); q.add(node.right); }\n" +
+        "            i++;\n" +
+        "        }\n" +
+        "        return root;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time and space in both directions.</p>" +
+        "<p><strong>The trap.</strong> Writing a recursive preorder decoder in Python. It is the classic answer and correct, but on a skewed tree of 10\u2074 nodes it recurses 10\u2074 deep, past CPython's default limit of 1,000 (Chapter 6). The level-order version has no depth limit.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -19711,6 +20245,452 @@ CHAPTERS.push({
         "<p>The measurement is the argument. Against the naive method &mdash; a breadth-first search from every node &mdash; rerooting produced identical answers for all n nodes, at n equals 200, 800 and 2000, while running 75, 333 and 794 times faster respectively. The speedup grows with n because the naive method is quadratic and rerooting is linear: at 2000 nodes the naive run took 758 milliseconds and rerooting took under one. Every subtree aggregate you can compute for the root &mdash; distances, counts, maxima &mdash; can be rerooted to all nodes this way, and recognising when a problem is secretly asking for the all-roots version is what the technique buys.</p>" + "<p>The reroot step deserves one concrete edge. Suppose the root's total distance to all nodes is 30, the tree has 10 nodes, and you slide the root to a child whose subtree holds 4 of them. Those 4 nodes each get one step closer, saving 4; the other 6 nodes each get one step farther, costing 6; so the child's total is 30 minus 4 plus 6, which is 32. That is the whole second pass &mdash; one subtraction and one addition per edge, O(1) each, n edges, O(n) total. The first pass had to compute the root's answer and every subtree's size the slow honest way; the second pass never recomputes a distance, it only adjusts. Seeing that a whole-tree quantity can be slid across an edge in constant time, rather than recomputed, is the entire idea, and it recurs far beyond distances.</p>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Maximum Depth of Binary Tree</h3>" +
+        "<p><strong>LeetCode 104 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/maximum-depth-of-binary-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the number of nodes on the longest path from the root down to a leaf.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Shape section's simplest tree DP: a node's depth is 1 plus the larger of its children's depths, and each child answers the same question for its own subtree.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> There is nothing slower that makes sense; every node must be looked at once.</p>" +
+        "<p><strong>Approach.</strong> Return 0 for an empty tree. Otherwise return 1 + max(depth of left, depth of right).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxDepth(self, root: Optional[TreeNode]) -&gt; int:\n" +
+        "        if not root:\n" +
+        "            return 0\n" +
+        "        return 1 + max(self.maxDepth(root.left), self.maxDepth(root.right))</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maxDepth(TreeNode root) {\n" +
+        "        if (root == null) return 0;\n" +
+        "        return 1 + Math.max(maxDepth(root.left), maxDepth(root.right));\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) recursion depth.</p>" +
+        "<p><strong>The trap.</strong> Recursion depth in Python. A tree of 10\u2074 nodes can be one long chain, which recurses 10\u2074 deep, past CPython's default limit of 1,000 (Chapter 6). A level-by-level BFS that counts levels gives the same answer with no recursion.</p></details>" +
+        "<h3>2. Balanced Binary Tree</h3>" +
+        "<p><strong>LeetCode 110 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/balanced-binary-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether every node's two subtrees differ in height by at most 1.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Height, Balance and Diameter section: return the height upward, and signal \"unbalanced\" with a special value (-1) so the parent can stop.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> At every node, compute both subtree heights from scratch: O(n\u00b2) on a chain.</p>" +
+        "<p><strong>Approach.</strong> A helper returns the subtree's height, or -1 if any node inside it is unbalanced. For a node, get both children's results; if either is -1 or they differ by more than 1, return -1; otherwise return 1 + the larger. The tree is balanced if the root's result is not -1.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isBalanced(self, root: Optional[TreeNode]) -&gt; bool:\n" +
+        "        def height(node):              # the height, or -1 if unbalanced anywhere below\n" +
+        "            if not node:\n" +
+        "                return 0\n" +
+        "            left, right = height(node.left), height(node.right)\n" +
+        "            if left &lt; 0 or right &lt; 0 or abs(left - right) &gt; 1:\n" +
+        "                return -1\n" +
+        "            return 1 + max(left, right)\n" +
+        "        return height(root) &gt;= 0</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isBalanced(TreeNode root) { return height(root) &gt;= 0; }\n" +
+        "\n" +
+        "    private int height(TreeNode node) {   // the height, or -1 if unbalanced anywhere below\n" +
+        "        if (node == null) return 0;\n" +
+        "        int left = height(node.left), right = height(node.right);\n" +
+        "        if (left &lt; 0 || right &lt; 0 || Math.abs(left - right) &gt; 1) return -1;\n" +
+        "        return 1 + Math.max(left, right);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Checking balance only at the root. Both of the root's subtrees can have the same height while a node deep inside is badly unbalanced, as in a tree whose two sides are both long chains.</p></details>" +
+        "<h3>3. Diameter of Binary Tree</h3>" +
+        "<p><strong>LeetCode 543 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/diameter-of-binary-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the number of edges on the longest path between any two nodes.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Height, Balance and Diameter section's key move: the function returns the height to its parent, and on the side updates the answer with the best path that bends at this node, left height plus right height.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compute heights from scratch at every node: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> A helper returns the subtree height in nodes. At each node, with children's heights a and b, the longest path through this node has a + b edges; keep the maximum. Return 1 + max(a, b) upward.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def diameterOfBinaryTree(self, root: Optional[TreeNode]) -&gt; int:\n" +
+        "        best = 0\n" +
+        "\n" +
+        "        def height(node):\n" +
+        "            nonlocal best\n" +
+        "            if not node:\n" +
+        "                return 0\n" +
+        "            a, b = height(node.left), height(node.right)\n" +
+        "            best = max(best, a + b)    # the path that bends here\n" +
+        "            return 1 + max(a, b)       # what the parent needs\n" +
+        "\n" +
+        "        height(root)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int best = 0;\n" +
+        "\n" +
+        "    public int diameterOfBinaryTree(TreeNode root) {\n" +
+        "        height(root);\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "\n" +
+        "    private int height(TreeNode node) {\n" +
+        "        if (node == null) return 0;\n" +
+        "        int a = height(node.left), b = height(node.right);\n" +
+        "        best = Math.max(best, a + b);  // the path that bends here\n" +
+        "        return 1 + Math.max(a, b);     // what the parent needs\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Assuming the longest path goes through the root. It may lie entirely inside one subtree, which is why every node is a candidate.</p></details>" +
+        "<h3>4. Path Sum</h3>" +
+        "<p><strong>LeetCode 112 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/path-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether some root-to-leaf path adds up to a target.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Information flows down this time: pass the remaining target to each child. At a leaf, check whether what remains equals the leaf's value.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> List every root-to-leaf path and sum it: O(n \u00d7 h).</p>" +
+        "<p><strong>Approach.</strong> For an empty tree, answer false. Subtract the node's value from the target. At a leaf, answer whether the remainder is 0. Otherwise ask the same of either child.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def hasPathSum(self, root: Optional[TreeNode], targetSum: int) -&gt; bool:\n" +
+        "        if not root:\n" +
+        "            return False\n" +
+        "        rest = targetSum - root.val\n" +
+        "        if not root.left and not root.right:\n" +
+        "            return rest == 0           # only a leaf may end the path\n" +
+        "        return self.hasPathSum(root.left, rest) or self.hasPathSum(root.right, rest)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean hasPathSum(TreeNode root, int targetSum) {\n" +
+        "        if (root == null) return false;\n" +
+        "        int rest = targetSum - root.val;\n" +
+        "        if (root.left == null &amp;&amp; root.right == null) return rest == 0;   // only a leaf ends a path\n" +
+        "        return hasPathSum(root.left, rest) || hasPathSum(root.right, rest);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Stopping at any node, not only at leaves. A path must end at a leaf; with target 1 and tree [1, 2], the root alone sums to 1 but is not a leaf, so the answer is false.</p></details>" +
+        "<h3>5. Lowest Common Ancestor of a Binary Tree</h3>" +
+        "<p><strong>LeetCode 236 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given two nodes p and q in a binary tree, return their lowest common ancestor: the deepest node that has both below it (a node counts as below itself).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Lowest Common Ancestor section: each call reports what it found below it (p, q, or their ancestor). The first node where the two searches meet from different sides is the answer.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Record p's ancestors in a set, then walk up from q until you reach one of them: O(n) with parent pointers, which the tree does not have, so they must be built first.</p>" +
+        "<p><strong>Approach.</strong> If the node is empty, p or q, return it. Otherwise search both subtrees. If both return something, p and q are on different sides and this node is their LCA. If only one side returns something, pass it up.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def lowestCommonAncestor(self, root: 'TreeNode', p: 'TreeNode', q: 'TreeNode') -&gt; 'TreeNode':\n" +
+        "        if root is None or root is p or root is q:\n" +
+        "            return root                # found one (or nothing): report it upward\n" +
+        "        left = self.lowestCommonAncestor(root.left, p, q)\n" +
+        "        right = self.lowestCommonAncestor(root.right, p, q)\n" +
+        "        if left and right:\n" +
+        "            return root                # p and q are on different sides\n" +
+        "        return left or right</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n" +
+        "        if (root == null || root == p || root == q) return root;   // found one: report it\n" +
+        "        TreeNode left = lowestCommonAncestor(root.left, p, q);\n" +
+        "        TreeNode right = lowestCommonAncestor(root.right, p, q);\n" +
+        "        if (left != null &amp;&amp; right != null) return root;            // different sides\n" +
+        "        return left != null ? left : right;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Continuing to search below p after finding it. If q is below p, then p is the answer, and returning p as soon as it is reached handles that case without looking further.</p></details>" +
+        "<h3>6. Validate Binary Search Tree</h3>" +
+        "<p><strong>LeetCode 98 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/validate-binary-search-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a binary tree is a valid BST: every value in a node's left subtree is smaller than it, and every value in its right subtree is larger.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Validate a BST section: checking each node against its two children is not enough. Each node must lie inside a range set by all its ancestors, so pass the allowed range down.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For every node, scan its whole left and right subtrees: O(n\u00b2). Or check that the inorder listing is strictly increasing, which is O(n) and correct.</p>" +
+        "<p><strong>Approach.</strong> Recurse with (node, low, high), starting with no bounds. A node's value must be strictly between low and high. Its left child gets (low, value) and its right child gets (value, high).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isValidBST(self, root: Optional[TreeNode]) -&gt; bool:\n" +
+        "        def ok(node, low, high):       # every value below must lie strictly in (low, high)\n" +
+        "            if not node:\n" +
+        "                return True\n" +
+        "            if (low is not None and node.val &lt;= low) or (high is not None and node.val &gt;= high):\n" +
+        "                return False\n" +
+        "            return ok(node.left, low, node.val) and ok(node.right, node.val, high)\n" +
+        "        return ok(root, None, None)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isValidBST(TreeNode root) { return ok(root, null, null); }\n" +
+        "\n" +
+        "    // Integer bounds, null for \"none\": MIN_VALUE and MAX_VALUE are legal node values\n" +
+        "    private boolean ok(TreeNode node, Integer low, Integer high) {\n" +
+        "        if (node == null) return true;\n" +
+        "        if ((low != null &amp;&amp; node.val &lt;= low) || (high != null &amp;&amp; node.val &gt;= high)) return false;\n" +
+        "        return ok(node.left, low, node.val) &amp;&amp; ok(node.right, node.val, high);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Two. Comparing a node only with its children lets [5, 4, 6, null, null, 3, 7] through, although 3 sits in 5's right subtree. And in Java, using Integer.MIN_VALUE and MAX_VALUE as \"no bound\" fails when a node holds exactly those values, which the constraints allow; use null (or long) for \"no bound\".</p></details>" +
+        "<h3>7. Count Good Nodes in Binary Tree</h3>" +
+        "<p><strong>LeetCode 1448 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/count-good-nodes-in-binary-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A node is good if no node on the path from the root to it has a larger value. Count the good nodes.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Pass the largest value seen on the way down; a node is good when its value is at least that.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each node, walk its path from the root and take the maximum: O(n \u00d7 h).</p>" +
+        "<p><strong>Approach.</strong> Recurse with (node, best so far). Count 1 if node.val \u2265 best, then recurse into both children with max(best, node.val).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def goodNodes(self, root: TreeNode) -&gt; int:\n" +
+        "        def count(node, best):         # best: the largest value above node\n" +
+        "            if not node:\n" +
+        "                return 0\n" +
+        "            good = 1 if node.val &gt;= best else 0   # equal counts as good\n" +
+        "            best = max(best, node.val)\n" +
+        "            return good + count(node.left, best) + count(node.right, best)\n" +
+        "        return count(root, root.val)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int goodNodes(TreeNode root) { return count(root, root.val); }\n" +
+        "\n" +
+        "    private int count(TreeNode node, int best) {   // best: the largest value above node\n" +
+        "        if (node == null) return 0;\n" +
+        "        int good = node.val &gt;= best ? 1 : 0;       // equal counts as good\n" +
+        "        best = Math.max(best, node.val);\n" +
+        "        return good + count(node.left, best) + count(node.right, best);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Using strictly greater. A node equal to the maximum above it is still good, since nothing on the path is larger.</p></details>" +
+        "<h3>8. House Robber III</h3>" +
+        "<p><strong>LeetCode 337 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/house-robber-iii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Houses form a binary tree, and robbing a house and its direct parent is forbidden. Find the most you can take.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Tree DP Proper: Independent Set section. Return a pair upward: the best for this subtree if this node is robbed, and the best if it is not. The parent needs both to decide.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every set of nodes with no parent-child pair: exponential.</p>" +
+        "<p><strong>Approach.</strong> For each node, get (rob, skip) from both children. If this node is robbed, its children must be skipped: rob = val + left.skip + right.skip. If it is skipped, each child may be robbed or not: skip = max(left) + max(right). Answer max of the root's pair.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def rob(self, root: Optional[TreeNode]) -&gt; int:\n" +
+        "        def best(node):                # (robbed, skipped) for this subtree\n" +
+        "            if not node:\n" +
+        "                return 0, 0\n" +
+        "            lr, ls = best(node.left)\n" +
+        "            rr, rs = best(node.right)\n" +
+        "            robbed = node.val + ls + rs            # children must be skipped\n" +
+        "            skipped = max(lr, ls) + max(rr, rs)    # children are free\n" +
+        "            return robbed, skipped\n" +
+        "        return max(best(root))</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int rob(TreeNode root) {\n" +
+        "        int[] r = best(root);\n" +
+        "        return Math.max(r[0], r[1]);\n" +
+        "    }\n" +
+        "\n" +
+        "    private int[] best(TreeNode node) {   // {robbed, skipped} for this subtree\n" +
+        "        if (node == null) return new int[]{0, 0};\n" +
+        "        int[] l = best(node.left), r = best(node.right);\n" +
+        "        int robbed = node.val + l[1] + r[1];                           // children skipped\n" +
+        "        int skipped = Math.max(l[0], l[1]) + Math.max(r[0], r[1]);     // children free\n" +
+        "        return new int[]{robbed, skipped};\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Memoizing a function of the node alone and trying grandchildren explicitly. It works, but it is the tuple idea in disguise and easier to get wrong. Returning both states answers every case in one pass.</p></details>" +
+        "<h3>9. Path Sum III</h3>" +
+        "<p><strong>LeetCode 437 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/path-sum-iii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the downward paths (starting anywhere, ending anywhere below) whose values add up to a target.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 9's Subarray Sum Equals K on the root-to-node path. Keep a count of the prefix sums on the current path; a path ending here has the target sum when current prefix - target was a prefix above.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Start a downward search at every node: O(n \u00d7 h), O(n\u00b2) on a chain.</p>" +
+        "<p><strong>Approach.</strong> DFS with the running prefix sum and a map of prefix-sum counts for the ancestors on the path, starting with {0: 1}. At each node, add the count of prefix - target, then record the node's prefix, recurse into both children, and remove the record on the way back so other branches do not see it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def pathSum(self, root: Optional[TreeNode], targetSum: int) -&gt; int:\n" +
+        "        seen = {0: 1}                  # prefix sums on the current path, with counts\n" +
+        "\n" +
+        "        def go(node, prefix):\n" +
+        "            if not node:\n" +
+        "                return 0\n" +
+        "            prefix += node.val\n" +
+        "            count = seen.get(prefix - targetSum, 0)\n" +
+        "            seen[prefix] = seen.get(prefix, 0) + 1\n" +
+        "            count += go(node.left, prefix) + go(node.right, prefix)\n" +
+        "            seen[prefix] -= 1          # leaving this node: it is off the path now\n" +
+        "            return count\n" +
+        "\n" +
+        "        return go(root, 0)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashMap;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final HashMap&lt;Long, Integer&gt; seen = new HashMap&lt;&gt;();   // prefix sums on the path\n" +
+        "    private int target;\n" +
+        "\n" +
+        "    public int pathSum(TreeNode root, int targetSum) {\n" +
+        "        target = targetSum;\n" +
+        "        seen.put(0L, 1);\n" +
+        "        return go(root, 0L);\n" +
+        "    }\n" +
+        "\n" +
+        "    private int go(TreeNode node, long prefix) {   // long: sums reach 10^12\n" +
+        "        if (node == null) return 0;\n" +
+        "        prefix += node.val;\n" +
+        "        int count = seen.getOrDefault(prefix - target, 0);\n" +
+        "        seen.merge(prefix, 1, Integer::sum);\n" +
+        "        count += go(node.left, prefix) + go(node.right, prefix);\n" +
+        "        seen.merge(prefix, -1, Integer::sum);   // leaving this node: off the path now\n" +
+        "        return count;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) space for the map and the recursion.</p>" +
+        "<p><strong>The trap.</strong> Forgetting to remove the node's prefix after its subtree. The map must describe only the current root-to-node path; a leftover entry pairs a node with a \"prefix\" from a different branch. In Java, sums reach about 10\u00b9\u00b2 with values up to 10\u2079, so use long.</p></details>" +
+        "<h3>10. Binary Tree Maximum Path Sum</h3>" +
+        "<p><strong>LeetCode 124 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/binary-tree-maximum-path-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the largest sum of any path in a binary tree. A path follows parent-child links, visits a node at most once, and need not pass through the root. Values can be negative.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Maximum Path Sum section: Diameter's shape with sums. Return upward the best path that goes down from this node along one side; on the side, update the answer with the best path that bends here.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every pair of endpoints and sum the path between them: O(n\u00b2) pairs times O(h).</p>" +
+        "<p><strong>Approach.</strong> A helper returns the best downward sum starting at the node: its value plus the better child branch, but a branch counts only if it is positive (max(branch, 0)). At the node, the best path bending here is value + max(left, 0) + max(right, 0); keep the maximum over all nodes.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxPathSum(self, root: Optional[TreeNode]) -&gt; int:\n" +
+        "        best = root.val                # not 0: every value may be negative\n" +
+        "\n" +
+        "        def down(node):                # best path going down from node on one side\n" +
+        "            nonlocal best\n" +
+        "            if not node:\n" +
+        "                return 0\n" +
+        "            left, right = max(down(node.left), 0), max(down(node.right), 0)   # drop losing branches\n" +
+        "            best = max(best, node.val + left + right)   # the path that bends here\n" +
+        "            return node.val + max(left, right)          # a parent can extend only one side\n" +
+        "        down(root)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int best;\n" +
+        "\n" +
+        "    public int maxPathSum(TreeNode root) {\n" +
+        "        best = root.val;               // not 0: every value may be negative\n" +
+        "        down(root);\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "\n" +
+        "    private int down(TreeNode node) {  // best path going down from node on one side\n" +
+        "        if (node == null) return 0;\n" +
+        "        int left = Math.max(down(node.left), 0), right = Math.max(down(node.right), 0);\n" +
+        "        best = Math.max(best, node.val + left + right);   // the path that bends here\n" +
+        "        return node.val + Math.max(left, right);          // a parent extends one side only\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Returning the bending path upward. A parent can extend only a path that goes down one side, never one that uses both children of this node. And start the answer at the smallest possible value, not 0: in an all-negative tree the answer is the largest single node.</p></details>" +
+        "<h3>11. Sum of Distances in Tree</h3>" +
+        "<p><strong>LeetCode 834 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/sum-of-distances-in-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a tree of n nodes given as edges, return for every node the sum of its distances to all other nodes.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Rerooting section. One DFS gives the answer for the root plus every subtree's size. Moving the root from a node to its child c brings the size(c) nodes of c's subtree one step closer and the other n - size(c) one step further.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> BFS from every node: O(n\u00b2), 9 \u00d7 10\u2078 at n = 3 \u00d7 10\u2074.</p>" +
+        "<p><strong>Approach.</strong> Root the tree at 0. A post-order pass computes size[v] and the sum of depths below each node, which gives answer[0]. A pre-order pass then sets answer[c] = answer[parent] - size[c] + (n - size[c]) for every child c.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def sumOfDistancesInTree(self, n: int, edges: list[list[int]]) -&gt; list[int]:\n" +
+        "        adj = [[] for _ in range(n)]\n" +
+        "        for a, b in edges:\n" +
+        "            adj[a].append(b)\n" +
+        "            adj[b].append(a)\n" +
+        "        parent, order, stack = [-1] * n, [], [0]\n" +
+        "        seen = [False] * n\n" +
+        "        seen[0] = True\n" +
+        "        while stack:                   # an explicit DFS order: no recursion depth\n" +
+        "            v = stack.pop()\n" +
+        "            order.append(v)\n" +
+        "            for w in adj[v]:\n" +
+        "                if not seen[w]:\n" +
+        "                    seen[w] = True\n" +
+        "                    parent[w] = v\n" +
+        "                    stack.append(w)\n" +
+        "        size, below = [1] * n, [0] * n # below[v]: sum of depths within v's subtree\n" +
+        "        for v in reversed(order):      # children before parents\n" +
+        "            p = parent[v]\n" +
+        "            if p &gt;= 0:\n" +
+        "                size[p] += size[v]\n" +
+        "                below[p] += below[v] + size[v]\n" +
+        "        ans = [0] * n\n" +
+        "        ans[0] = below[0]\n" +
+        "        for v in order[1:]:            # parents before children: reroot one edge at a time\n" +
+        "            ans[v] = ans[parent[v]] - size[v] + (n - size[v])\n" +
+        "        return ans</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] sumOfDistancesInTree(int n, int[][] edges) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; adj = new ArrayList&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; n; i++) adj.add(new ArrayList&lt;&gt;());\n" +
+        "        for (int[] e : edges) { adj.get(e[0]).add(e[1]); adj.get(e[1]).add(e[0]); }\n" +
+        "        int[] parent = new int[n], order = new int[n], size = new int[n], ans = new int[n];\n" +
+        "        long[] below = new long[n];    // sum of depths within the subtree\n" +
+        "        boolean[] seen = new boolean[n];\n" +
+        "        ArrayDeque&lt;Integer&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "        stack.push(0); seen[0] = true; parent[0] = -1;\n" +
+        "        int k = 0;\n" +
+        "        while (!stack.isEmpty()) {     // an explicit DFS order: no recursion depth\n" +
+        "            int v = stack.pop();\n" +
+        "            order[k++] = v;\n" +
+        "            for (int w : adj.get(v)) if (!seen[w]) { seen[w] = true; parent[w] = v; stack.push(w); }\n" +
+        "        }\n" +
+        "        Arrays.fill(size, 1);\n" +
+        "        for (int i = n - 1; i &gt; 0; i--) {   // children before parents\n" +
+        "            int v = order[i], p = parent[v];\n" +
+        "            size[p] += size[v];\n" +
+        "            below[p] += below[v] + size[v];\n" +
+        "        }\n" +
+        "        ans[0] = (int) below[0];\n" +
+        "        for (int i = 1; i &lt; n; i++) {  // parents before children: reroot one edge at a time\n" +
+        "            int v = order[i];\n" +
+        "            ans[v] = ans[parent[v]] - size[v] + (n - size[v]);\n" +
+        "        }\n" +
+        "        return ans;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time and space. Both passes below are iterative, so a path-shaped tree of 3 \u00d7 10\u2074 nodes does not overflow the call stack.</p>" +
+        "<p><strong>The trap.</strong> Recursing in Python on a tree given as edges. A path-shaped tree makes the DFS 3 \u00d7 10\u2074 deep. The solution below orders the nodes with an explicit stack and then runs both passes as loops over that order.</p></details>" +
+        "<h3>12. Binary Tree Cameras</h3>" +
+        "<p><strong>LeetCode 968 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/binary-tree-cameras/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A camera on a node watches the node, its parent and its children. Find the fewest cameras that watch every node.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A tree DP with three states per node, returned upward: \"has a camera\", \"watched by a child\", \"not watched yet\". Working from the leaves up, a leaf should never hold a camera: its parent watches at least as much.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every set of camera nodes: 2\u207f.</p>" +
+        "<p><strong>Approach.</strong> A helper returns 0 for \"not watched\", 1 for \"watched, no camera\", 2 for \"has a camera\"; an empty child counts as watched. If either child is not watched, put a camera here (count it, return 2). Else if either child has a camera, this node is watched (return 1). Otherwise return 0 and let the parent cover it. At the end, if the root is not watched, add one camera.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minCameraCover(self, root: Optional[TreeNode]) -&gt; int:\n" +
+        "        cameras = 0\n" +
+        "        NOT_WATCHED, WATCHED, CAMERA = 0, 1, 2\n" +
+        "\n" +
+        "        def state(node):\n" +
+        "            nonlocal cameras\n" +
+        "            if not node:\n" +
+        "                return WATCHED         # an empty child needs nothing\n" +
+        "            left, right = state(node.left), state(node.right)\n" +
+        "            if left == NOT_WATCHED or right == NOT_WATCHED:\n" +
+        "                cameras += 1           # a child needs a camera here\n" +
+        "                return CAMERA\n" +
+        "            if left == CAMERA or right == CAMERA:\n" +
+        "                return WATCHED\n" +
+        "            return NOT_WATCHED         # leave it for the parent\n" +
+        "\n" +
+        "        if state(root) == NOT_WATCHED:\n" +
+        "            cameras += 1               # nothing above the root can cover it\n" +
+        "        return cameras</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int cameras = 0;\n" +
+        "    private static final int NOT_WATCHED = 0, WATCHED = 1, CAMERA = 2;\n" +
+        "\n" +
+        "    public int minCameraCover(TreeNode root) {\n" +
+        "        if (state(root) == NOT_WATCHED) cameras++;   // nothing above the root covers it\n" +
+        "        return cameras;\n" +
+        "    }\n" +
+        "\n" +
+        "    private int state(TreeNode node) {\n" +
+        "        if (node == null) return WATCHED;            // an empty child needs nothing\n" +
+        "        int left = state(node.left), right = state(node.right);\n" +
+        "        if (left == NOT_WATCHED || right == NOT_WATCHED) { cameras++; return CAMERA; }\n" +
+        "        if (left == CAMERA || right == CAMERA) return WATCHED;\n" +
+        "        return NOT_WATCHED;                          // leave it for the parent\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Forgetting the root. Nothing above it can cover it, so if it comes back \"not watched\" it needs its own camera.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -19920,6 +20900,385 @@ CHAPTERS.push({
         "<p>A balanced search tree already answers membership, predecessor, successor and range queries in O(log n). One small augmentation extends it to answer questions about <em>position</em>, the questions a plain container cannot: what is the k-th smallest key, and how many keys are smaller than x? A tree so augmented is an <strong>order-statistics tree</strong>, and the augmentation is a single extra field per node &mdash; the size of that node's subtree, maintained in O(1) during the same rotations that keep the tree balanced.</p>" +
         "<p>With subtree sizes in hand, two operations become logarithmic walks. <strong>Select</strong>, finding the k-th smallest, compares k with the size of the left subtree at each node and goes left, stops, or goes right with k reduced by the left size plus one &mdash; it is binary search over rank instead of over value. <strong>Rank</strong>, counting keys below x, walks toward x and adds up the left-subtree sizes it steps past. Both are O(log n). Verified on an order-statistics tree of five thousand keys, select returned exactly the sorted array's k-th element and rank returned exactly each key's index, for every key; and where a sorted array answers select in O(1) but pays O(n) to insert in the middle, the tree does both select and insert in the roughly 14 steps its height allows.</p>" +
         "<p>This is what the ordered containers give you when they expose it. C++'s policy trees &mdash; the GNU <code>__gnu_pbds::tree</code> with a tree-order-statistics tag &mdash; are order-statistics red-black trees, offering <code>find_by_order</code> and <code>order_of_key</code> directly. Python's <code>sortedcontainers.SortedList</code> reaches the same big-O by a different structure, a list of lists, but presents the same rank-and-select interface. Java's <code>TreeMap</code> stops short: it gives you the ordered operations but not O(log n) rank, so counting keys below a value is a linear scan unless you augment it yourself. When a problem asks not only whether a key is present but where it falls, this is the structure, and Chapter 30's Fenwick tree is the array-based alternative when the keys are dense integers.</p>" + "<p>Trace a select to see the sizes at work. To find the fourth-smallest key, read the root's left-subtree size: if it is four or more, recurse left; if exactly three, the root itself is the answer, since three keys precede it; if fewer, say two, recurse right for the (four minus two minus one) equals first-smallest there. Each step discards a subtree, so the walk is O(log n) &mdash; an ordinary search branching on counts instead of keys.</p>" + "<p>What makes this an <strong>augmented tree</strong> rather than a redesign is that the extra field costs nothing to keep. A rotation re-parents a constant number of nodes, and each one's subtree size is one plus its two children's sizes, recomputed in constant time as the rotation finishes, so the augmentation rides on the balancing machinery already present. Any associative summary of a subtree &mdash; minimum, sum, a range aggregate &mdash; can be carried the same way, which is the bridge to the segment tree of Chapter 31; the subtree size is only the simplest such summary.</p>" + "<p>The contrast with a Fenwick tree is worth drawing, because both answer rank but pay differently. A Fenwick tree, Chapter 30's structure, stores its counts in a flat array indexed by the keys themselves, so it needs the keys to be dense small integers but answers rank in a few array steps with almost no per-element overhead. The order-statistics tree pays a pointer and a size field per node yet accepts arbitrary keys and supports insertion and deletion in the middle in O(log n), which a flat array cannot. Dense integers that never move favour the Fenwick tree; arbitrary keys that come and go favour the augmented balanced tree &mdash; the same read-versus-update question the whole chapter has been asking.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Search in a Binary Search Tree</h3>" +
+        "<p><strong>LeetCode 700 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/search-in-a-binary-search-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the node holding a value in a BST and return its subtree, or nothing if the value is absent.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The BST invariant turns search into binary search on a tree: at each node, the value is either here, only possible on the left, or only possible on the right.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Search the whole tree: O(n).</p>" +
+        "<p><strong>Approach.</strong> Start at the root. While the node exists and does not hold the value, go left if the value is smaller, right if larger. Return the node (or nothing).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def searchBST(self, root: Optional[TreeNode], val: int) -&gt; Optional[TreeNode]:\n" +
+        "        node = root\n" +
+        "        while node and node.val != val:\n" +
+        "            node = node.left if val &lt; node.val else node.right   # one side only\n" +
+        "        return node</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public TreeNode searchBST(TreeNode root, int val) {\n" +
+        "        TreeNode node = root;\n" +
+        "        while (node != null &amp;&amp; node.val != val) node = val &lt; node.val ? node.left : node.right;   // one side\n" +
+        "        return node;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(h) time: O(log n) when balanced, O(n) on a degenerate chain (the BST and How It Degenerates section). O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Searching both subtrees. That throws away the invariant and turns O(h) into O(n).</p></details>" +
+        "<h3>2. Convert Sorted Array to Binary Search Tree</h3>" +
+        "<p><strong>LeetCode 108 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/convert-sorted-array-to-binary-search-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Build a height-balanced BST from a sorted array (any such tree is accepted).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The middle element as the root splits the rest into two halves of equal size (within one), and each half is the same problem.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Insert the values one by one in sorted order: a valid BST, but a chain of height n, the degenerate case the chapter opens with.</p>" +
+        "<p><strong>Approach.</strong> Build(lo, hi) on the half-open range [lo, hi): if it is empty, return nothing; otherwise make the middle element the root, build its left subtree from [lo, mid) and its right from [mid + 1, hi).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def sortedArrayToBST(self, nums: list[int]) -&gt; Optional[TreeNode]:\n" +
+        "        def build(lo, hi):             # nums[lo:hi]\n" +
+        "            if lo &gt;= hi:\n" +
+        "                return None\n" +
+        "            mid = (lo + hi) // 2       # the middle: both halves within one of each other\n" +
+        "            return TreeNode(nums[mid], build(lo, mid), build(mid + 1, hi))\n" +
+        "        return build(0, len(nums))</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public TreeNode sortedArrayToBST(int[] nums) { return build(nums, 0, nums.length); }\n" +
+        "\n" +
+        "    private TreeNode build(int[] nums, int lo, int hi) {   // nums[lo..hi)\n" +
+        "        if (lo &gt;= hi) return null;\n" +
+        "        int mid = (lo + hi) &gt;&gt;&gt; 1;     // the middle: halves within one of each other\n" +
+        "        return new TreeNode(nums[mid], build(nums, lo, mid), build(nums, mid + 1, hi));\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(log n) recursion depth.</p>" +
+        "<p><strong>The trap.</strong> Inserting into a BST one by one, which is what makes balance matter in the first place. Sorted input is the worst case for plain insertion.</p></details>" +
+        "<h3>3. Minimum Absolute Difference in BST</h3>" +
+        "<p><strong>LeetCode 530 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/minimum-absolute-difference-in-bst/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the smallest difference between the values of any two nodes in a BST.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>An inorder walk of a BST lists the values in sorted order, and in a sorted list the closest pair is always adjacent.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compare every pair of nodes: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Walk the tree in inorder, remembering the previous value. At each node, compare with the previous value and keep the smallest difference.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def getMinimumDifference(self, root: Optional[TreeNode]) -&gt; int:\n" +
+        "        best, prev, stack, node = float(\"inf\"), None, [], root\n" +
+        "        while stack or node:           # iterative inorder: values in sorted order\n" +
+        "            while node:\n" +
+        "                stack.append(node)\n" +
+        "                node = node.left\n" +
+        "            node = stack.pop()\n" +
+        "            if prev is not None:\n" +
+        "                best = min(best, node.val - prev)   # neighbours in sorted order\n" +
+        "            prev = node.val\n" +
+        "            node = node.right\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.ArrayDeque;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int getMinimumDifference(TreeNode root) {\n" +
+        "        int best = Integer.MAX_VALUE;\n" +
+        "        Integer prev = null;\n" +
+        "        ArrayDeque&lt;TreeNode&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "        TreeNode node = root;\n" +
+        "        while (!stack.isEmpty() || node != null) {   // inorder: values in sorted order\n" +
+        "            while (node != null) { stack.push(node); node = node.left; }\n" +
+        "            node = stack.pop();\n" +
+        "            if (prev != null) best = Math.min(best, node.val - prev);   // sorted neighbours\n" +
+        "            prev = node.val;\n" +
+        "            node = node.right;\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) space.</p>" +
+        "<p><strong>The trap.</strong> Comparing each node only with its children. The closest value to a node may be far away in the tree, for example the largest value in its left subtree.</p></details>" +
+        "<h3>4. Insert into a Binary Search Tree</h3>" +
+        "<p><strong>LeetCode 701 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/insert-into-a-binary-search-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Insert a new value into a BST and return the root (any valid BST is accepted).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Search for the value; the empty spot where the search falls off the tree is exactly where the value belongs as a new leaf.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Rebuild the whole tree from its sorted values plus the new one: O(n).</p>" +
+        "<p><strong>Approach.</strong> If the tree is empty, the new node is the root. Otherwise walk down as in a search until the next step would be an empty child, and attach the new node there.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def insertIntoBST(self, root: Optional[TreeNode], val: int) -&gt; Optional[TreeNode]:\n" +
+        "        if not root:\n" +
+        "            return TreeNode(val)\n" +
+        "        node = root\n" +
+        "        while True:\n" +
+        "            side = \"left\" if val &lt; node.val else \"right\"\n" +
+        "            nxt = getattr(node, side)\n" +
+        "            if not nxt:\n" +
+        "                setattr(node, side, TreeNode(val))   # where the search fell off\n" +
+        "                return root\n" +
+        "            node = nxt</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public TreeNode insertIntoBST(TreeNode root, int val) {\n" +
+        "        if (root == null) return new TreeNode(val);\n" +
+        "        TreeNode node = root;\n" +
+        "        while (true) {\n" +
+        "            if (val &lt; node.val) {\n" +
+        "                if (node.left == null) { node.left = new TreeNode(val); return root; }   // fell off here\n" +
+        "                node = node.left;\n" +
+        "            } else {\n" +
+        "                if (node.right == null) { node.right = new TreeNode(val); return root; }\n" +
+        "                node = node.right;\n" +
+        "            }\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(h) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Returning the new node instead of the root when the tree was not empty. The caller needs the root back; the new node only becomes the root when there was nothing before.</p></details>" +
+        "<h3>5. Delete Node in a BST</h3>" +
+        "<p><strong>LeetCode 450 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/delete-node-in-a-bst/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Delete the node with a given key from a BST (if present) and return the root (any valid result is accepted).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The three cases every BST deletion has. A node with at most one child is replaced by that child. A node with two children takes the value of its inorder successor, the smallest node in its right subtree, which is then deleted from there.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Collect the values, drop the key, rebuild a BST: O(n).</p>" +
+        "<p><strong>Approach.</strong> Recursively find the key. At the node: if it has no left child, return its right child; if no right child, return its left. Otherwise find the leftmost node of its right subtree, copy that value here, and delete that value from the right subtree.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def deleteNode(self, root: Optional[TreeNode], key: int) -&gt; Optional[TreeNode]:\n" +
+        "        if not root:\n" +
+        "            return None\n" +
+        "        if key &lt; root.val:\n" +
+        "            root.left = self.deleteNode(root.left, key)\n" +
+        "        elif key &gt; root.val:\n" +
+        "            root.right = self.deleteNode(root.right, key)\n" +
+        "        else:\n" +
+        "            if not root.left:\n" +
+        "                return root.right      # zero or one child: the child takes its place\n" +
+        "            if not root.right:\n" +
+        "                return root.left\n" +
+        "            succ = root.right          # two children: the inorder successor steps in\n" +
+        "            while succ.left:\n" +
+        "                succ = succ.left\n" +
+        "            root.val = succ.val\n" +
+        "            root.right = self.deleteNode(root.right, succ.val)\n" +
+        "        return root</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public TreeNode deleteNode(TreeNode root, int key) {\n" +
+        "        if (root == null) return null;\n" +
+        "        if (key &lt; root.val) root.left = deleteNode(root.left, key);\n" +
+        "        else if (key &gt; root.val) root.right = deleteNode(root.right, key);\n" +
+        "        else {\n" +
+        "            if (root.left == null) return root.right;   // zero or one child\n" +
+        "            if (root.right == null) return root.left;\n" +
+        "            TreeNode succ = root.right;                 // two children: the successor steps in\n" +
+        "            while (succ.left != null) succ = succ.left;\n" +
+        "            root.val = succ.val;\n" +
+        "            root.right = deleteNode(root.right, succ.val);\n" +
+        "        }\n" +
+        "        return root;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(h) time, O(h) recursion depth.</p>" +
+        "<p><strong>The trap.</strong> Replacing a two-child node with its right child and hanging the left subtree anywhere. That can put values on the wrong side of an ancestor. The successor is the one value that can take the node's place without breaking the invariant.</p></details>" +
+        "<h3>6. Kth Smallest Element in a BST</h3>" +
+        "<p><strong>LeetCode 230 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/kth-smallest-element-in-a-bst/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the k-th smallest value in a BST (counting from 1).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Inorder visits a BST's values in increasing order, so the k-th node popped by an iterative inorder is the answer, and you can stop there.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Collect every value, sort, and index: O(n log n).</p>" +
+        "<p><strong>Approach.</strong> Run the iterative inorder from Binary Tree Inorder Traversal and count the nodes as they are popped. Return the value of the k-th.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def kthSmallest(self, root: Optional[TreeNode], k: int) -&gt; int:\n" +
+        "        stack, node = [], root\n" +
+        "        while True:\n" +
+        "            while node:\n" +
+        "                stack.append(node)\n" +
+        "                node = node.left\n" +
+        "            node = stack.pop()\n" +
+        "            k -= 1\n" +
+        "            if k == 0:\n" +
+        "                return node.val        # the k-th value in sorted order: stop here\n" +
+        "            node = node.right</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.ArrayDeque;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int kthSmallest(TreeNode root, int k) {\n" +
+        "        ArrayDeque&lt;TreeNode&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "        TreeNode node = root;\n" +
+        "        while (true) {\n" +
+        "            while (node != null) { stack.push(node); node = node.left; }\n" +
+        "            node = stack.pop();\n" +
+        "            if (--k == 0) return node.val;   // the k-th value in sorted order: stop\n" +
+        "            node = node.right;\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(h + k) time, O(h) space.</p>" +
+        "<p><strong>The trap.</strong> The follow-up, where the tree changes often and many k-th queries arrive. Rescanning is O(h + k) every time; the Ordered-Statistics Containers section stores each node's subtree size so a query walks one path, in O(h).</p></details>" +
+        "<h3>7. Lowest Common Ancestor of a Binary Search Tree</h3>" +
+        "<p><strong>LeetCode 235 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the lowest common ancestor of two nodes in a BST.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 25's LCA works on any tree, but a BST tells you which side each node is on without searching: walk down from the root until p and q fall on different sides.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> The general-tree LCA from Chapter 25: O(n), ignoring the ordering.</p>" +
+        "<p><strong>Approach.</strong> Start at the root. If both values are smaller than the node, go left; if both are larger, go right. Otherwise the paths to p and q split here (or one of them is this node), so this node is the answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def lowestCommonAncestor(self, root: 'TreeNode', p: 'TreeNode', q: 'TreeNode') -&gt; 'TreeNode':\n" +
+        "        node = root\n" +
+        "        while True:\n" +
+        "            if p.val &lt; node.val and q.val &lt; node.val:\n" +
+        "                node = node.left\n" +
+        "            elif p.val &gt; node.val and q.val &gt; node.val:\n" +
+        "                node = node.right\n" +
+        "            else:\n" +
+        "                return node            # the paths split here (or one of them is here)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n" +
+        "        TreeNode node = root;\n" +
+        "        while (true) {\n" +
+        "            if (p.val &lt; node.val &amp;&amp; q.val &lt; node.val) node = node.left;\n" +
+        "            else if (p.val &gt; node.val &amp;&amp; q.val &gt; node.val) node = node.right;\n" +
+        "            else return node;          // the paths split here (or one of them is here)\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(h) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Continuing when the node equals p or q. If one of them is the current node, it is the ancestor of the other, and the split test (not both smaller, not both larger) already stops there.</p></details>" +
+        "<h3>8. Balance a Binary Search Tree</h3>" +
+        "<p><strong>LeetCode 1382 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/balance-a-binary-search-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return a height-balanced BST with the same values as a given BST (any such tree is accepted).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The chapter's balanced trees keep balance with rotations on every update. When you are handed an already-built tree, rebuilding once is simpler: the inorder walk gives the sorted values, and Convert Sorted Array to BST builds a balanced tree from them.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Rotate nodes until the tree is balanced, as AVL rebalancing would: correct but fiddly, and O(n log n) or worse to converge.</p>" +
+        "<p><strong>Approach.</strong> Collect the values with an inorder walk (they come out sorted). Build a new tree from the middle out, as in Convert Sorted Array to BST.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def balanceBST(self, root: TreeNode) -&gt; TreeNode:\n" +
+        "        vals, stack, node = [], [], root\n" +
+        "        while stack or node:           # inorder: sorted values\n" +
+        "            while node:\n" +
+        "                stack.append(node)\n" +
+        "                node = node.left\n" +
+        "            node = stack.pop()\n" +
+        "            vals.append(node.val)\n" +
+        "            node = node.right\n" +
+        "\n" +
+        "        def build(lo, hi):             # middle-out, as in Convert Sorted Array to BST\n" +
+        "            if lo &gt;= hi:\n" +
+        "                return None\n" +
+        "            mid = (lo + hi) // 2\n" +
+        "            return TreeNode(vals[mid], build(lo, mid), build(mid + 1, hi))\n" +
+        "        return build(0, len(vals))</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final List&lt;Integer&gt; vals = new ArrayList&lt;&gt;();\n" +
+        "\n" +
+        "    public TreeNode balanceBST(TreeNode root) {\n" +
+        "        ArrayDeque&lt;TreeNode&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "        TreeNode node = root;\n" +
+        "        while (!stack.isEmpty() || node != null) {   // inorder: sorted values\n" +
+        "            while (node != null) { stack.push(node); node = node.left; }\n" +
+        "            node = stack.pop();\n" +
+        "            vals.add(node.val);\n" +
+        "            node = node.right;\n" +
+        "        }\n" +
+        "        return build(0, vals.size());\n" +
+        "    }\n" +
+        "\n" +
+        "    private TreeNode build(int lo, int hi) {   // middle-out\n" +
+        "        if (lo &gt;= hi) return null;\n" +
+        "        int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "        return new TreeNode(vals.get(mid), build(lo, mid), build(mid + 1, hi));\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Balancing only the root. Picking a good root leaves both subtrees as unbalanced as before; every subtree needs its middle element as its root, which the recursive build provides.</p></details>" +
+        "<h3>9. My Calendar I</h3>" +
+        "<p><strong>LeetCode 729 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/my-calendar-i/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Accept a booking [start, end) only if it overlaps no earlier accepted booking; report whether it was accepted.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>An ordered container of accepted bookings (the Ordered-Statistics Containers section): a new booking can only clash with its neighbours in start order, the one that starts right before it and the one that starts right after.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compare against every accepted booking: O(n) per call, O(n\u00b2) overall.</p>" +
+        "<p><strong>Approach.</strong> Keep bookings sorted by start. Find where the new start would go. It is accepted if the booking before it ends at or before the new start, and the booking after it starts at or after the new end. Java's TreeMap gives floor and ceiling in O(log n); Python's standard library has no balanced tree, so bisect plus a list insertion (O(n) per insert) is used, which is fine for 1,000 calls.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_right\n" +
+        "\n" +
+        "class MyCalendar:\n" +
+        "    def __init__(self):\n" +
+        "        self.starts, self.ends = [], []   # accepted bookings, sorted by start\n" +
+        "\n" +
+        "    def book(self, startTime: int, endTime: int) -&gt; bool:\n" +
+        "        i = bisect_right(self.starts, startTime)\n" +
+        "        if i &gt; 0 and self.ends[i - 1] &gt; startTime:\n" +
+        "            return False               # the booking before runs into this one\n" +
+        "        if i &lt; len(self.starts) and self.starts[i] &lt; endTime:\n" +
+        "            return False               # this one runs into the booking after\n" +
+        "        self.starts.insert(i, startTime)\n" +
+        "        self.ends.insert(i, endTime)\n" +
+        "        return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class MyCalendar {\n" +
+        "    private final TreeMap&lt;Integer, Integer&gt; booked = new TreeMap&lt;&gt;();   // start -&gt; end\n" +
+        "\n" +
+        "    public MyCalendar() {}\n" +
+        "\n" +
+        "    public boolean book(int startTime, int endTime) {\n" +
+        "        Map.Entry&lt;Integer, Integer&gt; before = booked.floorEntry(startTime);\n" +
+        "        if (before != null &amp;&amp; before.getValue() &gt; startTime) return false;   // runs into us\n" +
+        "        Integer after = booked.ceilingKey(startTime);\n" +
+        "        if (after != null &amp;&amp; after &lt; endTime) return false;                  // we run into it\n" +
+        "        booked.put(startTime, endTime);\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) per call with a balanced tree (TreeMap); O(n) per insert with Python's list.</p>" +
+        "<p><strong>The trap.</strong> Checking only the booking that starts right before. A booking starting later but before the new end also clashes, so both neighbours must be checked.</p></details>" +
+        "<h3>10. Contains Duplicate III</h3>" +
+        "<p><strong>LeetCode 220 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/contains-duplicate-iii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether two different positions i and j satisfy |i - j| \u2264 indexDiff and |nums[i] - nums[j]| \u2264 valueDiff.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A sliding window of the last indexDiff values, asking \"is any value within valueDiff of x?\". An ordered set answers that with floor and ceiling in O(log k). Buckets of width valueDiff + 1 answer it in O(1): two values in the same bucket are close enough, and a close value can otherwise only be in a neighbouring bucket.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compare each value with the previous indexDiff values: O(n \u00d7 indexDiff), up to 10\u00b9\u2070.</p>" +
+        "<p><strong>Approach.</strong> Map each value x to bucket x // (valueDiff + 1), keeping at most one value per bucket (two in one bucket would already be an answer). For each x: if its bucket is occupied, or a neighbouring bucket holds a value within valueDiff, answer true. Otherwise store x, and once the window is full, remove the value that fell out of it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def containsNearbyAlmostDuplicate(self, nums: list[int], indexDiff: int, valueDiff: int) -&gt; bool:\n" +
+        "        width = valueDiff + 1\n" +
+        "        buckets = {}                   # bucket id -&gt; the one value in it (within the window)\n" +
+        "        for i, x in enumerate(nums):\n" +
+        "            b = x // width             # Python's // rounds down, also for negatives\n" +
+        "            if b in buckets:\n" +
+        "                return True            # same bucket: close enough\n" +
+        "            for nb in (b - 1, b + 1):\n" +
+        "                if nb in buckets and abs(x - buckets[nb]) &lt;= valueDiff:\n" +
+        "                    return True\n" +
+        "            buckets[b] = x\n" +
+        "            if i &gt;= indexDiff:\n" +
+        "                del buckets[nums[i - indexDiff] // width]   # left the window\n" +
+        "        return False</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashMap;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean containsNearbyAlmostDuplicate(int[] nums, int indexDiff, int valueDiff) {\n" +
+        "        long width = (long) valueDiff + 1;\n" +
+        "        HashMap&lt;Long, Long&gt; buckets = new HashMap&lt;&gt;();   // bucket id -&gt; its one value\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) {\n" +
+        "            long x = nums[i], b = Math.floorDiv(x, width);   // floorDiv: -1 / 3 would be 0\n" +
+        "            if (buckets.containsKey(b)) return true;\n" +
+        "            Long left = buckets.get(b - 1), right = buckets.get(b + 1);\n" +
+        "            if (left != null &amp;&amp; x - left &lt;= valueDiff) return true;\n" +
+        "            if (right != null &amp;&amp; right - x &lt;= valueDiff) return true;\n" +
+        "            buckets.put(b, x);\n" +
+        "            if (i &gt;= indexDiff) buckets.remove(Math.floorDiv((long) nums[i - indexDiff], width));   // left the window\n" +
+        "        }\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(min(n, indexDiff)) space.</p>" +
+        "<p><strong>The trap.</strong> Negative values in Java. Integer division rounds toward zero, so -1 / 3 is 0 and lands in the same bucket as 1; use Math.floorDiv. And differences of values up to \u00b110\u2079 overflow int; compare in long.</p></details>"
     },
 
     { title: "Exercises",
@@ -20174,6 +21533,512 @@ CHAPTERS.push({
         "<p>Which raises the structure that should end the chapter as a caution. The <strong>Fibonacci heap</strong>, from Fredman and Tarjan in 1987, achieves O(1) amortised decrease-key and O(log n) extract-min, which drops Dijkstra's bound from O of open-bracket E plus V, all times log V, to O of E plus V log V &mdash; asymptotically better, and for decades the answer to the exam question about the fastest Dijkstra. Yet no standard library ships it, and production Dijkstra uses a binary or d-ary heap. The reason is honest and worth internalising: the Fibonacci heap's constant factors and pointer-chasing overhead are so large that on any graph that fits in memory the theoretically slower binary heap finishes first. It is the standing example that an asymptotic win is a claim about large enough n, and that the n large enough to realise this one does not occur. The best algorithm on paper is not always the best algorithm.</p>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Last Stone Weight</h3>" +
+        "<p><strong>LeetCode 1046 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/last-stone-weight/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Repeatedly smash the two heaviest stones: equal stones vanish, otherwise the difference remains. Return the last stone's weight, or 0.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"Repeatedly take the largest\" is what a max-heap is for: each step removes the top two and may add one back.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort the stones after every smash: O(n\u00b2 log n).</p>" +
+        "<p><strong>Approach.</strong> Put the stones in a max-heap (in Python, a min-heap of negated weights). While two or more remain, pop the two heaviest and push back their difference if it is not zero. Return the remaining stone, or 0.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def lastStoneWeight(self, stones: list[int]) -&gt; int:\n" +
+        "        heap = [-s for s in stones]    # negated: heapq is a min-heap\n" +
+        "        heapq.heapify(heap)            # O(n), the Why Build-Heap Is O(n) section\n" +
+        "        while len(heap) &gt; 1:\n" +
+        "            a, b = -heapq.heappop(heap), -heapq.heappop(heap)\n" +
+        "            if a != b:\n" +
+        "                heapq.heappush(heap, -(a - b))\n" +
+        "        return -heap[0] if heap else 0</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int lastStoneWeight(int[] stones) {\n" +
+        "        PriorityQueue&lt;Integer&gt; heap = new PriorityQueue&lt;&gt;(Collections.reverseOrder());   // max-heap\n" +
+        "        for (int s : stones) heap.add(s);\n" +
+        "        while (heap.size() &gt; 1) {\n" +
+        "            int a = heap.poll(), b = heap.poll();\n" +
+        "            if (a != b) heap.add(a - b);\n" +
+        "        }\n" +
+        "        return heap.isEmpty() ? 0 : heap.peek();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Forgetting that Python's heapq is a min-heap. Pushing the weights as they are pops the lightest stones, a different game.</p></details>" +
+        "<h3>2. Kth Largest Element in a Stream</h3>" +
+        "<p><strong>LeetCode 703 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/kth-largest-element-in-a-stream/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Build a class that, as numbers arrive one at a time, reports the k-th largest number seen so far.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Top-K section: keep only the k largest values in a min-heap. Its smallest element is exactly the k-th largest overall.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Keep every number in a sorted list and index it: O(n) per insertion.</p>" +
+        "<p><strong>Approach.</strong> Keep a min-heap of at most k values. To add a value, push it, and if the heap now holds more than k, pop the smallest. The heap's top is the answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class KthLargest:\n" +
+        "    def __init__(self, k: int, nums: list[int]):\n" +
+        "        self.k, self.heap = k, []\n" +
+        "        for x in nums:\n" +
+        "            self.add(x)\n" +
+        "\n" +
+        "    def add(self, val: int) -&gt; int:\n" +
+        "        heapq.heappush(self.heap, val)\n" +
+        "        if len(self.heap) &gt; self.k:\n" +
+        "            heapq.heappop(self.heap)   # keep only the k largest\n" +
+        "        return self.heap[0]            # the smallest of the k largest</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.PriorityQueue;\n" +
+        "\n" +
+        "class KthLargest {\n" +
+        "    private final PriorityQueue&lt;Integer&gt; heap = new PriorityQueue&lt;&gt;();   // min-heap of the k largest\n" +
+        "    private final int k;\n" +
+        "\n" +
+        "    public KthLargest(int k, int[] nums) {\n" +
+        "        this.k = k;\n" +
+        "        for (int x : nums) add(x);\n" +
+        "    }\n" +
+        "\n" +
+        "    public int add(int val) {\n" +
+        "        heap.add(val);\n" +
+        "        if (heap.size() &gt; k) heap.poll();   // keep only the k largest\n" +
+        "        return heap.peek();            // the smallest of the k largest\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log k) per add, O(k) space.</p>" +
+        "<p><strong>The trap.</strong> Using a max-heap of everything. Its top is the largest, not the k-th largest, and reaching the k-th means popping k - 1 values every call.</p></details>" +
+        "<h3>3. K Closest Points to Origin</h3>" +
+        "<p><strong>LeetCode 973 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/k-closest-points-to-origin/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the k points closest to the origin (in any order).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Top-K with the opposite direction: keep the k closest so far in a max-heap keyed by distance, so the farthest of them is on top and is the one to evict. (Chapter 15's quickselect also solves it in O(n) expected time.)</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort all points by distance: O(n log n).</p>" +
+        "<p><strong>Approach.</strong> Compare squared distances x\u00b2 + y\u00b2, which rank points the same way as true distances without a square root. Push each point into a max-heap of size k (negate the distance in Python); when the heap exceeds k, pop the farthest. The heap's contents are the answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def kClosest(self, points: list[list[int]], k: int) -&gt; list[list[int]]:\n" +
+        "        heap = []                      # (-squared distance, x, y): the farthest on top\n" +
+        "        for x, y in points:\n" +
+        "            heapq.heappush(heap, (-(x * x + y * y), x, y))   # squared: exact, no sqrt\n" +
+        "            if len(heap) &gt; k:\n" +
+        "                heapq.heappop(heap)    # evict the farthest\n" +
+        "        return [[x, y] for _, x, y in heap]</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[][] kClosest(int[][] points, int k) {\n" +
+        "        PriorityQueue&lt;int[]&gt; heap = new PriorityQueue&lt;&gt;(   // the farthest on top\n" +
+        "            (a, b) -&gt; Integer.compare(b[0] * b[0] + b[1] * b[1], a[0] * a[0] + a[1] * a[1]));\n" +
+        "        for (int[] p : points) {\n" +
+        "            heap.add(p);\n" +
+        "            if (heap.size() &gt; k) heap.poll();   // evict the farthest\n" +
+        "        }\n" +
+        "        return heap.toArray(new int[0][]);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log k) time, O(k) space.</p>" +
+        "<p><strong>The trap.</strong> Taking square roots. They add floating-point error and cost, and two different integer distances can then compare as equal. Squared distances are exact integers.</p></details>" +
+        "<h3>4. Task Scheduler</h3>" +
+        "<p><strong>LeetCode 621 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/task-scheduler/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Tasks are letters; the same letter must be separated by at least n time slots (idle slots allowed). Find the fewest slots needed to run all tasks.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Simulate with a max-heap of remaining counts: in each round of n + 1 slots, run the most frequent distinct tasks first, because the most frequent task is the one that forces idle time.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Search over orders: exponential.</p>" +
+        "<p><strong>Approach.</strong> Count the tasks. In each round, pop up to n + 1 of the most frequent remaining tasks from a max-heap, run each once, and push back those that still have copies. If tasks remain after the round, it cost the full n + 1 slots (idling if needed); the last round costs only the tasks it ran.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def leastInterval(self, tasks: list[str], n: int) -&gt; int:\n" +
+        "        heap = [-c for c in Counter(tasks).values()]   # max-heap of remaining counts\n" +
+        "        heapq.heapify(heap)\n" +
+        "        slots = 0\n" +
+        "        while heap:\n" +
+        "            ran = []\n" +
+        "            for _ in range(n + 1):     # one round: the most frequent distinct tasks first\n" +
+        "                if heap:\n" +
+        "                    ran.append(heapq.heappop(heap) + 1)   # run one copy (counts are negative)\n" +
+        "            for c in ran:\n" +
+        "                if c &lt; 0:\n" +
+        "                    heapq.heappush(heap, c)\n" +
+        "            slots += n + 1 if heap else len(ran)       # the last round needs no idling\n" +
+        "        return slots</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int leastInterval(char[] tasks, int n) {\n" +
+        "        int[] count = new int[26];\n" +
+        "        for (char t : tasks) count[t - 'A']++;\n" +
+        "        PriorityQueue&lt;Integer&gt; heap = new PriorityQueue&lt;&gt;(Collections.reverseOrder());   // max-heap\n" +
+        "        for (int c : count) if (c &gt; 0) heap.add(c);\n" +
+        "        int slots = 0;\n" +
+        "        while (!heap.isEmpty()) {\n" +
+        "            List&lt;Integer&gt; ran = new ArrayList&lt;&gt;();\n" +
+        "            for (int i = 0; i &lt;= n &amp;&amp; !heap.isEmpty(); i++) ran.add(heap.poll() - 1);   // one round\n" +
+        "            for (int c : ran) if (c &gt; 0) heap.add(c);\n" +
+        "            slots += heap.isEmpty() ? ran.size() : n + 1;   // the last round needs no idling\n" +
+        "        }\n" +
+        "        return slots;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(T log 26) time for T tasks, O(26) space. (There is also a closed formula: max(T, (maxCount - 1) \u00d7 (n + 1) + number of tasks with maxCount).)</p>" +
+        "<p><strong>The trap.</strong> Running the least frequent tasks first to fill the gaps. That leaves the most frequent task for the end, where each copy needs n idle slots before it.</p></details>" +
+        "<h3>5. Design Twitter</h3>" +
+        "<p><strong>LeetCode 355 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/design-twitter/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Build a small Twitter: users post tweets and follow or unfollow others, and getNewsFeed returns the 10 most recent tweet ids from the user and the people they follow.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Each user's tweets are already in time order. The news feed is the top 10 of a merge of those sorted lists: Merge k Sorted Lists (Chapter 11) with a heap, stopping after 10.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Gather every tweet from everyone followed, sort by time, take 10: O(T log T) per feed for T tweets.</p>" +
+        "<p><strong>Approach.</strong> Stamp every tweet with a global counter. Store each user's tweets as a list and their followees as a set. For a feed, push the newest tweet of the user and of each followee into a max-heap keyed by time; pop 10 times, each time pushing the next-older tweet from the same user.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "from collections import defaultdict\n" +
+        "\n" +
+        "class Twitter:\n" +
+        "    def __init__(self):\n" +
+        "        self.time = 0\n" +
+        "        self.tweets = defaultdict(list)    # user -&gt; [(time, tweetId)], oldest first\n" +
+        "        self.follows = defaultdict(set)\n" +
+        "\n" +
+        "    def postTweet(self, userId: int, tweetId: int) -&gt; None:\n" +
+        "        self.time += 1\n" +
+        "        self.tweets[userId].append((self.time, tweetId))\n" +
+        "\n" +
+        "    def getNewsFeed(self, userId: int) -&gt; list[int]:\n" +
+        "        heap = []\n" +
+        "        for u in self.follows[userId] | {userId}:   # always include the user's own tweets\n" +
+        "            if self.tweets[u]:\n" +
+        "                i = len(self.tweets[u]) - 1\n" +
+        "                t, tid = self.tweets[u][i]\n" +
+        "                heap.append((-t, tid, u, i))\n" +
+        "        heapq.heapify(heap)\n" +
+        "        feed = []\n" +
+        "        while heap and len(feed) &lt; 10: # merge k sorted lists, newest first\n" +
+        "            _, tid, u, i = heapq.heappop(heap)\n" +
+        "            feed.append(tid)\n" +
+        "            if i &gt; 0:\n" +
+        "                t, nxt = self.tweets[u][i - 1]\n" +
+        "                heapq.heappush(heap, (-t, nxt, u, i - 1))\n" +
+        "        return feed\n" +
+        "\n" +
+        "    def follow(self, followerId: int, followeeId: int) -&gt; None:\n" +
+        "        self.follows[followerId].add(followeeId)\n" +
+        "\n" +
+        "    def unfollow(self, followerId: int, followeeId: int) -&gt; None:\n" +
+        "        self.follows[followerId].discard(followeeId)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Twitter {\n" +
+        "    private int time = 0;\n" +
+        "    private final Map&lt;Integer, List&lt;int[]&gt;&gt; tweets = new HashMap&lt;&gt;();   // user -&gt; {time, id}, oldest first\n" +
+        "    private final Map&lt;Integer, Set&lt;Integer&gt;&gt; follows = new HashMap&lt;&gt;();\n" +
+        "\n" +
+        "    public Twitter() {}\n" +
+        "\n" +
+        "    public void postTweet(int userId, int tweetId) {\n" +
+        "        tweets.computeIfAbsent(userId, u -&gt; new ArrayList&lt;&gt;()).add(new int[]{++time, tweetId});\n" +
+        "    }\n" +
+        "\n" +
+        "    public List&lt;Integer&gt; getNewsFeed(int userId) {\n" +
+        "        // entries {time, tweetId, user, index}, newest on top\n" +
+        "        PriorityQueue&lt;int[]&gt; heap = new PriorityQueue&lt;&gt;((a, b) -&gt; Integer.compare(b[0], a[0]));\n" +
+        "        Set&lt;Integer&gt; users = new HashSet&lt;&gt;(follows.getOrDefault(userId, Set.of()));\n" +
+        "        users.add(userId);             // always include the user's own tweets\n" +
+        "        for (int u : users) {\n" +
+        "            List&lt;int[]&gt; list = tweets.get(u);\n" +
+        "            if (list != null &amp;&amp; !list.isEmpty()) {\n" +
+        "                int i = list.size() - 1;\n" +
+        "                heap.add(new int[]{list.get(i)[0], list.get(i)[1], u, i});\n" +
+        "            }\n" +
+        "        }\n" +
+        "        List&lt;Integer&gt; feed = new ArrayList&lt;&gt;();\n" +
+        "        while (!heap.isEmpty() &amp;&amp; feed.size() &lt; 10) {   // merge k sorted lists\n" +
+        "            int[] top = heap.poll();\n" +
+        "            feed.add(top[1]);\n" +
+        "            if (top[3] &gt; 0) {\n" +
+        "                int[] older = tweets.get(top[2]).get(top[3] - 1);\n" +
+        "                heap.add(new int[]{older[0], older[1], top[2], top[3] - 1});\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return feed;\n" +
+        "    }\n" +
+        "\n" +
+        "    public void follow(int followerId, int followeeId) {\n" +
+        "        follows.computeIfAbsent(followerId, u -&gt; new HashSet&lt;&gt;()).add(followeeId);\n" +
+        "    }\n" +
+        "\n" +
+        "    public void unfollow(int followerId, int followeeId) {\n" +
+        "        Set&lt;Integer&gt; s = follows.get(followerId);\n" +
+        "        if (s != null) s.remove(followeeId);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(f + 10 log f) per feed for f followees; O(1) for the other calls.</p>" +
+        "<p><strong>The trap.</strong> Letting a user follow or unfollow themselves change their own feed. Their own tweets must always appear, whatever the follow set says.</p></details>" +
+        "<h3>6. Reorganize String</h3>" +
+        "<p><strong>LeetCode 767 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/reorganize-string/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Rearrange a string so that no two neighbours are equal, or return \"\" if that is impossible (any valid answer is accepted).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Always place the most frequent remaining letter that differs from the last one placed. A max-heap of counts gives the most frequent letter in O(log 26).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try permutations until one works: factorial.</p>" +
+        "<p><strong>Approach.</strong> If some letter occurs more than (n + 1) / 2 times, return \"\". Otherwise, repeatedly pop the most frequent letter, append it, and hold it aside for one step so it cannot be used twice in a row; push the previously held letter back if it still has copies.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def reorganizeString(self, s: str) -&gt; str:\n" +
+        "        if max(Counter(s).values()) &gt; (len(s) + 1) // 2:\n" +
+        "            return \"\"                  # the most frequent letter cannot be spread out\n" +
+        "        heap = [(-c, ch) for ch, c in Counter(s).items()]\n" +
+        "        heapq.heapify(heap)\n" +
+        "        out, held = [], None           # held: last letter placed, kept out for one step\n" +
+        "        while heap:\n" +
+        "            c, ch = heapq.heappop(heap)\n" +
+        "            out.append(ch)\n" +
+        "            if held:\n" +
+        "                heapq.heappush(heap, held)\n" +
+        "            held = (c + 1, ch) if c + 1 &lt; 0 else None\n" +
+        "        return \"\".join(out)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public String reorganizeString(String s) {\n" +
+        "        int[] count = new int[26];\n" +
+        "        int max = 0;\n" +
+        "        for (char c : s.toCharArray()) max = Math.max(max, ++count[c - 'a']);\n" +
+        "        if (max &gt; (s.length() + 1) / 2) return \"\";   // cannot be spread out\n" +
+        "        PriorityQueue&lt;int[]&gt; heap = new PriorityQueue&lt;&gt;(   // {count, letter}: most frequent first\n" +
+        "            (a, b) -&gt; a[0] != b[0] ? Integer.compare(b[0], a[0]) : Integer.compare(a[1], b[1]));\n" +
+        "        for (int i = 0; i &lt; 26; i++) if (count[i] &gt; 0) heap.add(new int[]{count[i], i});\n" +
+        "        StringBuilder out = new StringBuilder();\n" +
+        "        int[] held = null;             // last letter placed, kept out for one step\n" +
+        "        while (!heap.isEmpty()) {\n" +
+        "            int[] top = heap.poll();\n" +
+        "            out.append((char) ('a' + top[1]));\n" +
+        "            if (held != null) heap.add(held);\n" +
+        "            held = --top[0] &gt; 0 ? top : null;\n" +
+        "        }\n" +
+        "        return out.toString();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log 26) time, O(26) space.</p>" +
+        "<p><strong>The trap.</strong> Placing letters greedily in frequency order without holding the last one back. The same letter comes out on top again immediately and lands next to itself.</p></details>" +
+        "<h3>7. Furthest Building You Can Reach</h3>" +
+        "<p><strong>LeetCode 1642 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/furthest-building-you-can-reach/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Walking along buildings, each climb up needs either bricks equal to the height difference or one ladder. Return the index of the furthest building you can reach.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Ladders should go on the biggest climbs, but you learn which climbs are biggest only as you go. Keep the ladder climbs in a min-heap: when you run out of ladders, the smallest ladder climb is the one to pay for with bricks instead.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every assignment of ladders to climbs: exponential.</p>" +
+        "<p><strong>Approach.</strong> Walk the buildings. For each climb, put it on a ladder (push it into the min-heap). If the heap now holds more climbs than ladders, pop the smallest and pay for it with bricks. If bricks go negative, the current building cannot be reached: return the previous index.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def furthestBuilding(self, heights: list[int], bricks: int, ladders: int) -&gt; int:\n" +
+        "        on_ladders = []                # min-heap of the climbs currently given ladders\n" +
+        "        for i in range(len(heights) - 1):\n" +
+        "            climb = heights[i + 1] - heights[i]\n" +
+        "            if climb &lt;= 0:\n" +
+        "                continue\n" +
+        "            heapq.heappush(on_ladders, climb)\n" +
+        "            if len(on_ladders) &gt; ladders:\n" +
+        "                bricks -= heapq.heappop(on_ladders)   # the smallest ladder climb takes bricks\n" +
+        "                if bricks &lt; 0:\n" +
+        "                    return i\n" +
+        "        return len(heights) - 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.PriorityQueue;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int furthestBuilding(int[] heights, int bricks, int ladders) {\n" +
+        "        PriorityQueue&lt;Integer&gt; onLadders = new PriorityQueue&lt;&gt;();   // climbs given ladders\n" +
+        "        for (int i = 0; i &lt; heights.length - 1; i++) {\n" +
+        "            int climb = heights[i + 1] - heights[i];\n" +
+        "            if (climb &lt;= 0) continue;\n" +
+        "            onLadders.add(climb);\n" +
+        "            if (onLadders.size() &gt; ladders) {\n" +
+        "                bricks -= onLadders.poll();   // the smallest ladder climb takes bricks\n" +
+        "                if (bricks &lt; 0) return i;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return heights.length - 1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log L) time for L ladders, O(L) space.</p>" +
+        "<p><strong>The trap.</strong> Using ladders on the first climbs you meet. A small early climb then wastes a ladder that a large later climb needed; the heap lets you revise that choice.</p></details>" +
+        "<h3>8. Find Median from Data Stream</h3>" +
+        "<p><strong>LeetCode 295 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/find-median-from-data-stream/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Numbers arrive one at a time; at any moment return the median of all numbers so far.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Two Heaps for a Running Median section: a max-heap for the smaller half and a min-heap for the larger half, kept the same size (or the lower half one bigger). The median sits on their tops.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Keep a sorted list and insert each number in place: O(n) per insertion.</p>" +
+        "<p><strong>Approach.</strong> Add a number to the lower half's max-heap, then move the lower half's largest to the upper half's min-heap, so every lower value stays below every upper value. If the upper half is now bigger, move its smallest back. The median is the lower top when the sizes differ, or the average of both tops.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class MedianFinder:\n" +
+        "    def __init__(self):\n" +
+        "        self.low, self.high = [], []   # low: max-heap (negated) of the smaller half\n" +
+        "\n" +
+        "    def addNum(self, num: int) -&gt; None:\n" +
+        "        heapq.heappush(self.low, -num)\n" +
+        "        heapq.heappush(self.high, -heapq.heappop(self.low))   # keeps low &lt;= high\n" +
+        "        if len(self.high) &gt; len(self.low):\n" +
+        "            heapq.heappush(self.low, -heapq.heappop(self.high))   # keeps the sizes close\n" +
+        "\n" +
+        "    def findMedian(self) -&gt; float:\n" +
+        "        if len(self.low) &gt; len(self.high):\n" +
+        "            return float(-self.low[0])\n" +
+        "        return (-self.low[0] + self.high[0]) / 2</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class MedianFinder {\n" +
+        "    private final PriorityQueue&lt;Integer&gt; low = new PriorityQueue&lt;&gt;(Collections.reverseOrder());   // smaller half\n" +
+        "    private final PriorityQueue&lt;Integer&gt; high = new PriorityQueue&lt;&gt;();                           // larger half\n" +
+        "\n" +
+        "    public MedianFinder() {}\n" +
+        "\n" +
+        "    public void addNum(int num) {\n" +
+        "        low.add(num);\n" +
+        "        high.add(low.poll());          // keeps low &lt;= high\n" +
+        "        if (high.size() &gt; low.size()) low.add(high.poll());   // keeps the sizes close\n" +
+        "    }\n" +
+        "\n" +
+        "    public double findMedian() {\n" +
+        "        if (low.size() &gt; high.size()) return low.peek();\n" +
+        "        return (low.peek() + (double) high.peek()) / 2;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) per addNum, O(1) per findMedian, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Balancing the sizes without keeping the halves ordered. The two heaps must also satisfy \"everything below is at most everything above\"; routing every new number through the lower heap and across to the upper one keeps both properties.</p></details>" +
+        "<h3>9. IPO</h3>" +
+        "<p><strong>LeetCode 502 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/ipo/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>You start with capital w and may finish at most k projects. A project needs some capital to start and adds its profit to your capital when done. Maximize your final capital.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Capital only grows, so projects become affordable in order of their capital requirement and never stop being affordable. Sort by requirement, and keep the affordable projects' profits in a max-heap; always do the most profitable one available.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every sequence of up to k projects: exponential.</p>" +
+        "<p><strong>Approach.</strong> Sort projects by required capital. Repeat k times: move every project you can now afford into a max-heap of profits; if the heap is empty, stop; otherwise take the largest profit and add it to w.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def findMaximizedCapital(self, k: int, w: int, profits: list[int], capital: list[int]) -&gt; int:\n" +
+        "        projects = sorted(zip(capital, profits))   # in the order they become affordable\n" +
+        "        heap, i = [], 0                # max-heap (negated) of affordable profits\n" +
+        "        for _ in range(k):\n" +
+        "            while i &lt; len(projects) and projects[i][0] &lt;= w:\n" +
+        "                heapq.heappush(heap, -projects[i][1])\n" +
+        "                i += 1\n" +
+        "            if not heap:\n" +
+        "                break                  # nothing affordable: capital cannot grow\n" +
+        "            w -= heapq.heappop(heap)   # take the most profitable\n" +
+        "        return w</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int findMaximizedCapital(int k, int w, int[] profits, int[] capital) {\n" +
+        "        int n = profits.length;\n" +
+        "        Integer[] order = new Integer[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) order[i] = i;\n" +
+        "        Arrays.sort(order, (a, b) -&gt; Integer.compare(capital[a], capital[b]));   // by requirement\n" +
+        "        PriorityQueue&lt;Integer&gt; heap = new PriorityQueue&lt;&gt;(Collections.reverseOrder());   // affordable profits\n" +
+        "        int i = 0;\n" +
+        "        for (int round = 0; round &lt; k; round++) {\n" +
+        "            while (i &lt; n &amp;&amp; capital[order[i]] &lt;= w) heap.add(profits[order[i++]]);\n" +
+        "            if (heap.isEmpty()) break; // nothing affordable\n" +
+        "            w += heap.poll();          // the most profitable\n" +
+        "        }\n" +
+        "        return w;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Choosing the cheapest affordable project to unlock more. Profits are what raise capital, so the most profitable affordable project is always at least as good; it unlocks everything the cheaper one would.</p></details>" +
+        "<h3>10. Course Schedule III</h3>" +
+        "<p><strong>LeetCode 630 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/course-schedule-iii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Each course has a duration and a last day by which it must be finished. Taking one course at a time from day 1, find the most courses you can complete.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 23's deadline scheduling plus a heap. Take courses in order of deadline; if adding one overruns its deadline, drop the longest course taken so far. That keeps the count and frees the most time.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset and check whether some order fits the deadlines: exponential.</p>" +
+        "<p><strong>Approach.</strong> Sort by last day. Keep a max-heap of the durations taken and the total time used. For each course, take it (push its duration, add to the total). If the total now exceeds this course's last day, pop the longest duration and subtract it. The heap's size is the answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def scheduleCourse(self, courses: list[list[int]]) -&gt; int:\n" +
+        "        taken, total = [], 0           # max-heap (negated) of taken durations\n" +
+        "        for duration, last in sorted(courses, key=lambda c: c[1]):   # by deadline\n" +
+        "            heapq.heappush(taken, -duration)\n" +
+        "            total += duration\n" +
+        "            if total &gt; last:\n" +
+        "                total += heapq.heappop(taken)   # drop the longest course so far\n" +
+        "        return len(taken)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int scheduleCourse(int[][] courses) {\n" +
+        "        Arrays.sort(courses, (a, b) -&gt; Integer.compare(a[1], b[1]));   // by deadline\n" +
+        "        PriorityQueue&lt;Integer&gt; taken = new PriorityQueue&lt;&gt;(Collections.reverseOrder());\n" +
+        "        int total = 0;\n" +
+        "        for (int[] c : courses) {\n" +
+        "            taken.add(c[0]);\n" +
+        "            total += c[0];\n" +
+        "            if (total &gt; c[1]) total -= taken.poll();   // drop the longest course so far\n" +
+        "        }\n" +
+        "        return taken.size();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Skipping a course that does not fit instead of swapping. Removing the longest course taken (which may be the new one) keeps the same count while leaving the most room for the courses still to come.</p></details>" +
+        "<h3>11. Minimum Number of Refueling Stops</h3>" +
+        "<p><strong>LeetCode 871 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/minimum-number-of-refueling-stops/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A car starts with some fuel and passes gas stations on the way to a target (one unit of fuel per mile). Find the fewest stops that reach the target, or -1.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Drive as far as the fuel allows, remembering every station passed. When you run dry, retroactively refuel at the best station you passed, the one with the most fuel: a max-heap of passed stations.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset of stations in order: exponential. A DP over (stations, stops) is O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Walk the stations and then the target in order. Before reaching each point, while the fuel cannot get there, pop the largest fuel amount from the heap of passed stations and add it, counting a stop; if the heap is empty, return -1. On reaching a station, push its fuel.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def minRefuelStops(self, target: int, startFuel: int, stations: list[list[int]]) -&gt; int:\n" +
+        "        passed, fuel, stops = [], startFuel, 0   # max-heap (negated) of fuel at passed stations\n" +
+        "        for pos, gas in stations + [[target, 0]]:\n" +
+        "            while fuel &lt; pos:          # cannot reach pos: refuel at the best station passed\n" +
+        "                if not passed:\n" +
+        "                    return -1\n" +
+        "                fuel -= heapq.heappop(passed)\n" +
+        "                stops += 1\n" +
+        "            heapq.heappush(passed, -gas)\n" +
+        "        return stops</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int minRefuelStops(int target, int startFuel, int[][] stations) {\n" +
+        "        PriorityQueue&lt;Integer&gt; passed = new PriorityQueue&lt;&gt;(Collections.reverseOrder());   // fuel at passed stations\n" +
+        "        long fuel = startFuel;         // long: many 10^9 refuels pass 2^31\n" +
+        "        int stops = 0;\n" +
+        "        for (int i = 0; i &lt;= stations.length; i++) {\n" +
+        "            int pos = i &lt; stations.length ? stations[i][0] : target;\n" +
+        "            while (fuel &lt; pos) {       // cannot reach pos: refuel at the best station passed\n" +
+        "                if (passed.isEmpty()) return -1;\n" +
+        "                fuel += passed.poll();\n" +
+        "                stops++;\n" +
+        "            }\n" +
+        "            if (i &lt; stations.length) passed.add(stations[i][1]);\n" +
+        "        }\n" +
+        "        return stops;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Overflow in Java. Fuel amounts reach 10\u2079 each, and adding up to 500 of them passes 2\u00b3\u00b9; keep the tank in a long.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -20416,6 +22281,478 @@ CHAPTERS.push({
         "<p>So the rule is a question about the workload, not the data structure. Do you need prefix search, autocomplete, longest-prefix-match, ordered iteration, or the bitwise-XOR trick? Then the trie's structure is exactly what a hash set threw away, and its cost buys something. Do you only need to know whether an exact key is present? Then the hash set of Chapter 17 is smaller and simpler and you should use it. The trie is a specialist: unbeatable at the prefix questions, and a memory-heavy way to answer the one question a hash set already answers well. Measure the workload, not the structure, and pick accordingly.</p>" + "<p>One caveat keeps the comparison honest: the sixfold figure is the naive dictionary-node trie's, and the representation is most of the cost. A radix trie, collapsing the two-thirds of nodes that are filler, closes much of the gap, and an array-node trie over a small alphabet trades the hash-map overhead for fixed slots that can be cheaper still when the alphabet is tiny, as it is for the bitwise trie's two symbols. The structural choice is as consequential as the algorithmic one, so 'a trie costs six times a hash set' is true only of the first implementation you would write, not of the ones production ships.</p>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Longest Common Prefix</h3>" +
+        "<p><strong>LeetCode 14 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/longest-common-prefix/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the longest prefix shared by every string in a list.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>In trie terms, the answer is the path from the root that never branches and never passes the end of a word. For one query you do not need to build the trie: compare the strings column by column.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every prefix of the first string, longest first, and check it against all the others: O(L\u00b2 \u00d7 n).</p>" +
+        "<p><strong>Approach.</strong> Take the first string as the candidate. For each position i, check that every string is long enough and has the same character there; stop at the first position where one does not.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def longestCommonPrefix(self, strs: list[str]) -&gt; str:\n" +
+        "        first = strs[0]\n" +
+        "        for i, c in enumerate(first):\n" +
+        "            for s in strs[1:]:\n" +
+        "                if i &gt;= len(s) or s[i] != c:   # a shorter string also ends it\n" +
+        "                    return first[:i]\n" +
+        "        return first</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public String longestCommonPrefix(String[] strs) {\n" +
+        "        String first = strs[0];\n" +
+        "        for (int i = 0; i &lt; first.length(); i++)\n" +
+        "            for (String s : strs)\n" +
+        "                if (i &gt;= s.length() || s.charAt(i) != first.charAt(i)) return first.substring(0, i);\n" +
+        "        return first;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(total characters) in the worst case, O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Forgetting that a shorter string ends the prefix. If one string is \"ab\" and another \"abc\", the prefix cannot be longer than \"ab\", even though all characters so far match.</p></details>" +
+        "<h3>2. Implement Trie (Prefix Tree)</h3>" +
+        "<p><strong>LeetCode 208 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/implement-trie-prefix-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Build a trie with insert, search (is this exact word stored?) and startsWith (is any stored word prefixed by this?).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The chapter's Structure and Insert, Search, Starts-With sections as code: a tree of nodes with one child per next character, and a flag marking where a word ends.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Store the words in a set and scan all of them for startsWith: O(total length) per prefix query.</p>" +
+        "<p><strong>Approach.</strong> Each node has a map (or 26-slot array) of children and an end flag. insert walks the word, creating missing children, and marks the last node. search and startsWith both walk the string; search also requires the end flag on the last node.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Trie:\n" +
+        "    def __init__(self):\n" +
+        "        self.root = {}                 # a node is a dict: char -&gt; child, \"$\" -&gt; end of a word\n" +
+        "\n" +
+        "    def insert(self, word: str) -&gt; None:\n" +
+        "        node = self.root\n" +
+        "        for c in word:\n" +
+        "            node = node.setdefault(c, {})\n" +
+        "        node[\"$\"] = True\n" +
+        "\n" +
+        "    def _walk(self, s):\n" +
+        "        node = self.root\n" +
+        "        for c in s:\n" +
+        "            if c not in node:\n" +
+        "                return None\n" +
+        "            node = node[c]\n" +
+        "        return node\n" +
+        "\n" +
+        "    def search(self, word: str) -&gt; bool:\n" +
+        "        node = self._walk(word)\n" +
+        "        return node is not None and \"$\" in node   # a prefix alone is not a word\n" +
+        "\n" +
+        "    def startsWith(self, prefix: str) -&gt; bool:\n" +
+        "        return self._walk(prefix) is not None</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Trie {\n" +
+        "    private static class Node {\n" +
+        "        Node[] next = new Node[26];\n" +
+        "        boolean end;                   // a word ends here\n" +
+        "    }\n" +
+        "\n" +
+        "    private final Node root = new Node();\n" +
+        "\n" +
+        "    public Trie() {}\n" +
+        "\n" +
+        "    public void insert(String word) {\n" +
+        "        Node node = root;\n" +
+        "        for (char c : word.toCharArray()) {\n" +
+        "            if (node.next[c - 'a'] == null) node.next[c - 'a'] = new Node();\n" +
+        "            node = node.next[c - 'a'];\n" +
+        "        }\n" +
+        "        node.end = true;\n" +
+        "    }\n" +
+        "\n" +
+        "    private Node walk(String s) {\n" +
+        "        Node node = root;\n" +
+        "        for (char c : s.toCharArray()) {\n" +
+        "            node = node.next[c - 'a'];\n" +
+        "            if (node == null) return null;\n" +
+        "        }\n" +
+        "        return node;\n" +
+        "    }\n" +
+        "\n" +
+        "    public boolean search(String word) {\n" +
+        "        Node node = walk(word);\n" +
+        "        return node != null &amp;&amp; node.end;   // a prefix alone is not a word\n" +
+        "    }\n" +
+        "\n" +
+        "    public boolean startsWith(String prefix) { return walk(prefix) != null; }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(L) per operation for a string of length L. Space is O(total characters inserted).</p>" +
+        "<p><strong>The trap.</strong> Returning true from search when the word is only a prefix of a stored word. After inserting \"apple\", search(\"app\") must be false; that is what the end flag is for.</p></details>" +
+        "<h3>3. Design Add and Search Words Data Structure</h3>" +
+        "<p><strong>LeetCode 211 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/design-add-and-search-words-data-structure/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Store words and answer searches where '.' matches any single letter.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Implement Trie, where a '.' in the query branches the search into every child: a small backtracking search (Chapter 18) over the trie.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Store the words in a list and match each against the pattern: O(n \u00d7 L) per search.</p>" +
+        "<p><strong>Approach.</strong> Insert as in Implement Trie. To search, recurse on (node, position): at the end, require the end flag; for a letter, follow that one child; for '.', try every child and succeed if any branch does.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class WordDictionary:\n" +
+        "    def __init__(self):\n" +
+        "        self.root = {}\n" +
+        "\n" +
+        "    def addWord(self, word: str) -&gt; None:\n" +
+        "        node = self.root\n" +
+        "        for c in word:\n" +
+        "            node = node.setdefault(c, {})\n" +
+        "        node[\"$\"] = True\n" +
+        "\n" +
+        "    def search(self, word: str) -&gt; bool:\n" +
+        "        def go(node, i):\n" +
+        "            if i == len(word):\n" +
+        "                return \"$\" in node\n" +
+        "            if word[i] == \".\":         # any one letter: try every child\n" +
+        "                return any(go(child, i + 1) for c, child in node.items() if c != \"$\")\n" +
+        "            return word[i] in node and go(node[word[i]], i + 1)\n" +
+        "        return go(self.root, 0)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class WordDictionary {\n" +
+        "    private static class Node {\n" +
+        "        Node[] next = new Node[26];\n" +
+        "        boolean end;\n" +
+        "    }\n" +
+        "\n" +
+        "    private final Node root = new Node();\n" +
+        "\n" +
+        "    public WordDictionary() {}\n" +
+        "\n" +
+        "    public void addWord(String word) {\n" +
+        "        Node node = root;\n" +
+        "        for (char c : word.toCharArray()) {\n" +
+        "            if (node.next[c - 'a'] == null) node.next[c - 'a'] = new Node();\n" +
+        "            node = node.next[c - 'a'];\n" +
+        "        }\n" +
+        "        node.end = true;\n" +
+        "    }\n" +
+        "\n" +
+        "    public boolean search(String word) { return go(root, word, 0); }\n" +
+        "\n" +
+        "    private boolean go(Node node, String word, int i) {\n" +
+        "        if (i == word.length()) return node.end;\n" +
+        "        char c = word.charAt(i);\n" +
+        "        if (c == '.') {                // any one letter: try every child\n" +
+        "            for (Node child : node.next) if (child != null &amp;&amp; go(child, word, i + 1)) return true;\n" +
+        "            return false;\n" +
+        "        }\n" +
+        "        Node child = node.next[c - 'a'];\n" +
+        "        return child != null &amp;&amp; go(child, word, i + 1);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(L) per addWord. A search is O(L) without dots and O(26\u1d48 \u00d7 L) with d dots; the problem allows at most 2.</p>" +
+        "<p><strong>The trap.</strong> Treating '.' as matching any number of letters. It matches exactly one, so the search must still reach the end of the pattern at a word's end, not partway.</p></details>" +
+        "<h3>4. Replace Words</h3>" +
+        "<p><strong>LeetCode 648 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/replace-words/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given dictionary roots and a sentence, replace every word that starts with a root by the shortest such root.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Put the roots in a trie. Walking a word from its first letter, the first end flag you meet is the shortest root that prefixes it.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each word, check every root with startswith: O(words \u00d7 roots \u00d7 L).</p>" +
+        "<p><strong>Approach.</strong> Build a trie of the roots. For each word, walk the trie letter by letter; if you reach a node that ends a root, output the letters so far; if the walk falls off the trie first, keep the word.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def replaceWords(self, dictionary: list[str], sentence: str) -&gt; str:\n" +
+        "        root = {}\n" +
+        "        for w in dictionary:\n" +
+        "            node = root\n" +
+        "            for c in w:\n" +
+        "                node = node.setdefault(c, {})\n" +
+        "            node[\"$\"] = True\n" +
+        "\n" +
+        "        def shortest_root(word):\n" +
+        "            node = root\n" +
+        "            for i, c in enumerate(word):\n" +
+        "                if c not in node:\n" +
+        "                    return word        # fell off the trie: no root\n" +
+        "                node = node[c]\n" +
+        "                if \"$\" in node:\n" +
+        "                    return word[:i + 1]   # the first root reached is the shortest\n" +
+        "            return word\n" +
+        "\n" +
+        "        return \" \".join(shortest_root(w) for w in sentence.split())</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private static class Node { Node[] next = new Node[26]; boolean end; }\n" +
+        "\n" +
+        "    public String replaceWords(List&lt;String&gt; dictionary, String sentence) {\n" +
+        "        Node root = new Node();\n" +
+        "        for (String w : dictionary) {\n" +
+        "            Node node = root;\n" +
+        "            for (char c : w.toCharArray()) {\n" +
+        "                if (node.next[c - 'a'] == null) node.next[c - 'a'] = new Node();\n" +
+        "                node = node.next[c - 'a'];\n" +
+        "            }\n" +
+        "            node.end = true;\n" +
+        "        }\n" +
+        "        StringBuilder out = new StringBuilder();\n" +
+        "        for (String word : sentence.split(\" \")) {\n" +
+        "            if (out.length() &gt; 0) out.append(' ');\n" +
+        "            Node node = root;\n" +
+        "            int cut = word.length();\n" +
+        "            for (int i = 0; i &lt; word.length(); i++) {\n" +
+        "                node = node.next[word.charAt(i) - 'a'];\n" +
+        "                if (node == null) break;               // fell off: no root\n" +
+        "                if (node.end) { cut = i + 1; break; }  // the first root reached is the shortest\n" +
+        "            }\n" +
+        "            out.append(word, 0, cut);\n" +
+        "        }\n" +
+        "        return out.toString();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(total length of roots + total length of the sentence).</p>" +
+        "<p><strong>The trap.</strong> Checking roots from a set by trying prefixes of every length: correct, but O(L\u00b2) per word, since each prefix is a new string to hash. The trie walk stops at the first root it meets.</p></details>" +
+        "<h3>5. Search Suggestions System</h3>" +
+        "<p><strong>LeetCode 1268 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/search-suggestions-system/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>As each letter of a search word is typed, return up to three products (in lexicographic order) that start with the typed prefix.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Autocomplete is the trie's textbook use. Store at each trie node the (at most three) smallest products passing through it, so each keystroke's answer is ready at the node it reaches.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For every prefix, filter all products and sort: O(L \u00d7 n \u00d7 m log n).</p>" +
+        "<p><strong>Approach.</strong> Sort the products, then insert them in that order; at each node on a product's path, append it to the node's suggestion list if the list has fewer than three. For the search word, walk the trie; each node's list is that prefix's answer, and once the walk falls off, every later answer is empty.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def suggestedProducts(self, products: list[str], searchWord: str) -&gt; list[list[str]]:\n" +
+        "        root = {}\n" +
+        "        for p in sorted(products):     # sorted: each node keeps the first three it sees\n" +
+        "            node = root\n" +
+        "            for c in p:\n" +
+        "                node = node.setdefault(c, {\"#\": []})\n" +
+        "                if len(node[\"#\"]) &lt; 3:\n" +
+        "                    node[\"#\"].append(p)\n" +
+        "        out, node = [], root\n" +
+        "        for c in searchWord:\n" +
+        "            node = node.get(c) if node else None\n" +
+        "            out.append(node[\"#\"] if node else [])   # fell off: empty from here on\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private static class Node { Node[] next = new Node[26]; List&lt;String&gt; top = new ArrayList&lt;&gt;(); }\n" +
+        "\n" +
+        "    public List&lt;List&lt;String&gt;&gt; suggestedProducts(String[] products, String searchWord) {\n" +
+        "        String[] sorted = products.clone();\n" +
+        "        Arrays.sort(sorted);           // each node keeps the first three it sees\n" +
+        "        Node root = new Node();\n" +
+        "        for (String p : sorted) {\n" +
+        "            Node node = root;\n" +
+        "            for (char c : p.toCharArray()) {\n" +
+        "                if (node.next[c - 'a'] == null) node.next[c - 'a'] = new Node();\n" +
+        "                node = node.next[c - 'a'];\n" +
+        "                if (node.top.size() &lt; 3) node.top.add(p);\n" +
+        "            }\n" +
+        "        }\n" +
+        "        List&lt;List&lt;String&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        Node node = root;\n" +
+        "        for (char c : searchWord.toCharArray()) {\n" +
+        "            node = node == null ? null : node.next[c - 'a'];\n" +
+        "            out.add(node == null ? new ArrayList&lt;&gt;() : node.top);   // fell off: empty from here on\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(total product length + search length) after an O(n log n) sort.</p>" +
+        "<p><strong>The trap.</strong> Forgetting the prefixes after the walk falls off the trie. The output must still have one (empty) list per typed letter.</p></details>" +
+        "<h3>6. Maximum XOR of Two Numbers in an Array</h3>" +
+        "<p><strong>LeetCode 421 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/maximum-xor-of-two-numbers-in-an-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the largest value of nums[i] XOR nums[j].</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Bitwise Trie section: store the numbers as 31-bit strings, highest bit first. For a number x, walking the trie and taking the opposite bit whenever possible builds the largest XOR with any stored number, because a higher bit outweighs all lower bits together.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every pair: O(n\u00b2), 2 \u00d7 10\u00b9\u2070 at n = 2 \u00d7 10\u2075.</p>" +
+        "<p><strong>Approach.</strong> Insert every number bit by bit from bit 30 down to bit 0. Then for each number, walk from the root choosing the child with the opposite bit when it exists (that bit of the XOR becomes 1), otherwise the same bit. Keep the best XOR found.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findMaximumXOR(self, nums: list[int]) -&gt; int:\n" +
+        "        root = {}\n" +
+        "        for x in nums:                 # highest bit first\n" +
+        "            node = root\n" +
+        "            for b in range(30, -1, -1):\n" +
+        "                node = node.setdefault((x &gt;&gt; b) &amp; 1, {})\n" +
+        "        best = 0\n" +
+        "        for x in nums:\n" +
+        "            node, xor = root, 0\n" +
+        "            for b in range(30, -1, -1):\n" +
+        "                bit = (x &gt;&gt; b) &amp; 1\n" +
+        "                if 1 - bit in node:    # the opposite bit makes this XOR bit 1\n" +
+        "                    xor |= 1 &lt;&lt; b\n" +
+        "                    node = node[1 - bit]\n" +
+        "                else:\n" +
+        "                    node = node[bit]\n" +
+        "            best = max(best, xor)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findMaximumXOR(int[] nums) {\n" +
+        "        int[][] child = new int[31 * nums.length + 1][2];   // trie as arrays: node 0 is the root\n" +
+        "        int nodes = 1;\n" +
+        "        for (int x : nums) {           // highest bit first\n" +
+        "            int node = 0;\n" +
+        "            for (int b = 30; b &gt;= 0; b--) {\n" +
+        "                int bit = (x &gt;&gt; b) &amp; 1;\n" +
+        "                if (child[node][bit] == 0) child[node][bit] = nodes++;\n" +
+        "                node = child[node][bit];\n" +
+        "            }\n" +
+        "        }\n" +
+        "        int best = 0;\n" +
+        "        for (int x : nums) {\n" +
+        "            int node = 0, xor = 0;\n" +
+        "            for (int b = 30; b &gt;= 0; b--) {\n" +
+        "                int bit = (x &gt;&gt; b) &amp; 1;\n" +
+        "                if (child[node][1 - bit] != 0) { xor |= 1 &lt;&lt; b; node = child[node][1 - bit]; }   // opposite bit\n" +
+        "                else node = child[node][bit];\n" +
+        "            }\n" +
+        "            best = Math.max(best, xor);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(31 \u00d7 n) time and O(31 \u00d7 n) trie nodes.</p>" +
+        "<p><strong>The trap.</strong> Walking from the lowest bit. Greedily setting low bits first can lose a high bit, and one high bit is worth more than all the lower ones combined; the walk must go from the most significant bit down.</p></details>" +
+        "<h3>7. Word Search II</h3>" +
+        "<p><strong>LeetCode 212 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/word-search-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find every word from a list that can be traced in a letter grid (adjacent cells, each cell used once per word).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Word Search on a Grid section. Running Chapter 18's Word Search once per word repeats the same grid walks up to 3 \u00d7 10\u2074 times. Put the words in a trie and walk the grid once: the trie tells you at every step whether any word continues this way.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Word Search for each word separately: O(words \u00d7 cells \u00d7 3^L).</p>" +
+        "<p><strong>Approach.</strong> Build a trie, storing each complete word at its end node. Start a DFS from every cell with the trie root. At each cell, move to the trie child for its letter (stop if there is none); if that node holds a word, record it and clear it so it is reported once. Mark the cell used, try the four neighbours, and restore it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findWords(self, board: list[list[str]], words: list[str]) -&gt; list[str]:\n" +
+        "        root = {}\n" +
+        "        for w in words:\n" +
+        "            node = root\n" +
+        "            for c in w:\n" +
+        "                node = node.setdefault(c, {})\n" +
+        "            node[\"$\"] = w              # the word itself, stored at its end\n" +
+        "        R, C, found = len(board), len(board[0]), []\n" +
+        "\n" +
+        "        def go(r, c, parent):\n" +
+        "            ch = board[r][c]\n" +
+        "            node = parent.get(ch)\n" +
+        "            if node is None:\n" +
+        "                return                 # no word continues this way\n" +
+        "            if \"$\" in node:\n" +
+        "                found.append(node.pop(\"$\"))   # report once\n" +
+        "            board[r][c] = \"#\"          # mark used\n" +
+        "            for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):\n" +
+        "                if 0 &lt;= nr &lt; R and 0 &lt;= nc &lt; C and board[nr][nc] != \"#\":\n" +
+        "                    go(nr, nc, node)\n" +
+        "            board[r][c] = ch           # restore\n" +
+        "\n" +
+        "        for r in range(R):\n" +
+        "            for c in range(C):\n" +
+        "                go(r, c, root)\n" +
+        "        return found</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private static class Node { Node[] next = new Node[26]; String word; }   // word stored at its end\n" +
+        "\n" +
+        "    private final List&lt;String&gt; found = new ArrayList&lt;&gt;();\n" +
+        "    private char[][] board;\n" +
+        "\n" +
+        "    public List&lt;String&gt; findWords(char[][] board, String[] words) {\n" +
+        "        this.board = board;\n" +
+        "        Node root = new Node();\n" +
+        "        for (String w : words) {\n" +
+        "            Node node = root;\n" +
+        "            for (char c : w.toCharArray()) {\n" +
+        "                if (node.next[c - 'a'] == null) node.next[c - 'a'] = new Node();\n" +
+        "                node = node.next[c - 'a'];\n" +
+        "            }\n" +
+        "            node.word = w;\n" +
+        "        }\n" +
+        "        for (int r = 0; r &lt; board.length; r++)\n" +
+        "            for (int c = 0; c &lt; board[0].length; c++) go(r, c, root);\n" +
+        "        return found;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int r, int c, Node parent) {\n" +
+        "        char ch = board[r][c];\n" +
+        "        Node node = parent.next[ch - 'a'];\n" +
+        "        if (node == null) return;      // no word continues this way\n" +
+        "        if (node.word != null) { found.add(node.word); node.word = null; }   // report once\n" +
+        "        board[r][c] = '#';             // mark used\n" +
+        "        int[][] dirs = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};\n" +
+        "        for (int[] d : dirs) {\n" +
+        "            int nr = r + d[0], nc = c + d[1];\n" +
+        "            if (nr &gt;= 0 &amp;&amp; nr &lt; board.length &amp;&amp; nc &gt;= 0 &amp;&amp; nc &lt; board[0].length &amp;&amp; board[nr][nc] != '#')\n" +
+        "                go(nr, nc, node);\n" +
+        "        }\n" +
+        "        board[r][c] = ch;              // restore\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(cells \u00d7 4 \u00d7 3^(L - 1)) in the worst case for words of length up to L, far less in practice because the trie prunes dead paths.</p>" +
+        "<p><strong>The trap.</strong> Reporting the same word more than once when it can be traced along several paths. Clearing the word from its trie node the first time it is found fixes it.</p></details>" +
+        "<h3>8. Maximum XOR With an Element From Array</h3>" +
+        "<p><strong>LeetCode 1707 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/maximum-xor-with-an-element-from-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>For each query (x, m), find the largest x XOR y over the array's values y that are at most m, or -1 if there are none.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Maximum XOR of Two Numbers with a limit on y. Answer the queries offline (Chapter 12's sweep): sort them by m, and insert array values into the bitwise trie in increasing order, so when a query is answered the trie holds exactly the values \u2264 m.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each query, scan all values: O(n \u00d7 q), 10\u00b9\u2070 at the limits.</p>" +
+        "<p><strong>Approach.</strong> Sort the values, and sort the query indices by m. For each query in that order, insert every value \u2264 m not yet inserted; if the trie is still empty, the answer is -1; otherwise walk it greedily for x, preferring the opposite bit, as in Maximum XOR of Two Numbers. Write each answer at its query's original position.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maximizeXor(self, nums: list[int], queries: list[list[int]]) -&gt; list[int]:\n" +
+        "        nums = sorted(nums)\n" +
+        "        root, i = {}, 0\n" +
+        "        out = [-1] * len(queries)\n" +
+        "        for qi in sorted(range(len(queries)), key=lambda j: queries[j][1]):   # by limit m\n" +
+        "            x, m = queries[qi]\n" +
+        "            while i &lt; len(nums) and nums[i] &lt;= m:  # the trie holds exactly the values &lt;= m\n" +
+        "                node = root\n" +
+        "                for b in range(29, -1, -1):\n" +
+        "                    node = node.setdefault((nums[i] &gt;&gt; b) &amp; 1, {})\n" +
+        "                i += 1\n" +
+        "            if not root:\n" +
+        "                continue               # no value &lt;= m: the answer stays -1\n" +
+        "            node, xor = root, 0\n" +
+        "            for b in range(29, -1, -1):\n" +
+        "                bit = (x &gt;&gt; b) &amp; 1\n" +
+        "                if 1 - bit in node:\n" +
+        "                    xor |= 1 &lt;&lt; b\n" +
+        "                    node = node[1 - bit]\n" +
+        "                else:\n" +
+        "                    node = node[bit]\n" +
+        "            out[qi] = xor\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] maximizeXor(int[] nums, int[][] queries) {\n" +
+        "        int[] sorted = nums.clone();\n" +
+        "        Arrays.sort(sorted);\n" +
+        "        int q = queries.length;\n" +
+        "        Integer[] order = new Integer[q];\n" +
+        "        for (int j = 0; j &lt; q; j++) order[j] = j;\n" +
+        "        Arrays.sort(order, (a, b) -&gt; Integer.compare(queries[a][1], queries[b][1]));   // by limit m\n" +
+        "        int[][] child = new int[30 * sorted.length + 1][2];\n" +
+        "        int nodes = 1, i = 0;\n" +
+        "        int[] out = new int[q];\n" +
+        "        for (int qi : order) {\n" +
+        "            int x = queries[qi][0], m = queries[qi][1];\n" +
+        "            while (i &lt; sorted.length &amp;&amp; sorted[i] &lt;= m) {   // the trie holds the values &lt;= m\n" +
+        "                int node = 0;\n" +
+        "                for (int b = 29; b &gt;= 0; b--) {\n" +
+        "                    int bit = (sorted[i] &gt;&gt; b) &amp; 1;\n" +
+        "                    if (child[node][bit] == 0) child[node][bit] = nodes++;\n" +
+        "                    node = child[node][bit];\n" +
+        "                }\n" +
+        "                i++;\n" +
+        "            }\n" +
+        "            if (i == 0) { out[qi] = -1; continue; }         // no value &lt;= m\n" +
+        "            int node = 0, xor = 0;\n" +
+        "            for (int b = 29; b &gt;= 0; b--) {\n" +
+        "                int bit = (x &gt;&gt; b) &amp; 1;\n" +
+        "                if (child[node][1 - bit] != 0) { xor |= 1 &lt;&lt; b; node = child[node][1 - bit]; }\n" +
+        "                else node = child[node][bit];\n" +
+        "            }\n" +
+        "            out[qi] = xor;\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O((n + q) \u00d7 30 + n log n + q log q) time, O(30 \u00d7 n) trie nodes.</p>" +
+        "<p><strong>The trap.</strong> Losing the queries' original order after sorting them. Sort indices, not the queries, so each answer goes back to where it was asked.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -20622,6 +22959,444 @@ CHAPTERS.push({
         "<p>Two facts about trees are worth carrying because they turn a tree into something you can divide and conquer. The first is the <strong>diameter</strong>, the longest path between any two nodes, and it has a proof-backed shortcut: breadth-first search from any node to find the farthest node u, then breadth-first search from u to find the farthest node v; the path from u to v is a diameter. The reason the first search can start <em>anywhere</em> is the theorem that the farthest node from any starting point is always an endpoint of some diameter, so u is guaranteed to be a diameter endpoint and the second search finds the other. Verified against the brute-force all-pairs longest path on three thousand random trees, the two-search method matched every one, in two linear passes instead of n.</p>" +
         "<p>The second is the <strong>centroid</strong>, the node whose removal leaves every remaining component with at most half the tree's nodes. Every tree has one (or two adjacent ones), and it is found in a single pass computing subtree sizes: the centroid is the node for which the largest piece left behind &mdash; the biggest child subtree, or the rest of the tree above it &mdash; is no more than n over two. Checked on three thousand random trees, removing the computed centroid always left every component at most half the size.</p>" +
         "<p>That half-size guarantee is the whole point, because it makes the tree divisible. <strong>Centroid decomposition</strong> removes the centroid, recurses on each resulting component, and repeats; since every piece is at most half its parent, the recursion is O(log n) deep, and it is divide and conquer of Chapter 3 applied to trees rather than arrays. Path-counting problems &mdash; how many pairs of nodes are exactly distance k apart &mdash; that look hopeless on a tree become tractable once the centroid splits every path into two halves that meet at it, one level of the decomposition at a time. The diameter and the centroid are the two structural handles that let the array paradigms finally close over trees.</p>" + "<p>Both are worth holding as procedures. The two-search diameter is: breadth-first from any node, note the farthest node reached, breadth-first again from there, and the farthest node this time is the other diameter endpoint &mdash; two linear sweeps against the n sweeps of trying every source. Centroid decomposition is: remove the centroid, whose half-size guarantee makes every remaining component at most half the tree, then recurse on each, building a structure of depth log n in which each level accounts for the paths passing through that level's centroid. A question like counting how many node pairs lie exactly distance k apart, hopeless to brute-force on a tree, becomes a sum over log n levels of a one-dimensional counting problem, one centroid at a time.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 25 minutes (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Number of Nodes in the Sub-Tree With the Same Label</h3>" +
+        "<p><strong>LeetCode 1519 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/number-of-nodes-in-the-sub-tree-with-the-same-label/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a tree rooted at node 0, each node has a letter. For every node, count the nodes in its subtree (itself included) with the same letter.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Subtree questions: each node's answer is built from its children's. A count of the 26 letters per subtree, merged upward, answers every node at once.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each node, walk its whole subtree: O(n\u00b2) on a path.</p>" +
+        "<p><strong>Approach.</strong> Order the nodes with an explicit DFS from node 0, recording parents. Walk that order backwards (children before parents), giving each node a 26-entry count: its own letter plus its children's counts added in. A node's answer is its count for its own letter.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countSubTrees(self, n: int, edges: list[list[int]], labels: str) -&gt; list[int]:\n" +
+        "        adj = [[] for _ in range(n)]\n" +
+        "        for a, b in edges:\n" +
+        "            adj[a].append(b)\n" +
+        "            adj[b].append(a)\n" +
+        "        parent, order, stack = [-1] * n, [], [0]\n" +
+        "        seen = [False] * n\n" +
+        "        seen[0] = True\n" +
+        "        while stack:                   # explicit DFS order: no recursion depth\n" +
+        "            v = stack.pop()\n" +
+        "            order.append(v)\n" +
+        "            for w in adj[v]:\n" +
+        "                if not seen[w]:\n" +
+        "                    seen[w] = True\n" +
+        "                    parent[w] = v\n" +
+        "                    stack.append(w)\n" +
+        "        count = [[0] * 26 for _ in range(n)]\n" +
+        "        ans = [0] * n\n" +
+        "        for v in reversed(order):      # children before parents\n" +
+        "            count[v][ord(labels[v]) - 97] += 1\n" +
+        "            ans[v] = count[v][ord(labels[v]) - 97]\n" +
+        "            p = parent[v]\n" +
+        "            if p &gt;= 0:\n" +
+        "                for c in range(26):\n" +
+        "                    count[p][c] += count[v][c]\n" +
+        "        return ans</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] countSubTrees(int n, int[][] edges, String labels) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; adj = new ArrayList&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; n; i++) adj.add(new ArrayList&lt;&gt;());\n" +
+        "        for (int[] e : edges) { adj.get(e[0]).add(e[1]); adj.get(e[1]).add(e[0]); }\n" +
+        "        int[] parent = new int[n], order = new int[n], ans = new int[n];\n" +
+        "        boolean[] seen = new boolean[n];\n" +
+        "        ArrayDeque&lt;Integer&gt; stack = new ArrayDeque&lt;&gt;();\n" +
+        "        stack.push(0); seen[0] = true; parent[0] = -1;\n" +
+        "        int k = 0;\n" +
+        "        while (!stack.isEmpty()) {     // explicit DFS order\n" +
+        "            int v = stack.pop();\n" +
+        "            order[k++] = v;\n" +
+        "            for (int w : adj.get(v)) if (!seen[w]) { seen[w] = true; parent[w] = v; stack.push(w); }\n" +
+        "        }\n" +
+        "        int[][] count = new int[n][26];\n" +
+        "        for (int i = n - 1; i &gt;= 0; i--) {   // children before parents\n" +
+        "            int v = order[i], c = labels.charAt(v) - 'a';\n" +
+        "            ans[v] = ++count[v][c];\n" +
+        "            if (parent[v] &gt;= 0) for (int x = 0; x &lt; 26; x++) count[parent[v]][x] += count[v][x];\n" +
+        "        }\n" +
+        "        return ans;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(26 \u00d7 n) time and space.</p>" +
+        "<p><strong>The trap.</strong> Treating the edges as parent-to-child. They are undirected; the direction comes from rooting at node 0, which is what the parent array records.</p></details>" +
+        "<h3>2. Lowest Common Ancestor of Deepest Leaves</h3>" +
+        "<p><strong>LeetCode 1123 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/lowest-common-ancestor-of-deepest-leaves/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the lowest node whose subtree contains every deepest leaf of a binary tree.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 25's tuple trick applied to LCA: return (height, answer) from each subtree. If both sides are equally tall, the deepest leaves are on both sides and this node is their LCA; otherwise the taller side's answer stands.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Find the deepest leaves, then climb from each with parent pointers to their common ancestor: several passes.</p>" +
+        "<p><strong>Approach.</strong> A helper returns (height, lca) for a subtree. For an empty tree, (0, None). For a node, compare the children's heights: equal means this node is the LCA; otherwise pass up the taller child's lca. The height is 1 + the larger.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def lcaDeepestLeaves(self, root: Optional[TreeNode]) -&gt; Optional[TreeNode]:\n" +
+        "        def go(node):                  # (height, lca of this subtree's deepest leaves)\n" +
+        "            if not node:\n" +
+        "                return 0, None\n" +
+        "            hl, left = go(node.left)\n" +
+        "            hr, right = go(node.right)\n" +
+        "            if hl == hr:\n" +
+        "                return hl + 1, node    # deepest leaves on both sides\n" +
+        "            return (hl + 1, left) if hl &gt; hr else (hr + 1, right)\n" +
+        "        return go(root)[1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private record Result(int height, TreeNode lca) {}   // lca of the subtree's deepest leaves\n" +
+        "\n" +
+        "    public TreeNode lcaDeepestLeaves(TreeNode root) { return go(root).lca(); }\n" +
+        "\n" +
+        "    private Result go(TreeNode node) {\n" +
+        "        if (node == null) return new Result(0, null);\n" +
+        "        Result l = go(node.left), r = go(node.right);\n" +
+        "        if (l.height() == r.height()) return new Result(l.height() + 1, node);   // both sides\n" +
+        "        return l.height() &gt; r.height() ? new Result(l.height() + 1, l.lca()) : new Result(r.height() + 1, r.lca());\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(h) depth.</p>" +
+        "<p><strong>The trap.</strong> Returning the LCA of all leaves. Only the deepest ones count; a shallow leaf on the other side must not pull the answer up to the root.</p></details>" +
+        "<h3>3. Minimum Height Trees</h3>" +
+        "<p><strong>LeetCode 310 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/minimum-height-trees/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every node that, chosen as the root, gives a tree of minimum height (in any order).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Diameter and Centroid section: the best roots are the centre of the tree's longest path, which is one node or two. Peeling off leaves layer by layer converges on that centre.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> BFS from every node to measure the height: O(n\u00b2), 4 \u00d7 10\u2078 at n = 2 \u00d7 10\u2074.</p>" +
+        "<p><strong>Approach.</strong> Compute degrees. Put all leaves (degree 1) in a queue. Remove them layer by layer, decreasing their neighbours' degrees and enqueuing neighbours that become leaves, until at most two nodes remain. Those are the centres.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findMinHeightTrees(self, n: int, edges: list[list[int]]) -&gt; list[int]:\n" +
+        "        if n == 1:\n" +
+        "            return [0]\n" +
+        "        adj = [set() for _ in range(n)]\n" +
+        "        for a, b in edges:\n" +
+        "            adj[a].add(b)\n" +
+        "            adj[b].add(a)\n" +
+        "        leaves = [v for v in range(n) if len(adj[v]) == 1]\n" +
+        "        remaining = n\n" +
+        "        while remaining &gt; 2:           # peel one layer of leaves at a time\n" +
+        "            remaining -= len(leaves)\n" +
+        "            nxt = []\n" +
+        "            for leaf in leaves:\n" +
+        "                nb = adj[leaf].pop()\n" +
+        "                adj[nb].discard(leaf)\n" +
+        "                if len(adj[nb]) == 1:\n" +
+        "                    nxt.append(nb)\n" +
+        "            leaves = nxt\n" +
+        "        return leaves</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;Integer&gt; findMinHeightTrees(int n, int[][] edges) {\n" +
+        "        if (n == 1) return List.of(0);\n" +
+        "        List&lt;Set&lt;Integer&gt;&gt; adj = new ArrayList&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; n; i++) adj.add(new HashSet&lt;&gt;());\n" +
+        "        for (int[] e : edges) { adj.get(e[0]).add(e[1]); adj.get(e[1]).add(e[0]); }\n" +
+        "        List&lt;Integer&gt; leaves = new ArrayList&lt;&gt;();\n" +
+        "        for (int v = 0; v &lt; n; v++) if (adj.get(v).size() == 1) leaves.add(v);\n" +
+        "        int remaining = n;\n" +
+        "        while (remaining &gt; 2) {        // peel one layer of leaves at a time\n" +
+        "            remaining -= leaves.size();\n" +
+        "            List&lt;Integer&gt; next = new ArrayList&lt;&gt;();\n" +
+        "            for (int leaf : leaves) {\n" +
+        "                int nb = adj.get(leaf).iterator().next();\n" +
+        "                adj.get(nb).remove(leaf);\n" +
+        "                if (adj.get(nb).size() == 1) next.add(nb);\n" +
+        "            }\n" +
+        "            leaves = next;\n" +
+        "        }\n" +
+        "        return leaves;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time and space.</p>" +
+        "<p><strong>The trap.</strong> The single-node tree. It has no edges and no leaves of degree 1; its only node is the answer, so handle n = 1 before peeling.</p></details>" +
+        "<h3>4. Kth Ancestor of a Tree Node</h3>" +
+        "<p><strong>LeetCode 1483 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/kth-ancestor-of-a-tree-node/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given each node's parent, answer many queries \"what is the k-th ancestor of this node?\" (-1 if it does not exist).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Problem and Binary Lifting section: store every node's 1st, 2nd, 4th, 8th, \u2026 ancestor. Any k is a sum of powers of two, so a query takes one jump per set bit of k.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Walk up k parents per query: O(k), up to 5 \u00d7 10\u2074 per query and 2.5 \u00d7 10\u2079 over all queries.</p>" +
+        "<p><strong>Approach.</strong> up[j][v] is v's 2\u02b2-th ancestor: up[0] is the parent array, and up[j][v] = up[j - 1][up[j - 1][v]] (two jumps of half the size), or -1 once it runs off the top. For a query, for each bit j set in k, jump v = up[j][v], stopping at -1.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class TreeAncestor:\n" +
+        "    def __init__(self, n: int, parent: list[int]):\n" +
+        "        self.up = [parent[:]]          # up[j][v]: the 2^j-th ancestor of v, or -1\n" +
+        "        for j in range(1, 17):         # 2^16 &gt; 5 * 10^4\n" +
+        "            prev = self.up[-1]\n" +
+        "            self.up.append([-1 if prev[v] == -1 else prev[prev[v]] for v in range(n)])\n" +
+        "\n" +
+        "    def getKthAncestor(self, node: int, k: int) -&gt; int:\n" +
+        "        j = 0\n" +
+        "        while k and node != -1:\n" +
+        "            if k &amp; 1:\n" +
+        "                node = self.up[j][node]   # one jump per set bit of k\n" +
+        "            k &gt;&gt;= 1\n" +
+        "            j += 1\n" +
+        "        return node</code></pre>" +
+        "<pre data-lang='java' hidden><code>class TreeAncestor {\n" +
+        "    private final int[][] up;          // up[j][v]: the 2^j-th ancestor of v, or -1\n" +
+        "\n" +
+        "    public TreeAncestor(int n, int[] parent) {\n" +
+        "        up = new int[17][];            // 2^16 &gt; 5 * 10^4\n" +
+        "        up[0] = parent.clone();\n" +
+        "        for (int j = 1; j &lt; 17; j++) {\n" +
+        "            up[j] = new int[n];\n" +
+        "            for (int v = 0; v &lt; n; v++) up[j][v] = up[j - 1][v] == -1 ? -1 : up[j - 1][up[j - 1][v]];\n" +
+        "        }\n" +
+        "    }\n" +
+        "\n" +
+        "    public int getKthAncestor(int node, int k) {\n" +
+        "        for (int j = 0; k &gt; 0 &amp;&amp; node != -1; j++, k &gt;&gt;= 1)\n" +
+        "            if ((k &amp; 1) == 1) node = up[j][node];   // one jump per set bit of k\n" +
+        "        return node;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) to build, O(log k) per query, O(n log n) space.</p>" +
+        "<p><strong>The trap.</strong> Continuing to jump after reaching -1. Guard every lookup: once an ancestor does not exist, no larger ancestor does either.</p></details>" +
+        "<h3>5. Minimum Edge Weight Equilibrium Queries in a Tree</h3>" +
+        "<p><strong>LeetCode 2846 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/minimum-edge-weight-equilibrium-queries-in-a-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Edges have weights from 1 to 26. For each query (a, b), find the fewest edge weights to change so that every edge on the path from a to b has the same weight.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Keep the most common weight on the path and change the rest. Counting weights on a path is prefix counting from the root: count(a) + count(b) - 2 \u00d7 count(lca), with the LCA from binary lifting.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Walk each query's path explicitly and count: O(n) per query, 2 \u00d7 10\u2078 at the limits.</p>" +
+        "<p><strong>Approach.</strong> Root the tree at 0 with a BFS, recording depth, parent, and cnt[v][w] = number of edges of weight w on the path from the root to v. Build binary-lifting tables. For a query, find l = lca(a, b); the path has depth[a] + depth[b] - 2 \u00d7 depth[l] edges, and weight w appears cnt[a][w] + cnt[b][w] - 2 \u00d7 cnt[l][w] times. The answer is the path length minus the largest such count.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def minOperationsQueries(self, n: int, edges: list[list[int]], queries: list[list[int]]) -&gt; list[int]:\n" +
+        "        adj = [[] for _ in range(n)]\n" +
+        "        for a, b, w in edges:\n" +
+        "            adj[a].append((b, w))\n" +
+        "            adj[b].append((a, w))\n" +
+        "        LOG = max(1, n.bit_length())\n" +
+        "        up = [[0] * n for _ in range(LOG)]\n" +
+        "        depth, cnt = [0] * n, [[0] * 27 for _ in range(n)]\n" +
+        "        seen, q = [False] * n, deque([0])\n" +
+        "        seen[0] = True\n" +
+        "        while q:                       # BFS from the root: parents, depths, weight counts\n" +
+        "            v = q.popleft()\n" +
+        "            for w, wt in adj[v]:\n" +
+        "                if not seen[w]:\n" +
+        "                    seen[w] = True\n" +
+        "                    up[0][w], depth[w] = v, depth[v] + 1\n" +
+        "                    cnt[w] = cnt[v][:]\n" +
+        "                    cnt[w][wt] += 1\n" +
+        "                    q.append(w)\n" +
+        "        for j in range(1, LOG):\n" +
+        "            up[j] = [up[j - 1][up[j - 1][v]] for v in range(n)]\n" +
+        "\n" +
+        "        def lca(a, b):\n" +
+        "            if depth[a] &lt; depth[b]:\n" +
+        "                a, b = b, a\n" +
+        "            diff = depth[a] - depth[b]\n" +
+        "            for j in range(LOG):       # lift a to b's depth\n" +
+        "                if diff &gt;&gt; j &amp; 1:\n" +
+        "                    a = up[j][a]\n" +
+        "            if a == b:\n" +
+        "                return a\n" +
+        "            for j in range(LOG - 1, -1, -1):   # lift both while they differ\n" +
+        "                if up[j][a] != up[j][b]:\n" +
+        "                    a, b = up[j][a], up[j][b]\n" +
+        "            return up[0][a]\n" +
+        "\n" +
+        "        out = []\n" +
+        "        for a, b in queries:\n" +
+        "            l = lca(a, b)\n" +
+        "            length = depth[a] + depth[b] - 2 * depth[l]\n" +
+        "            most = max(cnt[a][w] + cnt[b][w] - 2 * cnt[l][w] for w in range(1, 27))   # the LCA twice\n" +
+        "            out.append(length - most)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] minOperationsQueries(int n, int[][] edges, int[][] queries) {\n" +
+        "        List&lt;List&lt;int[]&gt;&gt; adj = new ArrayList&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; n; i++) adj.add(new ArrayList&lt;&gt;());\n" +
+        "        for (int[] e : edges) { adj.get(e[0]).add(new int[]{e[1], e[2]}); adj.get(e[1]).add(new int[]{e[0], e[2]}); }\n" +
+        "        int LOG = Math.max(1, 32 - Integer.numberOfLeadingZeros(n));\n" +
+        "        int[][] up = new int[LOG][n], cnt = new int[n][27];\n" +
+        "        int[] depth = new int[n];\n" +
+        "        boolean[] seen = new boolean[n];\n" +
+        "        ArrayDeque&lt;Integer&gt; q = new ArrayDeque&lt;&gt;();\n" +
+        "        q.add(0); seen[0] = true;\n" +
+        "        while (!q.isEmpty()) {         // BFS: parents, depths, weight counts\n" +
+        "            int v = q.poll();\n" +
+        "            for (int[] e : adj.get(v)) {\n" +
+        "                int w = e[0];\n" +
+        "                if (seen[w]) continue;\n" +
+        "                seen[w] = true;\n" +
+        "                up[0][w] = v; depth[w] = depth[v] + 1;\n" +
+        "                cnt[w] = cnt[v].clone(); cnt[w][e[1]]++;\n" +
+        "                q.add(w);\n" +
+        "            }\n" +
+        "        }\n" +
+        "        for (int j = 1; j &lt; LOG; j++) for (int v = 0; v &lt; n; v++) up[j][v] = up[j - 1][up[j - 1][v]];\n" +
+        "        int[] out = new int[queries.length];\n" +
+        "        for (int i = 0; i &lt; queries.length; i++) {\n" +
+        "            int a = queries[i][0], b = queries[i][1], x = a, y = b;\n" +
+        "            if (depth[x] &lt; depth[y]) { int t = x; x = y; y = t; }\n" +
+        "            for (int j = 0, diff = depth[x] - depth[y]; j &lt; LOG; j++) if ((diff &gt;&gt; j &amp; 1) == 1) x = up[j][x];   // same depth\n" +
+        "            if (x != y) {\n" +
+        "                for (int j = LOG - 1; j &gt;= 0; j--) if (up[j][x] != up[j][y]) { x = up[j][x]; y = up[j][y]; }\n" +
+        "                x = up[0][x];\n" +
+        "            }\n" +
+        "            int l = x, most = 0;\n" +
+        "            for (int w = 1; w &lt;= 26; w++) most = Math.max(most, cnt[a][w] + cnt[b][w] - 2 * cnt[l][w]);   // LCA twice\n" +
+        "            out[i] = depth[a] + depth[b] - 2 * depth[l] - most;\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(26 \u00d7 n + n log n) to build, O(26 + log n) per query.</p>" +
+        "<p><strong>The trap.</strong> Subtracting the LCA's count once instead of twice. Both a's and b's root paths pass through the LCA's root path, so it must come off twice.</p></details>" +
+        "<h3>6. Minimum Score After Removals on a Tree</h3>" +
+        "<p><strong>LeetCode 2322 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/minimum-score-after-removals-on-a-tree/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Remove two edges from a tree with node values, splitting it into three parts. A split's score is the largest part-XOR minus the smallest. Find the minimum score.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Euler Tour section: entry and exit times tell you in O(1) whether one node's subtree contains another's. Removing the edges above nodes u and v leaves either nested subtrees or disjoint ones, and subtree XORs give all three parts either way.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each pair of edges, recompute the three parts with a search: O(n\u00b3), 10\u2079 at n = 1,000.</p>" +
+        "<p><strong>Approach.</strong> Root at 0. One DFS computes each node's subtree XOR x[v] and its entry/exit times. Every edge is identified by its lower node. For each pair of non-root nodes u, v: if v is inside u's subtree, the parts are x[v], x[u] ^ x[v], and total ^ x[u]; if u is inside v's, symmetric; otherwise x[u], x[v], and total ^ x[u] ^ x[v]. Keep the smallest max - min.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minimumScore(self, nums: list[int], edges: list[list[int]]) -&gt; int:\n" +
+        "        n = len(nums)\n" +
+        "        adj = [[] for _ in range(n)]\n" +
+        "        for a, b in edges:\n" +
+        "            adj[a].append(b)\n" +
+        "            adj[b].append(a)\n" +
+        "        tin, tout, x, parent = [0] * n, [0] * n, nums[:], [-1] * n\n" +
+        "        timer, stack, order = 0, [(0, False)], []\n" +
+        "        while stack:                   # iterative DFS with entry and exit times\n" +
+        "            v, done = stack.pop()\n" +
+        "            if done:\n" +
+        "                tout[v] = timer\n" +
+        "                continue\n" +
+        "            tin[v] = timer\n" +
+        "            timer += 1\n" +
+        "            order.append(v)\n" +
+        "            stack.append((v, True))\n" +
+        "            for w in adj[v]:\n" +
+        "                if w != parent[v]:\n" +
+        "                    parent[w] = v\n" +
+        "                    stack.append((w, False))\n" +
+        "        for v in reversed(order):      # subtree XORs, children first\n" +
+        "            if parent[v] &gt;= 0:\n" +
+        "                x[parent[v]] ^= x[v]\n" +
+        "        inside = lambda a, b: tin[a] &lt;= tin[b] and tout[b] &lt;= tout[a]   # b in a's subtree\n" +
+        "        total, best = x[0], float(\"inf\")\n" +
+        "        for u in range(1, n):\n" +
+        "            for v in range(u + 1, n):\n" +
+        "                if inside(u, v):\n" +
+        "                    parts = (x[v], x[u] ^ x[v], total ^ x[u])\n" +
+        "                elif inside(v, u):\n" +
+        "                    parts = (x[u], x[v] ^ x[u], total ^ x[v])\n" +
+        "                else:\n" +
+        "                    parts = (x[u], x[v], total ^ x[u] ^ x[v])\n" +
+        "                best = min(best, max(parts) - min(parts))\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int minimumScore(int[] nums, int[][] edges) {\n" +
+        "        int n = nums.length;\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; adj = new ArrayList&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; n; i++) adj.add(new ArrayList&lt;&gt;());\n" +
+        "        for (int[] e : edges) { adj.get(e[0]).add(e[1]); adj.get(e[1]).add(e[0]); }\n" +
+        "        int[] tin = new int[n], tout = new int[n], x = nums.clone(), parent = new int[n], order = new int[n];\n" +
+        "        Arrays.fill(parent, -1);\n" +
+        "        int timer = 0, k = 0;\n" +
+        "        ArrayDeque&lt;int[]&gt; stack = new ArrayDeque&lt;&gt;();   // {node, done}\n" +
+        "        stack.push(new int[]{0, 0});\n" +
+        "        while (!stack.isEmpty()) {     // iterative DFS with entry and exit times\n" +
+        "            int[] top = stack.pop();\n" +
+        "            int v = top[0];\n" +
+        "            if (top[1] == 1) { tout[v] = timer; continue; }\n" +
+        "            tin[v] = timer++;\n" +
+        "            order[k++] = v;\n" +
+        "            stack.push(new int[]{v, 1});\n" +
+        "            for (int w : adj.get(v)) if (w != parent[v]) { parent[w] = v; stack.push(new int[]{w, 0}); }\n" +
+        "        }\n" +
+        "        for (int i = n - 1; i &gt; 0; i--) x[parent[order[i]]] ^= x[order[i]];   // subtree XORs\n" +
+        "        int total = x[0], best = Integer.MAX_VALUE;\n" +
+        "        for (int u = 1; u &lt; n; u++)\n" +
+        "            for (int v = u + 1; v &lt; n; v++) {\n" +
+        "                int a, b, c;\n" +
+        "                if (tin[u] &lt;= tin[v] &amp;&amp; tout[v] &lt;= tout[u]) { a = x[v]; b = x[u] ^ x[v]; c = total ^ x[u]; }   // v in u\n" +
+        "                else if (tin[v] &lt;= tin[u] &amp;&amp; tout[u] &lt;= tout[v]) { a = x[u]; b = x[v] ^ x[u]; c = total ^ x[v]; }\n" +
+        "                else { a = x[u]; b = x[v]; c = total ^ x[u] ^ x[v]; }\n" +
+        "                best = Math.min(best, Math.max(a, Math.max(b, c)) - Math.min(a, Math.min(b, c)));\n" +
+        "            }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time for the pairs, 10\u2076 at n = 1,000, and O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Treating nested and disjoint removals the same way. When v is inside u's subtree, u's part is x[u] with v's subtree taken out (x[u] ^ x[v]), not x[u].</p></details>" +
+        "<h3>7. Longest Path With Different Adjacent Characters</h3>" +
+        "<p><strong>LeetCode 2246 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/longest-path-with-different-adjacent-characters/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a tree given by a parent array, each node has a letter. Find the longest path (counted in nodes) on which no two adjacent nodes share a letter.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 25's Diameter of Binary Tree on a general tree, with a filter: a child's downward chain can extend its parent only if their letters differ. The best path through a node joins its two longest such chains.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every pair of endpoints and check their path: O(n\u00b2) pairs times O(n).</p>" +
+        "<p><strong>Approach.</strong> Process nodes children-first (the reverse of a BFS order from the root). For each node keep the two longest valid downward chains among its children (children with a different letter). The best path through it is 1 + the two longest; its own chain, passed up to its parent, is 1 + the longest.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import deque\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def longestPath(self, parent: list[int], s: str) -&gt; int:\n" +
+        "        n = len(parent)\n" +
+        "        children = [[] for _ in range(n)]\n" +
+        "        for v in range(1, n):\n" +
+        "            children[parent[v]].append(v)\n" +
+        "        order, q = [], deque([0])\n" +
+        "        while q:                       # BFS order; reversed, children come first\n" +
+        "            v = q.popleft()\n" +
+        "            order.append(v)\n" +
+        "            q.extend(children[v])\n" +
+        "        chain, best = [1] * n, 1       # chain[v]: longest valid path going down from v\n" +
+        "        for v in reversed(order):\n" +
+        "            top1 = top2 = 0            # the two longest usable child chains\n" +
+        "            for c in children[v]:\n" +
+        "                if s[c] != s[v]:\n" +
+        "                    if chain[c] &gt; top1:\n" +
+        "                        top1, top2 = chain[c], top1\n" +
+        "                    elif chain[c] &gt; top2:\n" +
+        "                        top2 = chain[c]\n" +
+        "            best = max(best, 1 + top1 + top2)   # the path that bends at v\n" +
+        "            chain[v] = 1 + top1\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int longestPath(int[] parent, String s) {\n" +
+        "        int n = parent.length;\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; children = new ArrayList&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; n; i++) children.add(new ArrayList&lt;&gt;());\n" +
+        "        for (int v = 1; v &lt; n; v++) children.get(parent[v]).add(v);\n" +
+        "        int[] order = new int[n], chain = new int[n];   // chain[v]: longest valid path down from v\n" +
+        "        int head = 0, tail = 0, best = 1;\n" +
+        "        order[tail++] = 0;\n" +
+        "        while (head &lt; tail) for (int c : children.get(order[head++])) order[tail++] = c;   // BFS order\n" +
+        "        for (int i = n - 1; i &gt;= 0; i--) {   // children first\n" +
+        "            int v = order[i], top1 = 0, top2 = 0;\n" +
+        "            for (int c : children.get(v)) {\n" +
+        "                if (s.charAt(c) == s.charAt(v)) continue;\n" +
+        "                if (chain[c] &gt; top1) { top2 = top1; top1 = chain[c]; }\n" +
+        "                else if (chain[c] &gt; top2) top2 = chain[c];\n" +
+        "            }\n" +
+        "            best = Math.max(best, 1 + top1 + top2);   // the path that bends at v\n" +
+        "            chain[v] = 1 + top1;\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time and space.</p>" +
+        "<p><strong>The trap.</strong> Resetting a node's chain when a child shares its letter, as if the node were unusable. The node still starts a chain of length 1 and can still extend its own parent; only that one child is excluded.</p></details>"
     },
 
     { title: "Exercises",
@@ -20868,6 +23643,322 @@ CHAPTERS.push({
         "<p>What is the ratio of updates to queries? The measured table in the first section is the honest answer: at a thousand queries per update, a prefix sum rebuilt lazily beat the Fenwick tree; at a thousand updates per query, the plain array beat it; only in between, which is most real workloads, did the balanced structure win, and there it won by one to three orders of magnitude. Are the updates to points or to ranges, and are the queries on points or ranges? Point update with range query is the plain Fenwick tree, range update with point query is the Fenwick tree over differences, and both at once is the two-BIT construction. How many dimensions? Each one multiplies the log factor and the memory.</p>" +
         "<p>One further use belongs here because it turns the Fenwick tree from an array structure into a counting structure. Index the tree by value instead of by position, and it counts how many elements seen so far are below any threshold: that is the rank query of Chapter 26 for dense integer keys, in a few array steps with no pointers. Scanning an array from right to left and asking, at each element, how many smaller values are already in the tree counts the array&apos;s inversions in O(n log n); on a hundred thousand random values it counted about 2.5 billion inversions in 0.15 seconds, against the five billion pair comparisons a brute-force count would make. The same tree finds the k-th smallest value by descending through its powers of two, checked against sorting on a thousand random multisets.</p>" +
         "<p>The discipline is to answer those questions before writing code, because they decide the structure and nothing else does. The structures in this chapter are small enough to write from memory; the error that costs time is reaching for the balanced one out of habit on a workload that is static, or for the prefix sum on one that is not. The next chapter builds the structure that answers the questions this one cannot &mdash; any associative operation, range assignment, range minimum with updates &mdash; and pays for its generality in memory and code.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 25 minutes (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Range Sum Query - Mutable</h3>" +
+        "<p><strong>LeetCode 307 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/range-sum-query-mutable/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Support updating an array element and summing any range, both fast.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 9's prefix array answers a range sum in O(1) but costs O(n) per update. The Update/Query Trade-off section's middle point, the Fenwick tree, does both in O(log n).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Update in place and sum the range with a loop: O(1) update, O(n) query.</p>" +
+        "<p><strong>Approach.</strong> Keep the array and a Fenwick tree over it. To set index i to val, add (val - old) at position i + 1 in the tree: walk i += i &amp; -i, adding the change. A prefix sum walks i -= i &amp; -i, adding tree[i]. A range sum is prefix(right + 1) - prefix(left).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class NumArray:\n" +
+        "    def __init__(self, nums: list[int]):\n" +
+        "        self.nums = [0] * len(nums)\n" +
+        "        self.tree = [0] * (len(nums) + 1)   # 1-indexed Fenwick tree\n" +
+        "        for i, x in enumerate(nums):\n" +
+        "            self.update(i, x)\n" +
+        "\n" +
+        "    def _add(self, i, delta):\n" +
+        "        i += 1\n" +
+        "        while i &lt; len(self.tree):\n" +
+        "            self.tree[i] += delta\n" +
+        "            i += i &amp; -i                # the next node that covers position i\n" +
+        "\n" +
+        "    def _prefix(self, i):              # sum of the first i elements\n" +
+        "        s = 0\n" +
+        "        while i &gt; 0:\n" +
+        "            s += self.tree[i]\n" +
+        "            i -= i &amp; -i                # drop the lowest set bit\n" +
+        "        return s\n" +
+        "\n" +
+        "    def update(self, index: int, val: int) -&gt; None:\n" +
+        "        self._add(index, val - self.nums[index])   # the change, not the value\n" +
+        "        self.nums[index] = val\n" +
+        "\n" +
+        "    def sumRange(self, left: int, right: int) -&gt; int:\n" +
+        "        return self._prefix(right + 1) - self._prefix(left)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class NumArray {\n" +
+        "    private final int[] nums, tree;    // tree: 1-indexed Fenwick tree\n" +
+        "\n" +
+        "    public NumArray(int[] nums) {\n" +
+        "        this.nums = new int[nums.length];\n" +
+        "        tree = new int[nums.length + 1];\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) update(i, nums[i]);\n" +
+        "    }\n" +
+        "\n" +
+        "    private void add(int i, int delta) {\n" +
+        "        for (i++; i &lt; tree.length; i += i &amp; -i) tree[i] += delta;   // nodes covering i\n" +
+        "    }\n" +
+        "\n" +
+        "    private int prefix(int i) {        // sum of the first i elements\n" +
+        "        int s = 0;\n" +
+        "        for (; i &gt; 0; i -= i &amp; -i) s += tree[i];   // drop the lowest set bit\n" +
+        "        return s;\n" +
+        "    }\n" +
+        "\n" +
+        "    public void update(int index, int val) {\n" +
+        "        add(index, val - nums[index]); // the change, not the value\n" +
+        "        nums[index] = val;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int sumRange(int left, int right) { return prefix(right + 1) - prefix(left); }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) to build by repeated adds (O(n) is possible), O(log n) per update and per query, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Adding val instead of the difference. The tree stores sums, so an update must add the change from the old value, which means remembering the current array.</p></details>" +
+        "<h3>2. Count Number of Teams</h3>" +
+        "<p><strong>LeetCode 1395 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/count-number-of-teams/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the triples i &lt; j &lt; k whose (distinct) ratings are strictly increasing or strictly decreasing.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Fix the middle soldier j. The increasing teams through j number (smaller on the left) \u00d7 (larger on the right), and the decreasing ones (larger on the left) \u00d7 (smaller on the right). A Fenwick tree over ratings counts \"smaller on the left\" as you sweep.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every triple: O(n\u00b3).</p>" +
+        "<p><strong>Approach.</strong> Compress the ratings to ranks 1..n. Sweep left to right with a Fenwick tree of ranks seen: before inserting j, smaller-left = prefix(rank - 1) and larger-left = j - smaller-left. The right-side counts follow: smaller-right = (rank - 1) - smaller-left and larger-right = (n - rank) - larger-left. Add both products.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def numTeams(self, rating: list[int]) -&gt; int:\n" +
+        "        n = len(rating)\n" +
+        "        rank = {r: i + 1 for i, r in enumerate(sorted(rating))}   # compress to 1..n\n" +
+        "        tree = [0] * (n + 1)\n" +
+        "        teams = 0\n" +
+        "        for j, r in enumerate(rating):\n" +
+        "            k, smaller_left = rank[r] - 1, 0\n" +
+        "            while k &gt; 0:\n" +
+        "                smaller_left += tree[k]\n" +
+        "                k -= k &amp; -k\n" +
+        "            larger_left = j - smaller_left\n" +
+        "            smaller_right = (rank[r] - 1) - smaller_left\n" +
+        "            larger_right = (n - rank[r]) - larger_left\n" +
+        "            teams += smaller_left * larger_right + larger_left * smaller_right   # up, and down\n" +
+        "            k = rank[r]\n" +
+        "            while k &lt;= n:\n" +
+        "                tree[k] += 1\n" +
+        "                k += k &amp; -k\n" +
+        "        return teams</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int numTeams(int[] rating) {\n" +
+        "        int n = rating.length;\n" +
+        "        int[] sorted = rating.clone();\n" +
+        "        Arrays.sort(sorted);\n" +
+        "        int[] tree = new int[n + 1];\n" +
+        "        int teams = 0;\n" +
+        "        for (int j = 0; j &lt; n; j++) {\n" +
+        "            int rank = Arrays.binarySearch(sorted, rating[j]) + 1;   // compress to 1..n\n" +
+        "            int smallerLeft = 0;\n" +
+        "            for (int k = rank - 1; k &gt; 0; k -= k &amp; -k) smallerLeft += tree[k];\n" +
+        "            int largerLeft = j - smallerLeft;\n" +
+        "            int smallerRight = (rank - 1) - smallerLeft, largerRight = (n - rank) - largerLeft;\n" +
+        "            teams += smallerLeft * largerRight + largerLeft * smallerRight;   // up, and down\n" +
+        "            for (int k = rank; k &lt;= n; k += k &amp; -k) tree[k]++;\n" +
+        "        }\n" +
+        "        return teams;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space. (Counting both sides with plain loops for each j is O(n\u00b2), also fine at this problem's size.)</p>" +
+        "<p><strong>The trap.</strong> Counting only increasing teams. Decreasing ones count too, and they use the other two counts.</p></details>" +
+        "<h3>3. Longest Continuous Subarray With Absolute Diff Less Than or Equal to Limit</h3>" +
+        "<p><strong>LeetCode 1438 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-continuous-subarray-with-absolute-diff-less-than-or-equal-to-limit/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the longest block of consecutive values whose maximum and minimum differ by at most a limit.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A variable window (Chapter 8) whose validity depends on the window's max and min. The Sparse Table and Idempotence section answers \"max (or min) of any range\" in O(1) after O(n log n) preprocessing, because max and min tolerate overlapping halves.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every block's max and min: O(n\u00b2) even with running values.</p>" +
+        "<p><strong>Approach.</strong> Build sparse tables for max and min: level j stores the answer for every range of length 2\u02b2. A range [l, r] is covered by two overlapping blocks of length 2\u1d4f, with k the largest power fitting, so its max is the larger of two lookups. Slide a window: extend r, and while the window's max - min exceeds the limit, advance l. Track the longest window.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def longestSubarray(self, nums: list[int], limit: int) -&gt; int:\n" +
+        "        n = len(nums)\n" +
+        "        hi, lo = [nums[:]], [nums[:]]  # level j: max / min of nums[i : i + 2^j]\n" +
+        "        j = 1\n" +
+        "        while 1 &lt;&lt; j &lt;= n:\n" +
+        "            half = 1 &lt;&lt; (j - 1)\n" +
+        "            hi.append([max(hi[-1][i], hi[-1][i + half]) for i in range(n - (1 &lt;&lt; j) + 1)])\n" +
+        "            lo.append([min(lo[-1][i], lo[-1][i + half]) for i in range(n - (1 &lt;&lt; j) + 1)])\n" +
+        "            j += 1\n" +
+        "\n" +
+        "        def spread(l, r):              # max - min of nums[l..r]: two overlapping blocks\n" +
+        "            k = (r - l + 1).bit_length() - 1\n" +
+        "            return max(hi[k][l], hi[k][r - (1 &lt;&lt; k) + 1]) - min(lo[k][l], lo[k][r - (1 &lt;&lt; k) + 1])\n" +
+        "\n" +
+        "        best = l = 0\n" +
+        "        for r in range(n):\n" +
+        "            while spread(l, r) &gt; limit:\n" +
+        "                l += 1\n" +
+        "            best = max(best, r - l + 1)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int longestSubarray(int[] nums, int limit) {\n" +
+        "        int n = nums.length, levels = 32 - Integer.numberOfLeadingZeros(n);\n" +
+        "        int[][] hi = new int[levels][], lo = new int[levels][];   // level j: max / min over 2^j\n" +
+        "        hi[0] = nums.clone(); lo[0] = nums.clone();\n" +
+        "        for (int j = 1; j &lt; levels; j++) {\n" +
+        "            int len = n - (1 &lt;&lt; j) + 1, half = 1 &lt;&lt; (j - 1);\n" +
+        "            hi[j] = new int[len]; lo[j] = new int[len];\n" +
+        "            for (int i = 0; i &lt; len; i++) {\n" +
+        "                hi[j][i] = Math.max(hi[j - 1][i], hi[j - 1][i + half]);\n" +
+        "                lo[j][i] = Math.min(lo[j - 1][i], lo[j - 1][i + half]);\n" +
+        "            }\n" +
+        "        }\n" +
+        "        int best = 0, l = 0;\n" +
+        "        for (int r = 0; r &lt; n; r++) {\n" +
+        "            while (true) {             // max - min of nums[l..r]: two overlapping blocks\n" +
+        "                int k = 31 - Integer.numberOfLeadingZeros(r - l + 1), s = r - (1 &lt;&lt; k) + 1;\n" +
+        "                long spread = (long) Math.max(hi[k][l], hi[k][s]) - Math.min(lo[k][l], lo[k][s]);\n" +
+        "                if (spread &lt;= limit) break;\n" +
+        "                l++;\n" +
+        "            }\n" +
+        "            best = Math.max(best, r - l + 1);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time and space for the tables, O(n) for the sweep. (Chapter 10's monotonic deques give O(n) overall.)</p>" +
+        "<p><strong>The trap.</strong> Using a sparse table for sums. Sums are not idempotent: the two overlapping halves would count the middle twice. That is why this structure is for max, min and gcd, and the Fenwick tree is for sums.</p></details>" +
+        "<h3>4. Create Sorted Array through Instructions</h3>" +
+        "<p><strong>LeetCode 1649 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/create-sorted-array-through-instructions/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Insert numbers one at a time into a sorted container. Each insertion costs the smaller of (how many existing values are strictly less) and (how many are strictly greater). Return the total cost modulo 1,000,000,007.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Each cost is two counting queries over values seen so far, followed by a point update: a Fenwick tree indexed by value.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Keep a sorted list and count by scanning: O(n) per insertion, O(n\u00b2) overall.</p>" +
+        "<p><strong>Approach.</strong> Keep a Fenwick tree over values 1..max. For the i-th insertion of x, less = prefix(x - 1) and greater = i - prefix(x), where i values are already inserted. Add min(less, greater) to the total, then add 1 at x.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def createSortedArray(self, instructions: list[int]) -&gt; int:\n" +
+        "        MOD = 10**9 + 7\n" +
+        "        size = max(instructions)\n" +
+        "        tree = [0] * (size + 1)        # Fenwick tree indexed by value\n" +
+        "\n" +
+        "        def prefix(i):\n" +
+        "            s = 0\n" +
+        "            while i &gt; 0:\n" +
+        "                s += tree[i]\n" +
+        "                i -= i &amp; -i\n" +
+        "            return s\n" +
+        "\n" +
+        "        cost = 0\n" +
+        "        for i, x in enumerate(instructions):\n" +
+        "            less = prefix(x - 1)\n" +
+        "            greater = i - prefix(x)    # excludes copies of x\n" +
+        "            cost += min(less, greater)\n" +
+        "            while x &lt;= size:\n" +
+        "                tree[x] += 1\n" +
+        "                x += x &amp; -x\n" +
+        "        return cost % MOD</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int createSortedArray(int[] instructions) {\n" +
+        "        int size = 0;\n" +
+        "        for (int x : instructions) size = Math.max(size, x);\n" +
+        "        int[] tree = new int[size + 1];   // Fenwick tree indexed by value\n" +
+        "        long cost = 0;\n" +
+        "        for (int i = 0; i &lt; instructions.length; i++) {\n" +
+        "            int x = instructions[i], less = 0, upToX = 0;\n" +
+        "            for (int k = x - 1; k &gt; 0; k -= k &amp; -k) less += tree[k];\n" +
+        "            for (int k = x; k &gt; 0; k -= k &amp; -k) upToX += tree[k];\n" +
+        "            cost += Math.min(less, i - upToX);   // greater excludes copies of x\n" +
+        "            for (int k = x; k &lt;= size; k += k &amp; -k) tree[k]++;\n" +
+        "        }\n" +
+        "        return (int) (cost % 1_000_000_007);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log V) time and O(V) space for values up to V.</p>" +
+        "<p><strong>The trap.</strong> Computing greater as i - less. That counts copies of x as greater; greater must exclude values equal to x, which is why it uses prefix(x), not prefix(x - 1).</p></details>" +
+        "<h3>5. Count Good Triplets in an Array</h3>" +
+        "<p><strong>LeetCode 2179 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/count-good-triplets-in-an-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Two arrays are both permutations of 0..n-1. Count the value triples (x, y, z) that appear in increasing position order in both arrays.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Relabel each value by its position in nums2; then walk nums1. A good triple is an increasing triple of labels, and for each middle element the count is (smaller labels before it) \u00d7 (larger labels after it), which a Fenwick tree gives in one sweep.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every triple of values and check both orders: O(n\u00b3).</p>" +
+        "<p><strong>Approach.</strong> Let pos2[v] be v's index in nums2 and a[i] = pos2[nums1[i]]. Sweep i left to right with a Fenwick tree of labels seen: smaller_before = prefix(a[i]). The labels larger than a[i] number n - 1 - a[i] in total, of which i - smaller_before are already behind, so larger_after = (n - 1 - a[i]) - (i - smaller_before). Add smaller_before \u00d7 larger_after.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def goodTriplets(self, nums1: list[int], nums2: list[int]) -&gt; int:\n" +
+        "        n = len(nums1)\n" +
+        "        pos2 = [0] * n\n" +
+        "        for i, v in enumerate(nums2):\n" +
+        "            pos2[v] = i\n" +
+        "        tree = [0] * (n + 1)\n" +
+        "        total = 0\n" +
+        "        for i, v in enumerate(nums1):\n" +
+        "            a = pos2[v]                # the label: v's position in nums2\n" +
+        "            k, smaller_before = a, 0\n" +
+        "            while k &gt; 0:\n" +
+        "                smaller_before += tree[k]\n" +
+        "                k -= k &amp; -k\n" +
+        "            larger_after = (n - 1 - a) - (i - smaller_before)\n" +
+        "            total += smaller_before * larger_after\n" +
+        "            k = a + 1\n" +
+        "            while k &lt;= n:\n" +
+        "                tree[k] += 1\n" +
+        "                k += k &amp; -k\n" +
+        "        return total</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public long goodTriplets(int[] nums1, int[] nums2) {\n" +
+        "        int n = nums1.length;\n" +
+        "        int[] pos2 = new int[n], tree = new int[n + 1];\n" +
+        "        for (int i = 0; i &lt; n; i++) pos2[nums2[i]] = i;\n" +
+        "        long total = 0;                // long: the count reaches about n^3 / 6\n" +
+        "        for (int i = 0; i &lt; n; i++) {\n" +
+        "            int a = pos2[nums1[i]], smallerBefore = 0;   // the label: position in nums2\n" +
+        "            for (int k = a; k &gt; 0; k -= k &amp; -k) smallerBefore += tree[k];\n" +
+        "            long largerAfter = (n - 1 - a) - (i - smallerBefore);\n" +
+        "            total += smallerBefore * largerAfter;\n" +
+        "            for (int k = a + 1; k &lt;= n; k += k &amp; -k) tree[k]++;\n" +
+        "        }\n" +
+        "        return total;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Overflow: the count reaches about n\u00b3/6, far beyond int, which is why the Java signature returns long; multiply in long.</p></details>" +
+        "<h3>6. Number of Pairs Satisfying Inequality</h3>" +
+        "<p><strong>LeetCode 2426 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/number-of-pairs-satisfying-inequality/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the pairs i &lt; j with nums1[i] - nums1[j] \u2264 nums2[i] - nums2[j] + diff.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Move the i terms to one side: with a[k] = nums1[k] - nums2[k], the condition is a[i] \u2264 a[j] + diff. For each j, count the earlier a[i] at most a[j] + diff: a Fenwick tree over (shifted) values of a.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every pair: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Compute a. Sweep j left to right: query how many earlier values are \u2264 a[j] + diff, then insert a[j]. Values of a can be negative, so shift them by a constant to make every tree index positive, and clamp the query bound to the tree's range.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def numberOfPairs(self, nums1: list[int], nums2: list[int], diff: int) -&gt; int:\n" +
+        "        a = [x - y for x, y in zip(nums1, nums2)]   # condition: a[i] &lt;= a[j] + diff\n" +
+        "        lo = min(a) - 1                # shift: every index becomes positive\n" +
+        "        size = max(a) - lo\n" +
+        "        tree = [0] * (size + 1)\n" +
+        "        pairs = 0\n" +
+        "        for v in a:\n" +
+        "            k = min(v + diff - lo, size)   # count earlier values &lt;= v + diff\n" +
+        "            while k &gt; 0:\n" +
+        "                pairs += tree[k]\n" +
+        "                k -= k &amp; -k\n" +
+        "            k = v - lo\n" +
+        "            while k &lt;= size:\n" +
+        "                tree[k] += 1\n" +
+        "                k += k &amp; -k\n" +
+        "        return pairs</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public long numberOfPairs(int[] nums1, int[] nums2, int diff) {\n" +
+        "        int n = nums1.length, min = Integer.MAX_VALUE, max = Integer.MIN_VALUE;\n" +
+        "        int[] a = new int[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) {  // condition: a[i] &lt;= a[j] + diff\n" +
+        "            a[i] = nums1[i] - nums2[i];\n" +
+        "            min = Math.min(min, a[i]); max = Math.max(max, a[i]);\n" +
+        "        }\n" +
+        "        int lo = min - 1, size = max - lo;   // shift: indices become positive\n" +
+        "        int[] tree = new int[size + 1];\n" +
+        "        long pairs = 0;\n" +
+        "        for (int v : a) {\n" +
+        "            for (int k = Math.min(v + diff - lo, size); k &gt; 0; k -= k &amp; -k) pairs += tree[k];\n" +
+        "            for (int k = v - lo; k &lt;= size; k += k &amp; -k) tree[k]++;\n" +
+        "        }\n" +
+        "        return pairs;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log V) time for a value range V, O(V) space.</p>" +
+        "<p><strong>The trap.</strong> Rearranging the inequality with the sides mixed up, which counts pairs the wrong way round. And negative values need the shift before they can index the tree; a negative index silently corrupts it.</p></details>"
     },
 
     { title: "Exercises",
@@ -21159,6 +24250,375 @@ CHAPTERS.push({
         "<p>Undoing is what union-find usually cannot do, and the fix is to give something up. <strong>Rollback</strong> needs every union to be reversible, so drop path compression and keep union by size, which still bounds find at O(log n); each union then changes exactly one parent pointer and one size, which a stack records and a pop restores. Every edge is united and undone once per covering node, so the total is O((T + E) log T log n). Checked against a fresh breadth-first search at every query on three hundred random event sequences, the offline method answered every connectivity query correctly.</p>" +
         "<p>Picture one edge to see why each is handled only O(log T) times. Suppose it is added at event 2 and removed at event 9, so it is present at moments 2 through 8. That interval decomposes, exactly like a range update, into a handful of covering nodes of the time tree &mdash; perhaps [2, 3], [4, 7] and [8, 8] &mdash; and the edge is stored at those three and nowhere else. When the depth-first walk is inside [4, 7], the edge is united once and serves all four moments beneath it; when the walk leaves, it is undone, and moments outside its lifetime never see it. The segment tree has turned deletion, the one operation union-find cannot do, into a nesting of intervals it never has to undo out of order.</p>" +
         "<p>That completes the range-query toolkit, and the lesson of this part is how far a single idea stretches. A range is split into O(log n) canonical pieces; each piece stores a summary under an associative combine; updates are either paid on the spot or left as composable notes; and the positions being ranged over can be array indices, entry times, chain positions, versions or moments. The graphs of Part 5 open with representation, and several of their harder problems will come back to this structure in one of those disguises.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run at Hard level. Work through them in order.</p>" +
+        "<p>Give each problem 40 minutes (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Longest Increasing Subsequence II</h3>" +
+        "<p><strong>LeetCode 2407 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/longest-increasing-subsequence-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the longest strictly increasing subsequence in which neighbouring values differ by at most k.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 21's quadratic LIS asks, for each value v, for the best length ending at any earlier value in [v - k, v - 1]. That is a range maximum over values, updated one point at a time: a segment tree indexed by value (the Over a Monoid section, with max as the operation).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> The quadratic DP over positions: O(n\u00b2), 10\u00b9\u2070 at n = 10\u2075.</p>" +
+        "<p><strong>Approach.</strong> Keep best[v] = the longest valid subsequence ending with value v, in an iterative segment tree over values 1..max. For each x in order, query the maximum over [x - k, x - 1], add 1, and write that into position x (keeping the larger if x already has a value). The answer is the tree's overall maximum.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def lengthOfLIS(self, nums: list[int], k: int) -&gt; int:\n" +
+        "        size = max(nums) + 1\n" +
+        "        tree = [0] * (2 * size)        # iterative segment tree: leaves at size..2*size-1\n" +
+        "\n" +
+        "        def query(lo, hi):             # max of best[v] for v in [lo, hi)\n" +
+        "            res, lo, hi = 0, lo + size, hi + size\n" +
+        "            while lo &lt; hi:\n" +
+        "                if lo &amp; 1:\n" +
+        "                    res = max(res, tree[lo]); lo += 1\n" +
+        "                if hi &amp; 1:\n" +
+        "                    hi -= 1; res = max(res, tree[hi])\n" +
+        "                lo, hi = lo // 2, hi // 2\n" +
+        "            return res\n" +
+        "\n" +
+        "        def update(i, val):\n" +
+        "            i += size\n" +
+        "            tree[i] = max(tree[i], val)\n" +
+        "            while i &gt; 1:\n" +
+        "                i //= 2\n" +
+        "                tree[i] = max(tree[2 * i], tree[2 * i + 1])\n" +
+        "\n" +
+        "        for x in nums:\n" +
+        "            update(x, query(max(0, x - k), x) + 1)   # best over [x - k, x - 1], plus x\n" +
+        "        return tree[1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] tree;\n" +
+        "    private int size;\n" +
+        "\n" +
+        "    public int lengthOfLIS(int[] nums, int k) {\n" +
+        "        for (int x : nums) size = Math.max(size, x + 1);\n" +
+        "        tree = new int[2 * size];      // iterative segment tree: leaves at size..2*size-1\n" +
+        "        for (int x : nums) update(x, query(Math.max(0, x - k), x) + 1);   // best over [x-k, x-1]\n" +
+        "        return tree[1];\n" +
+        "    }\n" +
+        "\n" +
+        "    private int query(int lo, int hi) {   // max over [lo, hi)\n" +
+        "        int res = 0;\n" +
+        "        for (lo += size, hi += size; lo &lt; hi; lo &gt;&gt;= 1, hi &gt;&gt;= 1) {\n" +
+        "            if ((lo &amp; 1) == 1) res = Math.max(res, tree[lo++]);\n" +
+        "            if ((hi &amp; 1) == 1) res = Math.max(res, tree[--hi]);\n" +
+        "        }\n" +
+        "        return res;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void update(int i, int val) {\n" +
+        "        i += size;\n" +
+        "        tree[i] = Math.max(tree[i], val);\n" +
+        "        for (i &gt;&gt;= 1; i &gt;= 1; i &gt;&gt;= 1) tree[i] = Math.max(tree[2 * i], tree[2 * i + 1]);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log V) time and O(V) space for values up to V.</p>" +
+        "<p><strong>The trap.</strong> Chapter 21's n log n LIS with the tails array. It cannot enforce the \"differ by at most k\" rule, because tails forgets which earlier values produced each length; the range query over values keeps exactly that information.</p></details>" +
+        "<h3>2. Falling Squares</h3>" +
+        "<p><strong>LeetCode 699 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/falling-squares/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Squares fall one at a time onto a line, each landing on whatever is highest beneath it. After each drop, report the tallest stack so far.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A drop reads the maximum height over the square's span and raises that whole span to (maximum + side). \"Range max, then raise a range\" is the Lazy Propagation section's case, over coordinates compressed to the few distinct endpoints.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compare each square with every earlier one it overlaps: O(n\u00b2), fine at n = 1,000 and a good check.</p>" +
+        "<p><strong>Approach.</strong> Compress all left edges and right edges to indices. Keep a segment tree of heights with a lazy \"raise to at least h\" tag. For each square [l, l + side), query the max over its compressed range, then apply \"raise to max + side\" over the same range; the new overall maximum is tree[1]. Raising to at least h is safe here because the new top is higher than everything beneath it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def fallingSquares(self, positions: list[list[int]]) -&gt; list[int]:\n" +
+        "        xs = sorted({x for l, s in positions for x in (l, l + s)})\n" +
+        "        idx = {x: i for i, x in enumerate(xs)}   # compressed coordinates\n" +
+        "        n = len(xs)\n" +
+        "        tree, lazy = [0] * (4 * n), [0] * (4 * n)\n" +
+        "\n" +
+        "        def push(node):                # hand a pending raise to the children\n" +
+        "            for c in (2 * node, 2 * node + 1):\n" +
+        "                tree[c] = max(tree[c], lazy[node])\n" +
+        "                lazy[c] = max(lazy[c], lazy[node])\n" +
+        "            lazy[node] = 0\n" +
+        "\n" +
+        "        def query(node, lo, hi, l, r):     # max over [l, r) within the node's [lo, hi)\n" +
+        "            if r &lt;= lo or hi &lt;= l:\n" +
+        "                return 0\n" +
+        "            if l &lt;= lo and hi &lt;= r:\n" +
+        "                return tree[node]\n" +
+        "            push(node)\n" +
+        "            mid = (lo + hi) // 2\n" +
+        "            return max(query(2 * node, lo, mid, l, r), query(2 * node + 1, mid, hi, l, r))\n" +
+        "\n" +
+        "        def raise_to(node, lo, hi, l, r, h):\n" +
+        "            if r &lt;= lo or hi &lt;= l:\n" +
+        "                return\n" +
+        "            if l &lt;= lo and hi &lt;= r:\n" +
+        "                tree[node], lazy[node] = max(tree[node], h), max(lazy[node], h)   # lazily\n" +
+        "                return\n" +
+        "            push(node)\n" +
+        "            mid = (lo + hi) // 2\n" +
+        "            raise_to(2 * node, lo, mid, l, r, h)\n" +
+        "            raise_to(2 * node + 1, mid, hi, l, r, h)\n" +
+        "            tree[node] = max(tree[2 * node], tree[2 * node + 1])\n" +
+        "\n" +
+        "        out = []\n" +
+        "        for left, side in positions:\n" +
+        "            l, r = idx[left], idx[left + side]     # half-open: touching is not overlapping\n" +
+        "            top = query(1, 0, n, l, r) + side\n" +
+        "            raise_to(1, 0, n, l, r, top)\n" +
+        "            out.append(tree[1])\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private int[] tree, lazy;\n" +
+        "\n" +
+        "    public List&lt;Integer&gt; fallingSquares(int[][] positions) {\n" +
+        "        TreeSet&lt;Integer&gt; set = new TreeSet&lt;&gt;();\n" +
+        "        for (int[] p : positions) { set.add(p[0]); set.add(p[0] + p[1]); }\n" +
+        "        Map&lt;Integer, Integer&gt; idx = new HashMap&lt;&gt;();   // compressed coordinates\n" +
+        "        for (int x : set) idx.put(x, idx.size());\n" +
+        "        int n = idx.size();\n" +
+        "        tree = new int[4 * n]; lazy = new int[4 * n];\n" +
+        "        List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        for (int[] p : positions) {\n" +
+        "            int l = idx.get(p[0]), r = idx.get(p[0] + p[1]);   // half-open span\n" +
+        "            int top = query(1, 0, n, l, r) + p[1];\n" +
+        "            raise(1, 0, n, l, r, top);\n" +
+        "            out.add(tree[1]);\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void push(int node) {      // hand a pending raise to the children\n" +
+        "        for (int c = 2 * node; c &lt;= 2 * node + 1; c++) {\n" +
+        "            tree[c] = Math.max(tree[c], lazy[node]);\n" +
+        "            lazy[c] = Math.max(lazy[c], lazy[node]);\n" +
+        "        }\n" +
+        "        lazy[node] = 0;\n" +
+        "    }\n" +
+        "\n" +
+        "    private int query(int node, int lo, int hi, int l, int r) {\n" +
+        "        if (r &lt;= lo || hi &lt;= l) return 0;\n" +
+        "        if (l &lt;= lo &amp;&amp; hi &lt;= r) return tree[node];\n" +
+        "        push(node);\n" +
+        "        int mid = (lo + hi) / 2;\n" +
+        "        return Math.max(query(2 * node, lo, mid, l, r), query(2 * node + 1, mid, hi, l, r));\n" +
+        "    }\n" +
+        "\n" +
+        "    private void raise(int node, int lo, int hi, int l, int r, int h) {\n" +
+        "        if (r &lt;= lo || hi &lt;= l) return;\n" +
+        "        if (l &lt;= lo &amp;&amp; hi &lt;= r) { tree[node] = Math.max(tree[node], h); lazy[node] = Math.max(lazy[node], h); return; }\n" +
+        "        push(node);\n" +
+        "        int mid = (lo + hi) / 2;\n" +
+        "        raise(2 * node, lo, mid, l, r, h);\n" +
+        "        raise(2 * node + 1, mid, hi, l, r, h);\n" +
+        "        tree[node] = Math.max(tree[2 * node], tree[2 * node + 1]);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Treating touching squares as overlapping. A square covering [1, 3) and one starting at 3 only touch; using half-open spans keeps the second from landing on the first.</p></details>" +
+        "<h3>3. Range Module</h3>" +
+        "<p><strong>LeetCode 715 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/range-module/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Track a set of real numbers under three operations on half-open ranges [left, right): add the range, remove it, and ask whether the whole range is tracked.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Coordinates reach 10\u2079, so the Dynamic, Implicit and Persistent section's options are a segment tree created only where it is touched, or no tree at all. A sorted list of boundaries is enough: a point is tracked exactly when an odd number of boundaries lie at or before it.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Store every tracked integer point: impossible at 10\u2079.</p>" +
+        "<p><strong>Approach.</strong> Keep bounds, a sorted list [s\u2080, e\u2080, s\u2081, e\u2081, \u2026] of disjoint tracked ranges. addRange(l, r): find i = first index with bounds[i] \u2265 l and j = first index with bounds[j] &gt; r, and replace bounds[i:j] with l if i is even and r if j is even (those are the new outer edges). removeRange is the same with i and j both taken as the first index \u2265 the endpoint and the parities flipped. queryRange(l, r) is true when l and r - 1 sit inside the same tracked range: the counts of boundaries \u2264 l and &lt; r are equal and odd.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_left, bisect_right\n" +
+        "\n" +
+        "class RangeModule:\n" +
+        "    def __init__(self):\n" +
+        "        self.bounds = []               # [s0, e0, s1, e1, ...]: disjoint tracked ranges\n" +
+        "\n" +
+        "    def addRange(self, left: int, right: int) -&gt; None:\n" +
+        "        i, j = bisect_left(self.bounds, left), bisect_right(self.bounds, right)\n" +
+        "        mid = ([left] if i % 2 == 0 else []) + ([right] if j % 2 == 0 else [])\n" +
+        "        self.bounds[i:j] = mid         # an even index means we are outside a range there\n" +
+        "\n" +
+        "    def queryRange(self, left: int, right: int) -&gt; bool:\n" +
+        "        i, j = bisect_right(self.bounds, left), bisect_left(self.bounds, right)\n" +
+        "        return i == j and i % 2 == 1   # both ends inside the same tracked range\n" +
+        "\n" +
+        "    def removeRange(self, left: int, right: int) -&gt; None:\n" +
+        "        i, j = bisect_left(self.bounds, left), bisect_left(self.bounds, right)\n" +
+        "        mid = ([left] if i % 2 == 1 else []) + ([right] if j % 2 == 1 else [])\n" +
+        "        self.bounds[i:j] = mid</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class RangeModule {\n" +
+        "    private final List&lt;Integer&gt; bounds = new ArrayList&lt;&gt;();   // [s0, e0, s1, e1, ...]\n" +
+        "\n" +
+        "    public RangeModule() {}\n" +
+        "\n" +
+        "    private int firstAtLeast(int x) {  // first index with bounds[i] &gt;= x\n" +
+        "        int lo = 0, hi = bounds.size();\n" +
+        "        while (lo &lt; hi) { int m = (lo + hi) &gt;&gt;&gt; 1; if (bounds.get(m) &lt; x) lo = m + 1; else hi = m; }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "\n" +
+        "    private int firstAbove(int x) { return firstAtLeast(x + 1); }   // first index with bounds[i] &gt; x\n" +
+        "\n" +
+        "    private void splice(int i, int j, List&lt;Integer&gt; mid) {\n" +
+        "        bounds.subList(i, j).clear();\n" +
+        "        bounds.addAll(i, mid);\n" +
+        "    }\n" +
+        "\n" +
+        "    public void addRange(int left, int right) {\n" +
+        "        int i = firstAtLeast(left), j = firstAbove(right);\n" +
+        "        List&lt;Integer&gt; mid = new ArrayList&lt;&gt;();\n" +
+        "        if (i % 2 == 0) mid.add(left);     // even: outside a range there\n" +
+        "        if (j % 2 == 0) mid.add(right);\n" +
+        "        splice(i, j, mid);\n" +
+        "    }\n" +
+        "\n" +
+        "    public boolean queryRange(int left, int right) {\n" +
+        "        int i = firstAbove(left), j = firstAtLeast(right);\n" +
+        "        return i == j &amp;&amp; i % 2 == 1;       // both ends inside the same range\n" +
+        "    }\n" +
+        "\n" +
+        "    public void removeRange(int left, int right) {\n" +
+        "        int i = firstAtLeast(left), j = firstAtLeast(right);\n" +
+        "        List&lt;Integer&gt; mid = new ArrayList&lt;&gt;();\n" +
+        "        if (i % 2 == 1) mid.add(left);\n" +
+        "        if (j % 2 == 1) mid.add(right);\n" +
+        "        splice(i, j, mid);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) to locate plus O(n) for the list splice per call; with 10\u2074 calls that is fast. A dynamic segment tree makes every call O(log C) for coordinate range C.</p>" +
+        "<p><strong>The trap.</strong> Mixing closed and half-open ends. With [left, right) ranges, adding [1, 3) and [3, 5) must merge into [1, 5), which the \"first index &gt; r\" in addRange does, while removing [3, 5) from [1, 5) must leave [1, 3).</p></details>" +
+        "<h3>4. The Skyline Problem</h3>" +
+        "<p><strong>LeetCode 218 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/the-skyline-problem/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given rectangular buildings [left, right, height], return the key points where the skyline's height changes, as [x, height] pairs from left to right.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Sweep the x-axis (Chapter 12). At each building edge, the skyline is the tallest building still standing: a max-heap of (height, right edge), where buildings that have ended are removed lazily when they reach the top. The Beyond Arrays section solves the same problem with a segment tree over compressed x.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> At every edge coordinate, scan all buildings for the tallest one covering it: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Make events: each building's left edge (adding it) and every right edge (a point where heights may drop). Sort them by x, with taller starts first at the same x. Keep a max-heap of (height, right) seeded with the ground (0, infinity). At each event, pop buildings whose right edge is at or before x, push the starting building if any, and if the tallest height differs from the last key point's height, record [x, height].</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import heapq\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def getSkyline(self, buildings: list[list[int]]) -&gt; list[list[int]]:\n" +
+        "        events = sorted([(l, -h, r) for l, r, h in buildings] +     # starts: taller first\n" +
+        "                        [(r, 0, 0) for _, r, _ in buildings])        # ends\n" +
+        "        out, live = [[0, 0]], [(0, float(\"inf\"))]                   # (-height, right); ground\n" +
+        "        for x, neg_h, r in events:\n" +
+        "            while live[0][1] &lt;= x:\n" +
+        "                heapq.heappop(live)    # lazy deletion: it ended already\n" +
+        "            if neg_h:\n" +
+        "                heapq.heappush(live, (neg_h, r))\n" +
+        "            if out[-1][1] != -live[0][0]:\n" +
+        "                out.append([x, -live[0][0]])   # the height changed here\n" +
+        "        return out[1:]</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; getSkyline(int[][] buildings) {\n" +
+        "        List&lt;long[]&gt; events = new ArrayList&lt;&gt;();   // {x, -height, right}; ends have height 0\n" +
+        "        for (int[] b : buildings) {\n" +
+        "            events.add(new long[]{b[0], -b[2], b[1]});\n" +
+        "            events.add(new long[]{b[1], 0, 0});\n" +
+        "        }\n" +
+        "        events.sort((a, b) -&gt; a[0] != b[0] ? Long.compare(a[0], b[0]) : Long.compare(a[1], b[1]));   // taller starts first\n" +
+        "        PriorityQueue&lt;long[]&gt; live = new PriorityQueue&lt;&gt;((a, b) -&gt; Long.compare(b[0], a[0]));   // {height, right}\n" +
+        "        live.add(new long[]{0, Long.MAX_VALUE});   // the ground; long: rights reach 2^31 - 1\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        long last = 0;\n" +
+        "        for (long[] e : events) {\n" +
+        "            while (live.peek()[1] &lt;= e[0]) live.poll();   // lazy deletion\n" +
+        "            if (e[1] != 0) live.add(new long[]{-e[1], e[2]});\n" +
+        "            long h = live.peek()[0];\n" +
+        "            if (h != last) { out.add(List.of((int) e[0], (int) h)); last = h; }   // the height changed\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Removing a building from the heap the moment it ends. A binary heap cannot delete from the middle cheaply; lazy deletion (discard it when it surfaces at the top) keeps every step O(log n). In Java, keep right edges in a long so the ground's \"infinity\" is larger than any real edge, which can be 2\u00b3\u00b9 - 1.</p></details>" +
+        "<h3>5. Rectangle Area II</h3>" +
+        "<p><strong>LeetCode 850 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/rectangle-area-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the total area covered by a set of axis-aligned rectangles (overlaps counted once), modulo 1,000,000,007.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Sweep a vertical line across x. Between consecutive x events, the covered area is (covered length on y) \u00d7 (width). The covered length under many overlapping intervals is kept by a segment tree over compressed y that stores, per node, how many rectangles cover it fully and the length it covers.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Cut the plane into the grid of compressed cells and mark each cell covered by some rectangle: O(n\u00b3) with n rectangles, fine at n = 200.</p>" +
+        "<p><strong>Approach.</strong> Compress the y coordinates. For each rectangle, make two events: at x\u2081 add +1 over [y\u2081, y\u2082), at x\u2082 add -1. Sort events by x. Before applying each event, add covered \u00d7 (x - previous x) to the area. In the segment tree, a node whose count is positive covers its whole y-span; otherwise it covers the sum of its children's covered lengths (0 for a leaf).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def rectangleArea(self, rectangles: list[list[int]]) -&gt; int:\n" +
+        "        ys = sorted({y for r in rectangles for y in (r[1], r[3])})\n" +
+        "        yi = {y: i for i, y in enumerate(ys)}\n" +
+        "        m = len(ys) - 1                # elementary y-intervals\n" +
+        "        count, covered = [0] * (4 * m), [0] * (4 * m)\n" +
+        "\n" +
+        "        def update(node, lo, hi, l, r, delta):   # node covers ys[lo]..ys[hi]\n" +
+        "            if r &lt;= lo or hi &lt;= l:\n" +
+        "                return\n" +
+        "            if l &lt;= lo and hi &lt;= r:\n" +
+        "                count[node] += delta\n" +
+        "            else:\n" +
+        "                mid = (lo + hi) // 2\n" +
+        "                update(2 * node, lo, mid, l, r, delta)\n" +
+        "                update(2 * node + 1, mid, hi, l, r, delta)\n" +
+        "            if count[node] &gt; 0:\n" +
+        "                covered[node] = ys[hi] - ys[lo]  # fully covered by some rectangle\n" +
+        "            elif hi - lo == 1:\n" +
+        "                covered[node] = 0\n" +
+        "            else:\n" +
+        "                covered[node] = covered[2 * node] + covered[2 * node + 1]\n" +
+        "\n" +
+        "        events = sorted([(x1, 1, y1, y2) for x1, y1, x2, y2 in rectangles] +\n" +
+        "                        [(x2, -1, y1, y2) for x1, y1, x2, y2 in rectangles])\n" +
+        "        area, prev_x = 0, events[0][0]\n" +
+        "        for x, delta, y1, y2 in events:\n" +
+        "            area += covered[1] * (x - prev_x)   # the slab since the last event\n" +
+        "            update(1, 0, m, yi[y1], yi[y2], delta)\n" +
+        "            prev_x = x\n" +
+        "        return area % (10**9 + 7)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private int[] count;\n" +
+        "    private long[] covered;\n" +
+        "    private int[] ys;\n" +
+        "\n" +
+        "    public int rectangleArea(int[][] rectangles) {\n" +
+        "        TreeSet&lt;Integer&gt; set = new TreeSet&lt;&gt;();\n" +
+        "        for (int[] r : rectangles) { set.add(r[1]); set.add(r[3]); }\n" +
+        "        ys = set.stream().mapToInt(Integer::intValue).toArray();\n" +
+        "        Map&lt;Integer, Integer&gt; yi = new HashMap&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; ys.length; i++) yi.put(ys[i], i);\n" +
+        "        int m = ys.length - 1;\n" +
+        "        count = new int[4 * m]; covered = new long[4 * m];\n" +
+        "        List&lt;int[]&gt; events = new ArrayList&lt;&gt;();   // {x, delta, y1, y2}\n" +
+        "        for (int[] r : rectangles) {\n" +
+        "            events.add(new int[]{r[0], 1, r[1], r[3]});\n" +
+        "            events.add(new int[]{r[2], -1, r[1], r[3]});\n" +
+        "        }\n" +
+        "        events.sort((a, b) -&gt; Integer.compare(a[0], b[0]));\n" +
+        "        long area = 0;\n" +
+        "        int prevX = events.get(0)[0];\n" +
+        "        for (int[] e : events) {\n" +
+        "            area = (area + covered[1] % 1_000_000_007 * (e[0] - prevX)) % 1_000_000_007;   // long slab\n" +
+        "            update(1, 0, m, yi.get(e[2]), yi.get(e[3]), e[1]);\n" +
+        "            prevX = e[0];\n" +
+        "        }\n" +
+        "        return (int) area;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void update(int node, int lo, int hi, int l, int r, int delta) {   // node covers ys[lo..hi]\n" +
+        "        if (r &lt;= lo || hi &lt;= l) return;\n" +
+        "        if (l &lt;= lo &amp;&amp; hi &lt;= r) count[node] += delta;\n" +
+        "        else {\n" +
+        "            int mid = (lo + hi) / 2;\n" +
+        "            update(2 * node, lo, mid, l, r, delta);\n" +
+        "            update(2 * node + 1, mid, hi, l, r, delta);\n" +
+        "        }\n" +
+        "        if (count[node] &gt; 0) covered[node] = ys[hi] - ys[lo];   // fully covered\n" +
+        "        else if (hi - lo == 1) covered[node] = 0;\n" +
+        "        else covered[node] = covered[2 * node] + covered[2 * node + 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time and O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Overflow. Coordinates reach 10\u2079, so one slab's area reaches 10\u00b9\u2078: multiply in 64-bit arithmetic (a long in Java; Python's int is unbounded), and reduce the running total modulo 1,000,000,007 as you go. A 32-bit int overflows on the first large slab.</p></details>"
     },
 
     { title: "Exercises",

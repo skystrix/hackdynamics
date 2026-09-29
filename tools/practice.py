@@ -6,18 +6,19 @@
 #     A problem with design=True is a class-design problem: its generator returns (ops, args) in LeetCode's
 #     own format, ops[0] being the class name, and the brute force returns the list of results.
 #     check_args=False skips comparing the arguments after the call (for inputs a language may reuse as scratch).
+#     unordered=True (with check_args=False) compares Java with Python after sorting a list-of-numbers result.
 #   python3 tools/practice.py emit courses/dsa-by-patterns/practice/ch08.py > section.js
 #     prints the "Practice Problems" section, ready to paste before the chapter's Exercises.
 #   python3 tools/practice.py insert courses/dsa-by-patterns/practice/ch08.py <bookData.js> 8
 #     writes it into the chapter, replacing an earlier Practice Problems section if there is one.
-import copy, importlib.util, json, os, struct, subprocess, sys, tempfile
+import ast, copy, importlib.util, json, os, re, struct, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(__file__))
 from chapter_asm import code, P
 
 # Argument markers for chapter modules: pass LL([1, 2]) for a ListNode list, CYC([1, 2, 3], pos) for a
 # list whose tail points back to index pos (LeetCode's cycle convention), RND([[val, random_index], ...])
 # for the random-pointer Node list, and a list of LL for ListNode[]. Plain ints, strs, int lists, str lists
-# and int matrices pass as is.
+# and int matrices pass as is. TREE and REF are defined below.
 class LL:
     def __init__(self, vals): self.vals, self.pos = list(vals), -1
     def __repr__(self): return f"LL({self.vals})"
@@ -28,6 +29,13 @@ class RND:
     def __init__(self, pairs): self.pairs = [list(p) for p in pairs]
     def __repr__(self): return f"RND({self.pairs})"
 
+class TREE:   # a binary tree in LeetCode's level order, None for a missing child: TREE([1, None, 2])
+    def __init__(self, vals): self.vals = list(vals)
+    def __repr__(self): return f"TREE({self.vals})"
+class REF:    # the node holding this value in the most recent TREE argument (LCA's p and q)
+    def __init__(self, val): self.val = val
+    def __repr__(self): return f"REF({self.val})"
+
 class Approx(float):   # brute-force answer for floating-point problems: equal within 1e-9 relative
     def __eq__(self, o): return abs(self - o) <= 1e-9 * max(1.0, abs(self))
     def __ne__(self, o): return not self.__eq__(o)
@@ -35,6 +43,8 @@ class Approx(float):   # brute-force answer for floating-point problems: equal w
 
 class ListNode:
     def __init__(self, val=0, next=None): self.val, self.next = val, next
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None): self.val, self.left, self.right = val, left, right
 class Node:   # ponytail: LeetCode 138's random-pointer node; graph chapters will need their own Node
     def __init__(self, x=0, next=None, random=None): self.val, self.next, self.random = x, next, random
 
@@ -46,17 +56,30 @@ class Node {
     int val; Node next, random;
     Node(int val) { this.val = val; }
 }
+class TreeNode {
+    int val; TreeNode left, right;
+    TreeNode() {} TreeNode(int val) { this.val = val; }
+    TreeNode(int val, TreeNode left, TreeNode right) { this.val = val; this.left = left; this.right = right; }
+}
 """
 
 RUNNER = r"""import java.io.*; import java.lang.reflect.*; import java.util.*;
 public class Runner {
     static Set<Object> inputNodes = Collections.newSetFromMap(new IdentityHashMap<>());
+    static Map<Integer, TreeNode> lastTree = new HashMap<>();   // value -> node, for REF arguments
     public static void main(String[] a) throws Exception {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
         StringBuilder out = new StringBuilder(); String line;
         while ((line = br.readLine()) != null) {
             inputNodes.clear();
             if (a[0].equals("--design")) { out.append(design(line)).append("\n"); continue; }
+            if (a[0].equals("--roundtrip")) {      // Codec: deserialize(serialize(root))
+                Class<?> k = Class.forName("Codec"); Constructor<?> c0 = k.getDeclaredConstructor(); c0.setAccessible(true);
+                Object codec = c0.newInstance();
+                Object ser = find(k.getDeclaredMethods(), "serialize", 1).invoke(codec, parse(TreeNode.class, line));
+                out.append(fmt(find(k.getDeclaredMethods(), "deserialize", 1).invoke(codec, ser))).append("\n");
+                continue;
+            }
             Class<?> k = Class.forName("Solution"); Constructor<?> ctor = k.getDeclaredConstructor(); ctor.setAccessible(true);
             Object sol = ctor.newInstance(); Method m = find(k.getDeclaredMethods(), a[0], -1);
             String[] ps = line.split("\t", -1);
@@ -102,6 +125,7 @@ public class Runner {
             return m;
         }
         if (t == String.class) return v;
+        if (t == char[].class) { String[] cs = v.isEmpty() ? new String[0] : v.split(",", -1); char[] out = new char[cs.length]; for (int i = 0; i < cs.length; i++) out[i] = cs[i].charAt(0); return out; }
         if (t == int[].class) return ints(v);
         if (t == String[].class) return v.isEmpty() ? new String[0] : v.split(",", -1);
         if (t == List.class) return new ArrayList<>(Arrays.asList(v.isEmpty() ? new String[0] : v.split(",", -1)));   // ponytail: List<String> only
@@ -118,6 +142,24 @@ public class Runner {
             String[] ls = v.split("#", -1); ListNode[] out = new ListNode[ls.length];
             for (int i = 0; i < ls.length; i++) out[i] = (ListNode) parse(ListNode.class, ls[i]);
             return out;
+        }
+        if (t == TreeNode.class) {
+            String[] pv = v.split("\\|", -1);
+            if (pv[0].equals("r")) return lastTree.get(Integer.parseInt(pv[1]));
+            lastTree = new HashMap<>();
+            if (pv[1].isEmpty()) return null;
+            String[] vs = pv[1].split(",");
+            TreeNode root = new TreeNode(Integer.parseInt(vs[0])); lastTree.putIfAbsent(root.val, root);
+            ArrayDeque<TreeNode> q = new ArrayDeque<>(); q.add(root);
+            for (int i = 1; i < vs.length; ) {
+                TreeNode cur = q.poll();
+                for (int side = 0; side < 2 && i < vs.length; side++, i++) {
+                    if (vs[i].equals("null")) continue;
+                    TreeNode ch = new TreeNode(Integer.parseInt(vs[i])); lastTree.putIfAbsent(ch.val, ch); q.add(ch);
+                    if (side == 0) cur.left = ch; else cur.right = ch;
+                }
+            }
+            return root;
         }
         if (t == Node.class) {
             if (v.isEmpty()) return null;
@@ -142,6 +184,17 @@ public class Runner {
             }
             return "L[" + String.join(", ", s) + "]";
         }
+        if (r instanceof TreeNode) {
+            List<String> s = new ArrayList<>(); ArrayDeque<TreeNode> q = new ArrayDeque<>(); List<TreeNode> order = new ArrayList<>();
+            order.add((TreeNode) r);
+            for (int i = 0; i < order.size(); i++) {
+                TreeNode x = order.get(i);
+                s.add(x == null ? "null" : String.valueOf(x.val));
+                if (x != null) { order.add(x.left); order.add(x.right); }
+            }
+            while (s.get(s.size() - 1).equals("null")) s.remove(s.size() - 1);
+            return "T[" + String.join(", ", s) + "]";
+        }
         if (r instanceof Node) {
             List<Node> ns = new ArrayList<>(); IdentityHashMap<Object, Integer> idx = new IdentityHashMap<>(); boolean shared = false;
             for (Node x = (Node) r; x != null && !idx.containsKey(x); x = x.next) { idx.put(x, ns.size()); ns.add(x); shared |= inputNodes.contains(x); }
@@ -154,7 +207,23 @@ public class Runner {
 }"""
 
 _input_nodes = set()
+_last_tree = {}
 def materialize(x):
+    global _last_tree
+    if isinstance(x, TREE):
+        _last_tree = {}
+        if not x.vals: return None
+        root = TreeNode(x.vals[0]); _last_tree.setdefault(root.val, root)
+        q, i = [root], 1
+        for cur in q:
+            for side in ("left", "right"):
+                if i >= len(x.vals): break
+                if x.vals[i] is not None:
+                    ch = TreeNode(x.vals[i]); _last_tree.setdefault(ch.val, ch); q.append(ch); setattr(cur, side, ch)
+                i += 1
+            if i >= len(x.vals): break
+        return root
+    if isinstance(x, REF): return _last_tree[x.val]
     if isinstance(x, LL):
         ns = [ListNode(v) for v in x.vals]
         for a, b in zip(ns, ns[1:]): a.next = b
@@ -168,6 +237,35 @@ def materialize(x):
     if isinstance(x, list) and x and isinstance(x[0], LL): return [materialize(y) for y in x]
     return copy.deepcopy(x)
 
+def tree_list(root):
+    """LeetCode level order of a TreeNode, None for gaps, trailing Nones trimmed."""
+    order, out = [root], []
+    for n in order:
+        out.append(None if n is None else n.val)
+        if n is not None: order += [n.left, n.right]
+    while out and out[-1] is None: out.pop()
+    return out
+
+def rand_tree(R, n, lo=-9, hi=9, distinct=False, bst=False):
+    """A random binary tree of n nodes as a TREE marker. bst=True gives a valid BST of distinct values."""
+    if n == 0: return TREE([])
+    vals = R.sample(range(lo, hi + 1), n) if (distinct or bst) else [R.randint(lo, hi) for _ in range(n)]
+    if bst:
+        root = None
+        def ins(node, v):
+            if node is None: return TreeNode(v)
+            if v < node.val: node.left = ins(node.left, v)
+            else: node.right = ins(node.right, v)
+            return node
+        for v in vals: root = ins(root, v)
+        return TREE(tree_list(root))
+    nodes = [TreeNode(v) for v in vals]
+    for i in range(1, n):             # hang each node on a random free slot of an earlier one
+        while True:
+            par = nodes[R.randrange(i)]; side = R.choice(("left", "right"))
+            if getattr(par, side) is None: setattr(par, side, nodes[i]); break
+    return TREE(tree_list(nodes[0]))
+
 def fmt(x):
     if x is None: return "None"
     if isinstance(x, bool): return "true" if x else "false"
@@ -179,6 +277,13 @@ def fmt(x):
             if id(x) in seen: s.append(f"@{seen[id(x)]}"); break
             seen[id(x)] = len(seen); s.append(str(x.val)); x = x.next
         return "L[" + ", ".join(s) + "]"
+    if isinstance(x, TreeNode):
+        order, s = [x], []
+        for n in order:
+            s.append("null" if n is None else str(n.val))
+            if n is not None: order += [n.left, n.right]
+        while s[-1] == "null": s.pop()
+        return "T[" + ", ".join(s) + "]"
     if isinstance(x, Node):
         ns, idx = [], {}
         while x is not None and id(x) not in idx: idx[id(x)] = len(ns); ns.append(x); x = x.next
@@ -192,6 +297,8 @@ def enc(x):
     if isinstance(x, float): return repr(x)
     if isinstance(x, LL): return f"{x.pos}|" + ",".join(map(str, x.vals))
     if isinstance(x, RND): return ";".join(f"{v},{r}" for v, r in x.pairs)
+    if isinstance(x, TREE): return "t|" + ",".join("null" if v is None else str(v) for v in x.vals)
+    if isinstance(x, REF): return f"r|{x.val}"
     if isinstance(x, list):
         if x and isinstance(x[0], LL): return "#".join(map(enc, x))   # ListNode[]
         if x and isinstance(x[0], list): return ";".join(",".join(map(str, r)) for r in x)
@@ -203,7 +310,7 @@ def load(path):
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
 
 def solution_ns(src):
-    ns = {"ListNode": ListNode, "Node": Node}
+    ns = {"ListNode": ListNode, "Node": Node, "TreeNode": TreeNode}
     exec("from typing import *\n" + src, ns); return ns
 
 def run_py(p, ns, args):
@@ -214,9 +321,13 @@ def run_py(p, ns, args):
         obj = ns[ops[0]](*map(materialize, opargs[0]))
         res = [None] + [getattr(obj, op)(*map(materialize, a)) for op, a in zip(ops[1:], opargs[1:])]
         return res, fmt(res)
+    if p.get("roundtrip"):             # Codec: deserialize(serialize(root))
+        codec = ns["Codec"]()
+        r = codec.deserialize(codec.serialize(materialize(args[0])))
+        return p.get("observe", lambda r, a: r)(r, None), fmt(r)
     after = [materialize(x) for x in args]
     r = getattr(ns["Solution"](), p["method"])(*after)
-    shown = [x for x in after if isinstance(x, (list, ListNode))] if p.get("check_args", True) else []
+    shown = [x for x in after if isinstance(x, (list, ListNode, TreeNode))] if p.get("check_args", True) else []
     line = " | ".join([fmt(r)] + [fmt(x) for x in shown])
     got = p.get("observe", lambda r, a: r)(r, after)
     return got, line
@@ -242,14 +353,19 @@ def check(mod, n):
                 if fails <= 2: print("  PY FAIL", p["num"], args, "got", got, "want", want)
             cases.append(java_case(p, args)); pyout.append(line)
         with tempfile.TemporaryDirectory() as d:
-            open(f"{d}/Solution.java", "w").write(p["java"]); open(f"{d}/Runner.java", "w").write(RUNNER)
+            src = re.sub(r"^public class ", "class ", p["java"], flags=re.M)   # any class name fits Solution.java
+            open(f"{d}/Solution.java", "w").write(src); open(f"{d}/Runner.java", "w").write(RUNNER)
             open(f"{d}/Support.java", "w").write(SUPPORT_JAVA)
             c = subprocess.run(["javac", "-d", d, f"{d}/Solution.java", f"{d}/Runner.java", f"{d}/Support.java"], capture_output=True, text=True)
             if c.returncode: print("  JAVAC FAIL", p["num"], c.stderr[:800]); bad += 1; continue
-            j = subprocess.run(["java", "-cp", d, "Runner", "--design" if p.get("design") else p["method"]]
+            mode = "--design" if p.get("design") else "--roundtrip" if p.get("roundtrip") else p["method"]
+            j = subprocess.run(["java", "-cp", d, "Runner", mode]
                                + ([] if p.get("check_args", True) else ["noargs"]),
                                input="\n".join(cases) + "\n", capture_output=True, text=True)
         jout = j.stdout.splitlines()
+        if p.get("unordered"):         # any order is legal: compare the sorted results
+            canon = lambda line: sorted(ast.literal_eval(line))
+            pyout, jout = [canon(x) for x in pyout], [canon(x) for x in jout]
         diffs = [(c_, a, b) for c_, a, b in zip(cases, pyout, jout) if a != b]
         jd = len(diffs) + abs(len(pyout) - len(jout))
         if jd: print("  JAVA DIFF", p["num"], j.stderr[:400], diffs[:1])

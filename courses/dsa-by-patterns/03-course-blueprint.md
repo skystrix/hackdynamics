@@ -922,6 +922,11 @@ interviews love: which pairs of traversals are enough to rebuild the tree, and w
 
 **Rows:** H1, H2, H11 · **Outcomes:** E9(partial), O2 · **Terms:** 15
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch24.py`)* — LeetCode, all free.
+- Easy: 94 Binary Tree Inorder Traversal · 145 Binary Tree Postorder Traversal · 226 Invert Binary Tree · 100 Same Tree · 101 Symmetric Tree · 572 Subtree of Another Tree
+- Medium: 102 Binary Tree Level Order Traversal · 199 Binary Tree Right Side View · 103 Binary Tree Zigzag Level Order Traversal · 105 Construct Binary Tree from Preorder and Inorder Traversal · 106 Construct Binary Tree from Inorder and Postorder Traversal · 173 Binary Search Tree Iterator
+- Hard: 297 Serialize and Deserialize Binary Tree
+
 ---
 
 ## Chapter 25 — Tree DP: Returning a Tuple Upward
@@ -954,6 +959,11 @@ you have never seen.
 - The three-node counterexample where local BST validation fails.
 
 **Rows:** H3, K13 · **Outcomes:** E15, A5, O1 · **Terms:** 14
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch25.py`)* — LeetCode, all free.
+- Easy: 104 Maximum Depth of Binary Tree · 110 Balanced Binary Tree · 543 Diameter of Binary Tree · 112 Path Sum
+- Medium: 236 Lowest Common Ancestor of a Binary Tree · 98 Validate Binary Search Tree · 1448 Count Good Nodes in Binary Tree · 337 House Robber III · 437 Path Sum III
+- Hard: 124 Binary Tree Maximum Path Sum · 834 Sum of Distances in Tree · 968 Binary Tree Cameras
 
 ---
 
@@ -990,6 +1000,11 @@ standard library ships one of these and this chapter tells you which.
 
 **Rows:** H4, H5, H6, G7, N10, A18(applied) · **Outcomes:** E9, A7, O6, B3 · **Terms:** 19
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch26.py`)* — LeetCode, all free.
+- Easy: 700 Search in a Binary Search Tree · 108 Convert Sorted Array to Binary Search Tree · 530 Minimum Absolute Difference in BST
+- Medium: 701 Insert into a Binary Search Tree · 450 Delete Node in a BST · 230 Kth Smallest Element in a BST · 235 Lowest Common Ancestor of a Binary Search Tree · 1382 Balance a Binary Search Tree · 729 My Calendar I
+- Hard: 220 Contains Duplicate III
+
 ---
 
 ## Chapter 27 — Heaps and Priority Queues
@@ -1021,6 +1036,11 @@ asking: how do you keep a running median.
 
 **Rows:** H7, H8, H9, D4 · **Outcomes:** E10, A7, B4 · **Terms:** 14
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch27.py`)* — LeetCode, all free.
+- Easy: 1046 Last Stone Weight · 703 Kth Largest Element in a Stream
+- Medium: 973 K Closest Points to Origin · 621 Task Scheduler · 355 Design Twitter · 767 Reorganize String · 1642 Furthest Building You Can Reach
+- Hard: 295 Find Median from Data Stream · 502 IPO · 630 Course Schedule III · 871 Minimum Number of Refueling Stops
+
 ---
 
 ## Chapter 28 — Tries and Prefix Structures
@@ -1049,6 +1069,11 @@ love, and — with one change of alphabet — of the fastest way to find a maxim
 - The bitwise trie walk for one query, opposite-branch choices marked.
 
 **Rows:** H10, M6, O14 · **Outcomes:** E19, A7, B8 · **Terms:** 12
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch28.py`)* — LeetCode, all free.
+- Easy: 14 Longest Common Prefix
+- Medium: 208 Implement Trie (Prefix Tree) · 211 Design Add and Search Words Data Structure · 648 Replace Words · 1268 Search Suggestions System · 421 Maximum XOR of Two Numbers in an Array
+- Hard: 212 Word Search II · 1707 Maximum XOR With an Element From Array
 
 ---
 
@@ -1082,6 +1107,10 @@ interview bank: flatten the tree with an Euler tour so that every subtree become
 
 **Rows:** H12, H13, H14, H15 · **Outcomes:** E9, A6, A7 · **Terms:** 15
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch29.py`)* — LeetCode, all free. Advanced material: no free Easy problems exist for binary lifting or Euler tours.
+- Medium: 1519 Number of Nodes in the Sub-Tree With the Same Label · 1123 Lowest Common Ancestor of Deepest Leaves · 310 Minimum Height Trees
+- Hard: 1483 Kth Ancestor of a Tree Node · 2846 Minimum Edge Weight Equilibrium Queries in a Tree · 2322 Minimum Score After Removals on a Tree · 2246 Longest Path With Different Adjacent Characters
+
 ---
 
 ## Chapter 30 — Range Queries: Prefix, Sparse Table, Fenwick
@@ -1113,6 +1142,10 @@ fits in one array with a loop you can write from memory once you see why it work
 - Fenwick index responsibilities drawn as nested bars beneath the array.
 
 **Rows:** N1(revisit), N2, N3, N10(partial) · **Outcomes:** E18, A7 · **Terms:** 14
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch30.py`)* — LeetCode, all free. Fenwick and sparse-table problems start at Medium on LeetCode.
+- Medium: 307 Range Sum Query - Mutable · 1395 Count Number of Teams · 1438 Longest Continuous Subarray With Absolute Diff Less Than or Equal to Limit
+- Hard: 1649 Create Sorted Array through Instructions · 2179 Count Good Triplets in an Array · 2426 Number of Pairs Satisfying Inequality
 
 ---
 
@@ -1147,6 +1180,9 @@ touching every element, by leaving a note at a node saying "everyone below me st
 - Mo's ordering drawn as a path through query points in (block, right-endpoint) space.
 
 **Rows:** N4, N5, N6, N7, N11 · **Outcomes:** E18, A7, B6 · **Terms:** 18
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch31.py`)* — LeetCode, all free. Segment-tree problems on LeetCode are all Hard.
+- Hard: 2407 Longest Increasing Subsequence II · 699 Falling Squares · 715 Range Module · 218 The Skyline Problem · 850 Rectangle Area II
 
 ---
 
