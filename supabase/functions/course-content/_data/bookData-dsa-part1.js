@@ -9201,6 +9201,450 @@ CHAPTERS.push({
         "<div class='callout'>Part 2 continues with the observation that makes this chapter's technique general: nothing above required an array. Chapter 14 drops the array entirely and searches over the <em>answer</em>, which turns a large family of optimisation questions into binary searches over a yes-or-no predicate.</div>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Binary Search</h3>" +
+        "<p><strong>LeetCode 704 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/binary-search/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the position of a target in a sorted array of distinct values, or return -1.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Sorted input and a lookup: binary search. Use the chapter's lower_bound, which finds the first position whose value is at least the target, then check whether that value is the target.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan left to right: O(n).</p>" +
+        "<p><strong>Approach.</strong> Keep the invariant that the answer lies in [lo, hi). Look at mid. If a[mid] &lt; target, mid and everything left of it are too small, so lo = mid + 1. Otherwise mid might be the answer, so hi = mid. When lo meets hi, lo is the first position with a value \u2265 target; it is the answer only if it is inside the array and holds the target.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def search(self, nums: list[int], target: int) -&gt; int:\n" +
+        "        lo, hi = 0, len(nums)          # the answer is in [lo, hi)\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] &lt; target:\n" +
+        "                lo = mid + 1           # mid is too small: discard it\n" +
+        "            else:\n" +
+        "                hi = mid               # mid might be the answer: keep it\n" +
+        "        return lo if lo &lt; len(nums) and nums[lo] == target else -1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int search(int[] nums, int target) {\n" +
+        "        int lo = 0, hi = nums.length;  // the answer is in [lo, hi)\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &lt; target) lo = mid + 1;   // too small: discard it\n" +
+        "            else hi = mid;                          // might be the answer: keep it\n" +
+        "        }\n" +
+        "        return lo &lt; nums.length &amp;&amp; nums[lo] == target ? lo : -1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Returning lo without checking it. When the target is missing, lower_bound still returns a position (where the target would be inserted), possibly len(nums), which is off the end.</p></details>" +
+        "<h3>2. Search Insert Position</h3>" +
+        "<p><strong>LeetCode 35 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/search-insert-position/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a sorted array of distinct values, return the target's position if present, or the position where it would be inserted to keep the array sorted.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"Where would it go?\" is exactly what lower_bound returns, found or not. This is the Lower Bound, Upper Bound, Equal Range section with nothing added.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan for the first value \u2265 target: O(n).</p>" +
+        "<p><strong>Approach.</strong> Run lower_bound and return lo. Unlike Binary Search, no check is needed afterwards: when the target is missing, lo is already its insertion point, including len(nums) for a target bigger than everything.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def searchInsert(self, nums: list[int], target: int) -&gt; int:\n" +
+        "        lo, hi = 0, len(nums)          # len(nums) is a legal answer\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] &lt; target:\n" +
+        "                lo = mid + 1\n" +
+        "            else:\n" +
+        "                hi = mid\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int searchInsert(int[] nums, int target) {\n" +
+        "        int lo = 0, hi = nums.length;  // nums.length is a legal answer\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &lt; target) lo = mid + 1;\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Starting with hi = len(nums) - 1. A target larger than every element belongs at position len(nums), and a search that never considers that position cannot return it. The half-open interval [0, len(nums)) with hi = len(nums) is what makes that answer reachable.</p></details>" +
+        "<h3>3. Maximum Count of Positive Integer and Negative Integer</h3>" +
+        "<p><strong>LeetCode 2529 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/maximum-count-of-positive-integer-and-negative-integer/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A sorted array may contain negatives, zeros and positives. Return the larger of the number of negatives and the number of positives.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Counting values below or above a threshold in a sorted array is two lower_bound calls: the first position with a value \u2265 0, and the first with a value \u2265 1.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Count with a loop: O(n). Correct, and the problem's follow-up asks for O(log n).</p>" +
+        "<p><strong>Approach.</strong> neg = lower_bound(0), because everything before the first value \u2265 0 is negative. pos = n - lower_bound(1), because everything from the first value \u2265 1 onwards is positive. The zeros sit between the two positions and are counted by neither.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maximumCount(self, nums: list[int]) -&gt; int:\n" +
+        "        def lower_bound(t):            # first position with nums[i] &gt;= t\n" +
+        "            lo, hi = 0, len(nums)\n" +
+        "            while lo &lt; hi:\n" +
+        "                mid = lo + (hi - lo) // 2\n" +
+        "                if nums[mid] &lt; t:\n" +
+        "                    lo = mid + 1\n" +
+        "                else:\n" +
+        "                    hi = mid\n" +
+        "            return lo\n" +
+        "\n" +
+        "        neg = lower_bound(0)\n" +
+        "        pos = len(nums) - lower_bound(1)   # zeros are skipped by both\n" +
+        "        return max(neg, pos)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int lowerBound(int[] nums, int t) {   // first position with nums[i] &gt;= t\n" +
+        "        int lo = 0, hi = nums.length;\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &lt; t) lo = mid + 1;\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int maximumCount(int[] nums) {\n" +
+        "        int neg = lowerBound(nums, 0);\n" +
+        "        int pos = nums.length - lowerBound(nums, 1);   // zeros are skipped by both\n" +
+        "        return Math.max(neg, pos);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Using lower_bound(0) for both. Everything from that position on includes the zeros, which are neither negative nor positive.</p></details>" +
+        "<h3>4. Find First and Last Position of Element in Sorted Array</h3>" +
+        "<p><strong>LeetCode 34 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/find-first-and-last-position-of-element-in-sorted-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a sorted array that may contain repeats, return the first and last positions of a target, or [-1, -1].</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Equal Range: all copies of the target sit between lower_bound(target) and lower_bound(target + 1).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Find any copy, then walk left and right to the ends of the run: O(n) when the whole array is the target.</p>" +
+        "<p><strong>Approach.</strong> first = lower_bound(target). If first is off the end or does not hold the target, return [-1, -1]. Otherwise last = lower_bound(target + 1) - 1, the position right before the first value bigger than the target.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def searchRange(self, nums: list[int], target: int) -&gt; list[int]:\n" +
+        "        def lower_bound(t):\n" +
+        "            lo, hi = 0, len(nums)\n" +
+        "            while lo &lt; hi:\n" +
+        "                mid = lo + (hi - lo) // 2\n" +
+        "                if nums[mid] &lt; t:\n" +
+        "                    lo = mid + 1\n" +
+        "                else:\n" +
+        "                    hi = mid\n" +
+        "            return lo\n" +
+        "\n" +
+        "        first = lower_bound(target)\n" +
+        "        if first == len(nums) or nums[first] != target:\n" +
+        "            return [-1, -1]\n" +
+        "        return [first, lower_bound(target + 1) - 1]   # right before the next bigger value</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int lowerBound(int[] nums, int t) {\n" +
+        "        int lo = 0, hi = nums.length;\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &lt; t) lo = mid + 1;\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int[] searchRange(int[] nums, int target) {\n" +
+        "        int first = lowerBound(nums, target);\n" +
+        "        if (first == nums.length || nums[first] != target) return new int[]{-1, -1};\n" +
+        "        return new int[]{first, lowerBound(nums, target + 1) - 1};   // before the next bigger value\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Finding one copy with a plain binary search and then scanning outwards. It looks logarithmic and is linear on an array of 100,000 copies of the same value.</p></details>" +
+        "<h3>5. Search a 2D Matrix</h3>" +
+        "<p><strong>LeetCode 74 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/search-a-2d-matrix/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Each row of a grid is sorted, and each row starts with a value bigger than the last value of the row above. Decide whether a target is in the grid.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Read row by row, the grid is one sorted list of m \u00d7 n values. Binary-search that list, converting a list position i to the cell (i // n, i % n).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan every cell: O(m \u00d7 n). Or pick the row, then search it: two searches, also fine.</p>" +
+        "<p><strong>Approach.</strong> Run lower_bound over positions 0 to m \u00d7 n, reading the value at position i as matrix[i // n][i % n]. Then check whether the position found holds the target.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def searchMatrix(self, matrix: list[list[int]], target: int) -&gt; bool:\n" +
+        "        m, n = len(matrix), len(matrix[0])\n" +
+        "        lo, hi = 0, m * n              # the grid as one sorted list\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if matrix[mid // n][mid % n] &lt; target:\n" +
+        "                lo = mid + 1\n" +
+        "            else:\n" +
+        "                hi = mid\n" +
+        "        return lo &lt; m * n and matrix[lo // n][lo % n] == target</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean searchMatrix(int[][] matrix, int target) {\n" +
+        "        int m = matrix.length, n = matrix[0].length;\n" +
+        "        int lo = 0, hi = m * n;        // the grid as one sorted list\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (matrix[mid / n][mid % n] &lt; target) lo = mid + 1;\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return lo &lt; m * n &amp;&amp; matrix[lo / n][lo % n] == target;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log(m \u00d7 n)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Confusing this with Chapter 3's Search a 2D Matrix II, where only rows and columns are sorted separately. The \"each row starts after the previous row ends\" rule is what makes the whole grid one sorted list; without it, this search is wrong.</p></details>" +
+        "<h3>6. Find Minimum in Rotated Sorted Array</h3>" +
+        "<p><strong>LeetCode 153 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A sorted array of distinct values was rotated (for example [3, 4, 5, 1, 2]). Find its minimum in O(log n).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Finding the Rotation Point subsection: every value in the rotated-away left part is bigger than the last element, and every value in the right part is at most the last element. \"nums[i] \u2264 nums[-1]\" is false, then true: a monotone predicate, so lower_bound finds where it flips.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan for the smallest value: O(n).</p>" +
+        "<p><strong>Approach.</strong> Search for the first index where nums[i] \u2264 nums[n - 1]. If nums[mid] &gt; nums[n - 1], mid is in the left part, so lo = mid + 1; otherwise hi = mid. The index found is the rotation point, which holds the minimum.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findMin(self, nums: list[int]) -&gt; int:\n" +
+        "        lo, hi = 0, len(nums) - 1      # the last index always satisfies the predicate\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] &gt; nums[-1]:\n" +
+        "                lo = mid + 1           # mid is in the rotated-away left part\n" +
+        "            else:\n" +
+        "                hi = mid\n" +
+        "        return nums[lo]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findMin(int[] nums) {\n" +
+        "        int last = nums[nums.length - 1];\n" +
+        "        int lo = 0, hi = nums.length - 1;   // the last index always satisfies the predicate\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &gt; last) lo = mid + 1;   // in the rotated-away left part\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return nums[lo];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Comparing with nums[0] instead of the last element. When the array is not rotated at all, every value is \u2265 nums[0], and the search heads off the wrong way. The last element works in both cases.</p></details>" +
+        "<h3>7. Search in Rotated Sorted Array</h3>" +
+        "<p><strong>LeetCode 33 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/search-in-rotated-sorted-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find a target's position in a rotated sorted array of distinct values, or return -1, in O(log n).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two templated searches beat one clever one. First find the rotation point (Find Minimum in Rotated Sorted Array). The array is then two sorted runs, and the target can only be in one of them.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan: O(n).</p>" +
+        "<p><strong>Approach.</strong> Find the rotation point p as in the previous problem. If the target is at most the last element, it can only be in the right run nums[p:]; otherwise only in the left run nums[:p]. Run lower_bound on that run and check the result.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def search(self, nums: list[int], target: int) -&gt; int:\n" +
+        "        lo, hi = 0, len(nums) - 1      # 1: find the rotation point\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] &gt; nums[-1]:\n" +
+        "                lo = mid + 1\n" +
+        "            else:\n" +
+        "                hi = mid\n" +
+        "        p = lo\n" +
+        "        lo, hi = (p, len(nums)) if target &lt;= nums[-1] else (0, p)   # 2: pick the run\n" +
+        "        while lo &lt; hi:                 # 3: ordinary lower_bound inside it\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] &lt; target:\n" +
+        "                lo = mid + 1\n" +
+        "            else:\n" +
+        "                hi = mid\n" +
+        "        return lo if lo &lt; len(nums) and nums[lo] == target else -1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int search(int[] nums, int target) {\n" +
+        "        int n = nums.length, last = nums[n - 1];\n" +
+        "        int lo = 0, hi = n - 1;        // 1: find the rotation point\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &gt; last) lo = mid + 1;\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        int p = lo;\n" +
+        "        if (target &lt;= last) { lo = p; hi = n; } else { lo = 0; hi = p; }   // 2: pick the run\n" +
+        "        while (lo &lt; hi) {              // 3: ordinary lower_bound inside it\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &lt; target) lo = mid + 1;\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return lo &lt; n &amp;&amp; nums[lo] == target ? lo : -1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space: two binary searches.</p>" +
+        "<p><strong>The trap.</strong> The one-pass version with four nested comparisons is the classic source of off-by-one bugs. Splitting it into two searches, each an unmodified template, removes the cases you have to get right.</p></details>" +
+        "<h3>8. Search in Rotated Sorted Array II</h3>" +
+        "<p><strong>LeetCode 81 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/search-in-rotated-sorted-array-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Search in Rotated Sorted Array, but values may repeat. Return whether the target is present.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Where Duplicates Break It subsection. With repeats, [1, 1, 1, 2, 1] gives nums[mid] equal to both ends, and you cannot tell which side the rotation point is on. No predicate is monotone any more, so the worst case has to be linear.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan: O(n), which is also the true worst case of any method here.</p>" +
+        "<p><strong>Approach.</strong> Search a closed range [lo, hi]. If nums[mid] is the target, done. If nums[lo], nums[mid] and nums[hi] are all equal, you learn nothing, so shrink both ends by one. Otherwise one half is sorted: if nums[lo] \u2264 nums[mid] the left half is, so search it if the target lies in its range, else the right half; symmetrically when the right half is sorted.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def search(self, nums: list[int], target: int) -&gt; bool:\n" +
+        "        lo, hi = 0, len(nums) - 1      # closed range [lo, hi]\n" +
+        "        while lo &lt;= hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] == target:\n" +
+        "                return True\n" +
+        "            if nums[lo] == nums[mid] == nums[hi]:\n" +
+        "                lo += 1                # no information: shrink both ends\n" +
+        "                hi -= 1\n" +
+        "            elif nums[lo] &lt;= nums[mid]:          # left half is sorted\n" +
+        "                if nums[lo] &lt;= target &lt; nums[mid]:\n" +
+        "                    hi = mid - 1\n" +
+        "                else:\n" +
+        "                    lo = mid + 1\n" +
+        "            else:                                # right half is sorted\n" +
+        "                if nums[mid] &lt; target &lt;= nums[hi]:\n" +
+        "                    lo = mid + 1\n" +
+        "                else:\n" +
+        "                    hi = mid - 1\n" +
+        "        return False</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean search(int[] nums, int target) {\n" +
+        "        int lo = 0, hi = nums.length - 1;   // closed range [lo, hi]\n" +
+        "        while (lo &lt;= hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] == target) return true;\n" +
+        "            if (nums[lo] == nums[mid] &amp;&amp; nums[mid] == nums[hi]) { lo++; hi--; }   // no information\n" +
+        "            else if (nums[lo] &lt;= nums[mid]) {            // left half is sorted\n" +
+        "                if (nums[lo] &lt;= target &amp;&amp; target &lt; nums[mid]) hi = mid - 1;\n" +
+        "                else lo = mid + 1;\n" +
+        "            } else {                                     // right half is sorted\n" +
+        "                if (nums[mid] &lt; target &amp;&amp; target &lt;= nums[hi]) lo = mid + 1;\n" +
+        "                else hi = mid - 1;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) on most inputs, O(n) in the worst case (every value equal except one).</p>" +
+        "<p><strong>The trap.</strong> Claiming O(log n). Interviewers ask this follow-up precisely to see whether you notice that duplicates make the problem linear in the worst case, and why.</p></details>" +
+        "<h3>9. Find Peak Element</h3>" +
+        "<p><strong>LeetCode 162 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/find-peak-element/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In an array where neighbours are never equal, return the index of any peak (a value bigger than its neighbours; the ends count as next to minus infinity), in O(log n).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The array is not sorted, yet binary search works. If nums[mid] &lt; nums[mid + 1], the values rise to the right, and a rise must end in a peak before the array does, so a peak exists on the right. That is enough to discard the left half.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan for the first i with nums[i] &gt; nums[i + 1]: O(n).</p>" +
+        "<p><strong>Approach.</strong> Search [0, n - 1]. At mid, if nums[mid] &lt; nums[mid + 1], a peak lies to the right of mid, so lo = mid + 1; otherwise mid itself or something to its left is a peak, so hi = mid. When lo meets hi, it is a peak.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findPeakElement(self, nums: list[int]) -&gt; int:\n" +
+        "        lo, hi = 0, len(nums) - 1\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] &lt; nums[mid + 1]:\n" +
+        "                lo = mid + 1           # rising: a peak lies to the right\n" +
+        "            else:\n" +
+        "                hi = mid               # falling: mid or something left of it\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findPeakElement(int[] nums) {\n" +
+        "        int lo = 0, hi = nums.length - 1;\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &lt; nums[mid + 1]) lo = mid + 1;   // rising: a peak to the right\n" +
+        "            else hi = mid;                                 // falling: mid or to its left\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Believing binary search needs sorted input. It needs a question whose answer tells you which half still contains an answer. \"Is the next value bigger?\" is such a question here.</p></details>" +
+        "<h3>10. Peak Index in a Mountain Array</h3>" +
+        "<p><strong>LeetCode 852 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/peak-index-in-a-mountain-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>An array strictly increases and then strictly decreases. Return the index of its top.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Mountain Array subsection. \"Is the next value smaller?\" is false all the way up and true all the way down: a monotone predicate, so lower_bound finds the first index where it turns true, which is the top.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan until the values start falling: O(n).</p>" +
+        "<p><strong>Approach.</strong> Search [0, n - 1] for the first i with arr[i] &gt; arr[i + 1]. If arr[mid] &lt; arr[mid + 1], mid is still on the way up, so lo = mid + 1; otherwise hi = mid.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def peakIndexInMountainArray(self, arr: list[int]) -&gt; int:\n" +
+        "        lo, hi = 0, len(arr) - 1       # mid &lt; hi, so arr[mid + 1] is always safe\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if arr[mid] &lt; arr[mid + 1]:\n" +
+        "                lo = mid + 1           # still climbing\n" +
+        "            else:\n" +
+        "                hi = mid\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int peakIndexInMountainArray(int[] arr) {\n" +
+        "        int lo = 0, hi = arr.length - 1;   // mid &lt; hi, so arr[mid + 1] is safe\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (arr[mid] &lt; arr[mid + 1]) lo = mid + 1;   // still climbing\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Reading arr[mid + 1] when mid could be the last index. Setting hi = n - 1 (not n) keeps mid below n - 1, because mid is always less than hi inside the loop.</p></details>" +
+        "<h3>11. Single Element in a Sorted Array</h3>" +
+        "<p><strong>LeetCode 540 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/single-element-in-a-sorted-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a sorted array, every value appears exactly twice except one, which appears once. Find it in O(log n) time and O(1) space.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Before the single element, every pair starts at an even index; after it, every pair starts at an odd index. \"Does the pair at this even index match?\" is true, then false: a monotone predicate over the even indices.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan in steps of two until a pair does not match: O(n). XOR of everything is also O(n).</p>" +
+        "<p><strong>Approach.</strong> Search the even positions only. Take mid, and if it is odd, step back one so it is even. If nums[mid] == nums[mid + 1], the pairs are still aligned, so the single element is after this pair: lo = mid + 2. Otherwise it is at mid or before: hi = mid.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def singleNonDuplicate(self, nums: list[int]) -&gt; int:\n" +
+        "        lo, hi = 0, len(nums) - 1\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if mid % 2 == 1:\n" +
+        "                mid -= 1               # pairs start at even indices before the single one\n" +
+        "            if nums[mid] == nums[mid + 1]:\n" +
+        "                lo = mid + 2           # still aligned: the single one is further right\n" +
+        "            else:\n" +
+        "                hi = mid\n" +
+        "        return nums[lo]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int singleNonDuplicate(int[] nums) {\n" +
+        "        int lo = 0, hi = nums.length - 1;\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (mid % 2 == 1) mid--;   // pairs start at even indices before the single one\n" +
+        "            if (nums[mid] == nums[mid + 1]) lo = mid + 2;   // still aligned: look right\n" +
+        "            else hi = mid;\n" +
+        "        }\n" +
+        "        return nums[lo];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Forgetting to make mid even. At an odd mid, \"matches the next value\" means the opposite, and the search moves the wrong way.</p></details>" +
+        "<h3>12. Find Minimum in Rotated Sorted Array II</h3>" +
+        "<p><strong>LeetCode 154 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/find-minimum-in-rotated-sorted-array-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the minimum of a rotated sorted array that may contain repeated values.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Find Minimum in Rotated Sorted Array plus the duplicates problem from Search in Rotated Sorted Array II. When nums[mid] equals the last element you cannot tell which side the minimum is on, but you can safely drop the last element, because nums[mid] is an equal copy of it.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan: O(n), which is again the true worst case.</p>" +
+        "<p><strong>Approach.</strong> Compare nums[mid] with nums[hi]. Smaller: the minimum is at mid or to its left, hi = mid. Bigger: mid is in the rotated-away part, lo = mid + 1. Equal: hi -= 1, which cannot lose the minimum because nums[mid] holds the same value.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findMin(self, nums: list[int]) -&gt; int:\n" +
+        "        lo, hi = 0, len(nums) - 1\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if nums[mid] &lt; nums[hi]:\n" +
+        "                hi = mid\n" +
+        "            elif nums[mid] &gt; nums[hi]:\n" +
+        "                lo = mid + 1\n" +
+        "            else:\n" +
+        "                hi -= 1                # nums[mid] is an equal copy: dropping nums[hi] is safe\n" +
+        "        return nums[lo]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findMin(int[] nums) {\n" +
+        "        int lo = 0, hi = nums.length - 1;\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            if (nums[mid] &lt; nums[hi]) hi = mid;\n" +
+        "            else if (nums[mid] &gt; nums[hi]) lo = mid + 1;\n" +
+        "            else hi--;                 // nums[mid] is an equal copy: dropping nums[hi] is safe\n" +
+        "        }\n" +
+        "        return nums[lo];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) typically, O(n) in the worst case, for the same reason as Search in Rotated Sorted Array II.</p>" +
+        "<p><strong>The trap.</strong> Comparing against a fixed nums[-1] as in the distinct version. With duplicates the rotation can put copies of the last value on both sides, and the fixed comparison gives the wrong half on inputs like [3, 1, 3, 3, 3]. Compare with the moving nums[hi].</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -9695,6 +10139,477 @@ CHAPTERS.push({
         "<p>The last row is why this is an engineering decision rather than a strict improvement. When the runs interleave evenly, the doubling probes are wasted work and galloping costs a few percent more. Timsort's answer is to gate it behind a streak: stay in the simple merge until one side has won seven times in a row, then switch, and switch back when the streak breaks. Chapter 16 reads the rest of that algorithm.</p>" +
 
         "<div class='callout'>Part 2's first two chapters have been one idea at increasing generality: a sorted array, then a monotone predicate, then a bracket discovered rather than given. Chapter 15 turns to how the sorted array gets sorted in the first place, and to the bound that says how well anyone can do it.</div>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Sqrt(x)</h3>" +
+        "<p><strong>LeetCode 69 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/sqrtx/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the integer square root of a non-negative integer x (the square root rounded down), without a built-in power or square-root function.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>You are not searching an array but a range of candidate answers, 0 to x. \"r \u00d7 r &gt; x\" is false for small r and true for large r: the chapter's generalisation, binary search over any monotone predicate.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try r = 0, 1, 2, \u2026 until r \u00d7 r exceeds x: O(\u221ax), about 46,000 steps for x near 2\u00b3\u00b9.</p>" +
+        "<p><strong>Approach.</strong> Find the first r in [0, x + 1) with r \u00d7 r &gt; x using the template, then return r - 1, the last value whose square still fits.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def mySqrt(self, x: int) -&gt; int:\n" +
+        "        lo, hi = 0, x + 1              # first r with r * r &gt; x lies in [0, x + 1]\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if mid * mid &gt; x:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo - 1                  # the last r whose square fits</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int mySqrt(int x) {\n" +
+        "        long lo = 0, hi = (long) x + 1;    // first r with r * r &gt; x lies in [0, x + 1]\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            long mid = lo + (hi - lo) / 2;\n" +
+        "            if (mid * mid &gt; x) hi = mid;   // long: mid * mid overflows an int\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return (int) (lo - 1);             // the last r whose square fits\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log x) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Overflow. For x near 2\u00b3\u00b9, mid \u00d7 mid does not fit in a Java int; compute it as a long. This is the same class of bug as the Overflow Bug section's (lo + hi) / 2.</p></details>" +
+        "<h3>2. Valid Perfect Square</h3>" +
+        "<p><strong>LeetCode 367 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/valid-perfect-square/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a positive integer is a perfect square, without a square-root function.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Sqrt(x) with a yes-or-no ending: find the first r with r \u00d7 r \u2265 num, and check whether its square is exactly num.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try r = 1, 2, 3, \u2026 while r \u00d7 r \u2264 num: O(\u221anum).</p>" +
+        "<p><strong>Approach.</strong> Search [1, num] for the first r with r \u00d7 r \u2265 num. The number is a perfect square exactly when that r squares to num.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isPerfectSquare(self, num: int) -&gt; bool:\n" +
+        "        lo, hi = 1, num                # first r with r * r &gt;= num\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if mid * mid &gt;= num:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo * lo == num</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isPerfectSquare(int num) {\n" +
+        "        long lo = 1, hi = num;         // first r with r * r &gt;= num\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            long mid = lo + (hi - lo) / 2;\n" +
+        "            if (mid * mid &gt;= num) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo * lo == num;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log num) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> The same overflow as Sqrt(x): square mid in a long in Java.</p></details>" +
+        "<h3>3. Arranging Coins</h3>" +
+        "<p><strong>LeetCode 441 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/arranging-coins/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>You build a staircase with n coins: row 1 has 1 coin, row 2 has 2, and so on. How many complete rows can you build?</p>" +
+        "<details class='solution'><summary>Hint</summary><p>k full rows use 1 + 2 + \u2026 + k = k(k + 1) / 2 coins, which grows with k. \"Do k rows need more than n coins?\" is a monotone predicate over k.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Build rows one at a time until the coins run out: O(\u221an).</p>" +
+        "<p><strong>Approach.</strong> Find the first k in [0, n + 1) with k(k + 1) / 2 &gt; n, and return k - 1. (A closed formula with a square root exists, but floating-point rounding makes it fragile near perfect squares; the search is exact.)</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def arrangeCoins(self, n: int) -&gt; int:\n" +
+        "        lo, hi = 0, n + 1              # first k whose staircase needs more than n coins\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if mid * (mid + 1) // 2 &gt; n:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo - 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int arrangeCoins(int n) {\n" +
+        "        long lo = 0, hi = (long) n + 1;    // first k needing more than n coins\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            long mid = lo + (hi - lo) / 2;\n" +
+        "            if (mid * (mid + 1) / 2 &gt; n) hi = mid;   // long: this overflows an int\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return (int) (lo - 1);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> k(k + 1) / 2 overflows a Java int when k is around 65,000 or more. Use long.</p></details>" +
+        "<h3>4. Koko Eating Bananas</h3>" +
+        "<p><strong>LeetCode 875 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/koko-eating-bananas/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Koko eats from one pile per hour at k bananas per hour (finishing a smaller pile early and waiting). Find the smallest k that lets her eat every pile within h hours.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The chapter works this one in the Constructing the Predicate section (\"Eating speed\"); try it from memory. Faster never hurts, so \"can she finish at speed k?\" is false, then true, as k grows.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try k = 1, 2, 3, \u2026 up to the largest pile: O(n \u00d7 max pile), up to 10\u00b9\u00b3 steps.</p>" +
+        "<p><strong>Approach.</strong> The answer is in [1, max(piles)], because at the largest pile's size each pile takes one hour. For a speed k, the hours needed are the sum of ceil(p / k). Find the first k whose hours are at most h.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minEatingSpeed(self, piles: list[int], h: int) -&gt; int:\n" +
+        "        lo, hi = 1, max(piles)         # at max(piles) every pile takes one hour\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            hours = sum((p + mid - 1) // mid for p in piles)   # ceil(p / mid)\n" +
+        "            if hours &lt;= h:\n" +
+        "                hi = mid               # fast enough: the answer is mid or slower\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minEatingSpeed(int[] piles, int h) {\n" +
+        "        int lo = 1, hi = 0;\n" +
+        "        for (int p : piles) hi = Math.max(hi, p);   // at max(piles) each pile takes an hour\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            long hours = 0;            // long: can reach 10^13\n" +
+        "            for (int p : piles) hours += (p + (long) mid - 1) / mid;   // ceil(p / mid)\n" +
+        "            if (hours &lt;= h) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log(max pile)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Overflow of the hour count. With 10,000 piles of 10\u2079 bananas at speed 1, the total is 10\u00b9\u00b3 hours, far past a Java int. Sum it in a long. And ceil(p / k) in integers is (p + k - 1) // k.</p></details>" +
+        "<h3>5. Capacity To Ship Packages Within D Days</h3>" +
+        "<p><strong>LeetCode 1011 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/capacity-to-ship-packages-within-d-days/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Packages must ship in the given order, one day's load at a time. Find the smallest ship capacity that ships everything within the given number of days.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Also worked in the chapter (\"Shipping capacity\"); try it from memory. A bigger ship never needs more days, so the predicate is monotone, and checking one capacity is a greedy pass.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every capacity from the heaviest package upwards: O(n \u00d7 total weight).</p>" +
+        "<p><strong>Approach.</strong> The answer is in [max(weights), sum(weights)]: the ship must carry the heaviest package, and at the total it ships everything in one day. For a capacity, count days greedily: fill today until the next package would overflow, then start a new day. Find the first capacity that needs at most the allowed days.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def shipWithinDays(self, weights: list[int], days: int) -&gt; int:\n" +
+        "        def days_needed(cap):          # greedy: start a new day only when forced to\n" +
+        "            used, load = 1, 0\n" +
+        "            for w in weights:\n" +
+        "                if load + w &gt; cap:\n" +
+        "                    used, load = used + 1, 0\n" +
+        "                load += w\n" +
+        "            return used\n" +
+        "\n" +
+        "        lo, hi = max(weights), sum(weights)\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if days_needed(mid) &lt;= days:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int shipWithinDays(int[] weights, int days) {\n" +
+        "        int lo = 0, hi = 0;\n" +
+        "        for (int w : weights) { lo = Math.max(lo, w); hi += w; }\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            int used = 1, load = 0;    // greedy: start a new day only when forced to\n" +
+        "            for (int w : weights) {\n" +
+        "                if (load + w &gt; mid) { used++; load = 0; }\n" +
+        "                load += w;\n" +
+        "            }\n" +
+        "            if (used &lt;= days) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log(sum of weights)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Starting the search at 1. A capacity below the heaviest package can never ship it, and a greedy counter that does not check for that loops or miscounts. Starting at the maximum removes the case.</p></details>" +
+        "<h3>6. Minimum Number of Days to Make m Bouquets</h3>" +
+        "<p><strong>LeetCode 1482 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/minimum-number-of-days-to-make-m-bouquets/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Flower i blooms on day bloomDay[i]. A bouquet needs k adjacent bloomed flowers. Find the first day on which you can make m bouquets, or -1 if it is never possible.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Waiting longer only makes more flowers bloom, so \"can I make m bouquets by day d?\" is monotone in d. Checking one day is a single left-to-right pass.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every distinct bloom day in increasing order, checking each: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> If m \u00d7 k is more than the number of flowers, return -1. Otherwise search days in [min(bloomDay), max(bloomDay)]. For a day d, walk the flowers counting a run of bloomed ones; every time the run reaches k, make a bouquet and reset the run. Find the first day with at least m bouquets.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minDays(self, bloomDay: list[int], m: int, k: int) -&gt; int:\n" +
+        "        if m * k &gt; len(bloomDay):\n" +
+        "            return -1                  # not enough flowers, ever\n" +
+        "\n" +
+        "        def bouquets(day):\n" +
+        "            made = run = 0\n" +
+        "            for b in bloomDay:\n" +
+        "                run = run + 1 if b &lt;= day else 0\n" +
+        "                if run == k:           # k adjacent bloomed flowers\n" +
+        "                    made, run = made + 1, 0\n" +
+        "            return made\n" +
+        "\n" +
+        "        lo, hi = min(bloomDay), max(bloomDay)\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if bouquets(mid) &gt;= m:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minDays(int[] bloomDay, int m, int k) {\n" +
+        "        if ((long) m * k &gt; bloomDay.length) return -1;   // long: m * k can reach 10^11\n" +
+        "        int lo = Integer.MAX_VALUE, hi = 0;\n" +
+        "        for (int b : bloomDay) { lo = Math.min(lo, b); hi = Math.max(hi, b); }\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            int made = 0, run = 0;\n" +
+        "            for (int b : bloomDay) {\n" +
+        "                run = b &lt;= mid ? run + 1 : 0;\n" +
+        "                if (run == k) { made++; run = 0; }   // k adjacent bloomed flowers\n" +
+        "            }\n" +
+        "            if (made &gt;= m) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log(max day)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Checking m \u00d7 k &gt; n in Java ints. m can be 10\u2076 and k up to 10\u2075, so the product reaches 10\u00b9\u00b9 and overflows into a wrong comparison. Multiply as long.</p></details>" +
+        "<h3>7. Find the Smallest Divisor Given a Threshold</h3>" +
+        "<p><strong>LeetCode 1283 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/find-the-smallest-divisor-given-a-threshold/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Divide every number by the same positive divisor, rounding each result up, and add them. Find the smallest divisor that keeps the sum at or below a threshold.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Koko Eating Bananas in different clothes: a bigger divisor only shrinks each rounded-up quotient, so the sum falls as the divisor grows.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try divisors 1, 2, 3, \u2026 up to the largest number: O(n \u00d7 max).</p>" +
+        "<p><strong>Approach.</strong> The answer is in [1, max(nums)], because at the maximum every quotient is 1 and the sum is n, which the problem guarantees is within the threshold. Find the first divisor whose sum of ceil(x / d) is at most the threshold.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def smallestDivisor(self, nums: list[int], threshold: int) -&gt; int:\n" +
+        "        lo, hi = 1, max(nums)          # at max(nums) the sum is len(nums)\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if sum((x + mid - 1) // mid for x in nums) &lt;= threshold:   # rounded up\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int smallestDivisor(int[] nums, int threshold) {\n" +
+        "        int lo = 1, hi = 0;\n" +
+        "        for (int x : nums) hi = Math.max(hi, x);   // at max(nums) the sum is nums.length\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            long total = 0;\n" +
+        "            for (int x : nums) total += (x + mid - 1) / mid;   // rounded up\n" +
+        "            if (total &lt;= threshold) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log(max)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Rounding down instead of up. ceil(x / d) is (x + d - 1) // d; plain integer division undercounts and returns a divisor that is too small.</p></details>" +
+        "<h3>8. Maximum Candies Allocated to K Children</h3>" +
+        "<p><strong>LeetCode 2226 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/maximum-candies-allocated-to-k-children/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Piles of candies can be split (not merged). Give each of k children a pile of the same size, taken from a single original pile. Find the largest possible size (0 if even size 1 fails).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Minimise the Maximum, Maximise the Minimum section's other direction. A smaller size always lets you serve at least as many children, so \"can I serve k children with size x?\" is true, then false. You want the last true.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every size from the largest pile downwards: O(n \u00d7 max pile).</p>" +
+        "<p><strong>Approach.</strong> Turn \"last true\" into \"first false\": find the first size x in [1, max + 1) where the number of portions, the sum of c // x, falls below k. The answer is x - 1, which is 0 when even size 1 does not serve everyone.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maximumCandies(self, candies: list[int], k: int) -&gt; int:\n" +
+        "        lo, hi = 1, max(candies) + 1   # first size that serves fewer than k children\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if sum(c // mid for c in candies) &lt; k:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo - 1                  # the last size that still serves everyone</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maximumCandies(int[] candies, long k) {\n" +
+        "        int lo = 1, hi = 1;\n" +
+        "        for (int c : candies) hi = Math.max(hi, c + 1);   // first size serving fewer than k\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            long portions = 0;         // long: k itself reaches 10^12\n" +
+        "            for (int c : candies) portions += c / mid;\n" +
+        "            if (portions &lt; k) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo - 1;                 // the last size that still serves everyone\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log(max pile)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> k goes up to 10\u00b9\u00b2, which is why the Java signature takes a long, and the portion count must be a long too. And searching for \"last true\" directly with the first-true template gives an off-by-one; convert it as above.</p></details>" +
+        "<h3>9. Magnetic Force Between Two Balls</h3>" +
+        "<p><strong>LeetCode 1552 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/magnetic-force-between-two-balls/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Place m balls into baskets at given positions so that the smallest distance between any two balls is as large as possible. Return that distance.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Maximise the minimum: the chapter's max_min_gap, from memory. A smaller required gap is always easier to achieve, and checking one gap is greedy: place each ball in the first basket far enough from the last one.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every way to choose m baskets: C(n, m), astronomically many.</p>" +
+        "<p><strong>Approach.</strong> Sort the positions. Find the first gap g in [1, span + 1) that cannot be achieved, where span is last - first; the answer is g - 1. To test a gap, put a ball in the first basket, then walk right and put one in every basket at least g past the previous ball; the gap is achievable if you place m balls.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxDistance(self, position: list[int], m: int) -&gt; int:\n" +
+        "        position.sort()\n" +
+        "\n" +
+        "        def fits(gap):                 # greedy: take every basket that is far enough\n" +
+        "            placed, last = 1, position[0]\n" +
+        "            for p in position[1:]:\n" +
+        "                if p - last &gt;= gap:\n" +
+        "                    placed, last = placed + 1, p\n" +
+        "            return placed &gt;= m\n" +
+        "\n" +
+        "        lo, hi = 1, position[-1] - position[0] + 1   # first gap that does not fit\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if not fits(mid):\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo - 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int maxDistance(int[] position, int m) {\n" +
+        "        Arrays.sort(position);\n" +
+        "        int lo = 1, hi = position[position.length - 1] - position[0] + 1;   // first gap that fails\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            int placed = 1, last = position[0];\n" +
+        "            for (int p : position)     // greedy: take every basket that is far enough\n" +
+        "                if (p - last &gt;= mid) { placed++; last = p; }\n" +
+        "            if (placed &lt; m) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo - 1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) for the sort plus O(n log(span)) for the search. O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Forgetting to sort. The greedy placement is only correct left to right over sorted positions.</p></details>" +
+        "<h3>10. Split Array Largest Sum</h3>" +
+        "<p><strong>LeetCode 410 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/split-array-largest-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Split an array of non-negative numbers into k non-empty consecutive parts so that the largest part sum is as small as possible. Return that sum.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Minimise the maximum, worked in the chapter as \"Splitting an array\". It is Capacity To Ship Packages with \"days\" renamed \"parts\": allowing a larger part sum never needs more parts.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every way to place k - 1 cut points: C(n - 1, k - 1) splits, or a dynamic program in O(k \u00d7 n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Search the largest part sum L in [max(nums), sum(nums)]. For a given L, cut greedily: extend the current part until adding the next number would exceed L, then start a new part. Find the first L that needs at most k parts. Using fewer than k parts is fine, because a part can always be split further without raising the maximum.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def splitArray(self, nums: list[int], k: int) -&gt; int:\n" +
+        "        def parts_needed(limit):       # greedy: close a part only when forced to\n" +
+        "            parts, total = 1, 0\n" +
+        "            for x in nums:\n" +
+        "                if total + x &gt; limit:\n" +
+        "                    parts, total = parts + 1, 0\n" +
+        "                total += x\n" +
+        "            return parts\n" +
+        "\n" +
+        "        lo, hi = max(nums), sum(nums)\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if parts_needed(mid) &lt;= k:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int splitArray(int[] nums, int k) {\n" +
+        "        int lo = 0, hi = 0;\n" +
+        "        for (int x : nums) { lo = Math.max(lo, x); hi += x; }\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            int parts = 1, total = 0;  // greedy: close a part only when forced to\n" +
+        "            for (int x : nums) {\n" +
+        "                if (total + x &gt; mid) { parts++; total = 0; }\n" +
+        "                total += x;\n" +
+        "            }\n" +
+        "            if (parts &lt;= k) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log(sum)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Worrying that the greedy check might use fewer than k parts. Splitting any part with two or more elements never increases the largest sum, so \"at most k\" is the right test.</p></details>" +
+        "<h3>11. Maximum Running Time of N Computers</h3>" +
+        "<p><strong>LeetCode 2141 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/maximum-running-time-of-n-computers/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Run n computers at the same time. Each battery can power one computer at a time and can be swapped between computers at any moment. Find the longest time all n can run together.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Longer is harder, so \"can all n run for T minutes?\" is monotone. The insight is the check: a battery can contribute at most T minutes (it can only power one computer at a time), so T is achievable exactly when the batteries' capped total, the sum of min(b, T), is at least n \u00d7 T.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Simulate minute by minute, each minute powering the n computers from the n fullest batteries: O(T \u00d7 n log n), with T up to 10\u00b9\u2074.</p>" +
+        "<p><strong>Approach.</strong> Search T in [0, sum(batteries) // n + 1) for the first T that is not achievable, and return T - 1. Test a T by summing min(b, T) over the batteries and comparing with n \u00d7 T.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxRunTime(self, n: int, batteries: list[int]) -&gt; int:\n" +
+        "        lo, hi = 0, sum(batteries) // n + 1   # first T that cannot be reached\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if sum(min(b, mid) for b in batteries) &lt; n * mid:   # a battery gives at most T\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo - 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public long maxRunTime(int n, int[] batteries) {\n" +
+        "        long total = 0;\n" +
+        "        for (int b : batteries) total += b;\n" +
+        "        long lo = 0, hi = total / n + 1;   // long: the total reaches 10^14\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            long mid = lo + (hi - lo) / 2;\n" +
+        "            long usable = 0;\n" +
+        "            for (int b : batteries) usable += Math.min(b, mid);   // a battery gives at most T\n" +
+        "            if (usable &lt; (long) n * mid) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo - 1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m log(sum / n)) time for m batteries, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Overflow: the battery total reaches 10\u00b9\u2074, so both the search range and n \u00d7 T need long in Java, which is why the method returns long. And the cap matters: without min(b, T), one enormous battery looks like it can power several computers at once.</p></details>" +
+        "<h3>12. Find K-th Smallest Pair Distance</h3>" +
+        "<p><strong>LeetCode 719 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/find-k-th-smallest-pair-distance/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Among all pairs of numbers in an array, find the k-th smallest distance |a - b|.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Listing all n(n - 1)/2 distances is 5 \u00d7 10\u2077 at n = 10,000. Instead search the answer d: \"are at least k pairs within distance d?\" is monotone in d, and counting those pairs on a sorted array is Chapter 8's two-pointer scan.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compute every pair distance and sort: O(n\u00b2 log n).</p>" +
+        "<p><strong>Approach.</strong> Sort. Search d in [0, max - min] for the first d with at least k pairs of distance \u2264 d. To count them, move a right pointer j across the array while a left pointer i advances until nums[j] - nums[i] \u2264 d; every index from i to j - 1 pairs with j, adding j - i.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def smallestDistancePair(self, nums: list[int], k: int) -&gt; int:\n" +
+        "        nums.sort()\n" +
+        "\n" +
+        "        def pairs_within(d):           # Chapter 8's two-pointer count\n" +
+        "            count = i = 0\n" +
+        "            for j in range(len(nums)):\n" +
+        "                while nums[j] - nums[i] &gt; d:\n" +
+        "                    i += 1\n" +
+        "                count += j - i\n" +
+        "            return count\n" +
+        "\n" +
+        "        lo, hi = 0, nums[-1] - nums[0]\n" +
+        "        while lo &lt; hi:\n" +
+        "            mid = lo + (hi - lo) // 2\n" +
+        "            if pairs_within(mid) &gt;= k:\n" +
+        "                hi = mid\n" +
+        "            else:\n" +
+        "                lo = mid + 1\n" +
+        "        return lo</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int smallestDistancePair(int[] nums, int k) {\n" +
+        "        Arrays.sort(nums);\n" +
+        "        int lo = 0, hi = nums[nums.length - 1] - nums[0];\n" +
+        "        while (lo &lt; hi) {\n" +
+        "            int mid = lo + (hi - lo) / 2;\n" +
+        "            int count = 0;             // Chapter 8's two-pointer count\n" +
+        "            for (int i = 0, j = 0; j &lt; nums.length; j++) {\n" +
+        "                while (nums[j] - nums[i] &gt; mid) i++;\n" +
+        "                count += j - i;\n" +
+        "            }\n" +
+        "            if (count &gt;= k) hi = mid;\n" +
+        "            else lo = mid + 1;\n" +
+        "        }\n" +
+        "        return lo;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n + n log(range)) time, O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Returning a d that is not an actual pair distance. It cannot happen here: the first d with count \u2265 k is always a real distance, because the count only changes at real distances.</p></details>"
     },
 
     { title: "Exercises",
@@ -10292,6 +11207,390 @@ CHAPTERS.push({
         "<div class='callout'><strong>Interview lens.</strong> This problem is asked precisely because the &#920;(m + n) merge is routine and the &#920;(log min(m, n)) partition search is not, and because candidates who have memorised the latter usually cannot say what the two comparisons mean. The sentence that shows understanding is “I am binary searching over how many elements come from A, and the predicate is that the split is valid” — after which the code follows.</div>" +
 
         "<p>Part 2 has now built the tools and the bound. Chapter 16 opens the standard libraries and reads what they actually do with them, which involves fewer of these algorithms than you would expect and more hybrids than any textbook admits.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Merge Sorted Array</h3>" +
+        "<p><strong>LeetCode 88 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/merge-sorted-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Merge a sorted array nums2 into a sorted array nums1 in place. nums1 has exactly enough spare slots at its end.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Mergesort's merge step, with one twist. Merging from the front would overwrite values of nums1 not yet read; merging from the back fills the spare slots first, so nothing unread is ever overwritten.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Copy nums2 into the spare slots and sort the whole array: O((m + n) log(m + n)).</p>" +
+        "<p><strong>Approach.</strong> Keep i at the last real value of nums1, j at the last value of nums2, and w at the last slot. Repeatedly write the larger of nums1[i] and nums2[j] at w and move that pointer and w left. When nums2 runs out, the rest of nums1 is already in place.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def merge(self, nums1: list[int], m: int, nums2: list[int], n: int) -&gt; None:\n" +
+        "        i, j, w = m - 1, n - 1, m + n - 1\n" +
+        "        while j &gt;= 0:                  # once nums2 is empty, nums1's rest is in place\n" +
+        "            if i &gt;= 0 and nums1[i] &gt; nums2[j]:\n" +
+        "                nums1[w] = nums1[i]\n" +
+        "                i -= 1\n" +
+        "            else:\n" +
+        "                nums1[w] = nums2[j]\n" +
+        "                j -= 1\n" +
+        "            w -= 1                     # fill from the back: nothing unread is overwritten</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public void merge(int[] nums1, int m, int[] nums2, int n) {\n" +
+        "        int i = m - 1, j = n - 1, w = m + n - 1;\n" +
+        "        while (j &gt;= 0) {               // once nums2 is empty, nums1's rest is in place\n" +
+        "            if (i &gt;= 0 &amp;&amp; nums1[i] &gt; nums2[j]) nums1[w--] = nums1[i--];\n" +
+        "            else nums1[w--] = nums2[j--];   // fill from the back\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m + n) time, O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Stopping when nums1 runs out. If nums2 still has values, they must be copied; the loop below runs while j \u2265 0 for exactly that reason.</p></details>" +
+        "<h3>2. Squares of a Sorted Array</h3>" +
+        "<p><strong>LeetCode 977 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/squares-of-a-sorted-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given a sorted array that may include negatives, return the squares of its values in sorted order, in O(n).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The squares form two sorted runs: the negatives' squares shrink toward the middle and the positives' squares grow away from it. The largest square is always at one of the two ends, so merge the two runs from the outside in.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Square everything and sort: O(n log n).</p>" +
+        "<p><strong>Approach.</strong> Put i at the start and j at the end, and fill the output from its last slot backwards. At each step, write the larger of the two end squares and move that end inward.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def sortedSquares(self, nums: list[int]) -&gt; list[int]:\n" +
+        "        out = [0] * len(nums)\n" +
+        "        i, j = 0, len(nums) - 1\n" +
+        "        for w in range(len(nums) - 1, -1, -1):   # the largest square is at an end\n" +
+        "            if abs(nums[i]) &gt; abs(nums[j]):\n" +
+        "                out[w] = nums[i] * nums[i]\n" +
+        "                i += 1\n" +
+        "            else:\n" +
+        "                out[w] = nums[j] * nums[j]\n" +
+        "                j -= 1\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int[] sortedSquares(int[] nums) {\n" +
+        "        int[] out = new int[nums.length];\n" +
+        "        int i = 0, j = nums.length - 1;\n" +
+        "        for (int w = nums.length - 1; w &gt;= 0; w--) {   // the largest square is at an end\n" +
+        "            if (Math.abs(nums[i]) &gt; Math.abs(nums[j])) { out[w] = nums[i] * nums[i]; i++; }\n" +
+        "            else { out[w] = nums[j] * nums[j]; j--; }\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(n) for the output.</p>" +
+        "<p><strong>The trap.</strong> Merging from the middle outward. You would first have to find where the negatives end, and every boundary case (all negative, all positive) needs its own branch. From the outside in there are none.</p></details>" +
+        "<h3>3. Height Checker</h3>" +
+        "<p><strong>LeetCode 1051 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/height-checker/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Students should stand in non-decreasing order of height. Count how many are standing in a position different from the one they would have in sorted order.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Heights are whole numbers from 1 to 100. A small, known range of keys is counting sort's case from the Breaking the Bound section: count each height, then read the counts back in order.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort a copy and compare position by position: O(n log n), which is also a fine answer here.</p>" +
+        "<p><strong>Approach.</strong> Count how many students have each height. Then walk the heights from 1 to 100, and for each student in the line, the next expected height is the smallest one whose count is not used up. Compare it with the student actually standing there.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def heightChecker(self, heights: list[int]) -&gt; int:\n" +
+        "        count = [0] * 101              # counting sort: heights are 1..100\n" +
+        "        for h in heights:\n" +
+        "            count[h] += 1\n" +
+        "        wrong, expected = 0, 1\n" +
+        "        for h in heights:\n" +
+        "            while count[expected] == 0:\n" +
+        "                expected += 1          # next height in sorted order\n" +
+        "            if h != expected:\n" +
+        "                wrong += 1\n" +
+        "            count[expected] -= 1\n" +
+        "        return wrong</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int heightChecker(int[] heights) {\n" +
+        "        int[] count = new int[101];    // counting sort: heights are 1..100\n" +
+        "        for (int h : heights) count[h]++;\n" +
+        "        int wrong = 0, expected = 1;\n" +
+        "        for (int h : heights) {\n" +
+        "            while (count[expected] == 0) expected++;   // next height in sorted order\n" +
+        "            if (h != expected) wrong++;\n" +
+        "            count[expected]--;\n" +
+        "        }\n" +
+        "        return wrong;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n + H) time and O(H) space, with H = 100 possible heights.</p>" +
+        "<p><strong>The trap.</strong> Comparing counts instead of positions. Two lines with the same multiset of heights can differ in many positions; you must compare the line with its sorted version slot by slot.</p></details>" +
+        "<h3>4. Sort Array by Increasing Frequency</h3>" +
+        "<p><strong>LeetCode 1636 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/sort-array-by-increasing-frequency/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Sort values by how often they occur, least frequent first; values with the same frequency go in decreasing order.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two sort keys. The Stability as a Design Tool section's move: a stable sort keeps equal items in their existing order, so sort by the secondary key first (value, decreasing), then stably by the primary key (frequency, increasing).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> There is nothing slower worth writing; the work is getting the two keys right.</p>" +
+        "<p><strong>Approach.</strong> Count each value. Sort by the key (frequency, -value). That is the same as two stable passes in one, and in Java it is a comparator that compares frequencies first and values in reverse on a tie.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def frequencySort(self, nums: list[int]) -&gt; list[int]:\n" +
+        "        freq = Counter(nums)\n" +
+        "        return sorted(nums, key=lambda x: (freq[x], -x))   # frequency up, then value down</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] frequencySort(int[] nums) {\n" +
+        "        Map&lt;Integer, Integer&gt; freq = new HashMap&lt;&gt;();\n" +
+        "        for (int x : nums) freq.merge(x, 1, Integer::sum);\n" +
+        "        return Arrays.stream(nums).boxed()\n" +
+        "            .sorted((a, b) -&gt; !freq.get(a).equals(freq.get(b))\n" +
+        "                    ? Integer.compare(freq.get(a), freq.get(b))   // frequency up\n" +
+        "                    : Integer.compare(b, a))                      // then value down\n" +
+        "            .mapToInt(Integer::intValue).toArray();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Forgetting that ties go in decreasing value order. A single key of frequency gives the right groups in the wrong order within each group.</p></details>" +
+        "<h3>5. Sort an Array</h3>" +
+        "<p><strong>LeetCode 912 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/sort-an-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Sort an array of integers without a built-in sort, in O(n log n) time.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Mergesort section, as an exercise. Mergesort's O(n log n) is guaranteed on every input, which matters here because the judge's tests include inputs designed to break a naive quicksort.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Insertion sort (one of The Elementary Three): O(n\u00b2), about 1.25 \u00d7 10\u2079 steps at n = 50,000.</p>" +
+        "<p><strong>Approach.</strong> Split the array in half, sort each half recursively, and merge the two sorted halves by repeatedly taking the smaller front element. Take from the left half on ties so the sort is stable.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def sortArray(self, nums: list[int]) -&gt; list[int]:\n" +
+        "        if len(nums) &lt;= 1:\n" +
+        "            return nums\n" +
+        "        mid = len(nums) // 2\n" +
+        "        left, right = self.sortArray(nums[:mid]), self.sortArray(nums[mid:])\n" +
+        "        out, i, j = [], 0, 0\n" +
+        "        while i &lt; len(left) and j &lt; len(right):\n" +
+        "            if left[i] &lt;= right[j]:    # &lt;= takes from the left on ties: stable\n" +
+        "                out.append(left[i])\n" +
+        "                i += 1\n" +
+        "            else:\n" +
+        "                out.append(right[j])\n" +
+        "                j += 1\n" +
+        "        return out + left[i:] + right[j:]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int[] sortArray(int[] nums) {\n" +
+        "        mergeSort(nums, new int[nums.length], 0, nums.length);\n" +
+        "        return nums;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void mergeSort(int[] a, int[] tmp, int lo, int hi) {\n" +
+        "        if (hi - lo &lt;= 1) return;\n" +
+        "        int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "        mergeSort(a, tmp, lo, mid);\n" +
+        "        mergeSort(a, tmp, mid, hi);\n" +
+        "        int i = lo, j = mid, k = lo;\n" +
+        "        while (i &lt; mid || j &lt; hi)      // &lt;= takes from the left on ties: stable\n" +
+        "            tmp[k++] = (j &gt;= hi || (i &lt; mid &amp;&amp; a[i] &lt;= a[j])) ? a[i++] : a[j++];\n" +
+        "        System.arraycopy(tmp, lo, a, lo, hi - lo);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) extra space for merging.</p>" +
+        "<p><strong>The trap.</strong> Quicksort with the first or last element as pivot. On already-sorted input, or an array of one repeated value, every partition is lopsided and the sort takes O(n\u00b2). The Quicksort section's fixes are a random pivot and three-way partitioning.</p></details>" +
+        "<h3>6. Kth Largest Element in an Array</h3>" +
+        "<p><strong>LeetCode 215 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/kth-largest-element-in-an-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the k-th largest value in an unsorted array without fully sorting it.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Quickselect section: partition around a pivot, then recurse only into the side that contains position n - k. And with up to 100,000 values drawn from only 20,001 possible ones, duplicates are guaranteed, which is the Quicksort section's reason for three-way partitioning.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort and index: O(n log n). A size-k heap is O(n log k); Chapter 27 builds that version.</p>" +
+        "<p><strong>Approach.</strong> Look for the value at sorted position n - k. Pick a random pivot and split the range into three groups: less than, equal to, and greater than the pivot. If the target position falls in the equal group, the pivot is the answer; otherwise continue in the one group that contains it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>import random\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def findKthLargest(self, nums: list[int], k: int) -&gt; int:\n" +
+        "        target = len(nums) - k         # the answer's position in sorted order\n" +
+        "        while True:\n" +
+        "            pivot = random.choice(nums)\n" +
+        "            less = [x for x in nums if x &lt; pivot]\n" +
+        "            equal = sum(1 for x in nums if x == pivot)   # three-way: duplicates in one go\n" +
+        "            if target &lt; len(less):\n" +
+        "                nums = less\n" +
+        "            elif target &lt; len(less) + equal:\n" +
+        "                return pivot\n" +
+        "            else:\n" +
+        "                target -= len(less) + equal\n" +
+        "                nums = [x for x in nums if x &gt; pivot]</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Random;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final Random rng = new Random();\n" +
+        "\n" +
+        "    public int findKthLargest(int[] nums, int k) {\n" +
+        "        int lo = 0, hi = nums.length - 1, target = nums.length - k;   // position in sorted order\n" +
+        "        while (true) {\n" +
+        "            int pivot = nums[lo + rng.nextInt(hi - lo + 1)];\n" +
+        "            int lt = lo, i = lo, gt = hi;   // three-way: [lo,lt) &lt; pivot, [lt,i) == pivot, (gt,hi] &gt; pivot\n" +
+        "            while (i &lt;= gt) {\n" +
+        "                if (nums[i] &lt; pivot) swap(nums, lt++, i++);\n" +
+        "                else if (nums[i] &gt; pivot) swap(nums, i, gt--);\n" +
+        "                else i++;\n" +
+        "            }\n" +
+        "            if (target &lt; lt) hi = lt - 1;\n" +
+        "            else if (target &gt; gt) lo = gt + 1;\n" +
+        "            else return pivot;\n" +
+        "        }\n" +
+        "    }\n" +
+        "\n" +
+        "    private void swap(int[] a, int i, int j) { int t = a[i]; a[i] = a[j]; a[j] = t; }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) expected time, because each round keeps on average a constant fraction of the range. O(n\u00b2) in the worst case with vanishing probability. O(1) extra space in Java, O(n) in the list-building Python version.</p>" +
+        "<p><strong>The trap.</strong> Two-way partitioning on many equal values. When most values equal the pivot, a two-way split puts them all on one side and each round removes almost nothing, so the expected O(n) becomes O(n\u00b2). The equal group removes them all at once.</p></details>" +
+        "<h3>7. Largest Number</h3>" +
+        "<p><strong>LeetCode 179 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/largest-number/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Arrange non-negative integers so that, written side by side, they form the largest possible number. Return it as a string.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A sort with a custom order. Which of two numbers should come first? Glue them both ways and compare: a goes before b if a followed by b is bigger than b followed by a. That rule is a consistent ordering, so any comparison sort can use it.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every order of the numbers: O(n!).</p>" +
+        "<p><strong>Approach.</strong> Convert the numbers to strings and sort with the comparator \"a + b &gt; b + a means a first\". Join the result. If the first character is \"0\", every number was 0, so return \"0\".</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from functools import cmp_to_key\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def largestNumber(self, nums: list[int]) -&gt; str:\n" +
+        "        s = [str(x) for x in nums]\n" +
+        "        s.sort(key=cmp_to_key(lambda a, b: -1 if a + b &gt; b + a else (1 if a + b &lt; b + a else 0)))\n" +
+        "        out = \"\".join(s)\n" +
+        "        return \"0\" if out[0] == \"0\" else out   # all zeros</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public String largestNumber(int[] nums) {\n" +
+        "        String[] s = new String[nums.length];\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) s[i] = String.valueOf(nums[i]);\n" +
+        "        Arrays.sort(s, (a, b) -&gt; (b + a).compareTo(a + b));   // a first if a+b is bigger\n" +
+        "        String out = String.join(\"\", s);\n" +
+        "        return out.charAt(0) == '0' ? \"0\" : out;               // all zeros\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) comparisons, each O(L) for numbers of up to L digits.</p>" +
+        "<p><strong>The trap.</strong> Sorting the strings in plain reverse lexicographic order. It puts \"30\" before \"3\", giving 303 instead of 330, and \"121\" before \"12\", giving 12112 instead of 12121. And an input of all zeros must return \"0\", not \"000\".</p></details>" +
+        "<h3>8. Maximum Gap</h3>" +
+        "<p><strong>LeetCode 164 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/maximum-gap/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the largest difference between neighbouring values after sorting, in linear time.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Linear time rules out comparison sorting, by the chapter's \u03a9(n log n) bound. The values are non-negative integers below 2\u00b3\u2070, which is radix sort's case: sort by one byte at a time with counting sort.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort and scan: O(n log n), fine in practice and ruled out by the problem's linear-time requirement.</p>" +
+        "<p><strong>Approach.</strong> LSD radix sort: four passes of a stable counting sort on bits 0\u20137, 8\u201315, 16\u201323 and 24\u201331. Each pass keeps the order from the previous passes among equal bytes, which is what makes the final order correct. Then scan neighbours for the largest difference.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maximumGap(self, nums: list[int]) -&gt; int:\n" +
+        "        for shift in (0, 8, 16, 24):   # LSD radix sort, one byte per pass\n" +
+        "            count = [0] * 257\n" +
+        "            for x in nums:\n" +
+        "                count[((x &gt;&gt; shift) &amp; 255) + 1] += 1\n" +
+        "            for b in range(256):\n" +
+        "                count[b + 1] += count[b]          # bucket start positions\n" +
+        "            out = [0] * len(nums)\n" +
+        "            for x in nums:                        # input order: the pass is stable\n" +
+        "                b = (x &gt;&gt; shift) &amp; 255\n" +
+        "                out[count[b]] = x\n" +
+        "                count[b] += 1\n" +
+        "            nums = out\n" +
+        "        return max((b - a for a, b in zip(nums, nums[1:])), default=0)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maximumGap(int[] nums) {\n" +
+        "        int[] out = new int[nums.length];\n" +
+        "        for (int shift = 0; shift &lt; 32; shift += 8) {   // LSD radix sort, one byte per pass\n" +
+        "            int[] count = new int[257];\n" +
+        "            for (int x : nums) count[((x &gt;&gt; shift) &amp; 255) + 1]++;\n" +
+        "            for (int b = 0; b &lt; 256; b++) count[b + 1] += count[b];   // bucket starts\n" +
+        "            for (int x : nums) out[count[(x &gt;&gt; shift) &amp; 255]++] = x;  // stable\n" +
+        "            int[] t = nums; nums = out; out = t;\n" +
+        "        }\n" +
+        "        int best = 0;\n" +
+        "        for (int i = 1; i &lt; nums.length; i++) best = Math.max(best, nums[i] - nums[i - 1]);\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(4 \u00d7 (n + 256)) = O(n) time, O(n) extra space.</p>" +
+        "<p><strong>The trap.</strong> An unstable counting pass. Radix sort relies on each pass preserving the previous passes' order among equal digits; filling the output from the front of each bucket, in input order, is what keeps it stable.</p></details>" +
+        "<h3>9. Custom Sort String</h3>" +
+        "<p><strong>LeetCode 791 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/custom-sort-string/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Rearrange a string so that its letters follow the order given by another string; letters not mentioned there can go anywhere.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>There are only 26 keys and their order is given, so this is counting sort with a custom key order: count the letters, then write them out in the given order.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort with a comparator that looks up each letter's rank: O(n log n).</p>" +
+        "<p><strong>Approach.</strong> Count each letter of s. Walk the order string and write each of its letters as many times as it was counted, zeroing the count. Then append the remaining letters, the ones the order does not mention.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def customSortString(self, order: str, s: str) -&gt; str:\n" +
+        "        count = Counter(s)\n" +
+        "        out = []\n" +
+        "        for c in order:                # counting sort with the given key order\n" +
+        "            out.append(c * count.pop(c, 0))\n" +
+        "        for c in sorted(count):        # letters the order does not mention\n" +
+        "            out.append(c * count[c])\n" +
+        "        return \"\".join(out)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public String customSortString(String order, String s) {\n" +
+        "        int[] count = new int[26];\n" +
+        "        for (char c : s.toCharArray()) count[c - 'a']++;\n" +
+        "        StringBuilder out = new StringBuilder();\n" +
+        "        for (char c : order.toCharArray()) {       // counting sort with the given order\n" +
+        "            out.append(String.valueOf(c).repeat(count[c - 'a']));\n" +
+        "            count[c - 'a'] = 0;\n" +
+        "        }\n" +
+        "        for (int c = 0; c &lt; 26; c++)               // letters the order does not mention\n" +
+        "            out.append(String.valueOf((char) ('a' + c)).repeat(count[c]));\n" +
+        "        return out.toString();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n + 26) time, O(26) extra space.</p>" +
+        "<p><strong>The trap.</strong> Dropping the letters that are not in the order string. They must still appear in the output, anywhere.</p></details>" +
+        "<h3>10. Median of Two Sorted Arrays</h3>" +
+        "<p><strong>LeetCode 4 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/median-of-two-sorted-arrays/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the median of the combined values of two sorted arrays in O(log(m + n)) time.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The chapter's last section, Selection Across Two Sorted Arrays, including why the obvious binary search does not work. Binary-search how many elements the shorter array contributes to the lower half; the longer array's contribution is then fixed.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Merge the two arrays (Merge Sorted Array) and take the middle: O(m + n).</p>" +
+        "<p><strong>Approach.</strong> Make nums1 the shorter array. Search i, the number of elements taken from nums1 into the lower half, in [0, m]; then j = (m + n + 1) // 2 - i come from nums2. The split is right when nums1[i - 1] \u2264 nums2[j] and nums2[j - 1] \u2264 nums1[i], treating missing neighbours as minus or plus infinity. If nums1[i - 1] &gt; nums2[j], i is too big; otherwise, if the split is still wrong, it is too small. At the right split, the median is the largest lower-half value (odd total) or its average with the smallest upper-half value (even total).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findMedianSortedArrays(self, nums1: list[int], nums2: list[int]) -&gt; float:\n" +
+        "        if len(nums1) &gt; len(nums2):\n" +
+        "            nums1, nums2 = nums2, nums1           # search the shorter array\n" +
+        "        m, n = len(nums1), len(nums2)\n" +
+        "        half = (m + n + 1) // 2\n" +
+        "        lo, hi = 0, m\n" +
+        "        inf = float(\"inf\")\n" +
+        "        while True:\n" +
+        "            i = (lo + hi) // 2                    # taken from nums1 into the lower half\n" +
+        "            j = half - i                          # the rest comes from nums2\n" +
+        "            a_left = nums1[i - 1] if i &gt; 0 else -inf\n" +
+        "            a_right = nums1[i] if i &lt; m else inf\n" +
+        "            b_left = nums2[j - 1] if j &gt; 0 else -inf\n" +
+        "            b_right = nums2[j] if j &lt; n else inf\n" +
+        "            if a_left &gt; b_right:\n" +
+        "                hi = i - 1                        # took too many from nums1\n" +
+        "            elif b_left &gt; a_right:\n" +
+        "                lo = i + 1                        # took too few\n" +
+        "            else:\n" +
+        "                low_max = max(a_left, b_left)\n" +
+        "                if (m + n) % 2:\n" +
+        "                    return float(low_max)\n" +
+        "                return (low_max + min(a_right, b_right)) / 2</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public double findMedianSortedArrays(int[] nums1, int[] nums2) {\n" +
+        "        if (nums1.length &gt; nums2.length) return findMedianSortedArrays(nums2, nums1);   // shorter first\n" +
+        "        int m = nums1.length, n = nums2.length, half = (m + n + 1) / 2;\n" +
+        "        int lo = 0, hi = m;\n" +
+        "        while (true) {\n" +
+        "            int i = (lo + hi) / 2, j = half - i;  // i from nums1, the rest from nums2\n" +
+        "            int aLeft = i &gt; 0 ? nums1[i - 1] : Integer.MIN_VALUE;\n" +
+        "            int aRight = i &lt; m ? nums1[i] : Integer.MAX_VALUE;\n" +
+        "            int bLeft = j &gt; 0 ? nums2[j - 1] : Integer.MIN_VALUE;\n" +
+        "            int bRight = j &lt; n ? nums2[j] : Integer.MAX_VALUE;\n" +
+        "            if (aLeft &gt; bRight) hi = i - 1;       // took too many from nums1\n" +
+        "            else if (bLeft &gt; aRight) lo = i + 1;  // took too few\n" +
+        "            else {\n" +
+        "                int lowMax = Math.max(aLeft, bLeft);\n" +
+        "                if ((m + n) % 2 == 1) return lowMax;\n" +
+        "                return (lowMax + (double) Math.min(aRight, bRight)) / 2;\n" +
+        "            }\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log(min(m, n))) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Searching over the longer array. Then j can go negative or past the end of the shorter array. Searching the shorter one keeps every j valid, and it is also the faster search.</p></details>"
     },
 
     { title: "Exercises",
@@ -11328,6 +12627,471 @@ CHAPTERS.push({
         "}</code></pre></div>" +
 
         "<p>The structure you now understand from the bottom &#8212; a random hash into a small array, collisions resolved by chaining or probing, load factor held below a threshold by amortized resizing, and randomness injected to defeat an adversary &#8212; is the same one behind <code>dict</code>, <code>HashMap</code>, <code>unordered_map</code> and the set literal in every language you will use. When you build one yourself, this is the structure whose test is the hardest to fool, because the correctness is straightforward and the performance is where every one of this chapter's decisions shows up or fails to.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Two Sum</h3>" +
+        "<p><strong>LeetCode 1 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/two-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the positions of the two numbers in an unsorted array that add up to a target. Exactly one such pair exists.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>For each number you need to know, instantly, whether its partner target - x has been seen, and where. \"Have I seen this value, and where?\" is a hash map lookup: The Patterns That Are Secretly This section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every pair: O(n\u00b2), about 5 \u00d7 10\u2077 pairs at n = 10,000. Sorting and using Chapter 8's two pointers is O(n log n), but sorting loses the original positions you have to return.</p>" +
+        "<p><strong>Approach.</strong> Walk the array once, keeping a map from each value seen so far to its position. For the value at position i, look up target - nums[i]. If it is in the map, you have the pair; otherwise record nums[i] and move on.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def twoSum(self, nums: list[int], target: int) -&gt; list[int]:\n" +
+        "        seen = {}                      # value -&gt; position\n" +
+        "        for i, x in enumerate(nums):\n" +
+        "            if target - x in seen:     # look up before inserting x itself\n" +
+        "                return [seen[target - x], i]\n" +
+        "            seen[x] = i\n" +
+        "        return []</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashMap;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] twoSum(int[] nums, int target) {\n" +
+        "        HashMap&lt;Integer, Integer&gt; seen = new HashMap&lt;&gt;();   // value -&gt; position\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) {\n" +
+        "            Integer j = seen.get(target - nums[i]);         // look up before inserting\n" +
+        "            if (j != null) return new int[]{j, i};\n" +
+        "            seen.put(nums[i], i);\n" +
+        "        }\n" +
+        "        return new int[0];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) expected time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Inserting nums[i] into the map before looking up its partner. With target = 6 and nums[i] = 3, the lookup finds 3 itself and returns the same position twice. Look up first, then insert.</p></details>" +
+        "<h3>2. Contains Duplicate</h3>" +
+        "<p><strong>LeetCode 217 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/contains-duplicate/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether any value appears at least twice in an array.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"Have I seen this before?\" on every element is the hash set's single job.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compare every pair: O(n\u00b2). Sorting and checking neighbours: O(n log n) and no extra memory.</p>" +
+        "<p><strong>Approach.</strong> Walk the array with a set of values seen so far. If the current value is already in the set, answer true; otherwise add it. If the walk finishes, answer false.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def containsDuplicate(self, nums: list[int]) -&gt; bool:\n" +
+        "        seen = set()\n" +
+        "        for x in nums:\n" +
+        "            if x in seen:\n" +
+        "                return True\n" +
+        "            seen.add(x)\n" +
+        "        return False</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashSet;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean containsDuplicate(int[] nums) {\n" +
+        "        HashSet&lt;Integer&gt; seen = new HashSet&lt;&gt;();\n" +
+        "        for (int x : nums)\n" +
+        "            if (!seen.add(x)) return true;   // add returns false if already present\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) expected time, O(n) space. The sort-based version trades that memory for O(n log n) time.</p>" +
+        "<p><strong>The trap.</strong> Forgetting that \"expected\" is doing work in O(n) expected. The Hash Flooding section shows inputs chosen so that every value lands in one bucket. Java caps the damage for Integer keys by treeifying a flooded bucket (they are Comparable), so a lookup stays O(log n). CPython randomizes string hashes, but not integer hashes, so crafted integer inputs can still slow a Python set down.</p></details>" +
+        "<h3>3. Valid Anagram</h3>" +
+        "<p><strong>LeetCode 242 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/valid-anagram/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether two strings use exactly the same letters the same number of times.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Compare letter counts. With only 26 lowercase letters, the \"hash table\" can be a plain array indexed by letter: The Problem, and Why an Array Is Not the Answer section explains when an array is the answer, and a small known key range is that case.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort both strings and compare: O(n log n).</p>" +
+        "<p><strong>Approach.</strong> If the lengths differ, answer false. Otherwise add 1 for each letter of s and subtract 1 for each letter of t in a 26-slot array. The strings are anagrams exactly when every slot ends at 0.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isAnagram(self, s: str, t: str) -&gt; bool:\n" +
+        "        if len(s) != len(t):\n" +
+        "            return False\n" +
+        "        count = [0] * 26               # 26 known keys: an array is the hash table\n" +
+        "        for a, b in zip(s, t):\n" +
+        "            count[ord(a) - 97] += 1\n" +
+        "            count[ord(b) - 97] -= 1\n" +
+        "        return not any(count)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isAnagram(String s, String t) {\n" +
+        "        if (s.length() != t.length()) return false;\n" +
+        "        int[] count = new int[26];     // 26 known keys: an array is the hash table\n" +
+        "        for (int i = 0; i &lt; s.length(); i++) {\n" +
+        "            count[s.charAt(i) - 'a']++;\n" +
+        "            count[t.charAt(i) - 'a']--;\n" +
+        "        }\n" +
+        "        for (int c : count) if (c != 0) return false;\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space for 26 counters.</p>" +
+        "<p><strong>The trap.</strong> The follow-up asks about Unicode. A 26-slot array no longer covers the keys, and that is precisely when you switch to a real hash map (Counter in Python, HashMap in Java).</p></details>" +
+        "<h3>4. Design HashMap</h3>" +
+        "<p><strong>LeetCode 706 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/design-hashmap/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Build a map from integer keys to integer values with put, get (returning -1 for a missing key) and remove, without a built-in hash table.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The chapter in miniature: a hash function to pick a bucket, the Chaining section's buckets as lists, and the Load Factor section's one knob, which decides when to grow the table.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> A list of (key, value) pairs searched on every call: O(n) per operation. Or an array of 10\u2076 + 1 slots indexed by key, which works only because this problem caps keys at 10\u2076.</p>" +
+        "<p><strong>Approach.</strong> Keep an array of buckets, each a list of [key, value] pairs, and send key k to bucket k mod (number of buckets). put updates the pair if the key is present, otherwise appends it; get and remove search only that bucket. When the number of keys exceeds the number of buckets (load factor above 1), double the bucket count and reinsert everything, so buckets stay short on average.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class MyHashMap:\n" +
+        "    def __init__(self):\n" +
+        "        self.buckets = [[] for _ in range(8)]\n" +
+        "        self.size = 0\n" +
+        "\n" +
+        "    def _bucket(self, key):\n" +
+        "        return self.buckets[key % len(self.buckets)]\n" +
+        "\n" +
+        "    def put(self, key: int, value: int) -&gt; None:\n" +
+        "        b = self._bucket(key)\n" +
+        "        for pair in b:\n" +
+        "            if pair[0] == key:\n" +
+        "                pair[1] = value        # update in place\n" +
+        "                return\n" +
+        "        b.append([key, value])\n" +
+        "        self.size += 1\n" +
+        "        if self.size &gt; len(self.buckets):          # load factor above 1: grow\n" +
+        "            old = self.buckets\n" +
+        "            self.buckets = [[] for _ in range(2 * len(old))]\n" +
+        "            for bucket in old:\n" +
+        "                for k, v in bucket:\n" +
+        "                    self._bucket(k).append([k, v])\n" +
+        "\n" +
+        "    def get(self, key: int) -&gt; int:\n" +
+        "        for k, v in self._bucket(key):\n" +
+        "            if k == key:\n" +
+        "                return v\n" +
+        "        return -1\n" +
+        "\n" +
+        "    def remove(self, key: int) -&gt; None:\n" +
+        "        b = self._bucket(key)\n" +
+        "        for i, pair in enumerate(b):\n" +
+        "            if pair[0] == key:\n" +
+        "                b.pop(i)               # chaining: removal touches one list only\n" +
+        "                self.size -= 1\n" +
+        "                return</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class MyHashMap {\n" +
+        "    private List&lt;int[]&gt;[] buckets = newBuckets(8);\n" +
+        "    private int size = 0;\n" +
+        "\n" +
+        "    @SuppressWarnings(\"unchecked\")\n" +
+        "    private static List&lt;int[]&gt;[] newBuckets(int n) {\n" +
+        "        List&lt;int[]&gt;[] b = new List[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) b[i] = new ArrayList&lt;&gt;();\n" +
+        "        return b;\n" +
+        "    }\n" +
+        "\n" +
+        "    private List&lt;int[]&gt; bucket(int key) { return buckets[key % buckets.length]; }\n" +
+        "\n" +
+        "    public MyHashMap() {}\n" +
+        "\n" +
+        "    public void put(int key, int value) {\n" +
+        "        for (int[] pair : bucket(key))\n" +
+        "            if (pair[0] == key) { pair[1] = value; return; }   // update in place\n" +
+        "        bucket(key).add(new int[]{key, value});\n" +
+        "        if (++size &gt; buckets.length) {                         // load factor above 1: grow\n" +
+        "            List&lt;int[]&gt;[] old = buckets;\n" +
+        "            buckets = newBuckets(2 * old.length);\n" +
+        "            for (List&lt;int[]&gt; b : old) for (int[] pair : b) bucket(pair[0]).add(pair);\n" +
+        "        }\n" +
+        "    }\n" +
+        "\n" +
+        "    public int get(int key) {\n" +
+        "        for (int[] pair : bucket(key)) if (pair[0] == key) return pair[1];\n" +
+        "        return -1;\n" +
+        "    }\n" +
+        "\n" +
+        "    public void remove(int key) {\n" +
+        "        if (bucket(key).removeIf(pair -&gt; pair[0] == key)) size--;   // one list only\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(1) expected per operation, with each resize's O(n) cost amortized over the insertions that caused it (Chapter 4's argument). O(n) space.</p>" +
+        "<p><strong>The trap.</strong> With open addressing instead of chaining, deleting by emptying the slot breaks later lookups that probed past it. The Open Addressing, and the Deletion Bug section explains why deletions must leave a tombstone. Chaining avoids the problem, because removal only touches one bucket's list.</p></details>" +
+        "<h3>5. Group Anagrams</h3>" +
+        "<p><strong>LeetCode 49 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/group-anagrams/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Group a list of words so that anagrams of each other end up in the same group (groups and words in any order).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two words are anagrams exactly when they have the same canonical form, for example their letters sorted. Grouping by a canonical key is a hash map from key to list.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compare every pair of words with Valid Anagram: O(n\u00b2 \u00d7 L).</p>" +
+        "<p><strong>Approach.</strong> For each word, compute its key, the word's letters in sorted order, and append the word to the map's list for that key. The map's values are the groups.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def groupAnagrams(self, strs: list[str]) -&gt; list[list[str]]:\n" +
+        "        groups = {}                    # canonical key -&gt; words with that key\n" +
+        "        for w in strs:\n" +
+        "            key = \"\".join(sorted(w))   # a string, so it can be a dict key\n" +
+        "            groups.setdefault(key, []).append(w)\n" +
+        "        return list(groups.values())</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;String&gt;&gt; groupAnagrams(String[] strs) {\n" +
+        "        Map&lt;String, List&lt;String&gt;&gt; groups = new LinkedHashMap&lt;&gt;();   // key -&gt; its words\n" +
+        "        for (String w : strs) {\n" +
+        "            char[] c = w.toCharArray();\n" +
+        "            Arrays.sort(c);\n" +
+        "            groups.computeIfAbsent(new String(c), k -&gt; new ArrayList&lt;&gt;()).add(w);\n" +
+        "        }\n" +
+        "        return new ArrayList&lt;&gt;(groups.values());\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 L log L) time for n words of length up to L, O(n \u00d7 L) space. A 26-count tuple as the key makes it O(n \u00d7 L).</p>" +
+        "<p><strong>The trap.</strong> Using a mutable list as a Python dict key, which raises TypeError. Use a string or a tuple. The Java version keeps groups in first-seen order with LinkedHashMap; plain HashMap is also correct, since any order is accepted.</p></details>" +
+        "<h3>6. Longest Consecutive Sequence</h3>" +
+        "<p><strong>LeetCode 128 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-consecutive-sequence/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the length of the longest run of consecutive integers (like 4, 5, 6, 7) that can be formed from an unsorted array's values, in O(n) time.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>O(n) rules out sorting. With all values in a hash set, \"is x + 1 present?\" costs O(1), so you can walk a run upward. The trick is to start walking only from the beginning of a run.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort, then scan for runs: O(n log n). Walking upward from every value without the start check is O(n\u00b2) on an input like 1, 2, \u2026, n.</p>" +
+        "<p><strong>Approach.</strong> Put every value in a set. For each value x in the set, if x - 1 is also present, x is not the start of a run: skip it. Otherwise count x, x + 1, x + 2, \u2026 while they are present, and keep the longest count.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def longestConsecutive(self, nums: list[int]) -&gt; int:\n" +
+        "        values = set(nums)\n" +
+        "        best = 0\n" +
+        "        for x in values:               # the set: each value once\n" +
+        "            if x - 1 in values:\n" +
+        "                continue               # not the start of a run\n" +
+        "            length = 1\n" +
+        "            while x + length in values:\n" +
+        "                length += 1\n" +
+        "            best = max(best, length)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashSet;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int longestConsecutive(int[] nums) {\n" +
+        "        HashSet&lt;Integer&gt; values = new HashSet&lt;&gt;();\n" +
+        "        for (int x : nums) values.add(x);\n" +
+        "        int best = 0;\n" +
+        "        for (int x : values) {         // the set: each value once\n" +
+        "            if (values.contains(x - 1)) continue;   // not the start of a run\n" +
+        "            int length = 1;\n" +
+        "            while (values.contains(x + length)) length++;\n" +
+        "            best = Math.max(best, length);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) expected time: every value is visited once as a potential start and at most once while walking a run. O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Looping over the original array instead of the set. With many duplicates of a run's first value, the same run is walked once per copy, which is O(n\u00b2) on an array of n copies of 1, 2, \u2026</p></details>" +
+        "<h3>7. Top K Frequent Elements</h3>" +
+        "<p><strong>LeetCode 347 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/top-k-frequent-elements/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the k values that occur most often (in any order). The answer is unique. The follow-up asks for better than O(n log n).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Counting is a hash map. Beating O(n log n) is Chapter 15's bucket idea: a frequency is a whole number between 1 and n, so values can be dropped into buckets indexed by frequency instead of being sorted.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Count, then sort values by count: O(n log n). A size-k heap is O(n log k), which Chapter 27 builds.</p>" +
+        "<p><strong>Approach.</strong> Count each value in a map. Make n + 1 buckets and put each value into bucket[its count]. Walk the buckets from the highest count down, collecting values until you have k.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def topKFrequent(self, nums: list[int], k: int) -&gt; list[int]:\n" +
+        "        count = Counter(nums)\n" +
+        "        buckets = [[] for _ in range(len(nums) + 1)]   # a count can be as large as n\n" +
+        "        for x, c in count.items():\n" +
+        "            buckets[c].append(x)\n" +
+        "        out = []\n" +
+        "        for c in range(len(nums), 0, -1):              # highest counts first\n" +
+        "            out.extend(buckets[c])\n" +
+        "            if len(out) &gt;= k:\n" +
+        "                return out[:k]\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] topKFrequent(int[] nums, int k) {\n" +
+        "        Map&lt;Integer, Integer&gt; count = new LinkedHashMap&lt;&gt;();\n" +
+        "        for (int x : nums) count.merge(x, 1, Integer::sum);\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; buckets = new ArrayList&lt;&gt;();   // a count can be as large as n\n" +
+        "        for (int i = 0; i &lt;= nums.length; i++) buckets.add(new ArrayList&lt;&gt;());\n" +
+        "        for (Map.Entry&lt;Integer, Integer&gt; e : count.entrySet()) buckets.get(e.getValue()).add(e.getKey());\n" +
+        "        int[] out = new int[k];\n" +
+        "        int filled = 0;\n" +
+        "        for (int c = nums.length; c &gt; 0 &amp;&amp; filled &lt; k; c--)   // highest counts first\n" +
+        "            for (int x : buckets.get(c)) if (filled &lt; k) out[filled++] = x;\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Sizing the buckets by the number of distinct values instead of n. A value can occur n times, so bucket index n must exist.</p></details>" +
+        "<h3>8. Valid Sudoku</h3>" +
+        "<p><strong>LeetCode 36 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/valid-sudoku/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Check whether a partially filled 9 \u00d7 9 Sudoku board breaks the rules: no digit twice in a row, a column, or a 3 \u00d7 3 box. (Solvability does not matter.)</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Three kinds of \"have I seen this digit here before?\", one per row, column and box. Hash sets keyed by (group, digit) answer all of them in one pass.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each filled cell, scan its row, column and box for the same digit: 81 \u00d7 27 checks. Fine for a fixed 9 \u00d7 9 board, but it repeats work.</p>" +
+        "<p><strong>Approach.</strong> Walk every filled cell once. Cell (r, c) belongs to row r, column c, and box (r // 3) \u00d7 3 + c // 3. For each of the three, if the digit is already in that group's set, the board is invalid; otherwise add it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isValidSudoku(self, board: list[list[str]]) -&gt; bool:\n" +
+        "        seen = set()                   # (\"row\", r, d), (\"col\", c, d), (\"box\", b, d)\n" +
+        "        for r in range(9):\n" +
+        "            for c in range(9):\n" +
+        "                d = board[r][c]\n" +
+        "                if d == \".\":\n" +
+        "                    continue\n" +
+        "                keys = [(\"row\", r, d), (\"col\", c, d), (\"box\", (r // 3) * 3 + c // 3, d)]\n" +
+        "                if any(k in seen for k in keys):\n" +
+        "                    return False\n" +
+        "                seen.update(keys)\n" +
+        "        return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashSet;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean isValidSudoku(char[][] board) {\n" +
+        "        HashSet&lt;String&gt; seen = new HashSet&lt;&gt;();   // \"r0:5\", \"c3:5\", \"b4:5\"\n" +
+        "        for (int r = 0; r &lt; 9; r++)\n" +
+        "            for (int c = 0; c &lt; 9; c++) {\n" +
+        "                char d = board[r][c];\n" +
+        "                if (d == '.') continue;\n" +
+        "                int box = (r / 3) * 3 + c / 3;\n" +
+        "                if (!seen.add(\"r\" + r + \":\" + d) | !seen.add(\"c\" + c + \":\" + d) | !seen.add(\"b\" + box + \":\" + d))\n" +
+        "                    return false;              // non-short-circuit |: always add all three\n" +
+        "            }\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(81) time and space for a 9 \u00d7 9 board: O(1), or O(n\u00b2) for an n \u00d7 n generalization.</p>" +
+        "<p><strong>The trap.</strong> The box index. (r // 3) \u00d7 3 + c // 3 numbers the boxes 0 to 8 row by row; r // 3 + c // 3 alone gives the same number to different boxes, like (0, 3) and (3, 0).</p></details>" +
+        "<h3>9. 4Sum II</h3>" +
+        "<p><strong>LeetCode 454 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/4sum-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given four arrays of equal length n, count the ways to pick one value from each so that the four sum to zero.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Meet in the middle with a hash map (Chapter 12 meets Chapter 17): a + b + c + d = 0 means a + b = -(c + d). Count every a + b in a map, then look up every -(c + d).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Four nested loops: n\u2074 = 1.6 \u00d7 10\u2079 at n = 200.</p>" +
+        "<p><strong>Approach.</strong> Build a map from each sum a + b (over all n\u00b2 pairs from the first two arrays) to how many pairs give it. Then for every pair c, d from the last two arrays, add the count of -(c + d).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def fourSumCount(self, nums1: list[int], nums2: list[int], nums3: list[int], nums4: list[int]) -&gt; int:\n" +
+        "        ab = Counter(a + b for a in nums1 for b in nums2)   # counts, not presence\n" +
+        "        return sum(ab[-(c + d)] for c in nums3 for d in nums4)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashMap;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int fourSumCount(int[] nums1, int[] nums2, int[] nums3, int[] nums4) {\n" +
+        "        HashMap&lt;Integer, Integer&gt; ab = new HashMap&lt;&gt;();     // counts, not presence\n" +
+        "        for (int a : nums1) for (int b : nums2) ab.merge(a + b, 1, Integer::sum);\n" +
+        "        int total = 0;\n" +
+        "        for (int c : nums3) for (int d : nums4) total += ab.getOrDefault(-(c + d), 0);\n" +
+        "        return total;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time and space: 40,000 map entries at n = 200 instead of 1.6 billion checks.</p>" +
+        "<p><strong>The trap.</strong> Storing whether a sum occurred instead of how many times. Different pairs with the same sum each form separate quadruples, so the map must hold counts.</p></details>" +
+        "<h3>10. Max Points on a Line</h3>" +
+        "<p><strong>LeetCode 149 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/max-points-on-a-line/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given distinct points on a plane, find the largest number of them that lie on one straight line.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Fix one point. Every line through it is identified by its slope, so group the other points by slope with a hash map; the biggest group plus the fixed point is the best line through it. The hard part is the key: the slope must be exact.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For every pair of points, count the points on their line: O(n\u00b3), 2.7 \u00d7 10\u2077 at n = 300. Fine here, and the hash map version is O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> For each point p, map every other point q to the slope key (dy, dx) with dy = qy - py and dx = qx - px, divided by their gcd and with a fixed sign (dx positive, or dx = 0 and dy = 1 for vertical lines). Count keys; the largest count plus 1 is the best line through p. Take the maximum over all p.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from math import gcd\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def maxPoints(self, points: list[list[int]]) -&gt; int:\n" +
+        "        best = 1\n" +
+        "        for i, (px, py) in enumerate(points):\n" +
+        "            slopes = {}\n" +
+        "            for qx, qy in points[i + 1:]:\n" +
+        "                dx, dy = qx - px, qy - py\n" +
+        "                g = gcd(dx, dy)\n" +
+        "                dx, dy = dx // g, dy // g          # reduced: exact, no floats\n" +
+        "                if dx &lt; 0 or (dx == 0 and dy &lt; 0):\n" +
+        "                    dx, dy = -dx, -dy              # one sign per direction\n" +
+        "                slopes[(dy, dx)] = slopes.get((dy, dx), 0) + 1\n" +
+        "            best = max(best, 1 + max(slopes.values(), default=0))\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashMap;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private int gcd(int a, int b) { return b == 0 ? Math.abs(a) : gcd(b, a % b); }\n" +
+        "\n" +
+        "    public int maxPoints(int[][] points) {\n" +
+        "        int best = 1;\n" +
+        "        for (int i = 0; i &lt; points.length; i++) {\n" +
+        "            HashMap&lt;Long, Integer&gt; slopes = new HashMap&lt;&gt;();\n" +
+        "            int localBest = 0;\n" +
+        "            for (int j = i + 1; j &lt; points.length; j++) {\n" +
+        "                int dx = points[j][0] - points[i][0], dy = points[j][1] - points[i][1];\n" +
+        "                int g = gcd(dx, dy);\n" +
+        "                dx /= g; dy /= g;                   // reduced: exact, no floats\n" +
+        "                if (dx &lt; 0 || (dx == 0 &amp;&amp; dy &lt; 0)) { dx = -dx; dy = -dy; }   // one sign per direction\n" +
+        "                long key = ((long) dy &lt;&lt; 32) ^ (dx &amp; 0xffffffffL);          // pack the pair\n" +
+        "                localBest = Math.max(localBest, slopes.merge(key, 1, Integer::sum));\n" +
+        "            }\n" +
+        "            best = Math.max(best, 1 + localBest);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2 log C) time, where log C is the gcd cost; O(n) space per fixed point.</p>" +
+        "<p><strong>The trap.</strong> Using a floating-point slope dy / dx as the key. Two different slopes can round to the same double, and vertical lines divide by zero. The reduced integer pair is exact, and fixing the sign makes (1, 2) and (-1, -2) the same key.</p></details>" +
+        "<h3>11. Substring with Concatenation of All Words</h3>" +
+        "<p><strong>LeetCode 30 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/substring-with-concatenation-of-all-words/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>All the given words have the same length. Find every starting position in s of a block that is some ordering of all the words, each used exactly once.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A block is valid when its word counts equal the list's counts: a hash map comparison. Because every word has length L, you can slide a window one word at a time, as in Chapter 8, once for each of the L possible offsets.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> At every start position, cut the next len(words) \u00d7 L characters into words and compare counts: O(n \u00d7 len(words) \u00d7 L).</p>" +
+        "<p><strong>Approach.</strong> Count the target words in a map. For each offset 0 to L - 1, slide a window over s in steps of L, keeping counts of the words inside it. Add the next word; if it is not a target word, reset the window past it. If it now appears too often, drop words from the left until it does not. When the window holds exactly len(words) words, record its start.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def findSubstring(self, s: str, words: list[str]) -&gt; list[int]:\n" +
+        "        L, k = len(words[0]), len(words)\n" +
+        "        need = Counter(words)          # counts: words can repeat\n" +
+        "        out = []\n" +
+        "        for offset in range(L):        # one sliding window per offset\n" +
+        "            left, have, used = offset, Counter(), 0\n" +
+        "            for right in range(offset, len(s) - L + 1, L):\n" +
+        "                w = s[right:right + L]\n" +
+        "                if w not in need:      # cannot be inside any answer: restart after it\n" +
+        "                    left, have, used = right + L, Counter(), 0\n" +
+        "                    continue\n" +
+        "                have[w] += 1\n" +
+        "                used += 1\n" +
+        "                while have[w] &gt; need[w]:           # too many copies: shrink from the left\n" +
+        "                    have[s[left:left + L]] -= 1\n" +
+        "                    left += L\n" +
+        "                    used -= 1\n" +
+        "                if used == k:\n" +
+        "                    out.append(left)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;Integer&gt; findSubstring(String s, String[] words) {\n" +
+        "        int L = words[0].length(), k = words.length;\n" +
+        "        Map&lt;String, Integer&gt; need = new HashMap&lt;&gt;();   // counts: words can repeat\n" +
+        "        for (String w : words) need.merge(w, 1, Integer::sum);\n" +
+        "        List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        for (int offset = 0; offset &lt; L; offset++) {   // one sliding window per offset\n" +
+        "            Map&lt;String, Integer&gt; have = new HashMap&lt;&gt;();\n" +
+        "            int left = offset, used = 0;\n" +
+        "            for (int right = offset; right + L &lt;= s.length(); right += L) {\n" +
+        "                String w = s.substring(right, right + L);\n" +
+        "                if (!need.containsKey(w)) {            // restart after it\n" +
+        "                    have.clear(); used = 0; left = right + L;\n" +
+        "                    continue;\n" +
+        "                }\n" +
+        "                have.merge(w, 1, Integer::sum);\n" +
+        "                used++;\n" +
+        "                while (have.get(w) &gt; need.get(w)) {    // too many copies: shrink\n" +
+        "                    have.merge(s.substring(left, left + L), -1, Integer::sum);\n" +
+        "                    left += L;\n" +
+        "                    used--;\n" +
+        "                }\n" +
+        "                if (used == k) out.add(left);\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(L \u00d7 (n / L) \u00d7 L) = O(n \u00d7 L) time, since each word is added and removed at most once per offset and each costs O(L) to hash. O(len(words) \u00d7 L) space.</p>" +
+        "<p><strong>The trap.</strong> Duplicate words. The list can contain the same word twice, so the check must compare counts, not membership in a set.</p></details>"
     },
 
     { title: "Exercises",

@@ -63,7 +63,7 @@ public class Runner {
             Object[] args = parse(m.getParameterTypes(), ps);
             out.append(fmt(m.invoke(sol, args)));
             if (a.length < 2)          // "noargs": skip the arguments-after-the-call check
-                for (Object x : args) if (x != null && !(x instanceof Integer || x instanceof Double || x instanceof String || x instanceof Node)) out.append(" | ").append(fmt(x));
+                for (Object x : args) if (x != null && !(x instanceof Integer || x instanceof Long || x instanceof Double || x instanceof String || x instanceof Node)) out.append(" | ").append(fmt(x));
             out.append("\n");
         }
         System.out.print(out);
@@ -94,6 +94,13 @@ public class Runner {
     static Object parse(Class<?> t, String v) {
         if (t == int.class) return Integer.parseInt(v);
         if (t == double.class) return Double.parseDouble(v);
+        if (t == long.class) return Long.parseLong(v);
+        if (t == char[][].class) {
+            if (v.isEmpty()) return new char[0][];
+            String[] r = v.split(";", -1); char[][] m = new char[r.length][];
+            for (int i = 0; i < r.length; i++) { String[] cs = r[i].split(",", -1); m[i] = new char[cs.length]; for (int j = 0; j < cs.length; j++) m[i][j] = cs[j].charAt(0); }
+            return m;
+        }
         if (t == String.class) return v;
         if (t == int[].class) return ints(v);
         if (t == String[].class) return v.isEmpty() ? new String[0] : v.split(",", -1);
@@ -124,6 +131,7 @@ public class Runner {
         if (r == null) return "None";
         if (r instanceof Double) return "d" + Double.doubleToLongBits((Double) r);   // exact bits
         if (r instanceof int[]) return Arrays.toString((int[]) r);
+        if (r instanceof char[]) { List<String> s = new ArrayList<>(); for (char c : (char[]) r) s.add(String.valueOf(c)); return "[" + String.join(", ", s) + "]"; }
         if (r instanceof Object[]) { List<String> s = new ArrayList<>(); for (Object x : (Object[]) r) s.add(fmt(x)); return "[" + String.join(", ", s) + "]"; }
         if (r instanceof ListNode) {
             List<String> s = new ArrayList<>(); IdentityHashMap<Object, Integer> seen = new IdentityHashMap<>();

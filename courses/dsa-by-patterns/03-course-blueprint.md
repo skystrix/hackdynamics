@@ -514,6 +514,11 @@ binary search for nine years, in a language you probably use.
 
 **Rows:** C1, C2, C4, P1 · **Outcomes:** E8, O2, O7 · **Terms:** 14
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch13.py`)* — LeetCode, all free.
+- Easy: 704 Binary Search · 35 Search Insert Position · 2529 Maximum Count of Positive Integer and Negative Integer
+- Medium: 34 Find First and Last Position of Element in Sorted Array · 74 Search a 2D Matrix · 153 Find Minimum in Rotated Sorted Array · 33 Search in Rotated Sorted Array · 81 Search in Rotated Sorted Array II · 162 Find Peak Element · 852 Peak Index in a Mountain Array · 540 Single Element in a Sorted Array
+- Hard: 154 Find Minimum in Rotated Sorted Array II
+
 ---
 
 ## Chapter 14 — Binary Search on the Answer
@@ -542,6 +547,11 @@ four lines.
 - Ternary search bracket shrinking on a unimodal curve.
 
 **Rows:** C3, C5, C6, P14 · **Outcomes:** E8, A1, A8 · **Terms:** 12
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch14.py`)* — LeetCode, all free. Worked in the chapter body and repeated here to try from memory: 875, 1011, 410, 1552.
+- Easy: 69 Sqrt(x) · 367 Valid Perfect Square · 441 Arranging Coins
+- Medium: 875 Koko Eating Bananas · 1011 Capacity To Ship Packages Within D Days · 1482 Minimum Number of Days to Make m Bouquets · 1283 Find the Smallest Divisor Given a Threshold · 2226 Maximum Candies Allocated to K Children · 1552 Magnetic Force Between Two Balls
+- Hard: 410 Split Array Largest Sum · 2141 Maximum Running Time of N Computers · 719 Find K-th Smallest Pair Distance
 
 ---
 
@@ -577,6 +587,11 @@ case disappear.
 
 **Rows:** D1, D2, D3, D5, D6, D9, D10, C7, C8 · **Outcomes:** E5, E6, A3 · **Terms:** 18
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch15.py`)* — LeetCode, all free. 215 lives here (quickselect) rather than in Chapter 27; 973 K Closest Points is left for Chapter 27's heaps.
+- Easy: 88 Merge Sorted Array · 977 Squares of a Sorted Array · 1051 Height Checker · 1636 Sort Array by Increasing Frequency
+- Medium: 912 Sort an Array · 215 Kth Largest Element in an Array · 179 Largest Number · 164 Maximum Gap · 791 Custom Sort String
+- Hard: 4 Median of Two Sorted Arrays
+
 ---
 
 ## Chapter 16 — What Your Standard Library Actually Runs
@@ -610,6 +625,8 @@ you will ever be asked.
 
 **Rows:** D7, S1, S2(partial), D8 · **Outcomes:** E6, A3, O5, O6 · **Terms:** 16
 
+**Practice problems:** none *(2026-09-29)*. This is an analysis chapter, exempt under guide §8.4; its sorting problems live in Chapter 15.
+
 ---
 
 ## Chapter 17 — Hash Tables from the Bottom
@@ -642,6 +659,11 @@ turns your O(1) lookups into O(n) — an attack that has taken down real web fra
 - Average probes against load factor, both strategies, with the asymptote drawn.
 
 **Rows:** E1, E2, E3, E4, E5, E6, E7, O10 · **Outcomes:** E7, A7, O6 · **Terms:** 18
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch17.py`)* — LeetCode, all free.
+- Easy: 1 Two Sum · 217 Contains Duplicate · 242 Valid Anagram · 706 Design HashMap
+- Medium: 49 Group Anagrams · 128 Longest Consecutive Sequence · 347 Top K Frequent Elements · 36 Valid Sudoku · 454 4Sum II
+- Hard: 149 Max Points on a Line · 30 Substring with Concatenation of All Words
 
 ---
 
