@@ -104,6 +104,7 @@ public class Runner {
         if (t == String.class) return v;
         if (t == int[].class) return ints(v);
         if (t == String[].class) return v.isEmpty() ? new String[0] : v.split(",", -1);
+        if (t == List.class) return new ArrayList<>(Arrays.asList(v.isEmpty() ? new String[0] : v.split(",", -1)));   // ponytail: List<String> only
         if (t == int[][].class) { if (v.isEmpty()) return new int[0][]; String[] r = v.split(";", -1); int[][] m = new int[r.length][]; for (int i = 0; i < r.length; i++) m[i] = ints(r[i]); return m; }
         if (t == ListNode.class) {
             String[] pv = v.split("\\|", -1); int pos = Integer.parseInt(pv[0]); int[] vals = ints(pv[1]);
@@ -259,10 +260,16 @@ def check(mod, n):
 
 def emit(mod):
     J = json.dumps
-    L = [J(P("""These are real interview problems from LeetCode, and every one is solved by an idea from this chapter.
-They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard,
-where it needs one more idea on top. Work through them in order.""")),
-         J(P("""Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything.
+    have = {p["diff"] for p in mod.PROBLEMS}
+    tiers = [(d, what, mins) for d, what, mins in
+             (("Easy", "the pattern is in plain sight", 15), ("Medium", "it is disguised", 25),
+              ("Hard", "it needs one more idea on top", 40)) if d in have]
+    span = ", through ".join(f"{d}, where {what}" for d, what, _ in tiers[:-1])
+    span = f"from {span}, to {tiers[-1][0]}, where {tiers[-1][1]}" if span else f"at {tiers[0][0]} level"
+    boxes = " or ".join(", ".join(f"{m} minutes ({d})" if k == 0 else f"{m} ({d})" for k, (d, _, m) in enumerate(tiers)).rsplit(", ", 1))
+    L = [J(P(f"""These are real interview problems from LeetCode, and every one is solved by an idea from this chapter.
+They run {span}. Work through them in order.""")),
+         J(P(f"""Give each problem {boxes} on your own before you open anything.
 If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the
 pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts
 from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own

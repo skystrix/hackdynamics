@@ -700,6 +700,11 @@ into an instant one.
 
 **Rows:** J3, J4, J5, J6, J7, J8, M3(partial) · **Outcomes:** E15(partial), A8, O1 · **Terms:** 15
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch18.py`)* — LeetCode, all free.
+- Easy: 1863 Sum of All Subset XOR Totals
+- Medium: 78 Subsets · 90 Subsets II · 46 Permutations · 47 Permutations II · 77 Combinations · 39 Combination Sum · 40 Combination Sum II · 22 Generate Parentheses · 17 Letter Combinations of a Phone Number · 79 Word Search · 131 Palindrome Partitioning
+- Hard: 51 N-Queens · 37 Sudoku Solver
+
 ---
 
 ## Chapter 19 — From Memoization to SRTBOT
@@ -735,6 +740,11 @@ the answer completely.
 
 **Rows:** J9, K1, K2, K3, K4, K18, K19 · **Outcomes:** E15, A5, O1 · **Terms:** 17
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch19.py`)* — LeetCode, all free.
+- Easy: 70 Climbing Stairs · 746 Min Cost Climbing Stairs · 118 Pascal's Triangle
+- Medium: 198 House Robber · 213 House Robber II · 91 Decode Ways · 139 Word Break · 377 Combination Sum IV · 152 Maximum Product Subarray · 740 Delete and Earn
+- Hard: 1235 Maximum Profit in Job Scheduling · 140 Word Break II
+
 ---
 
 ## Chapter 20 — The Knapsack Family and Pseudopolynomial Time
@@ -764,6 +774,10 @@ interview answer that is correct and one that sounds correct.
 - Input length in bits beside table size, for three values of W, with the exponential gap labelled.
 
 **Rows:** K5, K6, K7 · **Outcomes:** E1, E15, A5 · **Terms:** 13
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch20.py`)* — LeetCode, all free. The knapsack family has no free Easy problem, so the set starts at Medium.
+- Medium: 416 Partition Equal Subset Sum · 494 Target Sum · 322 Coin Change · 518 Coin Change II · 474 Ones and Zeroes · 1049 Last Stone Weight II · 279 Perfect Squares · 1155 Number of Dice Rolls With Target Sum
+- Hard: 879 Profitable Schemes · 2035 Partition Array Into Two Arrays to Minimize Sum Difference
 
 ---
 
@@ -797,6 +811,11 @@ characters long".
 
 **Rows:** K8, K9, K11 · **Outcomes:** E15, A5 · **Terms:** 15
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch21.py`)* — LeetCode, all free.
+- Easy: 392 Is Subsequence
+- Medium: 300 Longest Increasing Subsequence · 1143 Longest Common Subsequence · 72 Edit Distance · 5 Longest Palindromic Substring · 647 Palindromic Substrings · 516 Longest Palindromic Subsequence · 583 Delete Operation for Two Strings · 97 Interleaving String · 673 Number of Longest Increasing Subsequence
+- Hard: 354 Russian Doll Envelopes · 115 Distinct Subsequences · 10 Regular Expression Matching
+
 ---
 
 ## Chapter 22 — Grid, Interval and Bitmask DP
@@ -827,6 +846,10 @@ n=20, and it is how the travelling salesman problem is actually solved for small
 - A bitmask as an integer beside the subset it represents, with the transition drawn.
 
 **Rows:** K10, K12, K14, K15, K16, K20, M3, I19(partial) · **Outcomes:** E15, E19, A5 · **Terms:** 16
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch22.py`)* — LeetCode, all free. Grid, interval, bitmask and digit DP have no free Easy problems, so the set starts at Medium.
+- Medium: 62 Unique Paths · 63 Unique Paths II · 64 Minimum Path Sum · 221 Maximal Square · 1039 Minimum Score Triangulation of Polygon · 698 Partition to K Equal Sum Subsets · 526 Beautiful Arrangement · 357 Count Numbers with Unique Digits
+- Hard: 312 Burst Balloons · 1547 Minimum Cost to Cut a Stick · 1723 Find Minimum Time to Finish All Jobs · 233 Number of Digit One
 
 ---
 
@@ -861,6 +884,11 @@ works whenever it does. You will also meet a greedy that looks obviously correct
 - A Huffman tree with frequencies on the leaves and code lengths annotated.
 
 **Rows:** L1, L2, L3, L4, L5, L6, L7, L8 · **Outcomes:** E16, A4 · **Terms:** 16
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch23.py`)* — LeetCode, all free. Every brute force searches all choices, so a wrong greedy rule cannot pass by agreeing with itself.
+- Easy: 455 Assign Cookies · 860 Lemonade Change · 1005 Maximize Sum Of Array After K Negations
+- Medium: 55 Jump Game · 45 Jump Game II · 134 Gas Station · 846 Hand of Straights · 763 Partition Labels · 678 Valid Parenthesis String · 1899 Merge Triplets to Form Target Triplet · 406 Queue Reconstruction by Height
+- Hard: 135 Candy · 330 Patching Array
 
 ---
 

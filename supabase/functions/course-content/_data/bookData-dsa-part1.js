@@ -13741,6 +13741,713 @@ CHAPTERS.push({
         "}</code></pre></div>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Sum of All Subset XOR Totals</h3>" +
+        "<p><strong>LeetCode 1863 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/sum-of-all-subset-xor-totals/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>For every subset of an array, take the XOR of its values (0 for the empty subset), and return the sum of all those XORs.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"Every subset\" is the Subsets section's tree: at each element, one branch takes it and one does not. The leaves are the 2\u207f subsets.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate subsets as bitmasks 0 to 2\u207f - 1 and XOR each one's values: O(2\u207f \u00d7 n). Fine for n \u2264 12.</p>" +
+        "<p><strong>Approach.</strong> Recurse over the positions carrying the XOR of the values taken so far. At position i, either skip nums[i] or take it (XOR it in). When i reaches the end, the carried XOR is one subset's total; return it, and let each call return the sum of its two branches.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def subsetXORSum(self, nums: list[int]) -&gt; int:\n" +
+        "        def go(i, xor):\n" +
+        "            if i == len(nums):\n" +
+        "                return xor             # one subset's total\n" +
+        "            return go(i + 1, xor) + go(i + 1, xor ^ nums[i])   # skip it, or take it\n" +
+        "        return go(0, 0)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int subsetXORSum(int[] nums) {\n" +
+        "        return go(nums, 0, 0);\n" +
+        "    }\n" +
+        "\n" +
+        "    private int go(int[] nums, int i, int xor) {\n" +
+        "        if (i == nums.length) return xor;   // one subset's total\n" +
+        "        return go(nums, i + 1, xor) + go(nums, i + 1, xor ^ nums[i]);   // skip, or take\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(2\u207f) time, O(n) recursion depth. (There is also a one-line trick: the answer is the OR of all values shifted left by n - 1, because every bit that appears anywhere is set in exactly half the subsets.)</p>" +
+        "<p><strong>The trap.</strong> Forgetting that the empty subset counts. It contributes 0, so it does not change the sum, but the recursion must still reach the end with nothing taken rather than treating an empty choice as invalid.</p></details>" +
+        "<h3>2. Subsets</h3>" +
+        "<p><strong>LeetCode 78 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/subsets/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every subset of an array of distinct values (in any order).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Subsets section's second reading of the tree: every node, not only the leaves, is a subset if each call adds the next element from a start index onwards.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Bitmasks 0 to 2\u207f - 1, one subset each: also O(2\u207f \u00d7 n), and a good way to check your recursion.</p>" +
+        "<p><strong>Approach.</strong> Keep a path (the current subset). Record a copy of the path at every call. Then for each index j from start to the end, append nums[j], recurse with start j + 1, and pop it again (choose, recurse, un-choose).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def subsets(self, nums: list[int]) -&gt; list[list[int]]:\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(start):\n" +
+        "            out.append(path[:])        # a copy: path keeps changing\n" +
+        "            for j in range(start, len(nums)):\n" +
+        "                path.append(nums[j])   # choose\n" +
+        "                go(j + 1)              # recurse\n" +
+        "                path.pop()             # un-choose\n" +
+        "\n" +
+        "        go(0)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; subsets(int[] nums) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(nums, 0, new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int[] nums, int start, List&lt;Integer&gt; path, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "        out.add(new ArrayList&lt;&gt;(path));  // a copy: path keeps changing\n" +
+        "        for (int j = start; j &lt; nums.length; j++) {\n" +
+        "            path.add(nums[j]);           // choose\n" +
+        "            go(nums, j + 1, path, out);  // recurse\n" +
+        "            path.remove(path.size() - 1);   // un-choose\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(2\u207f \u00d7 n) time, dominated by copying each of the 2\u207f subsets. O(n) recursion depth.</p>" +
+        "<p><strong>The trap.</strong> Recording the path itself instead of a copy. Every recorded entry then points at the same list, which is empty by the time the recursion finishes.</p></details>" +
+        "<h3>3. Subsets II</h3>" +
+        "<p><strong>LeetCode 90 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/subsets-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every distinct subset of an array that may contain repeated values.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Duplicates section's rule: sort first, so equal values sit together, then at any one level of the tree never start two branches with the same value.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Generate all 2\u207f subsets, sort each, and deduplicate with a set: correct, but it does all the duplicate work and throws it away.</p>" +
+        "<p><strong>Approach.</strong> Sort. Run the Subsets recursion, but inside the loop skip index j when j &gt; start and nums[j] == nums[j - 1]: that value was already tried as the next element at this level, and trying it again builds the same subsets.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def subsetsWithDup(self, nums: list[int]) -&gt; list[list[int]]:\n" +
+        "        nums.sort()                    # equal values side by side\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(start):\n" +
+        "            out.append(path[:])\n" +
+        "            for j in range(start, len(nums)):\n" +
+        "                if j &gt; start and nums[j] == nums[j - 1]:\n" +
+        "                    continue           # this value already started a branch here\n" +
+        "                path.append(nums[j])\n" +
+        "                go(j + 1)\n" +
+        "                path.pop()\n" +
+        "\n" +
+        "        go(0)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; subsetsWithDup(int[] nums) {\n" +
+        "        Arrays.sort(nums);             // equal values side by side\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(nums, 0, new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int[] nums, int start, List&lt;Integer&gt; path, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "        out.add(new ArrayList&lt;&gt;(path));\n" +
+        "        for (int j = start; j &lt; nums.length; j++) {\n" +
+        "            if (j &gt; start &amp;&amp; nums[j] == nums[j - 1]) continue;   // already started a branch here\n" +
+        "            path.add(nums[j]);\n" +
+        "            go(nums, j + 1, path, out);\n" +
+        "            path.remove(path.size() - 1);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(2\u207f \u00d7 n) time in the worst case (all values distinct), O(n) depth.</p>" +
+        "<p><strong>The trap.</strong> Skipping with j &gt; 0 instead of j &gt; start. That also forbids taking the second copy after the first at a deeper level, so subsets like [2, 2] disappear.</p></details>" +
+        "<h3>4. Permutations</h3>" +
+        "<p><strong>LeetCode 46 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/permutations/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every ordering of an array of distinct values.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Permutations section: at each position you may place any value not placed yet. A used[] array (\"mark used\") tracks which ones are free.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> There is nothing faster than listing n! orderings; the question is only how cleanly you list them.</p>" +
+        "<p><strong>Approach.</strong> Build the ordering one position at a time. For each index i not yet used, mark it used, append nums[i], recurse, then pop it and unmark it. When the path has n values, record a copy.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def permute(self, nums: list[int]) -&gt; list[list[int]]:\n" +
+        "        out, path, used = [], [], [False] * len(nums)\n" +
+        "\n" +
+        "        def go():\n" +
+        "            if len(path) == len(nums):\n" +
+        "                out.append(path[:])\n" +
+        "                return\n" +
+        "            for i in range(len(nums)):\n" +
+        "                if used[i]:\n" +
+        "                    continue\n" +
+        "                used[i] = True         # choose\n" +
+        "                path.append(nums[i])\n" +
+        "                go()\n" +
+        "                path.pop()             # un-choose, and unmark\n" +
+        "                used[i] = False\n" +
+        "\n" +
+        "        go()\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; permute(int[] nums) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(nums, new boolean[nums.length], new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int[] nums, boolean[] used, List&lt;Integer&gt; path, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "        if (path.size() == nums.length) { out.add(new ArrayList&lt;&gt;(path)); return; }\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) {\n" +
+        "            if (used[i]) continue;\n" +
+        "            used[i] = true;            // choose\n" +
+        "            path.add(nums[i]);\n" +
+        "            go(nums, used, path, out);\n" +
+        "            path.remove(path.size() - 1);   // un-choose, and unmark\n" +
+        "            used[i] = false;\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n! \u00d7 n) time, O(n) depth plus the used array.</p>" +
+        "<p><strong>The trap.</strong> Forgetting to unmark on the way back. The value stays \"used\" for every later branch, and most permutations never appear.</p></details>" +
+        "<h3>5. Permutations II</h3>" +
+        "<p><strong>LeetCode 47 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/permutations-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every distinct ordering of an array that may contain repeated values.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Permutations plus the Duplicates section's rule, in its permutation form: sort, and among equal values always use them in left-to-right order, so two copies are never placed in swapped order.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Generate all n! orderings and deduplicate with a set: up to n! wasted work when many values repeat.</p>" +
+        "<p><strong>Approach.</strong> Sort. In the Permutations loop, skip index i if nums[i] == nums[i - 1] and i - 1 is not currently used. That condition means the earlier copy was already tried at this position and released, so placing this copy here would repeat its branches.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def permuteUnique(self, nums: list[int]) -&gt; list[list[int]]:\n" +
+        "        nums.sort()\n" +
+        "        out, path, used = [], [], [False] * len(nums)\n" +
+        "\n" +
+        "        def go():\n" +
+        "            if len(path) == len(nums):\n" +
+        "                out.append(path[:])\n" +
+        "                return\n" +
+        "            for i in range(len(nums)):\n" +
+        "                if used[i]:\n" +
+        "                    continue\n" +
+        "                if i &gt; 0 and nums[i] == nums[i - 1] and not used[i - 1]:\n" +
+        "                    continue           # equal copies go left to right only\n" +
+        "                used[i] = True\n" +
+        "                path.append(nums[i])\n" +
+        "                go()\n" +
+        "                path.pop()\n" +
+        "                used[i] = False\n" +
+        "\n" +
+        "        go()\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; permuteUnique(int[] nums) {\n" +
+        "        Arrays.sort(nums);\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(nums, new boolean[nums.length], new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int[] nums, boolean[] used, List&lt;Integer&gt; path, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "        if (path.size() == nums.length) { out.add(new ArrayList&lt;&gt;(path)); return; }\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) {\n" +
+        "            if (used[i]) continue;\n" +
+        "            if (i &gt; 0 &amp;&amp; nums[i] == nums[i - 1] &amp;&amp; !used[i - 1]) continue;   // left copy first\n" +
+        "            used[i] = true;\n" +
+        "            path.add(nums[i]);\n" +
+        "            go(nums, used, path, out);\n" +
+        "            path.remove(path.size() - 1);\n" +
+        "            used[i] = false;\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n! \u00d7 n) worst case, much less with repeats. O(n) depth.</p>" +
+        "<p><strong>The trap.</strong> Writing the condition with \"used\" instead of \"not used\". Both versions produce each ordering once, but the \"used\" version prunes far later and explores many dead branches. The chapter's section asks you to derive which copy may go first, and \"left copy before right copy\" is the rule that prunes early.</p></details>" +
+        "<h3>6. Combinations</h3>" +
+        "<p><strong>LeetCode 77 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/combinations/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every way to choose k numbers from 1 to n.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Combinations section: a start index makes each combination come out once, in increasing order. The Pruning section adds a cheap cut: stop when too few numbers remain to reach k.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Generate all subsets and keep those of size k: O(2\u207f) instead of O(C(n, k)).</p>" +
+        "<p><strong>Approach.</strong> Recurse with a start value. When the path has k numbers, record it. Otherwise try each next value i from start up to n - (k - len(path)) + 1: past that, there are not enough numbers left to finish, so those branches are cut before they begin.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def combine(self, n: int, k: int) -&gt; list[list[int]]:\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(start):\n" +
+        "            if len(path) == k:\n" +
+        "                out.append(path[:])\n" +
+        "                return\n" +
+        "            for i in range(start, n - (k - len(path)) + 2):   # enough numbers left\n" +
+        "                path.append(i)\n" +
+        "                go(i + 1)\n" +
+        "                path.pop()\n" +
+        "\n" +
+        "        go(1)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; combine(int n, int k) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(n, k, 1, new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int n, int k, int start, List&lt;Integer&gt; path, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "        if (path.size() == k) { out.add(new ArrayList&lt;&gt;(path)); return; }\n" +
+        "        for (int i = start; i &lt;= n - (k - path.size()) + 1; i++) {   // enough numbers left\n" +
+        "            path.add(i);\n" +
+        "            go(n, k, i + 1, path, out);\n" +
+        "            path.remove(path.size() - 1);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(C(n, k) \u00d7 k) time, O(k) depth.</p>" +
+        "<p><strong>The trap.</strong> Looping i all the way to n. The answers are the same, but the search walks into branches that can never be completed; for n = 20, k = 18 that is most of the tree.</p></details>" +
+        "<h3>7. Combination Sum</h3>" +
+        "<p><strong>LeetCode 39 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/combination-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every combination of the given distinct numbers (each usable any number of times) that adds up to a target.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Combinations with reuse: recurse with the same start index after taking a number, so it may be taken again, and never go back to earlier numbers, so each combination appears once. Sorting lets you prune: once a number overshoots, every later one does too.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate multisets without order control and deduplicate afterwards: exponentially more branches.</p>" +
+        "<p><strong>Approach.</strong> Sort the candidates. Recurse with (start, remaining). If remaining is 0, record the path. Otherwise, for each j from start, stop the loop as soon as candidates[j] &gt; remaining; else take candidates[j] and recurse with start j (not j + 1, so it can be reused).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def combinationSum(self, candidates: list[int], target: int) -&gt; list[list[int]]:\n" +
+        "        candidates.sort()\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(start, remaining):\n" +
+        "            if remaining == 0:\n" +
+        "                out.append(path[:])\n" +
+        "                return\n" +
+        "            for j in range(start, len(candidates)):\n" +
+        "                if candidates[j] &gt; remaining:\n" +
+        "                    break              # sorted: every later one overshoots too\n" +
+        "                path.append(candidates[j])\n" +
+        "                go(j, remaining - candidates[j])   # j, not j + 1: reuse allowed\n" +
+        "                path.pop()\n" +
+        "\n" +
+        "        go(0, target)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; combinationSum(int[] candidates, int target) {\n" +
+        "        Arrays.sort(candidates);\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(candidates, 0, target, new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int[] c, int start, int remaining, List&lt;Integer&gt; path, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "        if (remaining == 0) { out.add(new ArrayList&lt;&gt;(path)); return; }\n" +
+        "        for (int j = start; j &lt; c.length &amp;&amp; c[j] &lt;= remaining; j++) {   // sorted: stop at overshoot\n" +
+        "            path.add(c[j]);\n" +
+        "            go(c, j, remaining - c[j], path, out);   // j, not j + 1: reuse allowed\n" +
+        "            path.remove(path.size() - 1);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> Exponential in target / smallest candidate; the pruning keeps it small at the problem's limits.</p>" +
+        "<p><strong>The trap.</strong> Recursing with j + 1, which forbids reuse, or with 0, which produces the same combination in several orders.</p></details>" +
+        "<h3>8. Combination Sum II</h3>" +
+        "<p><strong>LeetCode 40 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/combination-sum-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every distinct combination of the given numbers (which may repeat, each used at most once) that adds up to a target.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Combination Sum without reuse (recurse with j + 1) plus Subsets II's duplicate rule (skip equal values at the same level).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Generate all subsets, keep those with the right sum, deduplicate: O(2\u207f).</p>" +
+        "<p><strong>Approach.</strong> Sort. Recurse with (start, remaining). Record the path when remaining hits 0. In the loop, skip j &gt; start with candidates[j] == candidates[j - 1], stop when candidates[j] &gt; remaining, and otherwise take candidates[j] and recurse with j + 1.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def combinationSum2(self, candidates: list[int], target: int) -&gt; list[list[int]]:\n" +
+        "        candidates.sort()\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(start, remaining):\n" +
+        "            if remaining == 0:\n" +
+        "                out.append(path[:])\n" +
+        "                return\n" +
+        "            for j in range(start, len(candidates)):\n" +
+        "                if j &gt; start and candidates[j] == candidates[j - 1]:\n" +
+        "                    continue           # same value, same level: same branches\n" +
+        "                if candidates[j] &gt; remaining:\n" +
+        "                    break\n" +
+        "                path.append(candidates[j])\n" +
+        "                go(j + 1, remaining - candidates[j])   # each number at most once\n" +
+        "                path.pop()\n" +
+        "\n" +
+        "        go(0, target)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; combinationSum2(int[] candidates, int target) {\n" +
+        "        Arrays.sort(candidates);\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(candidates, 0, target, new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int[] c, int start, int remaining, List&lt;Integer&gt; path, List&lt;List&lt;Integer&gt;&gt; out) {\n" +
+        "        if (remaining == 0) { out.add(new ArrayList&lt;&gt;(path)); return; }\n" +
+        "        for (int j = start; j &lt; c.length &amp;&amp; c[j] &lt;= remaining; j++) {\n" +
+        "            if (j &gt; start &amp;&amp; c[j] == c[j - 1]) continue;   // same value, same level\n" +
+        "            path.add(c[j]);\n" +
+        "            go(c, j + 1, remaining - c[j], path, out);     // each number at most once\n" +
+        "            path.remove(path.size() - 1);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(2\u207f) in the worst case, far less with the two prunings.</p>" +
+        "<p><strong>The trap.</strong> Deduplicating the output with a set instead of pruning. It gives the right answer and times out on inputs like thirty 1s with target 30, where the unpruned tree has over a billion branches.</p></details>" +
+        "<h3>9. Generate Parentheses</h3>" +
+        "<p><strong>LeetCode 22 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/generate-parentheses/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every well-formed string of n pairs of parentheses.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Build the string one character at a time and prune any prefix that can no longer become valid. The two rules are all you need: at most n opening brackets, and never more closing than opening.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Generate all 2\u00b2\u207f strings of brackets and check each: 2\u00b2\u207f \u00d7 2n work, 65,536 strings at n = 8 (the problem's limit), of which 1,430 are valid.</p>" +
+        "<p><strong>Approach.</strong> Recurse with counts of open and close brackets used. Add \"(\" if open &lt; n. Add \")\" if close &lt; open. When the string has length 2n, it is valid by construction; record it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def generateParenthesis(self, n: int) -&gt; list[str]:\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(opened, closed):\n" +
+        "            if len(path) == 2 * n:\n" +
+        "                out.append(\"\".join(path))   # valid by construction\n" +
+        "                return\n" +
+        "            if opened &lt; n:\n" +
+        "                path.append(\"(\")\n" +
+        "                go(opened + 1, closed)\n" +
+        "                path.pop()\n" +
+        "            if closed &lt; opened:             # never close more than you opened\n" +
+        "                path.append(\")\")\n" +
+        "                go(opened, closed + 1)\n" +
+        "                path.pop()\n" +
+        "\n" +
+        "        go(0, 0)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;String&gt; generateParenthesis(int n) {\n" +
+        "        List&lt;String&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(n, 0, 0, new StringBuilder(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(int n, int opened, int closed, StringBuilder path, List&lt;String&gt; out) {\n" +
+        "        if (path.length() == 2 * n) { out.add(path.toString()); return; }   // valid by construction\n" +
+        "        if (opened &lt; n) {\n" +
+        "            path.append('(');\n" +
+        "            go(n, opened + 1, closed, path, out);\n" +
+        "            path.deleteCharAt(path.length() - 1);\n" +
+        "        }\n" +
+        "        if (closed &lt; opened) {         // never close more than you opened\n" +
+        "            path.append(')');\n" +
+        "            go(n, opened, closed + 1, path, out);\n" +
+        "            path.deleteCharAt(path.length() - 1);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> Proportional to the number of answers, the n-th Catalan number (1,430 at n = 8), times 2n to build each.</p>" +
+        "<p><strong>The trap.</strong> Checking validity only at the end. Pruning invalid prefixes as soon as they appear is what turns 2\u00b2\u207f candidates into only the valid ones.</p></details>" +
+        "<h3>10. Letter Combinations of a Phone Number</h3>" +
+        "<p><strong>LeetCode 17 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/letter-combinations-of-a-phone-number/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given digits 2 to 9, return every letter string they could spell on a phone keypad (\"2\" is abc, and so on). An empty input gives an empty list.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>One level of the tree per digit, one branch per letter on that key. The template with no pruning at all, because every leaf is an answer.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Nested loops work only for a fixed number of digits; recursion (or a running product) handles any length.</p>" +
+        "<p><strong>Approach.</strong> Recurse over the digit positions. At position i, for each letter on digit i's key, append it, recurse to i + 1, and remove it. When i reaches the end, record the string.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def letterCombinations(self, digits: str) -&gt; list[str]:\n" +
+        "        if not digits:\n" +
+        "            return []                  # not [\"\"]\n" +
+        "        keys = {\"2\": \"abc\", \"3\": \"def\", \"4\": \"ghi\", \"5\": \"jkl\",\n" +
+        "                \"6\": \"mno\", \"7\": \"pqrs\", \"8\": \"tuv\", \"9\": \"wxyz\"}\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(i):\n" +
+        "            if i == len(digits):\n" +
+        "                out.append(\"\".join(path))\n" +
+        "                return\n" +
+        "            for letter in keys[digits[i]]:\n" +
+        "                path.append(letter)\n" +
+        "                go(i + 1)\n" +
+        "                path.pop()\n" +
+        "\n" +
+        "        go(0)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private static final String[] KEYS = {\"\", \"\", \"abc\", \"def\", \"ghi\", \"jkl\", \"mno\", \"pqrs\", \"tuv\", \"wxyz\"};\n" +
+        "\n" +
+        "    public List&lt;String&gt; letterCombinations(String digits) {\n" +
+        "        List&lt;String&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        if (digits.isEmpty()) return out;   // not [\"\"]\n" +
+        "        go(digits, 0, new StringBuilder(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(String digits, int i, StringBuilder path, List&lt;String&gt; out) {\n" +
+        "        if (i == digits.length()) { out.add(path.toString()); return; }\n" +
+        "        for (char letter : KEYS[digits.charAt(i) - '0'].toCharArray()) {\n" +
+        "            path.append(letter);\n" +
+        "            go(digits, i + 1, path, out);\n" +
+        "            path.deleteCharAt(path.length() - 1);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(4\u207f \u00d7 n) for n digits (7 and 9 have four letters).</p>" +
+        "<p><strong>The trap.</strong> The empty input. The recursion would record one empty string, but the problem wants an empty list. Handle it before starting.</p></details>" +
+        "<h3>11. Word Search</h3>" +
+        "<p><strong>LeetCode 79 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/word-search/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a word can be traced in a grid of letters by moving between horizontally or vertically adjacent cells, using each cell at most once.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>From each starting cell, a path through the grid is a branch of a search tree, and \"each cell at most once\" is the used-marking from Permutations. A mismatched letter prunes the branch at once.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> There is no exhaustive alternative short of trying every path; the pruning is the whole game.</p>" +
+        "<p><strong>Approach.</strong> For every cell, start a search for the word's first letter. A search at (r, c) for position i fails if the cell is off the grid or does not hold word[i]; succeeds if i is the last position; otherwise it marks the cell used (overwrite it with \"#\"), tries the four neighbours for position i + 1, and restores the letter before returning.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def exist(self, board: list[list[str]], word: str) -&gt; bool:\n" +
+        "        R, C = len(board), len(board[0])\n" +
+        "\n" +
+        "        def go(r, c, i):\n" +
+        "            if not (0 &lt;= r &lt; R and 0 &lt;= c &lt; C) or board[r][c] != word[i]:\n" +
+        "                return False           # off the grid, used, or the wrong letter\n" +
+        "            if i == len(word) - 1:\n" +
+        "                return True\n" +
+        "            board[r][c] = \"#\"          # mark used\n" +
+        "            found = (go(r + 1, c, i + 1) or go(r - 1, c, i + 1)\n" +
+        "                     or go(r, c + 1, i + 1) or go(r, c - 1, i + 1))\n" +
+        "            board[r][c] = word[i]      # restore on the way back\n" +
+        "            return found\n" +
+        "\n" +
+        "        return any(go(r, c, 0) for r in range(R) for c in range(C))</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean exist(char[][] board, String word) {\n" +
+        "        for (int r = 0; r &lt; board.length; r++)\n" +
+        "            for (int c = 0; c &lt; board[0].length; c++)\n" +
+        "                if (go(board, word, r, c, 0)) return true;\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "\n" +
+        "    private boolean go(char[][] b, String word, int r, int c, int i) {\n" +
+        "        if (r &lt; 0 || r &gt;= b.length || c &lt; 0 || c &gt;= b[0].length || b[r][c] != word.charAt(i))\n" +
+        "            return false;              // off the grid, used, or the wrong letter\n" +
+        "        if (i == word.length() - 1) return true;\n" +
+        "        b[r][c] = '#';                 // mark used\n" +
+        "        boolean found = go(b, word, r + 1, c, i + 1) || go(b, word, r - 1, c, i + 1)\n" +
+        "                     || go(b, word, r, c + 1, i + 1) || go(b, word, r, c - 1, i + 1);\n" +
+        "        b[r][c] = word.charAt(i);      // restore on the way back\n" +
+        "        return found;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(R \u00d7 C \u00d7 3^L) in the worst case for a word of length L: each step has at most 3 new directions. O(L) depth.</p>" +
+        "<p><strong>The trap.</strong> Forgetting to restore the cell on the way back. The mark then leaks into searches that start elsewhere and blocks valid paths.</p></details>" +
+        "<h3>12. Palindrome Partitioning</h3>" +
+        "<p><strong>LeetCode 131 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/palindrome-partitioning/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every way to cut a string into pieces that are all palindromes.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Each cut position is a choice: the next piece is s[start:end] for some end. Prune any piece that is not a palindrome, so only valid partitions are ever built.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all 2\u207f\u207b\u00b9 ways to cut and check every piece of each.</p>" +
+        "<p><strong>Approach.</strong> Recurse with a start position. When start reaches the end, record the pieces. Otherwise, for each end from start + 1 to n, if s[start:end] is a palindrome, append it, recurse from end, and remove it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def partition(self, s: str) -&gt; list[list[str]]:\n" +
+        "        out, path = [], []\n" +
+        "\n" +
+        "        def go(start):\n" +
+        "            if start == len(s):\n" +
+        "                out.append(path[:])\n" +
+        "                return\n" +
+        "            for end in range(start + 1, len(s) + 1):\n" +
+        "                piece = s[start:end]\n" +
+        "                if piece == piece[::-1]:   # prune pieces that are not palindromes\n" +
+        "                    path.append(piece)\n" +
+        "                    go(end)\n" +
+        "                    path.pop()\n" +
+        "\n" +
+        "        go(0)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;String&gt;&gt; partition(String s) {\n" +
+        "        List&lt;List&lt;String&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(s, 0, new ArrayList&lt;&gt;(), out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private boolean isPal(String s, int i, int j) {   // s[i..j] inclusive\n" +
+        "        while (i &lt; j) if (s.charAt(i++) != s.charAt(j--)) return false;\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void go(String s, int start, List&lt;String&gt; path, List&lt;List&lt;String&gt;&gt; out) {\n" +
+        "        if (start == s.length()) { out.add(new ArrayList&lt;&gt;(path)); return; }\n" +
+        "        for (int end = start + 1; end &lt;= s.length(); end++) {\n" +
+        "            if (!isPal(s, start, end - 1)) continue;   // prune non-palindromes\n" +
+        "            path.add(s.substring(start, end));\n" +
+        "            go(s, end, path, out);\n" +
+        "            path.remove(path.size() - 1);\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 2\u207f) in the worst case (a string of one repeated letter, where every cut is valid).</p>" +
+        "<p><strong>The trap.</strong> Re-checking the same substrings for palindromes over and over. For long strings, a table of which substrings are palindromes (Chapter 21's Palindromic Variants) removes the repeated work; at this problem's n \u2264 16 the direct check is fine.</p></details>" +
+        "<h3>13. N-Queens</h3>" +
+        "<p><strong>LeetCode 51 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/n-queens/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Place n queens on an n \u00d7 n board so that none attacks another, and return every such board (\"Q\" for a queen, \".\" for empty).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>One queen per row, so the tree has one level per row and one branch per column. Three sets (columns, and the two diagonals, identified by r - c and r + c) make \"is this square attacked?\" a constant-time check that prunes the branch immediately.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all C(n\u00b2, n) placements: over 4 billion at n = 8. One queen per row cuts it to n\u207f; pruning cuts it to a few thousand nodes.</p>" +
+        "<p><strong>Approach.</strong> Recurse over rows. In row r, for each column c not in cols, r - c not in diag1 and r + c not in diag2, place the queen (add to the three sets and record the column), recurse to row r + 1, then remove it. When r reaches n, turn the recorded columns into board strings.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def solveNQueens(self, n: int) -&gt; list[list[str]]:\n" +
+        "        out, queens = [], []           # queens[r] = column of the queen in row r\n" +
+        "        cols, diag1, diag2 = set(), set(), set()\n" +
+        "\n" +
+        "        def go(r):\n" +
+        "            if r == n:\n" +
+        "                out.append([\".\" * c + \"Q\" + \".\" * (n - c - 1) for c in queens])\n" +
+        "                return\n" +
+        "            for c in range(n):\n" +
+        "                if c in cols or r - c in diag1 or r + c in diag2:\n" +
+        "                    continue           # attacked: prune\n" +
+        "                cols.add(c); diag1.add(r - c); diag2.add(r + c); queens.append(c)\n" +
+        "                go(r + 1)\n" +
+        "                cols.remove(c); diag1.remove(r - c); diag2.remove(r + c); queens.pop()\n" +
+        "\n" +
+        "        go(0)\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;String&gt;&gt; solveNQueens(int n) {\n" +
+        "        List&lt;List&lt;String&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        go(n, 0, new int[n], new boolean[n], new boolean[2 * n], new boolean[2 * n], out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    // queens[r] = column in row r; d1 is indexed by r - c + n, d2 by r + c\n" +
+        "    private void go(int n, int r, int[] queens, boolean[] cols, boolean[] d1, boolean[] d2, List&lt;List&lt;String&gt;&gt; out) {\n" +
+        "        if (r == n) {\n" +
+        "            List&lt;String&gt; board = new ArrayList&lt;&gt;();\n" +
+        "            for (int c : queens) board.add(\".\".repeat(c) + \"Q\" + \".\".repeat(n - c - 1));\n" +
+        "            out.add(board);\n" +
+        "            return;\n" +
+        "        }\n" +
+        "        for (int c = 0; c &lt; n; c++) {\n" +
+        "            if (cols[c] || d1[r - c + n] || d2[r + c]) continue;   // attacked: prune\n" +
+        "            cols[c] = d1[r - c + n] = d2[r + c] = true;\n" +
+        "            queens[r] = c;\n" +
+        "            go(n, r + 1, queens, cols, d1, d2, out);\n" +
+        "            cols[c] = d1[r - c + n] = d2[r + c] = false;\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> Bounded by O(n!) with far fewer nodes in practice; O(n) depth and set sizes.</p>" +
+        "<p><strong>The trap.</strong> Checking attacks by scanning the board for every candidate square, O(n) per check. The diagonal keys r - c and r + c are constant along each diagonal, which is what makes the sets work.</p></details>" +
+        "<h3>14. Sudoku Solver</h3>" +
+        "<p><strong>LeetCode 37 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/sudoku-solver/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Fill in a Sudoku board in place. The puzzle has exactly one solution.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Constraint Propagation section. Plain backtracking fills cells left to right; choosing the empty cell with the fewest legal digits first finds contradictions far sooner, and on hard puzzles that is the difference between milliseconds and minutes.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all digits in every empty cell: up to 9\u2075\u2070 or so for a hard puzzle, which only pruning makes feasible.</p>" +
+        "<p><strong>Approach.</strong> Keep sets of the digits used in each row, column and box. Recursively: find the empty cell with the fewest legal digits. If none is empty, the board is solved. If that cell has no legal digit, backtrack. Otherwise try each legal digit: place it (update the three sets), recurse, and if that fails, remove it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def solveSudoku(self, board: list[list[str]]) -&gt; None:\n" +
+        "        rows = [set() for _ in range(9)]\n" +
+        "        cols = [set() for _ in range(9)]\n" +
+        "        boxes = [set() for _ in range(9)]\n" +
+        "        empty = []\n" +
+        "        for r in range(9):\n" +
+        "            for c in range(9):\n" +
+        "                d = board[r][c]\n" +
+        "                if d == \".\":\n" +
+        "                    empty.append((r, c))\n" +
+        "                else:\n" +
+        "                    rows[r].add(d); cols[c].add(d); boxes[r // 3 * 3 + c // 3].add(d)\n" +
+        "\n" +
+        "        def options(r, c):\n" +
+        "            used = rows[r] | cols[c] | boxes[r // 3 * 3 + c // 3]\n" +
+        "            return [d for d in \"123456789\" if d not in used]\n" +
+        "\n" +
+        "        def go():\n" +
+        "            if not empty:\n" +
+        "                return True\n" +
+        "            best = min(range(len(empty)), key=lambda i: len(options(*empty[i])))   # fewest options first\n" +
+        "            r, c = empty.pop(best)\n" +
+        "            for d in options(r, c):\n" +
+        "                board[r][c] = d\n" +
+        "                rows[r].add(d); cols[c].add(d); boxes[r // 3 * 3 + c // 3].add(d)\n" +
+        "                if go():\n" +
+        "                    return True\n" +
+        "                rows[r].remove(d); cols[c].remove(d); boxes[r // 3 * 3 + c // 3].remove(d)\n" +
+        "            board[r][c] = \".\"          # undo, and give the cell back\n" +
+        "            empty.insert(best, (r, c))\n" +
+        "            return False\n" +
+        "\n" +
+        "        go()</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final boolean[][] rows = new boolean[9][10], cols = new boolean[9][10], boxes = new boolean[9][10];\n" +
+        "    private final List&lt;int[]&gt; empty = new ArrayList&lt;&gt;();\n" +
+        "    private char[][] board;\n" +
+        "\n" +
+        "    public void solveSudoku(char[][] board) {\n" +
+        "        this.board = board;\n" +
+        "        for (int r = 0; r &lt; 9; r++)\n" +
+        "            for (int c = 0; c &lt; 9; c++) {\n" +
+        "                if (board[r][c] == '.') empty.add(new int[]{r, c});\n" +
+        "                else set(r, c, board[r][c] - '0', true);\n" +
+        "            }\n" +
+        "        go();\n" +
+        "    }\n" +
+        "\n" +
+        "    private void set(int r, int c, int d, boolean v) {\n" +
+        "        rows[r][d] = v; cols[c][d] = v; boxes[r / 3 * 3 + c / 3][d] = v;\n" +
+        "    }\n" +
+        "\n" +
+        "    private int options(int r, int c) {\n" +
+        "        int n = 0;\n" +
+        "        for (int d = 1; d &lt;= 9; d++) if (!rows[r][d] &amp;&amp; !cols[c][d] &amp;&amp; !boxes[r / 3 * 3 + c / 3][d]) n++;\n" +
+        "        return n;\n" +
+        "    }\n" +
+        "\n" +
+        "    private boolean go() {\n" +
+        "        if (empty.isEmpty()) return true;\n" +
+        "        int best = 0;                  // fewest options first\n" +
+        "        for (int i = 1; i &lt; empty.size(); i++)\n" +
+        "            if (options(empty.get(i)[0], empty.get(i)[1]) &lt; options(empty.get(best)[0], empty.get(best)[1])) best = i;\n" +
+        "        int[] cell = empty.remove(best);\n" +
+        "        int r = cell[0], c = cell[1];\n" +
+        "        for (int d = 1; d &lt;= 9; d++) {\n" +
+        "            if (rows[r][d] || cols[c][d] || boxes[r / 3 * 3 + c / 3][d]) continue;\n" +
+        "            board[r][c] = (char) ('0' + d);\n" +
+        "            set(r, c, d, true);\n" +
+        "            if (go()) return true;\n" +
+        "            set(r, c, d, false);\n" +
+        "        }\n" +
+        "        board[r][c] = '.';             // undo, and give the cell back\n" +
+        "        empty.add(best, cell);\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> Exponential in the worst case; with the fewest-options rule, typical puzzles take well under a second.</p>" +
+        "<p><strong>The trap.</strong> Returning after the recursion without undoing the placement when it fails. The next digit tried then sits on a board still holding the previous attempt.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -14266,6 +14973,419 @@ CHAPTERS.push({
       viz: "dsaDPOrder", vizTitle: "Two loops, two orders, two different answers. Find the cell where they first diverge"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Climbing Stairs</h3>" +
+        "<p><strong>LeetCode 70 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/climbing-stairs/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>You climb a staircase of n steps, one or two steps at a time. Count the distinct ways to reach the top.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Your last move was either one step or two, so ways(n) = ways(n - 1) + ways(n - 2). That recursion repeats the same subproblems exponentially often: the chapter's opening picture of a tree that repeats itself.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> The plain recursion: about 1.6\u207f calls, roughly 3.7 billion at n = 45 (the problem's limit).</p>" +
+        "<p><strong>Approach.</strong> SRTBOT: subproblem ways(i) for the number of ways to reach step i; relate ways(i) = ways(i - 1) + ways(i - 2); topological order i increasing; base cases ways(0) = ways(1) = 1; original problem ways(n); time O(n). Only the last two values are ever needed, so keep two variables (the Rolling Array section).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def climbStairs(self, n: int) -&gt; int:\n" +
+        "        a, b = 1, 1                    # ways(0), ways(1)\n" +
+        "        for _ in range(n - 1):\n" +
+        "            a, b = b, a + b            # ways(i) = ways(i - 1) + ways(i - 2)\n" +
+        "        return b</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int climbStairs(int n) {\n" +
+        "        int a = 1, b = 1;              // ways(0), ways(1)\n" +
+        "        for (int i = 1; i &lt; n; i++) {\n" +
+        "            int next = a + b;          // ways(i) = ways(i - 1) + ways(i - 2)\n" +
+        "            a = b;\n" +
+        "            b = next;\n" +
+        "        }\n" +
+        "        return b;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Recognizing it as \"Fibonacci\" and stopping there. The point of the exercise is to derive the relation from the last move, because the same derivation handles one, two or three steps, or any set of allowed step sizes.</p></details>" +
+        "<h3>2. Min Cost Climbing Stairs</h3>" +
+        "<p><strong>LeetCode 746 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/min-cost-climbing-stairs/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Step i costs cost[i] to leave, and each move climbs one or two steps. Starting from step 0 or 1, find the cheapest way past the last step.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Climbing Stairs with costs: the same two predecessors, but take the minimum instead of the sum.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every sequence of one- and two-step moves: exponential.</p>" +
+        "<p><strong>Approach.</strong> Let best(i) be the cheapest cost to stand on step i. You can start on step 0 or 1 for free, so best(0) = best(1) = 0, and best(i) = min(best(i - 1) + cost[i - 1], best(i - 2) + cost[i - 2]). The answer is best(n), the step past the top. Keep only the last two values.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minCostClimbingStairs(self, cost: list[int]) -&gt; int:\n" +
+        "        a, b = 0, 0                    # best(0), best(1): both starts are free\n" +
+        "        for i in range(2, len(cost) + 1):   # up to n: the top is past the last step\n" +
+        "            a, b = b, min(b + cost[i - 1], a + cost[i - 2])\n" +
+        "        return b</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minCostClimbingStairs(int[] cost) {\n" +
+        "        int a = 0, b = 0;              // best(0), best(1): both starts are free\n" +
+        "        for (int i = 2; i &lt;= cost.length; i++) {   // the top is past the last step\n" +
+        "            int next = Math.min(b + cost[i - 1], a + cost[i - 2]);\n" +
+        "            a = b;\n" +
+        "            b = next;\n" +
+        "        }\n" +
+        "        return b;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Treating the last step as the top. The top is one past the last step, so the answer is best(n), not best(n - 1).</p></details>" +
+        "<h3>3. Pascal's Triangle</h3>" +
+        "<p><strong>LeetCode 118 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/pascals-triangle/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the first numRows rows of Pascal's triangle, where each inner number is the sum of the two above it.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Tabulation in its simplest form: each row is computed from the previous one, in order, and every cell is filled once.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compute each entry as a binomial coefficient C(r, c) from factorials: correct, but it recomputes large products the table gives you for free.</p>" +
+        "<p><strong>Approach.</strong> Start with [1]. Each next row begins and ends with 1, and its inner entry c is previous[c - 1] + previous[c].</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def generate(self, numRows: int) -&gt; list[list[int]]:\n" +
+        "        rows = [[1]]\n" +
+        "        for _ in range(numRows - 1):\n" +
+        "            prev = rows[-1]\n" +
+        "            rows.append([1] + [prev[c - 1] + prev[c] for c in range(1, len(prev))] + [1])   # a new list\n" +
+        "        return rows</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; generate(int numRows) {\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; rows = new ArrayList&lt;&gt;();\n" +
+        "        rows.add(List.of(1));\n" +
+        "        for (int r = 1; r &lt; numRows; r++) {\n" +
+        "            List&lt;Integer&gt; prev = rows.get(r - 1), row = new ArrayList&lt;&gt;();   // a new list\n" +
+        "            row.add(1);\n" +
+        "            for (int c = 1; c &lt; prev.size(); c++) row.add(prev.get(c - 1) + prev.get(c));\n" +
+        "            row.add(1);\n" +
+        "            rows.add(row);\n" +
+        "        }\n" +
+        "        return rows;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(numRows\u00b2) time and output size.</p>" +
+        "<p><strong>The trap.</strong> Building each row by modifying the previous row in place and appending the same list object again. All rows then alias one list. Build a new list per row.</p></details>" +
+        "<h3>4. House Robber</h3>" +
+        "<p><strong>LeetCode 198 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/house-robber/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Houses in a row hold amounts of money. You may not rob two neighbours. Find the most you can take.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Decide about the last house: rob it (and skip its neighbour) or skip it. Each choice leaves a smaller copy of the same problem, which is the SRTBOT section's \"relate\" step.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every set of non-adjacent houses: exponential (about 1.6\u207f sets).</p>" +
+        "<p><strong>Approach.</strong> SRTBOT: best(i) is the most from the first i houses; relate best(i) = max(best(i - 1), best(i - 2) + nums[i - 1]); order i increasing; base best(0) = 0, best(1) = nums[0]; answer best(n). Keep the last two values.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def rob(self, nums: list[int]) -&gt; int:\n" +
+        "        prev, cur = 0, 0               # best(i - 2), best(i - 1)\n" +
+        "        for x in nums:\n" +
+        "            prev, cur = cur, max(cur, prev + x)   # skip this house, or rob it\n" +
+        "        return cur</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int rob(int[] nums) {\n" +
+        "        int prev = 0, cur = 0;         // best(i - 2), best(i - 1)\n" +
+        "        for (int x : nums) {\n" +
+        "            int next = Math.max(cur, prev + x);   // skip this house, or rob it\n" +
+        "            prev = cur;\n" +
+        "            cur = next;\n" +
+        "        }\n" +
+        "        return cur;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> A greedy like \"take every other house\" or \"take the biggest first\". On [2, 1, 1, 2] every-other gives 3, while the answer is 4 (the two ends).</p></details>" +
+        "<h3>5. House Robber II</h3>" +
+        "<p><strong>LeetCode 213 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/house-robber-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>House Robber, but the houses stand in a circle, so the first and last are neighbours.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The circle adds exactly one constraint: not both the first and last house. Split into two line problems, one without the first house and one without the last, and reuse House Robber.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every valid set on the circle: exponential.</p>" +
+        "<p><strong>Approach.</strong> Answer = max(rob(nums[1:]), rob(nums[:-1])), each solved as a line. A single house is its own answer, since both slices would be empty.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def rob(self, nums: list[int]) -&gt; int:\n" +
+        "        def line(houses):              # House Robber on a line\n" +
+        "            prev, cur = 0, 0\n" +
+        "            for x in houses:\n" +
+        "                prev, cur = cur, max(cur, prev + x)\n" +
+        "            return cur\n" +
+        "\n" +
+        "        if len(nums) == 1:\n" +
+        "            return nums[0]\n" +
+        "        return max(line(nums[1:]), line(nums[:-1]))   # not both first and last</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int line(int[] nums, int from, int to) {   // House Robber on nums[from..to)\n" +
+        "        int prev = 0, cur = 0;\n" +
+        "        for (int i = from; i &lt; to; i++) {\n" +
+        "            int next = Math.max(cur, prev + nums[i]);\n" +
+        "            prev = cur;\n" +
+        "            cur = next;\n" +
+        "        }\n" +
+        "        return cur;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int rob(int[] nums) {\n" +
+        "        if (nums.length == 1) return nums[0];\n" +
+        "        return Math.max(line(nums, 1, nums.length), line(nums, 0, nums.length - 1));   // not both ends\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> The one-house case. nums[1:] and nums[:-1] are both empty, and the answer would come out 0 instead of nums[0].</p></details>" +
+        "<h3>6. Decode Ways</h3>" +
+        "<p><strong>LeetCode 91 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/decode-ways/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Digits encode letters as \"1\" = A through \"26\" = Z. Count the ways to decode a digit string.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The last letter came from either the last digit or the last two digits. Like Climbing Stairs, but a step is only allowed when the digits form a valid code.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every way to split the string into pieces of one or two digits: exponential.</p>" +
+        "<p><strong>Approach.</strong> ways(i) counts decodings of the first i digits. ways(i) gets ways(i - 1) if digit i - 1 is not \"0\", plus ways(i - 2) if the two digits ending at i - 1 form a number from 10 to 26. Base ways(0) = 1 (the empty prefix has one decoding: nothing).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def numDecodings(self, s: str) -&gt; int:\n" +
+        "        prev, cur = 1, 1 if s[0] != \"0\" else 0    # ways(0), ways(1)\n" +
+        "        for i in range(2, len(s) + 1):\n" +
+        "            nxt = 0\n" +
+        "            if s[i - 1] != \"0\":\n" +
+        "                nxt += cur             # last letter from one digit\n" +
+        "            if 10 &lt;= int(s[i - 2:i]) &lt;= 26:\n" +
+        "                nxt += prev            # last letter from two digits (not \"06\")\n" +
+        "            prev, cur = cur, nxt\n" +
+        "        return cur</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int numDecodings(String s) {\n" +
+        "        int prev = 1, cur = s.charAt(0) != '0' ? 1 : 0;   // ways(0), ways(1)\n" +
+        "        for (int i = 2; i &lt;= s.length(); i++) {\n" +
+        "            int next = 0;\n" +
+        "            if (s.charAt(i - 1) != '0') next += cur;       // one digit\n" +
+        "            int two = Integer.parseInt(s.substring(i - 2, i));\n" +
+        "            if (two &gt;= 10 &amp;&amp; two &lt;= 26) next += prev;      // two digits (not \"06\")\n" +
+        "            prev = cur;\n" +
+        "            cur = next;\n" +
+        "        }\n" +
+        "        return cur;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space with two variables.</p>" +
+        "<p><strong>The trap.</strong> Zeros. \"0\" alone decodes to nothing, and \"06\" is not a valid two-digit code; only 10 to 26 are. A string starting with 0 has zero decodings, and the rules above give that automatically.</p></details>" +
+        "<h3>7. Word Break</h3>" +
+        "<p><strong>LeetCode 139 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/word-break/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a string can be split into a sequence of dictionary words (each word usable any number of times).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A prefix of s is breakable if it ends with a dictionary word whose start is itself a breakable prefix. The subproblem is \"is the first i characters breakable?\".</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every way to cut the string and check each piece: 2\u207f\u207b\u00b9 ways, astronomical at n = 300.</p>" +
+        "<p><strong>Approach.</strong> ok[0] = True. For each i from 1 to n, ok[i] is True if some j &lt; i has ok[j] and s[j:i] in the word set. Only word lengths up to the longest dictionary word are worth trying as s[j:i].</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def wordBreak(self, s: str, wordDict: list[str]) -&gt; bool:\n" +
+        "        words = set(wordDict)\n" +
+        "        longest = max(map(len, wordDict))\n" +
+        "        ok = [True] + [False] * len(s)     # ok[i]: the first i characters can be split\n" +
+        "        for i in range(1, len(s) + 1):\n" +
+        "            for j in range(max(0, i - longest), i):\n" +
+        "                if ok[j] and s[j:i] in words:\n" +
+        "                    ok[i] = True\n" +
+        "                    break\n" +
+        "        return ok[len(s)]</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean wordBreak(String s, List&lt;String&gt; wordDict) {\n" +
+        "        Set&lt;String&gt; words = new HashSet&lt;&gt;(wordDict);\n" +
+        "        int longest = 0;\n" +
+        "        for (String w : wordDict) longest = Math.max(longest, w.length());\n" +
+        "        boolean[] ok = new boolean[s.length() + 1];   // ok[i]: first i characters can be split\n" +
+        "        ok[0] = true;\n" +
+        "        for (int i = 1; i &lt;= s.length(); i++)\n" +
+        "            for (int j = Math.max(0, i - longest); j &lt; i; j++)\n" +
+        "                if (ok[j] &amp;&amp; words.contains(s.substring(j, i))) { ok[i] = true; break; }\n" +
+        "        return ok[s.length()];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 L) substring checks for a longest word length L, each O(L) to hash: O(n \u00d7 L\u00b2). O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Plain recursion without memoization. On s = \"aaaa\u2026ab\" with words \"a\", \"aa\", \"aaa\", the same suffixes are re-tried exponentially often before failing. The table computes each prefix once.</p></details>" +
+        "<h3>8. Combination Sum IV</h3>" +
+        "<p><strong>LeetCode 377 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/combination-sum-iv/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the ordered sequences of the given distinct positive numbers (repeats allowed) that add up to a target. Different orders count separately.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Loop Order Matters section. Counting ordered sequences means the last number chosen can be any of them: ways(t) = the sum of ways(t - x) over every x. The outer loop runs over totals, the inner over numbers.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate every sequence recursively: exponential in target / smallest number.</p>" +
+        "<p><strong>Approach.</strong> ways[0] = 1. For t from 1 to target, ways[t] = sum of ways[t - x] for each x \u2264 t. Because every total considers every number as the last one, sequences in different orders are counted separately, which is what this problem wants.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def combinationSum4(self, nums: list[int], target: int) -&gt; int:\n" +
+        "        ways = [1] + [0] * target\n" +
+        "        for t in range(1, target + 1): # totals outer: order matters\n" +
+        "            for x in nums:\n" +
+        "                if x &lt;= t:\n" +
+        "                    ways[t] += ways[t - x]   # x was the last number chosen\n" +
+        "        return ways[target]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int combinationSum4(int[] nums, int target) {\n" +
+        "        int[] ways = new int[target + 1];\n" +
+        "        ways[0] = 1;\n" +
+        "        for (int t = 1; t &lt;= target; t++)      // totals outer: order matters\n" +
+        "            for (int x : nums)\n" +
+        "                if (x &lt;= t) ways[t] += ways[t - x];   // x was the last number chosen\n" +
+        "        return ways[target];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(target \u00d7 len(nums)) time, O(target) space.</p>" +
+        "<p><strong>The trap.</strong> Swapping the loops (numbers outer, totals inner). That counts each multiset once, the answer to Coin Change II in Chapter 20, not this problem's. (In Java some intermediate counts can pass 2\u00b3\u00b9; int arithmetic wraps, but the final sum is still right because the problem guarantees the answer fits.)</p></details>" +
+        "<h3>9. Maximum Product Subarray</h3>" +
+        "<p><strong>LeetCode 152 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/maximum-product-subarray/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the largest product of any non-empty block of consecutive values (which may be negative or zero).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Kadane from Chapter 9 with a twist: a negative number turns the smallest product into the largest. So the subproblem must track two things per position, the largest and the smallest product of a block ending there.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Every block with a running product: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Walk the array keeping hi and lo, the largest and smallest products of a block ending at the current position. For a new value x, the candidates are x alone, hi \u00d7 x and lo \u00d7 x; the new hi is the largest of them and the new lo the smallest. Track the best hi seen.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxProduct(self, nums: list[int]) -&gt; int:\n" +
+        "        hi = lo = best = nums[0]       # largest / smallest product ending here\n" +
+        "        for x in nums[1:]:\n" +
+        "            candidates = (x, hi * x, lo * x)\n" +
+        "            hi, lo = max(candidates), min(candidates)   # both from the old values\n" +
+        "            best = max(best, hi)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maxProduct(int[] nums) {\n" +
+        "        int hi = nums[0], lo = nums[0], best = nums[0];   // largest / smallest ending here\n" +
+        "        for (int i = 1; i &lt; nums.length; i++) {\n" +
+        "            int x = nums[i], a = hi * x, b = lo * x;      // both from the old values\n" +
+        "            hi = Math.max(x, Math.max(a, b));\n" +
+        "            lo = Math.min(x, Math.min(a, b));\n" +
+        "            best = Math.max(best, hi);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Updating hi first and then using the new hi to compute lo. Compute both from the old values at the same time. And tracking only the maximum, which misses that -2 \u00d7 -3 = 6.</p></details>" +
+        "<h3>10. Delete and Earn</h3>" +
+        "<p><strong>LeetCode 740 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/delete-and-earn/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Picking a value v earns v points and deletes every v - 1 and v + 1 from the array. Find the most points you can earn.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Once you take one copy of v you may as well take all of them, and taking v forbids v - 1 and v + 1. Laid out by value, that is House Robber: neighbouring values are neighbouring houses.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset of distinct values with no two adjacent: exponential in the number of distinct values.</p>" +
+        "<p><strong>Approach.</strong> Build points[v] = v \u00d7 (number of copies of v) for v up to the largest value. Run House Robber over points.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def deleteAndEarn(self, nums: list[int]) -&gt; int:\n" +
+        "        points = [0] * (max(nums) + 1)     # points[v]: everything earned by taking v\n" +
+        "        for x in nums:\n" +
+        "            points[x] += x\n" +
+        "        prev, cur = 0, 0               # House Robber over values\n" +
+        "        for p in points:\n" +
+        "            prev, cur = cur, max(cur, prev + p)\n" +
+        "        return cur</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int deleteAndEarn(int[] nums) {\n" +
+        "        int max = 0;\n" +
+        "        for (int x : nums) max = Math.max(max, x);\n" +
+        "        int[] points = new int[max + 1];   // points[v]: everything earned by taking v\n" +
+        "        for (int x : nums) points[x] += x;\n" +
+        "        int prev = 0, cur = 0;             // House Robber over values\n" +
+        "        for (int p : points) {\n" +
+        "            int next = Math.max(cur, prev + p);\n" +
+        "            prev = cur;\n" +
+        "            cur = next;\n" +
+        "        }\n" +
+        "        return cur;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n + V) time and O(V) space for values up to V = 10\u2074.</p>" +
+        "<p><strong>The trap.</strong> Running House Robber over the sorted distinct values as if they were adjacent. Values 3 and 5 are not in conflict; laying points out by value, with gaps as zeros, handles that automatically.</p></details>" +
+        "<h3>11. Maximum Profit in Job Scheduling</h3>" +
+        "<p><strong>LeetCode 1235 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/maximum-profit-in-job-scheduling/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Jobs have start times, end times and profits. Choose jobs that do not overlap (one may start exactly when another ends) to maximize total profit.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Weighted interval scheduling. Sort by end time and decide about the last job: skip it, or take it plus the best schedule of jobs ending no later than its start. Finding that earlier job is a binary search (Chapter 13).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every compatible subset of jobs: O(2\u207f).</p>" +
+        "<p><strong>Approach.</strong> Sort jobs by end time. best[i] is the best profit using the first i jobs. For job i - 1, find with binary search the number k of jobs whose end time is at most its start time. Then best[i] = max(best[i - 1], best[k] + profit).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_right\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def jobScheduling(self, startTime: list[int], endTime: list[int], profit: list[int]) -&gt; int:\n" +
+        "        jobs = sorted(zip(endTime, startTime, profit))   # by end time\n" +
+        "        ends = [e for e, _, _ in jobs]\n" +
+        "        best = [0] * (len(jobs) + 1)   # best[i]: using the first i jobs\n" +
+        "        for i, (e, s, p) in enumerate(jobs, 1):\n" +
+        "            k = bisect_right(ends, s, 0, i - 1)          # jobs ending at or before s\n" +
+        "            best[i] = max(best[i - 1], best[k] + p)      # skip it, or take it\n" +
+        "        return best[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int jobScheduling(int[] startTime, int[] endTime, int[] profit) {\n" +
+        "        int n = startTime.length;\n" +
+        "        Integer[] order = new Integer[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) order[i] = i;\n" +
+        "        Arrays.sort(order, (a, b) -&gt; Integer.compare(endTime[a], endTime[b]));   // by end time\n" +
+        "        int[] best = new int[n + 1];   // best[i]: using the first i jobs\n" +
+        "        for (int i = 1; i &lt;= n; i++) {\n" +
+        "            int job = order[i - 1], s = startTime[job];\n" +
+        "            int lo = 0, hi = i - 1;    // count the jobs among the first i - 1 ending at or before s\n" +
+        "            while (lo &lt; hi) {\n" +
+        "                int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "                if (endTime[order[mid]] &lt;= s) lo = mid + 1;\n" +
+        "                else hi = mid;\n" +
+        "            }\n" +
+        "            best[i] = Math.max(best[i - 1], best[lo] + profit[job]);   // skip, or take\n" +
+        "        }\n" +
+        "        return best[n];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time for the sort and the binary searches, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Sorting by start time and relating to the next job instead. It can be made to work, but the binary search must then find the first job starting at or after the current end, and mixing the two conventions is the usual bug. Pick one and keep it.</p></details>" +
+        "<h3>12. Word Break II</h3>" +
+        "<p><strong>LeetCode 140 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/word-break-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return every way to split a string into dictionary words, as sentences with the words separated by spaces.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Reconstructing the Answer section: Word Break decides whether a split exists; here you must produce every split. Memoize, for each start position, the list of sentences that the rest of the string can form.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every one of the 2\u207f\u207b\u00b9 ways to cut the string and keep those made entirely of words.</p>" +
+        "<p><strong>Approach.</strong> Define sentences(i) as the list of ways to split s[i:]. For each word w that s[i:] starts with, prepend w to every sentence of sentences(i + len(w)); the empty suffix has one way, the empty sentence. Cache sentences(i) so each suffix is solved once.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from functools import lru_cache\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def wordBreak(self, s: str, wordDict: list[str]) -&gt; list[str]:\n" +
+        "        words = set(wordDict)\n" +
+        "\n" +
+        "        @lru_cache(maxsize=None)\n" +
+        "        def sentences(i):              # every way to split s[i:]\n" +
+        "            if i == len(s):\n" +
+        "                return [\"\"]            # one way: the empty sentence\n" +
+        "            out = []\n" +
+        "            for j in range(i + 1, len(s) + 1):\n" +
+        "                if s[i:j] in words:\n" +
+        "                    for rest in sentences(j):\n" +
+        "                        out.append(s[i:j] + (\" \" + rest if rest else \"\"))\n" +
+        "            return out\n" +
+        "\n" +
+        "        return sentences(0)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final Map&lt;Integer, List&lt;String&gt;&gt; memo = new HashMap&lt;&gt;();\n" +
+        "\n" +
+        "    public List&lt;String&gt; wordBreak(String s, List&lt;String&gt; wordDict) {\n" +
+        "        return sentences(s, 0, new HashSet&lt;&gt;(wordDict));\n" +
+        "    }\n" +
+        "\n" +
+        "    private List&lt;String&gt; sentences(String s, int i, Set&lt;String&gt; words) {   // every way to split s[i:]\n" +
+        "        if (i == s.length()) return List.of(\"\");   // one way: the empty sentence\n" +
+        "        if (memo.containsKey(i)) return memo.get(i);\n" +
+        "        List&lt;String&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        for (int j = i + 1; j &lt;= s.length(); j++) {\n" +
+        "            String w = s.substring(i, j);\n" +
+        "            if (!words.contains(w)) continue;\n" +
+        "            for (String rest : sentences(s, j, words)) out.add(rest.isEmpty() ? w : w + \" \" + rest);\n" +
+        "        }\n" +
+        "        memo.put(i, out);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> Bounded by the size of the output, which can be exponential; the cache stops the work from exceeding it by more than a polynomial factor. The problem keeps the answer small (n \u2264 20).</p>" +
+        "<p><strong>The trap.</strong> Returning an empty list for the empty suffix instead of a list containing one empty sentence. Then nothing ever gets built, because every sentence ends by reaching the end of the string.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -14662,6 +15782,378 @@ CHAPTERS.push({
         "<p>Named as a table of when each wins: the O(nW) fill costs time and space O(nW), so it is cheap in memory, linear in n, and usable only while W stays small. Meet in the middle costs time and space O(2<sup>n/2</sup>), so it is exponential in n but wholly indifferent to the magnitude of the numbers, usable only while n stays small. One covers many items with small numbers, the other few items with huge numbers, and reaching for the wrong one is not slow but impossible &#8212; the table cannot be allocated, or the enumeration cannot finish.</p>" +
 
         "<p>Neither method makes subset sum tractable in general, and neither should be read as beating its NP-completeness. The table is fast only for small numbers; meet in the middle is fast only for small n. When both n and the numbers are large, the problem is genuinely hard, and the right move is an approximation or a heuristic, not a cleverer exact algorithm &#8212; because a polynomial exact algorithm for this problem would resolve P versus NP, and Chapter 46 explains why nobody expects to find one.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 25 minutes (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Partition Equal Subset Sum</h3>" +
+        "<p><strong>LeetCode 416 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/partition-equal-subset-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether an array of positive integers can be split into two groups with equal sums.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two equal halves means one group sums to exactly total / 2. \"Can some subset reach this sum?\" is 0/1 knapsack with yes-or-no cells, the first of the Four Problems, One Table.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset: 2\u207f, about 1.6 \u00d7 10\u2076\u2070 at n = 200.</p>" +
+        "<p><strong>Approach.</strong> If the total is odd, answer false. Otherwise keep can[s] = \"some subset of the numbers seen so far sums to s\", starting with can[0] = True. For each number x, for s from total / 2 down to x, set can[s] = can[s] or can[s - x]. Answer can[total / 2].</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def canPartition(self, nums: list[int]) -&gt; bool:\n" +
+        "        total = sum(nums)\n" +
+        "        if total % 2:\n" +
+        "            return False\n" +
+        "        half = total // 2\n" +
+        "        can = [True] + [False] * half  # can[s]: some subset sums to s\n" +
+        "        for x in nums:\n" +
+        "            for s in range(half, x - 1, -1):   # downwards: each number at most once\n" +
+        "                can[s] = can[s] or can[s - x]\n" +
+        "        return can[half]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean canPartition(int[] nums) {\n" +
+        "        int total = 0;\n" +
+        "        for (int x : nums) total += x;\n" +
+        "        if (total % 2 != 0) return false;\n" +
+        "        int half = total / 2;\n" +
+        "        boolean[] can = new boolean[half + 1];   // can[s]: some subset sums to s\n" +
+        "        can[0] = true;\n" +
+        "        for (int x : nums)\n" +
+        "            for (int s = half; s &gt;= x; s--)       // downwards: each number at most once\n" +
+        "                can[s] = can[s] || can[s - x];\n" +
+        "        return can[half];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 total) time, O(total) space. Pseudopolynomial: fast because the sums here are at most 20,000, not because the problem is tractable in general.</p>" +
+        "<p><strong>The trap.</strong> Looping s upwards. Then can[s - x] may already include x from this same round, so x gets used twice. Going down reads only last round's values: the Why the Loop Flips section, in the 0/1 direction.</p></details>" +
+        "<h3>2. Target Sum</h3>" +
+        "<p><strong>LeetCode 494 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/target-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Put a + or - in front of every number so the total equals a target. Count the ways.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Let P be the numbers given +. Then sum(P) - (total - sum(P)) = target, so sum(P) = (total + target) / 2. Counting the subsets with that sum is the counting row of the same knapsack table.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all 2\u207f sign patterns: about a million at n = 20, which passes, but the table is the lesson.</p>" +
+        "<p><strong>Approach.</strong> If total + target is odd or |target| &gt; total, there are no ways. Otherwise count[s] = number of subsets of the numbers seen so far summing to s, with count[0] = 1. For each x, for s downwards from the goal to x, add count[s - x] to count[s]. Answer count[goal].</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findTargetSumWays(self, nums: list[int], target: int) -&gt; int:\n" +
+        "        total = sum(nums)\n" +
+        "        if abs(target) &gt; total or (total + target) % 2:\n" +
+        "            return 0\n" +
+        "        goal = (total + target) // 2   # the sum of the numbers given +\n" +
+        "        count = [1] + [0] * goal\n" +
+        "        for x in nums:\n" +
+        "            for s in range(goal, x - 1, -1):   # includes s = 0 when x = 0: zeros double\n" +
+        "                count[s] += count[s - x]\n" +
+        "        return count[goal]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findTargetSumWays(int[] nums, int target) {\n" +
+        "        int total = 0;\n" +
+        "        for (int x : nums) total += x;\n" +
+        "        if (Math.abs(target) &gt; total || (total + target) % 2 != 0) return 0;\n" +
+        "        int goal = (total + target) / 2;   // the sum of the numbers given +\n" +
+        "        int[] count = new int[goal + 1];\n" +
+        "        count[0] = 1;\n" +
+        "        for (int x : nums)\n" +
+        "            for (int s = goal; s &gt;= x; s--)   // includes s = 0 when x = 0: zeros double\n" +
+        "                count[s] += count[s - x];\n" +
+        "        return count[goal];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 total) time, O(total) space.</p>" +
+        "<p><strong>The trap.</strong> Zeros. A 0 can take + or -, doubling the count, and the downward loop must include s = x = 0 for that to happen. A loop that stops at s = 1 silently loses those ways.</p></details>" +
+        "<h3>3. Coin Change</h3>" +
+        "<p><strong>LeetCode 322 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/coin-change/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the fewest coins (each denomination usable any number of times) that add up to an amount, or -1 if it cannot be made.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Unbounded knapsack, minimizing the count: the Why the Loop Flips for Unbounded section. And it is Chapter 23's \"a greedy that fails\": with coins 1, 3 and 4, taking the largest coin first makes 6 as 4 + 1 + 1, while 3 + 3 uses two coins.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every combination of coin counts recursively: exponential in amount / smallest coin.</p>" +
+        "<p><strong>Approach.</strong> fewest[0] = 0 and every other amount starts at infinity (or amount + 1, which no answer can reach). For each coin c, for a from c upwards to amount, fewest[a] = min(fewest[a], fewest[a - c] + 1). Answer fewest[amount], or -1 if it is still at the sentinel.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def coinChange(self, coins: list[int], amount: int) -&gt; int:\n" +
+        "        NONE = amount + 1              # more coins than any real answer needs\n" +
+        "        fewest = [0] + [NONE] * amount\n" +
+        "        for c in coins:\n" +
+        "            for a in range(c, amount + 1):   # upwards: a coin may be reused\n" +
+        "                fewest[a] = min(fewest[a], fewest[a - c] + 1)\n" +
+        "        return fewest[amount] if fewest[amount] != NONE else -1</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int coinChange(int[] coins, int amount) {\n" +
+        "        int none = amount + 1;         // not MAX_VALUE: MAX_VALUE + 1 wraps negative\n" +
+        "        int[] fewest = new int[amount + 1];\n" +
+        "        Arrays.fill(fewest, none);\n" +
+        "        fewest[0] = 0;\n" +
+        "        for (int c : coins)\n" +
+        "            for (int a = c; a &lt;= amount; a++)   // upwards: a coin may be reused\n" +
+        "                fewest[a] = Math.min(fewest[a], fewest[a - c] + 1);\n" +
+        "        return fewest[amount] == none ? -1 : fewest[amount];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(len(coins) \u00d7 amount) time, O(amount) space. Pseudopolynomial in the amount, at most 10\u2074 here.</p>" +
+        "<p><strong>The trap.</strong> Starting \"impossible\" at Integer.MAX_VALUE in Java. Adding 1 to it wraps to a negative number, which then looks like the best answer. Use amount + 1 as the sentinel.</p></details>" +
+        "<h3>4. Coin Change II</h3>" +
+        "<p><strong>LeetCode 518 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/coin-change-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the combinations of coins (each denomination usable any number of times) that make an amount. Order does not matter.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Counting unbounded knapsack with coins in the outer loop. That order builds each combination with its coins in a fixed sequence, so it is counted once; Chapter 19's Combination Sum IV swaps the loops and counts orderings instead.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate multisets of coins recursively: exponential.</p>" +
+        "<p><strong>Approach.</strong> ways[0] = 1. For each coin c, for a from c up to amount, ways[a] += ways[a - c]. When coin c is processed, ways[a - c] already counts combinations of the earlier coins plus any number of c, so each combination is counted exactly once.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def change(self, amount: int, coins: list[int]) -&gt; int:\n" +
+        "        ways = [1] + [0] * amount\n" +
+        "        for c in coins:                # coins outer: each combination counted once\n" +
+        "            for a in range(c, amount + 1):\n" +
+        "                ways[a] += ways[a - c]\n" +
+        "        return ways[amount]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int change(int amount, int[] coins) {\n" +
+        "        int[] ways = new int[amount + 1];\n" +
+        "        ways[0] = 1;\n" +
+        "        for (int c : coins)            // coins outer: each combination counted once\n" +
+        "            for (int a = c; a &lt;= amount; a++) ways[a] += ways[a - c];\n" +
+        "        return ways[amount];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(len(coins) \u00d7 amount) time, O(amount) space.</p>" +
+        "<p><strong>The trap.</strong> Putting the amounts in the outer loop. Then 1 + 2 and 2 + 1 are both counted, which is Combination Sum IV's answer, not this one's.</p></details>" +
+        "<h3>5. Ones and Zeroes</h3>" +
+        "<p><strong>LeetCode 474 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/ones-and-zeroes/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Choose as many binary strings as possible such that together they contain at most m zeros and at most n ones.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>0/1 knapsack with two capacities (zeros and ones) instead of one. The table gains a dimension; nothing else changes, including the downward loops.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset of strings: 2\u2076\u2070\u2070 at the limit.</p>" +
+        "<p><strong>Approach.</strong> best[z][o] is the most strings that fit within z zeros and o ones. For each string with z0 zeros and o1 ones, for z from m down to z0 and o from n down to o1, best[z][o] = max(best[z][o], best[z - z0][o - o1] + 1).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findMaxForm(self, strs: list[str], m: int, n: int) -&gt; int:\n" +
+        "        best = [[0] * (n + 1) for _ in range(m + 1)]   # best[z][o]: within z zeros, o ones\n" +
+        "        for s in strs:\n" +
+        "            z0, o1 = s.count(\"0\"), s.count(\"1\")\n" +
+        "            for z in range(m, z0 - 1, -1):             # both capacities downwards\n" +
+        "                for o in range(n, o1 - 1, -1):\n" +
+        "                    best[z][o] = max(best[z][o], best[z - z0][o - o1] + 1)\n" +
+        "        return best[m][n]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findMaxForm(String[] strs, int m, int n) {\n" +
+        "        int[][] best = new int[m + 1][n + 1];   // best[z][o]: within z zeros, o ones\n" +
+        "        for (String s : strs) {\n" +
+        "            int z0 = 0, o1 = 0;\n" +
+        "            for (char c : s.toCharArray()) if (c == '0') z0++; else o1++;\n" +
+        "            for (int z = m; z &gt;= z0; z--)       // both capacities downwards\n" +
+        "                for (int o = n; o &gt;= o1; o--)\n" +
+        "                    best[z][o] = Math.max(best[z][o], best[z - z0][o - o1] + 1);\n" +
+        "        }\n" +
+        "        return best[m][n];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(len(strs) \u00d7 m \u00d7 n) time, O(m \u00d7 n) space.</p>" +
+        "<p><strong>The trap.</strong> Looping either capacity upwards, which lets the same string be taken twice. Both loops must go down.</p></details>" +
+        "<h3>6. Last Stone Weight II</h3>" +
+        "<p><strong>LeetCode 1049 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/last-stone-weight-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Repeatedly smash two stones; equal stones both vanish, otherwise the heavier keeps the difference. Find the smallest possible weight left at the end (0 if nothing is left).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Every sequence of smashes ends up adding some stones and subtracting the others, so the question is: split the stones into two piles with sums as close as possible. That is Partition Equal Subset Sum asking for the nearest reachable sum instead of an exact one.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Simulate every smashing order: factorial in the number of stones.</p>" +
+        "<p><strong>Approach.</strong> Compute which sums up to total // 2 are reachable with 0/1 knapsack (downward loop). The best pile is the largest reachable sum s \u2264 total // 2, and the answer is total - 2s.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def lastStoneWeightII(self, stones: list[int]) -&gt; int:\n" +
+        "        total = sum(stones)\n" +
+        "        half = total // 2\n" +
+        "        can = [True] + [False] * half\n" +
+        "        for x in stones:\n" +
+        "            for s in range(half, x - 1, -1):\n" +
+        "                can[s] = can[s] or can[s - x]\n" +
+        "        best = max(s for s in range(half + 1) if can[s])   # the pile closest to half\n" +
+        "        return total - 2 * best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int lastStoneWeightII(int[] stones) {\n" +
+        "        int total = 0;\n" +
+        "        for (int x : stones) total += x;\n" +
+        "        int half = total / 2;\n" +
+        "        boolean[] can = new boolean[half + 1];\n" +
+        "        can[0] = true;\n" +
+        "        for (int x : stones)\n" +
+        "            for (int s = half; s &gt;= x; s--) can[s] = can[s] || can[s - x];\n" +
+        "        for (int s = half; s &gt;= 0; s--)\n" +
+        "            if (can[s]) return total - 2 * s;   // the pile closest to half\n" +
+        "        return total;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 total) time, O(total) space, with total at most 3,000.</p>" +
+        "<p><strong>The trap.</strong> Simulating greedily by always smashing the two heaviest stones. That is a different problem (Last Stone Weight, 1046) and does not minimize the result here. On [3, 5, 6, 6, 4] it leaves 2, while the split 3 + 5 + 4 against 6 + 6 leaves 0.</p></details>" +
+        "<h3>7. Perfect Squares</h3>" +
+        "<p><strong>LeetCode 279 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/perfect-squares/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the fewest perfect squares (1, 4, 9, \u2026) that add up to n.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Coin Change where the coins are the squares up to n: unbounded knapsack, minimizing the count.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every combination of squares recursively: exponential.</p>" +
+        "<p><strong>Approach.</strong> fewest[0] = 0. For each a from 1 to n, fewest[a] = 1 + the minimum of fewest[a - j\u00b2] over all j with j\u00b2 \u2264 a.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def numSquares(self, n: int) -&gt; int:\n" +
+        "        fewest = [0] + [n] * n         # n ones always work\n" +
+        "        for a in range(1, n + 1):\n" +
+        "            j = 1\n" +
+        "            while j * j &lt;= a:\n" +
+        "                fewest[a] = min(fewest[a], fewest[a - j * j] + 1)\n" +
+        "                j += 1\n" +
+        "        return fewest[n]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int numSquares(int n) {\n" +
+        "        int[] fewest = new int[n + 1];\n" +
+        "        for (int a = 1; a &lt;= n; a++) {\n" +
+        "            fewest[a] = a;             // a ones always work\n" +
+        "            for (int j = 1; j * j &lt;= a; j++) fewest[a] = Math.min(fewest[a], fewest[a - j * j] + 1);\n" +
+        "        }\n" +
+        "        return fewest[n];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u221an) time, about 10\u2076 steps at n = 10\u2074, and O(n) space. (Lagrange's four-square theorem says the answer is never more than 4, which some faster solutions exploit.)</p>" +
+        "<p><strong>The trap.</strong> Taking the largest square first. For 12 that gives 9 + 1 + 1 + 1, four squares, while 4 + 4 + 4 uses three.</p></details>" +
+        "<h3>8. Number of Dice Rolls With Target Sum</h3>" +
+        "<p><strong>LeetCode 1155 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/number-of-dice-rolls-with-target-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Roll n dice with faces 1 to k. Count the ways (modulo 1,000,000,007) for the faces to add up to a target.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A grouped knapsack: each die is a group from which exactly one face must be chosen. The table is ways[dice used][sum].</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate all k\u207f rolls: 30\u00b3\u2070 at the limit.</p>" +
+        "<p><strong>Approach.</strong> ways over sums starts as [1, 0, 0, \u2026] for zero dice. For each die, build a new row: new[s] = sum of ways[s - f] for faces f from 1 to k with f \u2264 s. Replace the row and move on. Answer ways[target] after n dice.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def numRollsToTarget(self, n: int, k: int, target: int) -&gt; int:\n" +
+        "        MOD = 10**9 + 7\n" +
+        "        ways = [1] + [0] * target      # zero dice: only the sum 0\n" +
+        "        for _ in range(n):\n" +
+        "            new = [0] * (target + 1)   # a fresh row: exactly one face per die\n" +
+        "            for s in range(1, target + 1):\n" +
+        "                for f in range(1, min(k, s) + 1):\n" +
+        "                    new[s] = (new[s] + ways[s - f]) % MOD\n" +
+        "            ways = new\n" +
+        "        return ways[target]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int numRollsToTarget(int n, int k, int target) {\n" +
+        "        final int MOD = 1_000_000_007;\n" +
+        "        int[] ways = new int[target + 1];\n" +
+        "        ways[0] = 1;                   // zero dice: only the sum 0\n" +
+        "        for (int d = 0; d &lt; n; d++) {\n" +
+        "            int[] next = new int[target + 1];   // a fresh row: one face per die\n" +
+        "            for (int s = 1; s &lt;= target; s++)\n" +
+        "                for (int f = 1; f &lt;= Math.min(k, s); f++) next[s] = (next[s] + ways[s - f]) % MOD;\n" +
+        "            ways = next;\n" +
+        "        }\n" +
+        "        return ways[target];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 target \u00d7 k) time, about 900,000 steps at the limits, and O(target) space.</p>" +
+        "<p><strong>The trap.</strong> Updating the row in place. Each die must use exactly one face, so every new sum must be built from the previous die's row; in-place updates let one die contribute several faces.</p></details>" +
+        "<h3>9. Profitable Schemes</h3>" +
+        "<p><strong>LeetCode 879 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/profitable-schemes/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Crimes each need some members and yield some profit; a member can join only one crime. Count the sets of crimes (modulo 1,000,000,007) that use at most n members and earn at least minProfit.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>0/1 knapsack with a capacity (members) and a threshold (profit). The trick for \"at least minProfit\" is to cap the profit dimension at minProfit: every profit beyond it counts the same.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset of crimes: 2\u00b9\u2070\u2070 at the limit.</p>" +
+        "<p><strong>Approach.</strong> ways[m][p] counts the sets of crimes that use exactly m members and whose profit, capped at minProfit, is p. Start with ways[0][0] = 1. For each crime (g, pr), for m from n down to g and p from minProfit down to 0, add ways[m - g][p] into ways[m][min(minProfit, p + pr)]. Answer: the sum of ways[m][minProfit] over all m.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def profitableSchemes(self, n: int, minProfit: int, group: list[int], profit: list[int]) -&gt; int:\n" +
+        "        MOD = 10**9 + 7\n" +
+        "        ways = [[0] * (minProfit + 1) for _ in range(n + 1)]   # [members][profit, capped]\n" +
+        "        ways[0][0] = 1\n" +
+        "        for g, pr in zip(group, profit):\n" +
+        "            for m in range(n, g - 1, -1):                       # 0/1: downwards\n" +
+        "                for p in range(minProfit, -1, -1):\n" +
+        "                    capped = min(minProfit, p + pr)             # \"at least\" folds into the cap\n" +
+        "                    ways[m][capped] = (ways[m][capped] + ways[m - g][p]) % MOD\n" +
+        "        return sum(ways[m][minProfit] for m in range(n + 1)) % MOD</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int profitableSchemes(int n, int minProfit, int[] group, int[] profit) {\n" +
+        "        final int MOD = 1_000_000_007;\n" +
+        "        int[][] ways = new int[n + 1][minProfit + 1];   // [members][profit, capped]\n" +
+        "        ways[0][0] = 1;\n" +
+        "        for (int c = 0; c &lt; group.length; c++) {\n" +
+        "            int g = group[c], pr = profit[c];\n" +
+        "            for (int m = n; m &gt;= g; m--)                // 0/1: downwards\n" +
+        "                for (int p = minProfit; p &gt;= 0; p--) {\n" +
+        "                    int capped = Math.min(minProfit, p + pr);   // \"at least\" folds into the cap\n" +
+        "                    ways[m][capped] = (ways[m][capped] + ways[m - g][p]) % MOD;\n" +
+        "                }\n" +
+        "        }\n" +
+        "        int total = 0;\n" +
+        "        for (int m = 0; m &lt;= n; m++) total = (total + ways[m][minProfit]) % MOD;\n" +
+        "        return total;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(crimes \u00d7 n \u00d7 minProfit) time, about 10\u2076 at the limits, and O(n \u00d7 minProfit) space.</p>" +
+        "<p><strong>The trap.</strong> Letting the profit dimension grow to the true total (up to 10,000). It works, but the table is a hundred times bigger than needed. Capping at minProfit is the idea that makes a threshold constraint fit in a knapsack.</p></details>" +
+        "<h3>10. Partition Array Into Two Arrays to Minimize Sum Difference</h3>" +
+        "<p><strong>LeetCode 2035 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/partition-array-into-two-arrays-to-minimize-sum-difference/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Split an array of 2n integers (n \u2264 15, values up to \u00b110\u2077) into two arrays of n each, minimizing the absolute difference of their sums.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The values are too large for a knapsack table (the Pseudopolynomial section's warning), and 2\u00b3\u2070 subsets are too many. Thirty items is the Meet in the Middle, When n Is Small section's case: split the array in half and combine the halves' subset sums.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every way to choose n of the 2n elements: C(30, 15) \u2248 1.55 \u00d7 10\u2078 subsets, each summed.</p>" +
+        "<p><strong>Approach.</strong> Split into a left half and a right half of n each. For each half, list the subset sums grouped by how many elements were taken. A valid answer takes k from the left and n - k from the right, and you want that group sum as close to total / 2 as possible. For each k, sort the right half's sums for n - k, and for each left sum a binary-search the right sum that brings a + b closest to total / 2. The answer is |total - 2(a + b)| at the best pair.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_left\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def minimumDifference(self, nums: list[int]) -&gt; int:\n" +
+        "        n, total = len(nums) // 2, sum(nums)\n" +
+        "\n" +
+        "        def sums_by_count(half):       # sums[k] = every subset sum using k elements\n" +
+        "            sums = [[] for _ in range(n + 1)]\n" +
+        "            for mask in range(1 &lt;&lt; n):\n" +
+        "                sums[bin(mask).count(\"1\")].append(sum(half[i] for i in range(n) if mask &gt;&gt; i &amp; 1))\n" +
+        "            return sums\n" +
+        "\n" +
+        "        left, right = sums_by_count(nums[:n]), sums_by_count(nums[n:])\n" +
+        "        best = float(\"inf\")\n" +
+        "        for k in range(n + 1):\n" +
+        "            rs = sorted(right[n - k])  # k from the left means n - k from the right\n" +
+        "            for a in left[k]:\n" +
+        "                i = bisect_left(rs, total / 2 - a)   # the right sum nearest total/2 - a\n" +
+        "                for j in (i - 1, i):\n" +
+        "                    if 0 &lt;= j &lt; len(rs):\n" +
+        "                        best = min(best, abs(total - 2 * (a + rs[j])))\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int minimumDifference(int[] nums) {\n" +
+        "        int n = nums.length / 2;\n" +
+        "        long total = 0;\n" +
+        "        for (int x : nums) total += x;\n" +
+        "        List&lt;List&lt;Long&gt;&gt; left = sumsByCount(nums, 0, n), right = sumsByCount(nums, n, n);\n" +
+        "        long best = Long.MAX_VALUE;\n" +
+        "        for (int k = 0; k &lt;= n; k++) {\n" +
+        "            List&lt;Long&gt; rs = right.get(n - k);   // k from the left means n - k from the right\n" +
+        "            Collections.sort(rs);\n" +
+        "            for (long a : left.get(k)) {\n" +
+        "                // first right sum b with 2(a + b) &gt;= total, and the one before it\n" +
+        "                int lo = 0, hi = rs.size();\n" +
+        "                while (lo &lt; hi) {\n" +
+        "                    int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "                    if (2 * (a + rs.get(mid)) &lt; total) lo = mid + 1; else hi = mid;\n" +
+        "                }\n" +
+        "                for (int j = lo - 1; j &lt;= lo; j++)\n" +
+        "                    if (j &gt;= 0 &amp;&amp; j &lt; rs.size()) best = Math.min(best, Math.abs(total - 2 * (a + rs.get(j))));\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return (int) best;\n" +
+        "    }\n" +
+        "\n" +
+        "    private List&lt;List&lt;Long&gt;&gt; sumsByCount(int[] nums, int from, int n) {   // sums by elements used\n" +
+        "        List&lt;List&lt;Long&gt;&gt; sums = new ArrayList&lt;&gt;();\n" +
+        "        for (int k = 0; k &lt;= n; k++) sums.add(new ArrayList&lt;&gt;());\n" +
+        "        for (int mask = 0; mask &lt; (1 &lt;&lt; n); mask++) {\n" +
+        "            long s = 0;\n" +
+        "            for (int i = 0; i &lt; n; i++) if ((mask &gt;&gt; i &amp; 1) == 1) s += nums[from + i];\n" +
+        "            sums.get(Integer.bitCount(mask)).add(s);\n" +
+        "        }\n" +
+        "        return sums;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(2\u207f \u00d7 n) time for listing and searching, with n = 15 giving about 32,768 sums per half. O(2\u207f) space.</p>" +
+        "<p><strong>The trap.</strong> Ignoring the size constraint. Both arrays must have exactly n elements, so sums must be matched by count: k from the left with n - k from the right. Matching any left sum with any right sum finds splits of the wrong sizes.</p></details>"
     },
 
     { title: "Exercises",
@@ -15252,6 +16744,465 @@ CHAPTERS.push({
         "}</code></pre></div>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Is Subsequence</h3>" +
+        "<p><strong>LeetCode 392 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/is-subsequence/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether s can be obtained from t by deleting some characters without reordering the rest.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The simplest alignment in the chapter's family: match each character of s to the earliest usable character of t. Taking the earliest match never hurts, because it leaves the most of t for the rest of s.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every way to pick len(s) positions from t: exponential.</p>" +
+        "<p><strong>Approach.</strong> Walk t with a pointer i into s. Whenever t's character equals s[i], advance i. s is a subsequence exactly when i reaches the end of s.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isSubsequence(self, s: str, t: str) -&gt; bool:\n" +
+        "        i = 0\n" +
+        "        for c in t:\n" +
+        "            if i &lt; len(s) and s[i] == c:\n" +
+        "                i += 1                 # the earliest match is always safe to take\n" +
+        "        return i == len(s)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isSubsequence(String s, String t) {\n" +
+        "        int i = 0;\n" +
+        "        for (int j = 0; j &lt; t.length() &amp;&amp; i &lt; s.length(); j++)\n" +
+        "            if (s.charAt(i) == t.charAt(j)) i++;   // the earliest match is always safe\n" +
+        "        return i == s.length();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(len(t)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> The follow-up: with a billion strings s checked against the same t, rescanning t each time is too slow. Precompute, for each letter, the sorted list of its positions in t; each s then costs len(s) binary searches (Chapter 13).</p></details>" +
+        "<h3>2. Longest Increasing Subsequence</h3>" +
+        "<p><strong>LeetCode 300 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-increasing-subsequence/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the length of the longest strictly increasing subsequence of an array.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The chapter's first two sections. The quadratic DP asks, for each i, for the longest increasing subsequence ending at i. The n log n version keeps tails[len] = the smallest possible last value of an increasing subsequence of length len + 1, and places each value with a binary search.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every subsequence: 2\u207f.</p>" +
+        "<p><strong>Approach.</strong> Keep tails, which is always sorted. For each x, find with lower_bound the first tail \u2265 x. If there is none, x extends the longest subsequence: append it. Otherwise replace that tail with x, because a subsequence of that length can now end lower. The answer is len(tails).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_left\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def lengthOfLIS(self, nums: list[int]) -&gt; int:\n" +
+        "        tails = []                     # tails[k]: smallest last value of an increasing run of length k + 1\n" +
+        "        for x in nums:\n" +
+        "            i = bisect_left(tails, x)  # first tail &gt;= x (strictly increasing)\n" +
+        "            if i == len(tails):\n" +
+        "                tails.append(x)        # x extends the longest run\n" +
+        "            else:\n" +
+        "                tails[i] = x           # a run of length i + 1 can now end lower\n" +
+        "        return len(tails)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int lengthOfLIS(int[] nums) {\n" +
+        "        int[] tails = new int[nums.length];   // tails[k]: smallest end of a run of length k + 1\n" +
+        "        int size = 0;\n" +
+        "        for (int x : nums) {\n" +
+        "            int lo = 0, hi = size;     // first tail &gt;= x\n" +
+        "            while (lo &lt; hi) {\n" +
+        "                int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "                if (tails[mid] &lt; x) lo = mid + 1; else hi = mid;\n" +
+        "            }\n" +
+        "            tails[lo] = x;             // replace, or extend when lo == size\n" +
+        "            if (lo == size) size++;\n" +
+        "        }\n" +
+        "        return size;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space. The O(n\u00b2) DP is fine at n = 2,500 too, and is the version to derive first.</p>" +
+        "<p><strong>The trap.</strong> Reading tails as the subsequence itself: the LIS in n log n, and the Array That Lies section. tails is only a record of the best ending value for each length; for [3, 4, 1] it ends as [1, 4], which is not a subsequence. Rebuilding the actual sequence needs parent pointers.</p></details>" +
+        "<h3>3. Longest Common Subsequence</h3>" +
+        "<p><strong>LeetCode 1143 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-common-subsequence/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the length of the longest subsequence common to two strings.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Longest Common Subsequence section: look at the last characters of both prefixes. If they match, they can end the common subsequence; if not, one of them is not in it, so drop one or the other and take the better result.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate the subsequences of the shorter string and check each: 2\u207f.</p>" +
+        "<p><strong>Approach.</strong> L[i][j] is the LCS length of text1[:i] and text2[:j]. If text1[i - 1] == text2[j - 1], L[i][j] = L[i - 1][j - 1] + 1; otherwise L[i][j] = max(L[i - 1][j], L[i][j - 1]). Row 0 and column 0 are 0. Only the previous row is needed.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def longestCommonSubsequence(self, text1: str, text2: str) -&gt; int:\n" +
+        "        prev = [0] * (len(text2) + 1)  # row i - 1 of the table\n" +
+        "        for a in text1:\n" +
+        "            cur = [0]\n" +
+        "            for j, b in enumerate(text2, 1):\n" +
+        "                cur.append(prev[j - 1] + 1 if a == b else max(prev[j], cur[j - 1]))\n" +
+        "            prev = cur\n" +
+        "        return prev[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int longestCommonSubsequence(String text1, String text2) {\n" +
+        "        int n = text2.length();\n" +
+        "        int[] prev = new int[n + 1], cur = new int[n + 1];   // two rows of the table\n" +
+        "        for (int i = 1; i &lt;= text1.length(); i++) {\n" +
+        "            for (int j = 1; j &lt;= n; j++)\n" +
+        "                cur[j] = text1.charAt(i - 1) == text2.charAt(j - 1)\n" +
+        "                       ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);\n" +
+        "            int[] t = prev; prev = cur; cur = t;\n" +
+        "        }\n" +
+        "        return prev[n];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space with two rows.</p>" +
+        "<p><strong>The trap.</strong> On a match, also taking the max with the two neighbours. It is not wrong, since L[i - 1][j - 1] + 1 is never smaller, but reasoning that it might be is the confusion the chapter's section resolves: matching the last characters is always safe.</p></details>" +
+        "<h3>4. Edit Distance</h3>" +
+        "<p><strong>LeetCode 72 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/edit-distance/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the fewest single-character insertions, deletions and replacements that turn word1 into word2.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Edit Distance section. Look at the last characters: if they match, they cost nothing; otherwise the last operation was a replace, a delete or an insert, each leaving a smaller pair of prefixes.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every edit sequence: exponential.</p>" +
+        "<p><strong>Approach.</strong> D[i][j] is the distance between word1[:i] and word2[:j]. D[i][0] = i (delete everything) and D[0][j] = j (insert everything). If the last characters match, D[i][j] = D[i - 1][j - 1]; otherwise 1 + min(D[i - 1][j - 1] (replace), D[i - 1][j] (delete), D[i][j - 1] (insert)).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minDistance(self, word1: str, word2: str) -&gt; int:\n" +
+        "        prev = list(range(len(word2) + 1))   # row 0: insert everything\n" +
+        "        for i, a in enumerate(word1, 1):\n" +
+        "            cur = [i]                          # column 0: delete everything\n" +
+        "            for j, b in enumerate(word2, 1):\n" +
+        "                if a == b:\n" +
+        "                    cur.append(prev[j - 1])\n" +
+        "                else:\n" +
+        "                    cur.append(1 + min(prev[j - 1], prev[j], cur[j - 1]))   # replace, delete, insert\n" +
+        "            prev = cur\n" +
+        "        return prev[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minDistance(String word1, String word2) {\n" +
+        "        int n = word2.length();\n" +
+        "        int[] prev = new int[n + 1], cur = new int[n + 1];\n" +
+        "        for (int j = 0; j &lt;= n; j++) prev[j] = j;          // row 0: insert everything\n" +
+        "        for (int i = 1; i &lt;= word1.length(); i++) {\n" +
+        "            cur[0] = i;                                    // column 0: delete everything\n" +
+        "            for (int j = 1; j &lt;= n; j++)\n" +
+        "                cur[j] = word1.charAt(i - 1) == word2.charAt(j - 1) ? prev[j - 1]\n" +
+        "                       : 1 + Math.min(prev[j - 1], Math.min(prev[j], cur[j - 1]));   // replace, delete, insert\n" +
+        "            int[] t = prev; prev = cur; cur = t;\n" +
+        "        }\n" +
+        "        return prev[n];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space with two rows.</p>" +
+        "<p><strong>The trap.</strong> Forgetting the first row and column. Turning a string into the empty string costs its length, and without those base cases every answer comes out too small.</p></details>" +
+        "<h3>5. Longest Palindromic Substring</h3>" +
+        "<p><strong>LeetCode 5 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-palindromic-substring/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the longest substring that reads the same forwards and backwards (any one, if several tie).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Palindromic Variants section. Every palindrome has a centre, either a character or the gap between two, and grows outward from it one matching pair at a time. There are only 2n - 1 centres.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every substring: O(n\u00b3).</p>" +
+        "<p><strong>Approach.</strong> For each centre, expand while the characters on both sides match, and remember the longest stretch found. Do it for odd-length centres (i, i) and even-length ones (i, i + 1).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def longestPalindrome(self, s: str) -&gt; str:\n" +
+        "        best = (0, 1)                  # [start, end) of the best so far\n" +
+        "        for centre in range(2 * len(s) - 1):\n" +
+        "            lo, hi = centre // 2, (centre + 1) // 2   # a character, or a gap\n" +
+        "            while lo &gt;= 0 and hi &lt; len(s) and s[lo] == s[hi]:\n" +
+        "                lo, hi = lo - 1, hi + 1\n" +
+        "            if hi - lo - 1 &gt; best[1] - best[0]:\n" +
+        "                best = (lo + 1, hi)\n" +
+        "        return s[best[0]:best[1]]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public String longestPalindrome(String s) {\n" +
+        "        int bestLo = 0, bestHi = 1;    // [bestLo, bestHi)\n" +
+        "        for (int centre = 0; centre &lt; 2 * s.length() - 1; centre++) {\n" +
+        "            int lo = centre / 2, hi = (centre + 1) / 2;   // a character, or a gap\n" +
+        "            while (lo &gt;= 0 &amp;&amp; hi &lt; s.length() &amp;&amp; s.charAt(lo) == s.charAt(hi)) { lo--; hi++; }\n" +
+        "            if (hi - lo - 1 &gt; bestHi - bestLo) { bestLo = lo + 1; bestHi = hi; }\n" +
+        "        }\n" +
+        "        return s.substring(bestLo, bestHi);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time, O(1) space. Manacher's algorithm (Chapter 42) does it in O(n).</p>" +
+        "<p><strong>The trap.</strong> Only trying odd-length centres. \"abba\" has no character at its centre, so it is found only from the gap between the two b's.</p></details>" +
+        "<h3>6. Palindromic Substrings</h3>" +
+        "<p><strong>LeetCode 647 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/palindromic-substrings/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the substrings of a string that are palindromes (by position, so repeats count separately).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The same centre expansion, counting instead of measuring: every successful expansion step from a centre is one more palindrome.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every substring: O(n\u00b3).</p>" +
+        "<p><strong>Approach.</strong> For each of the 2n - 1 centres, expand while both sides match, adding 1 for each step that succeeds.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countSubstrings(self, s: str) -&gt; int:\n" +
+        "        count = 0\n" +
+        "        for centre in range(2 * len(s) - 1):\n" +
+        "            lo, hi = centre // 2, (centre + 1) // 2\n" +
+        "            while lo &gt;= 0 and hi &lt; len(s) and s[lo] == s[hi]:\n" +
+        "                count += 1             # s[lo..hi] is one more palindrome\n" +
+        "                lo, hi = lo - 1, hi + 1\n" +
+        "        return count</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int countSubstrings(String s) {\n" +
+        "        int count = 0;\n" +
+        "        for (int centre = 0; centre &lt; 2 * s.length() - 1; centre++) {\n" +
+        "            int lo = centre / 2, hi = (centre + 1) / 2;\n" +
+        "            while (lo &gt;= 0 &amp;&amp; hi &lt; s.length() &amp;&amp; s.charAt(lo) == s.charAt(hi)) {\n" +
+        "                count++;               // s[lo..hi] is one more palindrome\n" +
+        "                lo--;\n" +
+        "                hi++;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return count;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Counting distinct palindromes instead of palindromic positions. In \"aaa\" the answer is 6 (three \"a\", two \"aa\", one \"aaa\"), not 3.</p></details>" +
+        "<h3>7. Longest Palindromic Subsequence</h3>" +
+        "<p><strong>LeetCode 516 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-palindromic-subsequence/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the length of the longest subsequence (not necessarily contiguous) that is a palindrome.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The chapter's One Family point: this is the LCS of the string and its reverse. Or directly, an interval DP over s[i..j] that looks at both ends.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every subsequence: 2\u207f.</p>" +
+        "<p><strong>Approach.</strong> P[i][j] is the answer for s[i..j]. If s[i] == s[j], both ends belong to it: P[i][j] = P[i + 1][j - 1] + 2. Otherwise drop one end: max(P[i + 1][j], P[i][j - 1]). Single characters give 1. Fill with i decreasing so P[i + 1] is ready.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def longestPalindromeSubseq(self, s: str) -&gt; int:\n" +
+        "        n = len(s)\n" +
+        "        nxt = [0] * n                  # row i + 1 of the table\n" +
+        "        for i in range(n - 1, -1, -1): # i decreasing: row i + 1 is ready\n" +
+        "            cur = [0] * n\n" +
+        "            cur[i] = 1\n" +
+        "            for j in range(i + 1, n):\n" +
+        "                cur[j] = nxt[j - 1] + 2 if s[i] == s[j] else max(nxt[j], cur[j - 1])\n" +
+        "            nxt = cur\n" +
+        "        return nxt[n - 1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int longestPalindromeSubseq(String s) {\n" +
+        "        int n = s.length();\n" +
+        "        int[] next = new int[n], cur = new int[n];   // rows i + 1 and i\n" +
+        "        for (int i = n - 1; i &gt;= 0; i--) {           // i decreasing: row i + 1 is ready\n" +
+        "            cur[i] = 1;\n" +
+        "            for (int j = i + 1; j &lt; n; j++)\n" +
+        "                cur[j] = s.charAt(i) == s.charAt(j) ? next[j - 1] + 2 : Math.max(next[j], cur[j - 1]);\n" +
+        "            int[] t = next; next = cur; cur = t;\n" +
+        "        }\n" +
+        "        return next[n - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time, O(n) space with one row per i.</p>" +
+        "<p><strong>The trap.</strong> Filling the table with i increasing. P[i][j] needs row i + 1, which would not be computed yet. The order is the T in SRTBOT: every subproblem must come after the ones it depends on.</p></details>" +
+        "<h3>8. Delete Operation for Two Strings</h3>" +
+        "<p><strong>LeetCode 583 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/delete-operation-for-two-strings/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the fewest single-character deletions, from either string, that make two strings equal.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Whatever survives the deletions is a common subsequence, and to delete as little as possible it should be the longest one. So the answer is (m - LCS) + (n - LCS).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every pair of deletion sets: exponential.</p>" +
+        "<p><strong>Approach.</strong> Compute the LCS length L exactly as in Longest Common Subsequence, then return m + n - 2L.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minDistance(self, word1: str, word2: str) -&gt; int:\n" +
+        "        prev = [0] * (len(word2) + 1)  # LCS, two rows\n" +
+        "        for a in word1:\n" +
+        "            cur = [0]\n" +
+        "            for j, b in enumerate(word2, 1):\n" +
+        "                cur.append(prev[j - 1] + 1 if a == b else max(prev[j], cur[j - 1]))\n" +
+        "            prev = cur\n" +
+        "        return len(word1) + len(word2) - 2 * prev[-1]   # delete everything outside the LCS</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minDistance(String word1, String word2) {\n" +
+        "        int n = word2.length();\n" +
+        "        int[] prev = new int[n + 1], cur = new int[n + 1];   // LCS, two rows\n" +
+        "        for (int i = 1; i &lt;= word1.length(); i++) {\n" +
+        "            for (int j = 1; j &lt;= n; j++)\n" +
+        "                cur[j] = word1.charAt(i - 1) == word2.charAt(j - 1)\n" +
+        "                       ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);\n" +
+        "            int[] t = prev; prev = cur; cur = t;\n" +
+        "        }\n" +
+        "        return word1.length() + n - 2 * prev[n];   // delete everything outside the LCS\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Reaching for Edit Distance. With replacements allowed the answer is different; here only deletions exist, and a replacement would count as two of them.</p></details>" +
+        "<h3>9. Interleaving String</h3>" +
+        "<p><strong>LeetCode 97 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/interleaving-string/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether s3 can be formed by interleaving s1 and s2, keeping each one's characters in their original order.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>An alignment of three strings where s3's position is determined by the other two: after using i characters of s1 and j of s2, you are at position i + j of s3. The table is over (i, j).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every way to assign each character of s3 to s1 or s2: 2^len(s3).</p>" +
+        "<p><strong>Approach.</strong> ok[i][j] says whether s1[:i] and s2[:j] interleave into s3[:i + j]. ok[i][j] is true if the last character came from s1 (ok[i - 1][j] and s1[i - 1] == s3[i + j - 1]) or from s2 (ok[i][j - 1] and s2[j - 1] == s3[i + j - 1]). Check the lengths first.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isInterleave(self, s1: str, s2: str, s3: str) -&gt; bool:\n" +
+        "        m, n = len(s1), len(s2)\n" +
+        "        if m + n != len(s3):\n" +
+        "            return False\n" +
+        "        ok = [False] * (n + 1)         # one row: ok[j] for the current i\n" +
+        "        for i in range(m + 1):\n" +
+        "            for j in range(n + 1):\n" +
+        "                if i == 0 and j == 0:\n" +
+        "                    ok[j] = True\n" +
+        "                    continue\n" +
+        "                from_s1 = i &gt; 0 and ok[j] and s1[i - 1] == s3[i + j - 1]      # ok[j] is still row i - 1\n" +
+        "                from_s2 = j &gt; 0 and ok[j - 1] and s2[j - 1] == s3[i + j - 1]\n" +
+        "                ok[j] = from_s1 or from_s2\n" +
+        "        return ok[n]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isInterleave(String s1, String s2, String s3) {\n" +
+        "        int m = s1.length(), n = s2.length();\n" +
+        "        if (m + n != s3.length()) return false;\n" +
+        "        boolean[] ok = new boolean[n + 1];   // one row: ok[j] for the current i\n" +
+        "        for (int i = 0; i &lt;= m; i++)\n" +
+        "            for (int j = 0; j &lt;= n; j++) {\n" +
+        "                if (i == 0 &amp;&amp; j == 0) { ok[j] = true; continue; }\n" +
+        "                boolean fromS1 = i &gt; 0 &amp;&amp; ok[j] &amp;&amp; s1.charAt(i - 1) == s3.charAt(i + j - 1);   // row i - 1\n" +
+        "                boolean fromS2 = j &gt; 0 &amp;&amp; ok[j - 1] &amp;&amp; s2.charAt(j - 1) == s3.charAt(i + j - 1);\n" +
+        "                ok[j] = fromS1 || fromS2;\n" +
+        "            }\n" +
+        "        return ok[n];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space with one row, which is the follow-up's request.</p>" +
+        "<p><strong>The trap.</strong> A greedy that always takes from s1 when it matches. With s1 = \"aab\", s2 = \"aac\", s3 = \"aacaab\", taking both a's from s1 first gets stuck; the table explores both choices.</p></details>" +
+        "<h3>10. Number of Longest Increasing Subsequence</h3>" +
+        "<p><strong>LeetCode 673 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/number-of-longest-increasing-subsequence/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count how many longest strictly increasing subsequences an array has.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The quadratic LIS DP, carrying a second number per position: besides the best length ending at i, the number of ways to reach that length.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate every subsequence: 2\u207f.</p>" +
+        "<p><strong>Approach.</strong> For each i, look at every j &lt; i with nums[j] &lt; nums[i]. If length[j] + 1 beats length[i], adopt it and set count[i] = count[j]; if it ties, add count[j] to count[i]. The answer adds up count[i] over every i whose length is the maximum.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findNumberOfLIS(self, nums: list[int]) -&gt; int:\n" +
+        "        n = len(nums)\n" +
+        "        length, count = [1] * n, [1] * n   # best length ending at i, and how many reach it\n" +
+        "        for i in range(n):\n" +
+        "            for j in range(i):\n" +
+        "                if nums[j] &lt; nums[i]:\n" +
+        "                    if length[j] + 1 &gt; length[i]:\n" +
+        "                        length[i], count[i] = length[j] + 1, count[j]\n" +
+        "                    elif length[j] + 1 == length[i]:\n" +
+        "                        count[i] += count[j]\n" +
+        "        best = max(length)\n" +
+        "        return sum(c for l, c in zip(length, count) if l == best)   # they can end anywhere</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findNumberOfLIS(int[] nums) {\n" +
+        "        int n = nums.length, best = 0, total = 0;\n" +
+        "        int[] length = new int[n], count = new int[n];   // best length ending at i, and how many\n" +
+        "        for (int i = 0; i &lt; n; i++) {\n" +
+        "            length[i] = 1;\n" +
+        "            count[i] = 1;\n" +
+        "            for (int j = 0; j &lt; i; j++) {\n" +
+        "                if (nums[j] &gt;= nums[i]) continue;\n" +
+        "                if (length[j] + 1 &gt; length[i]) { length[i] = length[j] + 1; count[i] = count[j]; }\n" +
+        "                else if (length[j] + 1 == length[i]) count[i] += count[j];\n" +
+        "            }\n" +
+        "            best = Math.max(best, length[i]);\n" +
+        "        }\n" +
+        "        for (int i = 0; i &lt; n; i++) if (length[i] == best) total += count[i];   // can end anywhere\n" +
+        "        return total;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Summing counts only at the last index. Longest subsequences can end anywhere; every position that reaches the maximum length contributes.</p></details>" +
+        "<h3>11. Russian Doll Envelopes</h3>" +
+        "<p><strong>LeetCode 354 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/russian-doll-envelopes/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>An envelope fits inside another if both its width and its height are strictly smaller. Find the most envelopes you can nest.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two dimensions collapse to one: sort by width, and the nesting chain is an increasing subsequence of heights. With up to 10\u2075 envelopes, it must be the n log n LIS.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> The O(n\u00b2) DP over sorted envelopes: 10\u00b9\u2070 steps at the limit.</p>" +
+        "<p><strong>Approach.</strong> Sort by width ascending and, for equal widths, height descending. Then run the n log n LIS on the heights.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from bisect import bisect_left\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def maxEnvelopes(self, envelopes: list[list[int]]) -&gt; int:\n" +
+        "        envelopes.sort(key=lambda e: (e[0], -e[1]))   # equal widths: taller first\n" +
+        "        tails = []                     # n log n LIS on the heights\n" +
+        "        for _, h in envelopes:\n" +
+        "            i = bisect_left(tails, h)\n" +
+        "            if i == len(tails):\n" +
+        "                tails.append(h)\n" +
+        "            else:\n" +
+        "                tails[i] = h\n" +
+        "        return len(tails)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int maxEnvelopes(int[][] envelopes) {\n" +
+        "        Arrays.sort(envelopes, (a, b) -&gt; a[0] != b[0] ? Integer.compare(a[0], b[0])\n" +
+        "                                                      : Integer.compare(b[1], a[1]));   // equal widths: taller first\n" +
+        "        int[] tails = new int[envelopes.length];   // n log n LIS on the heights\n" +
+        "        int size = 0;\n" +
+        "        for (int[] e : envelopes) {\n" +
+        "            int lo = 0, hi = size;\n" +
+        "            while (lo &lt; hi) {\n" +
+        "                int mid = (lo + hi) &gt;&gt;&gt; 1;\n" +
+        "                if (tails[mid] &lt; e[1]) lo = mid + 1; else hi = mid;\n" +
+        "            }\n" +
+        "            tails[lo] = e[1];\n" +
+        "            if (lo == size) size++;\n" +
+        "        }\n" +
+        "        return size;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Sorting equal widths by height ascending. Then [2, 3] and [2, 4] look like a valid chain of heights 3, 4, although equal widths cannot nest. Descending heights within a width make any increasing run take at most one envelope per width.</p></details>" +
+        "<h3>12. Distinct Subsequences</h3>" +
+        "<p><strong>LeetCode 115 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/distinct-subsequences/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the distinct ways to pick characters of s, in order, that spell t.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>An LCS-shaped table that counts. For the last character of s: either it is not used, or, if it equals t's last character, it is used as that character.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every set of len(t) positions in s: C(len(s), len(t)).</p>" +
+        "<p><strong>Approach.</strong> W[i][j] counts ways to spell t[:j] from s[:i]. W[i][0] = 1 (the empty target, one way). W[i][j] = W[i - 1][j], plus W[i - 1][j - 1] when s[i - 1] == t[j - 1]. With one row, update j from right to left so W[i - 1][j - 1] is still last row's value.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def numDistinct(self, s: str, t: str) -&gt; int:\n" +
+        "        ways = [1] + [0] * len(t)      # ways[j]: ways to spell t[:j]; the empty target has one\n" +
+        "        for c in s:\n" +
+        "            for j in range(len(t), 0, -1):   # right to left: ways[j - 1] is last row's\n" +
+        "                if c == t[j - 1]:\n" +
+        "                    ways[j] += ways[j - 1]\n" +
+        "        return ways[len(t)]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int numDistinct(String s, String t) {\n" +
+        "        int[] ways = new int[t.length() + 1];   // ways[j]: ways to spell t[:j]\n" +
+        "        ways[0] = 1;                             // the empty target has one\n" +
+        "        for (char c : s.toCharArray())\n" +
+        "            for (int j = t.length(); j &gt;= 1; j--)   // right to left: ways[j - 1] is last row's\n" +
+        "                if (c == t.charAt(j - 1)) ways[j] += ways[j - 1];\n" +
+        "        return ways[t.length()];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(len(s) \u00d7 len(t)) time, O(len(t)) space.</p>" +
+        "<p><strong>The trap.</strong> Updating the single row left to right. Then W[j - 1] already holds this row's value, and one character of s gets used twice. (In Java, some intermediate counts can exceed int; the wrap is harmless because the final answer is guaranteed to fit.)</p></details>" +
+        "<h3>13. Regular Expression Matching</h3>" +
+        "<p><strong>LeetCode 10 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/regular-expression-matching/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a pattern with '.' (any one character) and '*' (zero or more of the preceding element) matches an entire string.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>An alignment of the string against the pattern, with one special column rule for '*': it either matches zero copies (skip the pair \"x*\" in the pattern) or one more copy (consume one string character and stay on the star).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Plain recursion over those choices: exponential on inputs like nineteen a's followed by a b, against the pattern \"a*a*a*a*a*a*c\".</p>" +
+        "<p><strong>Approach.</strong> M[i][j] says whether s[:i] matches p[:j]. M[0][0] is true. If p[j - 1] is '*': M[i][j] = M[i][j - 2] (zero copies) or (M[i - 1][j] and s[i - 1] matches p[j - 2]) (one more copy). Otherwise M[i][j] = M[i - 1][j - 1] and s[i - 1] matches p[j - 1], where a character matches if equal or the pattern has '.'.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isMatch(self, s: str, p: str) -&gt; bool:\n" +
+        "        m, n = len(s), len(p)\n" +
+        "        M = [[False] * (n + 1) for _ in range(m + 1)]\n" +
+        "        M[0][0] = True\n" +
+        "        for i in range(m + 1):         # i = 0 included: \"a*b*\" matches \"\"\n" +
+        "            for j in range(1, n + 1):\n" +
+        "                if p[j - 1] == \"*\":\n" +
+        "                    M[i][j] = M[i][j - 2] or (i &gt; 0 and M[i - 1][j] and p[j - 2] in (s[i - 1], \".\"))   # zero, or one more\n" +
+        "                else:\n" +
+        "                    M[i][j] = i &gt; 0 and M[i - 1][j - 1] and p[j - 1] in (s[i - 1], \".\")\n" +
+        "        return M[m][n]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isMatch(String s, String p) {\n" +
+        "        int m = s.length(), n = p.length();\n" +
+        "        boolean[][] M = new boolean[m + 1][n + 1];\n" +
+        "        M[0][0] = true;\n" +
+        "        for (int i = 0; i &lt;= m; i++)   // i = 0 included: \"a*b*\" matches \"\"\n" +
+        "            for (int j = 1; j &lt;= n; j++) {\n" +
+        "                if (p.charAt(j - 1) == '*')\n" +
+        "                    M[i][j] = M[i][j - 2] || (i &gt; 0 &amp;&amp; M[i - 1][j] &amp;&amp; matches(s.charAt(i - 1), p.charAt(j - 2)));   // zero, or one more\n" +
+        "                else\n" +
+        "                    M[i][j] = i &gt; 0 &amp;&amp; M[i - 1][j - 1] &amp;&amp; matches(s.charAt(i - 1), p.charAt(j - 1));\n" +
+        "            }\n" +
+        "        return M[m][n];\n" +
+        "    }\n" +
+        "\n" +
+        "    private boolean matches(char c, char pc) { return pc == '.' || pc == c; }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(len(s) \u00d7 len(p)) time and space.</p>" +
+        "<p><strong>The trap.</strong> Row 0. A pattern like \"a*b*\" matches the empty string, so M[0][j] must be filled using the zero-copies rule; initializing only M[0][0] misses those.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -15749,6 +17700,443 @@ CHAPTERS.push({
         "}</code></pre></div>" +
 
         "<p>The power is the scale it reaches. Counting the integers up to N with no two equal adjacent digits, the digit DP agrees with brute force exactly &#8212; 91 up to 100, 820 up to 1,000, 8,304 up to 12,345 &#8212; and then keeps going where brute force cannot: up to 10<sup>18</sup> it counts 168,856,464,709,124,011 valid numbers in a quarter of a millisecond, a computation that by enumeration would take longer than the age of the universe. That is the signature of a counting DP done right: the answer is astronomically large, the input is a handful of digits, and the work is proportional to the digits and not to the answer. It is the counting cousin of the whole course's thesis &#8212; the size of the thing you are counting is not the size of the work to count it.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 25 minutes (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Unique Paths</h3>" +
+        "<p><strong>LeetCode 62 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/unique-paths/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A robot moves only right or down on an m \u00d7 n grid. Count its paths from the top-left corner to the bottom-right.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Grid DP section's two predecessors: every cell is reached from the cell above or the cell to the left, so its count is their sum.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate every path: C(m + n - 2, m - 1) of them, about 2.3 \u00d7 10\u2075\u2078 on a 100 \u00d7 100 grid (the problem promises the answer for its tests fits in 2 \u00d7 10\u2079).</p>" +
+        "<p><strong>Approach.</strong> Keep one row of counts, all 1 for the top row. For each next row, walk left to right with row[c] += row[c - 1]: row[c] still holds the value from above, and row[c - 1] was already updated to this row's left neighbour.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def uniquePaths(self, m: int, n: int) -&gt; int:\n" +
+        "        row = [1] * n                  # the top row: one path to each cell\n" +
+        "        for _ in range(m - 1):\n" +
+        "            for c in range(1, n):\n" +
+        "                row[c] += row[c - 1]   # from above (old row[c]) plus from the left\n" +
+        "        return row[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int uniquePaths(int m, int n) {\n" +
+        "        int[] row = new int[n];\n" +
+        "        java.util.Arrays.fill(row, 1); // the top row: one path to each cell\n" +
+        "        for (int r = 1; r &lt; m; r++)\n" +
+        "            for (int c = 1; c &lt; n; c++) row[c] += row[c - 1];   // above plus left\n" +
+        "        return row[n - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space. (The count is also the binomial coefficient C(m + n - 2, m - 1), computable directly.)</p>" +
+        "<p><strong>The trap.</strong> Forgetting the edge. Cells in the top row and left column have only one predecessor, so their counts are 1; the one-row version gets that for free by starting at all 1s and leaving row[0] alone.</p></details>" +
+        "<h3>2. Unique Paths II</h3>" +
+        "<p><strong>LeetCode 63 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/unique-paths-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Unique Paths, but some cells are blocked (marked 1) and cannot be entered.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Grid DP section's \"edge\": the same two-predecessor sum, where a blocked cell has 0 paths through it.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate every path and discard the blocked ones: exponential.</p>" +
+        "<p><strong>Approach.</strong> Keep one row of counts starting with row[0] = 1 if the start is open. For each cell in order, set row[c] = 0 if it is blocked; otherwise add row[c - 1] (the left neighbour) when c &gt; 0. row[c] itself already holds the count from above.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def uniquePathsWithObstacles(self, obstacleGrid: list[list[int]]) -&gt; int:\n" +
+        "        n = len(obstacleGrid[0])\n" +
+        "        row = [1] + [0] * (n - 1)      # before the first row: only the start is reachable\n" +
+        "        for grid_row in obstacleGrid:\n" +
+        "            for c in range(n):\n" +
+        "                if grid_row[c] == 1:\n" +
+        "                    row[c] = 0         # no path goes through a block\n" +
+        "                elif c &gt; 0:\n" +
+        "                    row[c] += row[c - 1]\n" +
+        "        return row[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int uniquePathsWithObstacles(int[][] obstacleGrid) {\n" +
+        "        int n = obstacleGrid[0].length;\n" +
+        "        int[] row = new int[n];\n" +
+        "        row[0] = 1;                    // before the first row: only the start is reachable\n" +
+        "        for (int[] gridRow : obstacleGrid)\n" +
+        "            for (int c = 0; c &lt; n; c++) {\n" +
+        "                if (gridRow[c] == 1) row[c] = 0;   // no path goes through a block\n" +
+        "                else if (c &gt; 0) row[c] += row[c - 1];\n" +
+        "            }\n" +
+        "        return row[n - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Initializing the whole first row and column to 1 as in Unique Paths. A block partway along the top row cuts off every cell after it, so those cells must be 0; computing them with the same rule, instead of pre-filling, handles it.</p></details>" +
+        "<h3>3. Minimum Path Sum</h3>" +
+        "<p><strong>LeetCode 64 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/minimum-path-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Moving only right or down, find the path from the top-left to the bottom-right corner with the smallest sum of cell values.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Unique Paths with min instead of sum: the cheapest way to reach a cell is its own value plus the cheaper of the two predecessors.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Every path: exponential in m + n.</p>" +
+        "<p><strong>Approach.</strong> Keep one row of best costs. The first row is a running sum along it. For each later row, row[0] += that row's first value (only from above), and row[c] = value + min(row[c], row[c - 1]).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minPathSum(self, grid: list[list[int]]) -&gt; int:\n" +
+        "        row = []\n" +
+        "        for v in grid[0]:\n" +
+        "            row.append(v + (row[-1] if row else 0))   # the first row: only from the left\n" +
+        "        for grid_row in grid[1:]:\n" +
+        "            row[0] += grid_row[0]      # the first column: only from above\n" +
+        "            for c in range(1, len(row)):\n" +
+        "                row[c] = grid_row[c] + min(row[c], row[c - 1])   # above, or left\n" +
+        "        return row[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minPathSum(int[][] grid) {\n" +
+        "        int n = grid[0].length;\n" +
+        "        int[] row = new int[n];\n" +
+        "        row[0] = grid[0][0];\n" +
+        "        for (int c = 1; c &lt; n; c++) row[c] = row[c - 1] + grid[0][c];   // only from the left\n" +
+        "        for (int r = 1; r &lt; grid.length; r++) {\n" +
+        "            row[0] += grid[r][0];      // only from above\n" +
+        "            for (int c = 1; c &lt; n; c++) row[c] = grid[r][c] + Math.min(row[c], row[c - 1]);\n" +
+        "        }\n" +
+        "        return row[n - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> A greedy that always steps to the cheaper neighbour. A cheap first step can lead into an expensive corridor; the table considers every path implicitly.</p></details>" +
+        "<h3>4. Maximal Square</h3>" +
+        "<p><strong>LeetCode 221 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/maximal-square/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a grid of '0' and '1', find the area of the largest square containing only '1's.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Grid DP with three predecessors. The largest all-ones square with its bottom-right corner at a cell is limited by the squares ending directly above, directly left, and diagonally above-left.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each cell as the top-left corner, grow a square while it stays all ones: O((m \u00d7 n)\u00b2) in the worst case.</p>" +
+        "<p><strong>Approach.</strong> side[r][c] = 0 for a '0'; for a '1' it is 1 + min(side above, side left, side diagonal). The answer is the largest side, squared. With one row, keep the diagonal value in a variable before overwriting.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maximalSquare(self, matrix: list[list[str]]) -&gt; int:\n" +
+        "        n = len(matrix[0])\n" +
+        "        side = [0] * (n + 1)           # one row, with a zero column on the left\n" +
+        "        best = 0\n" +
+        "        for row in matrix:\n" +
+        "            diag = 0                   # side[r - 1][c - 1]\n" +
+        "            for c in range(1, n + 1):\n" +
+        "                above = side[c]\n" +
+        "                side[c] = 1 + min(above, side[c - 1], diag) if row[c - 1] == \"1\" else 0\n" +
+        "                diag = above\n" +
+        "                best = max(best, side[c])\n" +
+        "        return best * best             # the area, not the side</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maximalSquare(char[][] matrix) {\n" +
+        "        int n = matrix[0].length, best = 0;\n" +
+        "        int[] side = new int[n + 1];   // one row, with a zero column on the left\n" +
+        "        for (char[] row : matrix) {\n" +
+        "            int diag = 0;              // side[r - 1][c - 1]\n" +
+        "            for (int c = 1; c &lt;= n; c++) {\n" +
+        "                int above = side[c];\n" +
+        "                side[c] = row[c - 1] == '1' ? 1 + Math.min(above, Math.min(side[c - 1], diag)) : 0;\n" +
+        "                diag = above;\n" +
+        "                best = Math.max(best, side[c]);\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return best * best;            // the area, not the side\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u00d7 n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Returning the side length. The problem asks for the area.</p></details>" +
+        "<h3>5. Minimum Score Triangulation of Polygon</h3>" +
+        "<p><strong>LeetCode 1039 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/minimum-score-triangulation-of-polygon/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Cut a convex polygon into triangles; each triangle scores the product of its three vertex values. Minimize the total score.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Interval DP section. In any triangulation, the edge from vertex i to vertex j belongs to exactly one triangle, whose third vertex k lies between them. Choosing k splits the polygon into two smaller ranges.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Enumerate all triangulations: Catalan-many, about 10\u00b2\u2076 for 50 vertices.</p>" +
+        "<p><strong>Approach.</strong> C[i][j] is the best score for the polygon piece from vertex i to vertex j. C[i][j] = min over i &lt; k &lt; j of C[i][k] + C[k][j] + v[i] \u00d7 v[k] \u00d7 v[j], with C[i][i + 1] = 0. Fill by increasing gap j - i.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minScoreTriangulation(self, values: list[int]) -&gt; int:\n" +
+        "        n = len(values)\n" +
+        "        C = [[0] * n for _ in range(n)]\n" +
+        "        for gap in range(2, n):        # by increasing length: smaller ranges first\n" +
+        "            for i in range(n - gap):\n" +
+        "                j = i + gap\n" +
+        "                C[i][j] = min(C[i][k] + C[k][j] + values[i] * values[k] * values[j]\n" +
+        "                              for k in range(i + 1, j))   # k: the third vertex on edge i-j\n" +
+        "        return C[0][n - 1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minScoreTriangulation(int[] values) {\n" +
+        "        int n = values.length;\n" +
+        "        int[][] C = new int[n][n];\n" +
+        "        for (int gap = 2; gap &lt; n; gap++)          // by increasing length\n" +
+        "            for (int i = 0; i + gap &lt; n; i++) {\n" +
+        "                int j = i + gap;\n" +
+        "                C[i][j] = Integer.MAX_VALUE;\n" +
+        "                for (int k = i + 1; k &lt; j; k++)    // k: the third vertex on edge i-j\n" +
+        "                    C[i][j] = Math.min(C[i][j], C[i][k] + C[k][j] + values[i] * values[k] * values[j]);\n" +
+        "            }\n" +
+        "        return C[0][n - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b3) time, 125,000 steps at n = 50, and O(n\u00b2) space.</p>" +
+        "<p><strong>The trap.</strong> Filling the table row by row with i increasing. C[i][j] needs C[k][j] for k &gt; i, which is not computed yet. Filling by increasing length j - i guarantees every smaller range is ready.</p></details>" +
+        "<h3>6. Partition to K Equal Sum Subsets</h3>" +
+        "<p><strong>LeetCode 698 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/partition-to-k-equal-sum-subsets/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether up to 16 numbers can be split into k groups with equal sums.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Sixteen items is the Bitmask DP section's signal: a subset is an integer from 0 to 2\u00b9\u2076 - 1. Fill the groups one at a time, so the state only needs the set of numbers used; the current group's fill level follows from their sum.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every assignment of numbers to groups: k\u207f, about 4.3 billion at k = 4, n = 16.</p>" +
+        "<p><strong>Approach.</strong> If the total is not divisible by k, answer false; let target = total / k. fill[mask] is the sum of the current, partly filled group after using the numbers in mask, or -1 if mask cannot be reached. From each reachable mask, add any unused number that fits: fill[mask | bit] = (fill[mask] + x) % target. The answer is whether the full mask is reachable.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def canPartitionKSubsets(self, nums: list[int], k: int) -&gt; bool:\n" +
+        "        total = sum(nums)\n" +
+        "        if total % k:\n" +
+        "            return False\n" +
+        "        target, n = total // k, len(nums)\n" +
+        "        fill = [-1] * (1 &lt;&lt; n)         # fill[mask]: level of the current group, -1 if unreachable\n" +
+        "        fill[0] = 0\n" +
+        "        for mask in range(1 &lt;&lt; n):\n" +
+        "            if fill[mask] &lt; 0:\n" +
+        "                continue\n" +
+        "            for i, x in enumerate(nums):\n" +
+        "                if not mask &gt;&gt; i &amp; 1 and fill[mask] + x &lt;= target:\n" +
+        "                    fill[mask | 1 &lt;&lt; i] = (fill[mask] + x) % target   # a full group resets to 0\n" +
+        "        return fill[-1] == 0</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean canPartitionKSubsets(int[] nums, int k) {\n" +
+        "        int total = 0, n = nums.length;\n" +
+        "        for (int x : nums) total += x;\n" +
+        "        if (total % k != 0) return false;\n" +
+        "        int target = total / k;\n" +
+        "        int[] fill = new int[1 &lt;&lt; n];  // level of the current group, -1 if unreachable\n" +
+        "        Arrays.fill(fill, -1);\n" +
+        "        fill[0] = 0;\n" +
+        "        for (int mask = 0; mask &lt; (1 &lt;&lt; n); mask++) {\n" +
+        "            if (fill[mask] &lt; 0) continue;\n" +
+        "            for (int i = 0; i &lt; n; i++)\n" +
+        "                if ((mask &gt;&gt; i &amp; 1) == 0 &amp;&amp; fill[mask] + nums[i] &lt;= target)\n" +
+        "                    fill[mask | 1 &lt;&lt; i] = (fill[mask] + nums[i]) % target;   // a full group resets\n" +
+        "        }\n" +
+        "        return fill[(1 &lt;&lt; n) - 1] == 0;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 2\u207f) time, about a million steps at n = 16, and O(2\u207f) space.</p>" +
+        "<p><strong>The trap.</strong> Tracking the group each number went to. The groups are interchangeable, so that multiplies the work by k! for nothing. Filling one group at a time removes the symmetry.</p></details>" +
+        "<h3>7. Beautiful Arrangement</h3>" +
+        "<p><strong>LeetCode 526 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/beautiful-arrangement/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the orderings of 1 to n (n \u2264 15) where, at every position i (from 1), the number there divides i or i divides it.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Fill the positions in order. The position being filled is always one more than the count of numbers used, so the set of numbers used is the whole state: a bitmask.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all n! orderings: 1.3 \u00d7 10\u00b9\u00b2 at n = 15.</p>" +
+        "<p><strong>Approach.</strong> ways[mask] counts the ways to fill positions 1 to popcount(mask) using exactly the numbers in mask. For each mask, the next position is popcount(mask) + 1; add ways[mask] to ways[mask | bit(x)] for every unused x that is compatible with that position.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countArrangement(self, n: int) -&gt; int:\n" +
+        "        ways = [0] * (1 &lt;&lt; n)\n" +
+        "        ways[0] = 1\n" +
+        "        for mask in range(1 &lt;&lt; n):\n" +
+        "            if not ways[mask]:\n" +
+        "                continue\n" +
+        "            pos = bin(mask).count(\"1\") + 1         # the position is implied by the mask\n" +
+        "            for x in range(1, n + 1):\n" +
+        "                if not mask &gt;&gt; (x - 1) &amp; 1 and (x % pos == 0 or pos % x == 0):\n" +
+        "                    ways[mask | 1 &lt;&lt; (x - 1)] += ways[mask]\n" +
+        "        return ways[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int countArrangement(int n) {\n" +
+        "        int[] ways = new int[1 &lt;&lt; n];\n" +
+        "        ways[0] = 1;\n" +
+        "        for (int mask = 0; mask &lt; (1 &lt;&lt; n); mask++) {\n" +
+        "            if (ways[mask] == 0) continue;\n" +
+        "            int pos = Integer.bitCount(mask) + 1;  // the position is implied by the mask\n" +
+        "            for (int x = 1; x &lt;= n; x++)\n" +
+        "                if ((mask &gt;&gt; (x - 1) &amp; 1) == 0 &amp;&amp; (x % pos == 0 || pos % x == 0))\n" +
+        "                    ways[mask | 1 &lt;&lt; (x - 1)] += ways[mask];\n" +
+        "        }\n" +
+        "        return ways[(1 &lt;&lt; n) - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u00d7 2\u207f) time, about 500,000 steps at n = 15, and O(2\u207f) space.</p>" +
+        "<p><strong>The trap.</strong> Treating (position, mask) as the state. The position is already determined by the mask's popcount, so the extra dimension adds nothing but size.</p></details>" +
+        "<h3>8. Count Numbers with Unique Digits</h3>" +
+        "<p><strong>LeetCode 357 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/count-numbers-with-unique-digits/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the integers x with 0 \u2264 x &lt; 10\u207f whose digits are all different.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Counting and Digit DP section: count by length instead of by value. A d-digit number with distinct digits has 9 choices for its first digit (not 0), then 9, 8, 7, \u2026 for the rest.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every number below 10\u207f: 10\u2078 checks at n = 8.</p>" +
+        "<p><strong>Approach.</strong> Start with 1 (for the number 0). For each length d from 1 to n, the count of d-digit numbers with distinct digits is 9 \u00d7 9 \u00d7 8 \u00d7 \u2026 with d factors in total; add it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countNumbersWithUniqueDigits(self, n: int) -&gt; int:\n" +
+        "        total, count = 1, 9            # 1 for the number 0; 9 first digits (no leading zero)\n" +
+        "        for d in range(1, n + 1):\n" +
+        "            total += count             # d-digit numbers with distinct digits\n" +
+        "            count *= 10 - d            # the next digit has one fewer choice\n" +
+        "        return total</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int countNumbersWithUniqueDigits(int n) {\n" +
+        "        int total = 1, count = 9;      // 1 for 0; 9 first digits (no leading zero)\n" +
+        "        for (int d = 1; d &lt;= n; d++) {\n" +
+        "            total += count;            // d-digit numbers with distinct digits\n" +
+        "            count *= 10 - d;           // the next digit has one fewer choice\n" +
+        "        }\n" +
+        "        return total;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Treating 0 as a first digit. A leading zero makes a shorter number, which is already counted at its own length; the first digit has 9 choices, not 10.</p></details>" +
+        "<h3>9. Burst Balloons</h3>" +
+        "<p><strong>LeetCode 312 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/burst-balloons/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Bursting balloon i earns the product of its value and its two current neighbours' values (missing neighbours count as 1). Burst them all for the most coins.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Choosing the first balloon to burst changes everyone's neighbours, so the pieces are not independent. Choose the last balloon to burst in a range instead: while it survives, it walls off the two sides, which is what makes this an interval DP.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all n! bursting orders.</p>" +
+        "<p><strong>Approach.</strong> Pad the values with a 1 at each end. B[i][j] is the best for the balloons strictly between i and j. If k is the last one burst there, its neighbours at that moment are i and j, so B[i][j] = max over k of B[i][k] + B[k][j] + v[i] \u00d7 v[k] \u00d7 v[j]. Fill by increasing gap.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxCoins(self, nums: list[int]) -&gt; int:\n" +
+        "        v = [1] + nums + [1]           # padding: missing neighbours count as 1\n" +
+        "        n = len(v)\n" +
+        "        B = [[0] * n for _ in range(n)]\n" +
+        "        for gap in range(2, n):\n" +
+        "            for i in range(n - gap):\n" +
+        "                j = i + gap\n" +
+        "                B[i][j] = max(B[i][k] + B[k][j] + v[i] * v[k] * v[j]\n" +
+        "                              for k in range(i + 1, j))   # k is burst last between i and j\n" +
+        "        return B[0][n - 1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maxCoins(int[] nums) {\n" +
+        "        int n = nums.length + 2;\n" +
+        "        int[] v = new int[n];\n" +
+        "        v[0] = v[n - 1] = 1;           // padding: missing neighbours count as 1\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) v[i + 1] = nums[i];\n" +
+        "        int[][] B = new int[n][n];\n" +
+        "        for (int gap = 2; gap &lt; n; gap++)\n" +
+        "            for (int i = 0; i + gap &lt; n; i++) {\n" +
+        "                int j = i + gap;\n" +
+        "                for (int k = i + 1; k &lt; j; k++)    // k is burst last between i and j\n" +
+        "                    B[i][j] = Math.max(B[i][j], B[i][k] + B[k][j] + v[i] * v[k] * v[j]);\n" +
+        "            }\n" +
+        "        return B[0][n - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b3) time, 2.7 \u00d7 10\u2077 steps at n = 300, and O(n\u00b2) space.</p>" +
+        "<p><strong>The trap.</strong> Recursing on the first balloon to burst. After it bursts, its two neighbours become adjacent and the left and right parts interact, so the subproblems overlap in a way no table can capture. Thinking about the last one is the key idea.</p></details>" +
+        "<h3>10. Minimum Cost to Cut a Stick</h3>" +
+        "<p><strong>LeetCode 1547 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/minimum-cost-to-cut-a-stick/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A stick of length n must be cut at given positions; each cut costs the current length of the piece being cut. Choose the order of cuts to minimize the total cost.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The first cut in a piece splits it into two independent pieces, and its cost is the piece's length. With the cut positions sorted and the stick's ends added, a piece is a range of consecutive cut positions: interval DP over the cuts, not over the stick's length (which reaches 10\u2076).</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all orders of the cuts: up to 100!.</p>" +
+        "<p><strong>Approach.</strong> Let pos = [0] + sorted(cuts) + [n]. C[i][j] is the cheapest way to make every cut strictly between pos[i] and pos[j]. C[i][j] = pos[j] - pos[i] + min over i &lt; k &lt; j of C[i][k] + C[k][j], and 0 when no cut lies between. Fill by increasing gap.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minCost(self, n: int, cuts: list[int]) -&gt; int:\n" +
+        "        pos = [0] + sorted(cuts) + [n] # a piece is a range of consecutive positions\n" +
+        "        m = len(pos)\n" +
+        "        C = [[0] * m for _ in range(m)]\n" +
+        "        for gap in range(2, m):\n" +
+        "            for i in range(m - gap):\n" +
+        "                j = i + gap\n" +
+        "                C[i][j] = pos[j] - pos[i] + min(C[i][k] + C[k][j] for k in range(i + 1, j))\n" +
+        "        return C[0][m - 1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int minCost(int n, int[] cuts) {\n" +
+        "        int m = cuts.length + 2;\n" +
+        "        int[] pos = new int[m];        // a piece is a range of consecutive positions\n" +
+        "        int[] sorted = cuts.clone();\n" +
+        "        Arrays.sort(sorted);\n" +
+        "        for (int i = 0; i &lt; cuts.length; i++) pos[i + 1] = sorted[i];\n" +
+        "        pos[m - 1] = n;\n" +
+        "        int[][] C = new int[m][m];\n" +
+        "        for (int gap = 2; gap &lt; m; gap++)\n" +
+        "            for (int i = 0; i + gap &lt; m; i++) {\n" +
+        "                int j = i + gap, best = Integer.MAX_VALUE;\n" +
+        "                for (int k = i + 1; k &lt; j; k++) best = Math.min(best, C[i][k] + C[k][j]);\n" +
+        "                C[i][j] = pos[j] - pos[i] + best;\n" +
+        "            }\n" +
+        "        return C[0][m - 1];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(c\u00b3) time for c cuts, about 10\u2076 at c = 100, and O(c\u00b2) space, independent of the stick's length.</p>" +
+        "<p><strong>The trap.</strong> Indexing the table by stick positions. With n up to 10\u2076, an n \u00d7 n table does not fit anywhere; only the cut positions matter.</p></details>" +
+        "<h3>11. Find Minimum Time to Finish All Jobs</h3>" +
+        "<p><strong>LeetCode 1723 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/find-minimum-time-to-finish-all-jobs/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Assign up to 12 jobs to k workers so that the busiest worker's total time is as small as possible.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Assignment by Bitmask section: give each worker a subset of the jobs. After j workers, the state is the set of jobs done, and the next worker takes some subset of what remains.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every assignment of jobs to workers: k\u207f, about 8.9 \u00d7 10\u00b9\u00b2 at k = n = 12.</p>" +
+        "<p><strong>Approach.</strong> Precompute load[mask], the total time of the jobs in mask. best[mask] is the smallest possible maximum load after the first j workers finish exactly the jobs in mask. For each new worker, new[mask] = min over submasks sub of mask of max(best[mask ^ sub], load[sub]). Enumerate submasks with sub = (sub - 1) &amp; mask.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minimumTimeRequired(self, jobs: list[int], k: int) -&gt; int:\n" +
+        "        n = len(jobs)\n" +
+        "        load = [0] * (1 &lt;&lt; n)          # load[mask]: total time of the jobs in mask\n" +
+        "        for mask in range(1, 1 &lt;&lt; n):\n" +
+        "            low = mask &amp; -mask\n" +
+        "            load[mask] = load[mask ^ low] + jobs[low.bit_length() - 1]\n" +
+        "        best = load[:]                 # one worker does everything in mask\n" +
+        "        for _ in range(k - 1):\n" +
+        "            new = best[:]\n" +
+        "            for mask in range(1 &lt;&lt; n):\n" +
+        "                sub = mask\n" +
+        "                while sub:             # every submask: this worker's share\n" +
+        "                    new[mask] = min(new[mask], max(best[mask ^ sub], load[sub]))\n" +
+        "                    sub = (sub - 1) &amp; mask\n" +
+        "            best = new\n" +
+        "        return best[-1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minimumTimeRequired(int[] jobs, int k) {\n" +
+        "        int n = jobs.length, full = (1 &lt;&lt; n) - 1;\n" +
+        "        int[] load = new int[1 &lt;&lt; n];  // load[mask]: total time of the jobs in mask\n" +
+        "        for (int mask = 1; mask &lt;= full; mask++) {\n" +
+        "            int low = mask &amp; -mask;\n" +
+        "            load[mask] = load[mask ^ low] + jobs[Integer.numberOfTrailingZeros(low)];\n" +
+        "        }\n" +
+        "        int[] best = load.clone();     // one worker does everything in mask\n" +
+        "        for (int w = 1; w &lt; k; w++) {\n" +
+        "            int[] next = best.clone();\n" +
+        "            for (int mask = 0; mask &lt;= full; mask++)\n" +
+        "                for (int sub = mask; sub &gt; 0; sub = (sub - 1) &amp; mask)   // this worker's share\n" +
+        "                    next[mask] = Math.min(next[mask], Math.max(best[mask ^ sub], load[sub]));\n" +
+        "            best = next;\n" +
+        "        }\n" +
+        "        return best[full];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(k \u00d7 3\u207f) time, since the pairs (mask, submask) number 3\u207f: about 6.4 million steps at k = n = 12. O(2\u207f) space.</p>" +
+        "<p><strong>The trap.</strong> Looping over all 2\u207f masks for every mask to find its submasks: 4\u207f instead of 3\u207f, 16.7 million instead of 531,441 pairs per worker. The (sub - 1) &amp; mask step visits only real submasks.</p></details>" +
+        "<h3>12. Number of Digit One</h3>" +
+        "<p><strong>LeetCode 233 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/number-of-digit-one/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count how many times the digit 1 appears when you write out every integer from 0 to n (n up to 10\u2079).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Counting and Digit DP: count digit by digit instead of number by number. For each decimal position, work out how many of the numbers 0 to n have a 1 there, from the digits of n above, at, and below that position.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Write out every number and count: 10\u2079 numbers at the limit.</p>" +
+        "<p><strong>Approach.</strong> For each place value p = 1, 10, 100, \u2026: split n into high = n // (10p), the digit d = (n // p) % 10, and low = n % p. Full cycles above contribute high \u00d7 p ones. Then if d &gt; 1 the current partial cycle adds p more; if d == 1 it adds low + 1; if d == 0 it adds nothing.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countDigitOne(self, n: int) -&gt; int:\n" +
+        "        count, p = 0, 1\n" +
+        "        while p &lt;= n:\n" +
+        "            high, d, low = n // (10 * p), (n // p) % 10, n % p\n" +
+        "            count += high * p          # full cycles above this position\n" +
+        "            if d &gt; 1:\n" +
+        "                count += p             # the partial cycle has all p ones\n" +
+        "            elif d == 1:\n" +
+        "                count += low + 1       # only up to n itself\n" +
+        "            p *= 10\n" +
+        "        return count</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int countDigitOne(int n) {\n" +
+        "        long count = 0;\n" +
+        "        for (long p = 1; p &lt;= n; p *= 10) {   // long: 10 * p passes 2^31 near n = 10^9\n" +
+        "            long high = n / (10 * p), d = (n / p) % 10, low = n % p;\n" +
+        "            count += high * p;         // full cycles above this position\n" +
+        "            if (d &gt; 1) count += p;     // the partial cycle has all p ones\n" +
+        "            else if (d == 1) count += low + 1;   // only up to n itself\n" +
+        "        }\n" +
+        "        return (int) count;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log\u2081\u2080 n) time, 10 positions for n up to 10\u2079, and O(1) space.</p>" +
+        "<p><strong>The trap.</strong> The d == 1 case. When the digit at this position is exactly 1, only the numbers from high \u00d7 10p + p to n have a 1 there, which is low + 1 of them, not p.</p></details>"
     },
 
     { title: "Exercises",
@@ -16256,6 +18644,453 @@ CHAPTERS.push({
         "    return -1;\n" +
         "}</code></pre></div>" + "<p>Deciding canonicity outright, rather than sampling, is a solved problem: Pearson's 2005 algorithm tests a coin system in time cubic in the number of coins, checking only the small set of candidate amounts the theory singles out rather than every amount up to the bound. When the answer is that the system is not canonical &mdash; the common case &mdash; the dynamic-programming coin-change of Chapter 19 fills a table indexed by every amount from zero to the target, each cell holding the fewest coins for that amount, in time proportional to the target times the number of coins. It is slower than the greedy's handful of divisions, and it is always right, which is the trade the chapter closes on.</p>" +
         "<p>The correct algorithm when the coins are arbitrary is the coin-change dynamic program of Chapter 19, which is the honest fallback whenever a greedy's optimality is in doubt: greedy if you can prove it with an exchange argument or a matroid, and the dynamic program if you cannot. That is the discipline this chapter has been building toward. A greedy is the easiest algorithm to write, the hardest to justify, and the one most likely to be quietly wrong on an input you did not think to test &mdash; and the exchange argument, the two proof templates, and the matroid are the difference between hoping it is right and knowing.</p>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Assign Cookies</h3>" +
+        "<p><strong>LeetCode 455 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/assign-cookies/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Each child needs a cookie of at least some size, and each cookie can go to one child. Maximize the number of satisfied children.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Satisfy the least greedy child with the smallest cookie that works. The exchange argument from Two Ways to Prove a Greedy Correct: any optimal assignment can be rearranged to use that pairing without losing a child.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every assignment of cookies to children: factorial.</p>" +
+        "<p><strong>Approach.</strong> Sort both lists. Walk the cookies from smallest to largest with a pointer into the children: whenever the current cookie satisfies the current (least greedy remaining) child, give it and move to the next child. A cookie too small for this child is too small for everyone after, so skip it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findContentChildren(self, g: list[int], s: list[int]) -&gt; int:\n" +
+        "        g.sort()\n" +
+        "        s.sort()\n" +
+        "        child = 0\n" +
+        "        for cookie in s:               # smallest cookie first\n" +
+        "            if child &lt; len(g) and cookie &gt;= g[child]:\n" +
+        "                child += 1             # the least greedy child left takes it\n" +
+        "        return child</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int findContentChildren(int[] g, int[] s) {\n" +
+        "        Arrays.sort(g);\n" +
+        "        Arrays.sort(s);\n" +
+        "        int child = 0;\n" +
+        "        for (int cookie : s)           // smallest cookie first\n" +
+        "            if (child &lt; g.length &amp;&amp; cookie &gt;= g[child]) child++;   // least greedy child takes it\n" +
+        "        return child;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n + m log m) time for the sorts, O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Giving the biggest cookie to the least greedy child. It satisfies them, but wastes a cookie that a greedier child needed.</p></details>" +
+        "<h3>2. Lemonade Change</h3>" +
+        "<p><strong>LeetCode 860 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/lemonade-change/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Lemonade costs 5. Customers pay with 5, 10 or 20 bills in order, and you start with no change. Decide whether you can give every customer correct change.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Only one decision exists: change for a 20 can be 10 + 5 or 5 + 5 + 5. Prefer 10 + 5, because 5s are the more useful bill, needed for every 10 and every 20, while 10s are only ever useful for 20s.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> At each 20, try both ways of making change and search: exponential in the number of 20s.</p>" +
+        "<p><strong>Approach.</strong> Count your 5s and 10s. A 5 needs nothing. A 10 needs one 5. A 20 takes a 10 and a 5 if you have both, otherwise three 5s. If the needed bills are missing, answer false.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def lemonadeChange(self, bills: list[int]) -&gt; bool:\n" +
+        "        fives = tens = 0\n" +
+        "        for b in bills:\n" +
+        "            if b == 5:\n" +
+        "                fives += 1\n" +
+        "            elif b == 10:\n" +
+        "                if not fives:\n" +
+        "                    return False\n" +
+        "                fives, tens = fives - 1, tens + 1\n" +
+        "            elif tens and fives:       # a 20: keep the 5s, they are more useful\n" +
+        "                tens, fives = tens - 1, fives - 1\n" +
+        "            elif fives &gt;= 3:\n" +
+        "                fives -= 3\n" +
+        "            else:\n" +
+        "                return False\n" +
+        "        return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean lemonadeChange(int[] bills) {\n" +
+        "        int fives = 0, tens = 0;\n" +
+        "        for (int b : bills) {\n" +
+        "            if (b == 5) fives++;\n" +
+        "            else if (b == 10) {\n" +
+        "                if (fives == 0) return false;\n" +
+        "                fives--; tens++;\n" +
+        "            } else if (tens &gt; 0 &amp;&amp; fives &gt; 0) { tens--; fives--; }   // keep the 5s\n" +
+        "            else if (fives &gt;= 3) fives -= 3;\n" +
+        "            else return false;\n" +
+        "        }\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Paying a 20 with three 5s while a 10 is available. It works now and fails on the next 10, which cannot be changed without a 5.</p></details>" +
+        "<h3>3. Maximize Sum Of Array After K Negations</h3>" +
+        "<p><strong>LeetCode 1005 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/maximize-sum-of-array-after-k-negations/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Negate exactly k elements (the same element may be negated repeatedly) to make the array's sum as large as possible.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Each flip should gain as much as possible. Flipping the most negative number gains the most; once no negatives remain, spare flips cancel in pairs, and an odd one left over should hit the number closest to zero.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every sequence of k flips: n\u1d4f.</p>" +
+        "<p><strong>Approach.</strong> Sort. Walk from the smallest value, flipping negatives while k lasts. If k is still odd afterwards, flip the element with the smallest absolute value once. Return the sum.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def largestSumAfterKNegations(self, nums: list[int], k: int) -&gt; int:\n" +
+        "        nums.sort()\n" +
+        "        for i in range(len(nums)):\n" +
+        "            if k and nums[i] &lt; 0:\n" +
+        "                nums[i] = -nums[i]     # the most negative first: the biggest gain\n" +
+        "                k -= 1\n" +
+        "        if k % 2:                      # an odd flip is left: spend it where it costs least\n" +
+        "            return sum(nums) - 2 * min(nums)\n" +
+        "        return sum(nums)</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int largestSumAfterKNegations(int[] nums, int k) {\n" +
+        "        Arrays.sort(nums);\n" +
+        "        for (int i = 0; i &lt; nums.length &amp;&amp; k &gt; 0 &amp;&amp; nums[i] &lt; 0; i++, k--)\n" +
+        "            nums[i] = -nums[i];        // the most negative first: the biggest gain\n" +
+        "        int sum = 0, min = Integer.MAX_VALUE;\n" +
+        "        for (int x : nums) { sum += x; min = Math.min(min, x); }\n" +
+        "        return k % 2 == 1 ? sum - 2 * min : sum;   // an odd flip left: spend it cheaply\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Flipping the smallest element of the original sorted order when k is left over. After the negatives were flipped, the smallest absolute value may be one of them, so take the minimum again.</p></details>" +
+        "<h3>4. Jump Game</h3>" +
+        "<p><strong>LeetCode 55 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/jump-game/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>From position i you may jump up to nums[i] steps forward. Starting at position 0, decide whether you can reach the last position.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>You never need to know which jumps you take, only how far you can get. Track the furthest reachable position; it only grows.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Search every jump choice: exponential without memoization, O(n\u00b2) with a reachable-positions table.</p>" +
+        "<p><strong>Approach.</strong> Walk the positions keeping reach, the furthest position reachable so far. If the current position is beyond reach, it cannot be reached, so answer false. Otherwise update reach = max(reach, i + nums[i]). If the walk finishes, the end was reachable.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def canJump(self, nums: list[int]) -&gt; bool:\n" +
+        "        reach = 0                      # the furthest position reachable so far\n" +
+        "        for i, x in enumerate(nums):\n" +
+        "            if i &gt; reach:\n" +
+        "                return False           # i itself cannot be reached\n" +
+        "            reach = max(reach, i + x)\n" +
+        "        return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean canJump(int[] nums) {\n" +
+        "        int reach = 0;                 // the furthest position reachable so far\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) {\n" +
+        "            if (i &gt; reach) return false;   // i itself cannot be reached\n" +
+        "            reach = Math.max(reach, i + nums[i]);\n" +
+        "        }\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Stopping at the first 0. A 0 is only a dead end if nothing before it can jump past it.</p></details>" +
+        "<h3>5. Jump Game II</h3>" +
+        "<p><strong>LeetCode 45 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/jump-game-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Same jumps as Jump Game, with the end guaranteed reachable. Find the fewest jumps.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Breadth-first search without a queue: the positions reachable in j jumps form one contiguous window, and the next window runs from the position after it to the furthest point any of its positions can reach.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> BFS over positions, or a DP where best[i] is the fewest jumps to i: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Keep the end of the current window and the furthest reach found inside it. Walk i from 0 to n - 2, updating the furthest reach. When i reaches the end of the current window, you must jump: count one jump and make the furthest reach the new window's end.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def jump(self, nums: list[int]) -&gt; int:\n" +
+        "        jumps = window_end = furthest = 0\n" +
+        "        for i in range(len(nums) - 1): # not the last index: no jump needed from there\n" +
+        "            furthest = max(furthest, i + nums[i])\n" +
+        "            if i == window_end:        # the current window is used up: jump\n" +
+        "                jumps += 1\n" +
+        "                window_end = furthest\n" +
+        "        return jumps</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int jump(int[] nums) {\n" +
+        "        int jumps = 0, windowEnd = 0, furthest = 0;\n" +
+        "        for (int i = 0; i &lt; nums.length - 1; i++) {   // no jump needed from the last index\n" +
+        "            furthest = Math.max(furthest, i + nums[i]);\n" +
+        "            if (i == windowEnd) {      // the current window is used up: jump\n" +
+        "                jumps++;\n" +
+        "                windowEnd = furthest;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return jumps;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Walking i all the way to n - 1. Arriving at the last position does not need another jump, and counting one there gives an answer one too high whenever the window ends exactly at the last index.</p></details>" +
+        "<h3>6. Gas Station</h3>" +
+        "<p><strong>LeetCode 134 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/gas-station/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Stations on a circle each give some gas, and driving to the next costs some gas. Find the station to start from to drive the full circle, or -1 (the answer is unique when it exists).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two facts make it greedy. If total gas is at least total cost, some start works. And if you run dry going from start s to station i, no station between s and i can be the start either, so you can jump the start to i + 1.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Simulate from every start: O(n\u00b2), 10\u00b9\u2070 at n = 10\u2075.</p>" +
+        "<p><strong>Approach.</strong> If sum(gas) &lt; sum(cost), return -1. Otherwise walk once with a tank starting at 0. Add gas[i] - cost[i]; if the tank goes negative, the start must be after i, so set start = i + 1 and empty the tank. Return start.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def canCompleteCircuit(self, gas: list[int], cost: list[int]) -&gt; int:\n" +
+        "        if sum(gas) &lt; sum(cost):\n" +
+        "            return -1                  # not enough gas in total\n" +
+        "        start, tank = 0, 0\n" +
+        "        for i in range(len(gas)):\n" +
+        "            tank += gas[i] - cost[i]\n" +
+        "            if tank &lt; 0:               # nothing from start to i works: start after i\n" +
+        "                start, tank = i + 1, 0\n" +
+        "        return start</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int canCompleteCircuit(int[] gas, int[] cost) {\n" +
+        "        int total = 0, tank = 0, start = 0;\n" +
+        "        for (int i = 0; i &lt; gas.length; i++) {\n" +
+        "            total += gas[i] - cost[i];\n" +
+        "            tank += gas[i] - cost[i];\n" +
+        "            if (tank &lt; 0) { start = i + 1; tank = 0; }   // nothing from start to i works\n" +
+        "        }\n" +
+        "        return total &lt; 0 ? -1 : start; // not enough gas in total\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Believing the jump skips a valid start. Every station passed since the last reset was reached with a tank of at least 0, so starting at any of them would arrive at i with no more gas than you had, and still run dry.</p></details>" +
+        "<h3>7. Hand of Straights</h3>" +
+        "<p><strong>LeetCode 846 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/hand-of-straights/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a hand of cards can be split into groups of groupSize consecutive values.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The smallest card left must start a group, because nothing smaller remains to come before it. That forces every choice, which is what makes the greedy safe.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Search over all ways to form groups: exponential.</p>" +
+        "<p><strong>Approach.</strong> Count the cards. Repeatedly take the smallest value v still present with count c: the groups starting at v need c copies each of v, v + 1, \u2026, v + groupSize - 1. Subtract c from each; if any has fewer than c, answer false.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def isNStraightHand(self, hand: list[int], groupSize: int) -&gt; bool:\n" +
+        "        if len(hand) % groupSize:\n" +
+        "            return False\n" +
+        "        count = Counter(hand)          # values reach 10^9: count in a map\n" +
+        "        for v in sorted(count):\n" +
+        "            c = count[v]\n" +
+        "            if c == 0:\n" +
+        "                continue\n" +
+        "            for w in range(v, v + groupSize):   # the smallest card must start a group\n" +
+        "                if count[w] &lt; c:\n" +
+        "                    return False\n" +
+        "                count[w] -= c\n" +
+        "        return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.TreeMap;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean isNStraightHand(int[] hand, int groupSize) {\n" +
+        "        if (hand.length % groupSize != 0) return false;\n" +
+        "        TreeMap&lt;Integer, Integer&gt; count = new TreeMap&lt;&gt;();   // sorted, and values reach 10^9\n" +
+        "        for (int v : hand) count.merge(v, 1, Integer::sum);\n" +
+        "        for (int v : count.keySet()) {\n" +
+        "            int c = count.get(v);\n" +
+        "            if (c == 0) continue;\n" +
+        "            for (int w = v; w &lt; v + groupSize; w++) {      // the smallest card starts a group\n" +
+        "                int have = count.getOrDefault(w, 0);\n" +
+        "                if (have &lt; c) return false;\n" +
+        "                count.put(w, have - c);\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time with a sorted map, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Using an array indexed by card value. Values go up to 10\u2079; count with a hash map and visit the values in sorted order, or use a TreeMap.</p></details>" +
+        "<h3>8. Partition Labels</h3>" +
+        "<p><strong>LeetCode 763 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/partition-labels/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Cut a string into as many pieces as possible so that each letter appears in at most one piece. Return the pieces' lengths.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A piece that contains a letter must reach that letter's last occurrence. Extend the current piece to the furthest last occurrence of any letter inside it, and cut as soon as you reach that point.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every set of cut positions: 2\u207f\u207b\u00b9.</p>" +
+        "<p><strong>Approach.</strong> Record each letter's last index. Walk the string keeping end = the furthest last index of any letter in the current piece. When i equals end, the piece can close: record its length and start a new one.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def partitionLabels(self, s: str) -&gt; list[int]:\n" +
+        "        last = {c: i for i, c in enumerate(s)}\n" +
+        "        out, start, end = [], 0, 0\n" +
+        "        for i, c in enumerate(s):\n" +
+        "            end = max(end, last[c])    # the piece must reach every letter's last copy\n" +
+        "            if i == end:\n" +
+        "                out.append(end - start + 1)\n" +
+        "                start = i + 1\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;Integer&gt; partitionLabels(String s) {\n" +
+        "        int[] last = new int[26];\n" +
+        "        for (int i = 0; i &lt; s.length(); i++) last[s.charAt(i) - 'a'] = i;\n" +
+        "        List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        int start = 0, end = 0;\n" +
+        "        for (int i = 0; i &lt; s.length(); i++) {\n" +
+        "            end = Math.max(end, last[s.charAt(i) - 'a']);   // reach every letter's last copy\n" +
+        "            if (i == end) {\n" +
+        "                out.add(end - start + 1);\n" +
+        "                start = i + 1;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space for 26 letters.</p>" +
+        "<p><strong>The trap.</strong> Cutting as soon as the current letter's own last occurrence is reached. An earlier letter in the same piece may occur later still; the piece must reach the furthest of them.</p></details>" +
+        "<h3>9. Valid Parenthesis String</h3>" +
+        "<p><strong>LeetCode 678 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/valid-parenthesis-string/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A string has '(', ')' and '*', where '*' may be '(', ')' or nothing. Decide whether some choice makes the parentheses valid.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Instead of choosing each star, track the range of possible open-bracket counts. '(' raises both ends, ')' lowers both, '*' widens the range by one each way. The string is valid if 0 stays inside the range at the end.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try all 3\u1d4f choices for k stars.</p>" +
+        "<p><strong>Approach.</strong> Keep lo and hi, the fewest and most open brackets possible so far. '(' adds 1 to both; ')' subtracts 1 from both; '*' does lo - 1 and hi + 1. If hi drops below 0, too many ')' arrived: answer false. Clamp lo at 0, since a negative count is never a valid choice. At the end, answer lo == 0.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def checkValidString(self, s: str) -&gt; bool:\n" +
+        "        lo = hi = 0                    # the range of possible open counts\n" +
+        "        for c in s:\n" +
+        "            if c == \"(\":\n" +
+        "                lo, hi = lo + 1, hi + 1\n" +
+        "            elif c == \")\":\n" +
+        "                lo, hi = lo - 1, hi - 1\n" +
+        "            else:                      # \"*\": close, open, or nothing\n" +
+        "                lo, hi = lo - 1, hi + 1\n" +
+        "            if hi &lt; 0:\n" +
+        "                return False           # too many \")\" whatever the stars are\n" +
+        "            lo = max(lo, 0)            # a negative open count is never a real choice\n" +
+        "        return lo == 0</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean checkValidString(String s) {\n" +
+        "        int lo = 0, hi = 0;            // the range of possible open counts\n" +
+        "        for (char c : s.toCharArray()) {\n" +
+        "            if (c == '(') { lo++; hi++; }\n" +
+        "            else if (c == ')') { lo--; hi--; }\n" +
+        "            else { lo--; hi++; }       // '*': close, open, or nothing\n" +
+        "            if (hi &lt; 0) return false;  // too many ')' whatever the stars are\n" +
+        "            lo = Math.max(lo, 0);      // a negative open count is never a real choice\n" +
+        "        }\n" +
+        "        return lo == 0;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Forgetting to clamp lo. Without it, lo goes negative by counting choices where a star closes a bracket that was never opened, and the final lo == 0 check becomes wrong.</p></details>" +
+        "<h3>10. Merge Triplets to Form Target Triplet</h3>" +
+        "<p><strong>LeetCode 1899 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/merge-triplets-to-form-target-triplet/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Merging two triplets replaces one with their element-wise maximum. Decide whether some sequence of merges can produce a target triplet.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A triplet with any value above the target can never be used, because a maximum never decreases. Every other triplet is safe to merge in, so merge them all and see whether the target appears.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset of triplets to merge: 2\u207f.</p>" +
+        "<p><strong>Approach.</strong> Ignore every triplet with some coordinate larger than the target's. Among the rest, check whether each of the three target values is matched in its coordinate by at least one of them.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def mergeTriplets(self, triplets: list[list[int]], target: list[int]) -&gt; bool:\n" +
+        "        found = [False] * 3\n" +
+        "        for t in triplets:\n" +
+        "            if all(t[i] &lt;= target[i] for i in range(3)):   # safe to merge in\n" +
+        "                for i in range(3):\n" +
+        "                    if t[i] == target[i]:\n" +
+        "                        found[i] = True\n" +
+        "        return all(found)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean mergeTriplets(int[][] triplets, int[] target) {\n" +
+        "        boolean[] found = new boolean[3];\n" +
+        "        for (int[] t : triplets) {\n" +
+        "            if (t[0] &gt; target[0] || t[1] &gt; target[1] || t[2] &gt; target[2]) continue;   // unusable\n" +
+        "            for (int i = 0; i &lt; 3; i++) if (t[i] == target[i]) found[i] = true;\n" +
+        "        }\n" +
+        "        return found[0] &amp;&amp; found[1] &amp;&amp; found[2];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Requiring one triplet to match the target in all three coordinates. Different triplets can supply different coordinates; merging combines them.</p></details>" +
+        "<h3>11. Queue Reconstruction by Height</h3>" +
+        "<p><strong>LeetCode 406 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/queue-reconstruction-by-height/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Each person is [h, k]: height h, with exactly k people of height at least h in front of them. Rebuild the queue.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Place the tallest people first. Anyone shorter, inserted later, is invisible to them, so each tall person's k is exactly their position among those already placed.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every ordering and check it: n!.</p>" +
+        "<p><strong>Approach.</strong> Sort by height descending and, for equal heights, k ascending. Insert each person at index k of the output list. Everyone already placed is at least as tall, so that index gives exactly k of them in front, and later (shorter) insertions do not change it.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def reconstructQueue(self, people: list[list[int]]) -&gt; list[list[int]]:\n" +
+        "        people.sort(key=lambda p: (-p[0], p[1]))   # tallest first; smaller k first\n" +
+        "        queue = []\n" +
+        "        for p in people:\n" +
+        "            queue.insert(p[1], p)      # shorter people inserted later are invisible to p\n" +
+        "        return queue</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[][] reconstructQueue(int[][] people) {\n" +
+        "        Arrays.sort(people, (a, b) -&gt; a[0] != b[0] ? Integer.compare(b[0], a[0])\n" +
+        "                                                   : Integer.compare(a[1], b[1]));   // tallest first\n" +
+        "        List&lt;int[]&gt; queue = new ArrayList&lt;&gt;();\n" +
+        "        for (int[] p : people) queue.add(p[1], p);   // shorter people later are invisible to p\n" +
+        "        return queue.toArray(new int[0][]);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time for the insertions into a list, fine at n \u2264 2,000.</p>" +
+        "<p><strong>The trap.</strong> Sorting equal heights by k descending. Two people of the same height both count each other, so the one with smaller k must be placed first.</p></details>" +
+        "<h3>12. Candy</h3>" +
+        "<p><strong>LeetCode 135 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/candy/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Children in a row have ratings. Each gets at least one candy, and a child rated higher than a neighbour gets more than that neighbour. Find the fewest candies.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The two neighbour rules are independent. A left-to-right pass satisfies \"more than the left neighbour\", a right-to-left pass \"more than the right neighbour\", and taking the larger of the two requirements satisfies both with nothing extra.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Start everyone at 1 and repeatedly fix any violated pair by raising the higher-rated child, until nothing changes: correct, and O(n\u00b2) in the worst case.</p>" +
+        "<p><strong>Approach.</strong> left[i] = left[i - 1] + 1 if ratings[i] &gt; ratings[i - 1], else 1. right[i] = right[i + 1] + 1 if ratings[i] &gt; ratings[i + 1], else 1. Child i gets max(left[i], right[i]); sum them.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def candy(self, ratings: list[int]) -&gt; int:\n" +
+        "        n = len(ratings)\n" +
+        "        left, right = [1] * n, [1] * n\n" +
+        "        for i in range(1, n):          # more than the left neighbour\n" +
+        "            if ratings[i] &gt; ratings[i - 1]:\n" +
+        "                left[i] = left[i - 1] + 1\n" +
+        "        for i in range(n - 2, -1, -1): # more than the right neighbour\n" +
+        "            if ratings[i] &gt; ratings[i + 1]:\n" +
+        "                right[i] = right[i + 1] + 1\n" +
+        "        return sum(max(a, b) for a, b in zip(left, right))</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int candy(int[] ratings) {\n" +
+        "        int n = ratings.length;\n" +
+        "        int[] left = new int[n], right = new int[n];\n" +
+        "        java.util.Arrays.fill(left, 1);\n" +
+        "        java.util.Arrays.fill(right, 1);\n" +
+        "        for (int i = 1; i &lt; n; i++)            // more than the left neighbour\n" +
+        "            if (ratings[i] &gt; ratings[i - 1]) left[i] = left[i - 1] + 1;\n" +
+        "        for (int i = n - 2; i &gt;= 0; i--)       // more than the right neighbour\n" +
+        "            if (ratings[i] &gt; ratings[i + 1]) right[i] = right[i + 1] + 1;\n" +
+        "        int total = 0;\n" +
+        "        for (int i = 0; i &lt; n; i++) total += Math.max(left[i], right[i]);\n" +
+        "        return total;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Giving equal ratings equal candy. Equal neighbours have no constraint between them, so a child next to an equal-rated one can drop back to 1.</p></details>" +
+        "<h3>13. Patching Array</h3>" +
+        "<p><strong>LeetCode 330 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/patching-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given a sorted array, add as few numbers as possible so that every integer from 1 to n is the sum of some subset of the array.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>If every value in [1, reach) can already be made, then adding a number x \u2264 reach extends that to [1, reach + x). When the next array number is too big to extend it, the best possible patch is reach itself, which doubles the range.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every set of patches of size 1, 2, \u2026: exponential.</p>" +
+        "<p><strong>Approach.</strong> Keep reach = the smallest sum not yet makeable, starting at 1. While reach \u2264 n: if the next array number is at most reach, use it (reach += it) and move on; otherwise patch with reach (reach doubles) and count a patch.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minPatches(self, nums: list[int], n: int) -&gt; int:\n" +
+        "        reach, i, patches = 1, 0, 0    # every sum in [1, reach) can be made\n" +
+        "        while reach &lt;= n:\n" +
+        "            if i &lt; len(nums) and nums[i] &lt;= reach:\n" +
+        "                reach += nums[i]       # extends the range to [1, reach + nums[i])\n" +
+        "                i += 1\n" +
+        "            else:\n" +
+        "                reach += reach         # patch with reach itself: the range doubles\n" +
+        "                patches += 1\n" +
+        "        return patches</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minPatches(int[] nums, int n) {\n" +
+        "        long reach = 1;                // long: doubling can pass 2^31\n" +
+        "        int i = 0, patches = 0;        // every sum in [1, reach) can be made\n" +
+        "        while (reach &lt;= n) {\n" +
+        "            if (i &lt; nums.length &amp;&amp; nums[i] &lt;= reach) reach += nums[i++];\n" +
+        "            else { reach += reach; patches++; }   // patch with reach: the range doubles\n" +
+        "        }\n" +
+        "        return patches;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(len(nums) + log n) time, O(1) space: patches double the reach, so there are at most about 31 of them.</p>" +
+        "<p><strong>The trap.</strong> Overflow in Java. reach can pass 2\u00b3\u00b9 right before the loop ends (it doubles from values near n), so keep it in a long.</p></details>"
     },
 
     { title: "Exercises",
