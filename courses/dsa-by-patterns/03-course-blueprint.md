@@ -356,6 +356,11 @@ turns a rectangle-sum question into four array lookups.
 
 **Rows:** B5, B6, N1 · **Outcomes:** A2, O2 · **Terms:** 11
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch09.py`)* — LeetCode, all free.
+- Easy: 1480 Running Sum of 1d Array · 724 Find Pivot Index · 303 Range Sum Query - Immutable
+- Medium: 238 Product of Array Except Self · 304 Range Sum Query 2D - Immutable · 1109 Corporate Flight Bookings · 1094 Car Pooling · 560 Subarray Sum Equals K · 525 Contiguous Array · 974 Subarray Sums Divisible by K · 53 Maximum Subarray · 918 Maximum Sum Circular Subarray
+- Hard: 1074 Number of Submatrices That Sum to Target · 689 Maximum Sum of 3 Non-Overlapping Subarrays
+
 ---
 
 ## Chapter 10 — Stacks, Queues and the Monotonic Trick
@@ -386,6 +391,11 @@ nested-looking loops are linear.
 - Circular buffer with head/tail and the full-versus-empty ambiguity marked.
 
 **Rows:** F1, F2, F3, F4, F5, F6 · **Outcomes:** E4, O2 · **Terms:** 16
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch10.py`)* — LeetCode, all free.
+- Easy: 20 Valid Parentheses · 232 Implement Queue using Stacks · 496 Next Greater Element I
+- Medium: 155 Min Stack · 150 Evaluate Reverse Polish Notation · 739 Daily Temperatures · 901 Online Stock Span · 853 Car Fleet · 622 Design Circular Queue · 907 Sum of Subarray Minimums · 227 Basic Calculator II
+- Hard: 84 Largest Rectangle in Histogram · 239 Sliding Window Maximum · 862 Shortest Subarray with Sum at Least K · 224 Basic Calculator
 
 ---
 
@@ -419,6 +429,11 @@ people have never seen for why the two pointers meet where they do.
 
 **Rows:** G1, G2, G3, G4, G5, G6, B14 · **Outcomes:** E4, O3, A3 · **Terms:** 14
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch11.py`)* — LeetCode, all free.
+- Easy: 206 Reverse Linked List · 21 Merge Two Sorted Lists · 141 Linked List Cycle · 876 Middle of the Linked List
+- Medium: 19 Remove Nth Node From End of List · 143 Reorder List · 142 Linked List Cycle II · 2 Add Two Numbers · 148 Sort List · 138 Copy List with Random Pointer · 146 LRU Cache · 287 Find the Duplicate Number
+- Hard: 25 Reverse Nodes in k-Group · 23 Merge k Sorted Lists
+
 ---
 
 ## Chapter 12 — Intervals and the Sweep Line
@@ -448,9 +463,12 @@ and the reason the technique transfers.
 
 **Rows:** B9, B10, B11, B12, B13 · **Outcomes:** A8, O1 · **Terms:** 13
 
----
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch12.py`)* — LeetCode, all free. Premium-only 252 Meeting Rooms and 253 Meeting Rooms II are excluded (guide §8.4); 2406 teaches the same sweep, and 56 covers 252's question.
+- Easy: 169 Majority Element · 228 Summary Ranges · 1854 Maximum Population Year
+- Medium: 56 Merge Intervals · 57 Insert Interval · 435 Non-overlapping Intervals · 452 Minimum Number of Arrows to Burst Balloons · 2406 Divide Intervals Into Minimum Number of Groups · 229 Majority Element II · 54 Spiral Matrix · 48 Rotate Image · 73 Set Matrix Zeroes
+- Hard: 1755 Closest Subsequence Sum · 732 My Calendar III · 2251 Number of Flowers in Full Bloom
 
-# PART 2 — Order and Lookup
+---
 
 ## Chapter 13 — Binary Search as an Invariant
 **Archetype:** mechanism · **KEYSTONE** · **Words:** 4,000 · **Prereq:** 2
