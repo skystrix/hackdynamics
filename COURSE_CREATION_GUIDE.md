@@ -758,10 +758,15 @@ says why it is excluded.
 6. **Complexity**: time and space, with the reason.
 7. **The trap**: the edge case or wrong turn that fails most first submissions.
 
-Items 2–7 sit inside `<details class='solution'>` so the learner attempts the problem
-before seeing anything. The section opens by telling the learner how: attempt each
-problem for a fixed time (15 minutes for Easy, 25 for Medium, 40 for Hard), then open the
-cue first, and the full solution only if the cue did not unlock it.
+Item 2 sits in a closed `<details class='solution'>` labelled **Hint**, and items 3–7 in a
+second one labelled **Solution**, so the learner attempts the problem before seeing
+anything. The section opens by telling the learner how: attempt each problem for a fixed
+time (15 minutes for Easy, 25 for Medium, 40 for Hard), then open the hint, and the
+solution only if the hint did not unlock it. Solutions use the judge's own function
+signature (for LeetCode, `class Solution`) so the learner can paste them in to check.
+
+The Practice Problems section is exempt from §6.1's 250–700 word limit, and the judge's
+difficulty label "Easy" is exempt from §5.1's avoided words.
 
 **Mixed practice.** Pattern-labelled practice teaches the pattern but not how to pick it,
 and picking it is what an interview tests. The course's recognition or review chapter (for
@@ -785,8 +790,9 @@ part, with the pattern hidden inside the solution.
         "<h3>1. Two Sum II (LeetCode 167, Medium)</h3>" +
         "<p><a href='https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/' target='_blank' rel='noopener'>Open on LeetCode</a>. " +
         "Find two numbers in a sorted array that add to a target.</p>" +
-        "<details class='solution'><summary>Cue, approach and solution</summary>" +
-        "<p><strong>Cue.</strong> …</p><p><strong>Brute force.</strong> …</p><p><strong>Approach.</strong> …</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The cue …</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> …</p><p><strong>Approach.</strong> …</p>" +
         "<div class='code-tabs'>…</div>" +
         "<p><strong>Complexity.</strong> …</p><p><strong>The trap.</strong> …</p>" +
         "</details>" }
@@ -964,7 +970,7 @@ A chapter is accepted only when every line is true.
 - [ ] Level (core or advanced) matches the Blueprint; the recap callout is present.
 
 **Practice problems** (§8.4, where the Blueprint assigns them)
-- [ ] 8–15 problems, graded Easy / Medium / Hard, each with all seven parts, items 2–7 hidden in `<details>`.
+- [ ] 8–15 problems, graded Easy / Medium / Hard, each with all seven parts, hint and solution hidden in `<details>`.
 - [ ] Every number, title, difficulty, and link checked against the judge; every solution passed its fuzz harness; no statement text reproduced.
 
 **Prose**

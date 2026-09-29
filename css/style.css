@@ -314,6 +314,23 @@ pre code { background: none; border: none; padding: 0; color: var(--text-seconda
 }
 .callout::before { content: "◆ "; color: var(--orange); }
 
+/* Practice problems: hint and solution stay closed until the learner asks */
+details.solution {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  margin: 10px 0;
+  padding: 0 16px;
+}
+details.solution > summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 14px; font-weight: 600;
+  color: var(--primary);
+}
+details.solution[open] { padding-bottom: 6px; }
+details.solution[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+
 /* ---------- Visualization frames ---------- */
 .viz {
   background: var(--bg-2);

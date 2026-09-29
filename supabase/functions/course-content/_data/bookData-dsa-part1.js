@@ -2973,6 +2973,581 @@ CHAPTERS.push({
         "<div class='callout'><strong>Interview lens.</strong> These patterns are asked constantly and the code is short enough that writing it correctly separates almost nobody. What separates people is stating the invariant before the loop and naming the precondition that makes the pattern legal. &#8220;This works because the array is sorted, so discarding the left element cannot lose a pair&#8221; and &#8220;this needs non-negative values, otherwise shrink-while-valid misses windows&#8221; are the two sentences worth having ready.</div>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Valid Palindrome</h3>" +
+        "<p><strong>LeetCode 125 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/valid-palindrome/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether a string reads the same forwards and backwards once you ignore case and every character that is not a letter or a digit.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>You compare the first character with the last, the second with the second-to-last, and so on. Anything that pairs the two ends of a sequence is the opposite-ends shape from the Opposite Ends section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Build a cleaned, lowercased copy and compare it with its reverse. That is O(n) time too, but it needs O(n) extra memory for the copy, and interviewers usually ask for the version without it.</p>" +
+        "<p><strong>Approach.</strong> Put i at the start and j at the end. Skip anything that is not a letter or digit on either side. When both point at real characters, they must match (ignoring case); if they do, move both inward. The discarded characters on the outside are already proved to match, which is the same argument as the pair-sum scan.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isPalindrome(self, s: str) -&gt; bool:\n" +
+        "        i, j = 0, len(s) - 1\n" +
+        "        while i &lt; j:\n" +
+        "            if not s[i].isalnum():\n" +
+        "                i += 1\n" +
+        "            elif not s[j].isalnum():\n" +
+        "                j -= 1\n" +
+        "            elif s[i].lower() != s[j].lower():\n" +
+        "                return False\n" +
+        "            else:\n" +
+        "                i += 1\n" +
+        "                j -= 1\n" +
+        "        return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isPalindrome(String s) {\n" +
+        "        int i = 0, j = s.length() - 1;\n" +
+        "        while (i &lt; j) {\n" +
+        "            char a = s.charAt(i), b = s.charAt(j);\n" +
+        "            if (!Character.isLetterOrDigit(a)) i++;\n" +
+        "            else if (!Character.isLetterOrDigit(b)) j--;\n" +
+        "            else if (Character.toLowerCase(a) != Character.toLowerCase(b)) return false;\n" +
+        "            else { i++; j--; }\n" +
+        "        }\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, since each step moves i or j inward. O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Moving both pointers when only one side is punctuation. Skip one side at a time, then compare. Also check i &lt; j inside the skipping, or a string like \".,\" walks off the end.</p></details>" +
+        "<h3>2. Remove Duplicates from Sorted Array</h3>" +
+        "<p><strong>LeetCode 26 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/remove-duplicates-from-sorted-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Squeeze a sorted array in place so each distinct value appears once at the front, and return how many distinct values there are.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"In place\" plus \"keep some elements, drop others\" is the read-ahead, write-behind scan from the Same Direction section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Copy the distinct values into a new list, then copy them back. O(n) time but O(n) extra memory, which the problem forbids.</p>" +
+        "<p><strong>Approach.</strong> A read pointer r visits every element; a write pointer w marks the end of the finished part. Because the array is sorted, a duplicate always sits right next to its first copy, so r only needs to compare against the last value written, nums[w - 1]. When it sees something new, it writes it at w and moves w forward.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def removeDuplicates(self, nums: list[int]) -&gt; int:\n" +
+        "        w = 1                          # nums[:w] is the finished, distinct part\n" +
+        "        for r in range(1, len(nums)):\n" +
+        "            if nums[r] != nums[w - 1]:\n" +
+        "                nums[w] = nums[r]\n" +
+        "                w += 1\n" +
+        "        return w</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int removeDuplicates(int[] nums) {\n" +
+        "        int w = 1;                     // nums[0..w-1] is the finished, distinct part\n" +
+        "        for (int r = 1; r &lt; nums.length; r++) {\n" +
+        "            if (nums[r] != nums[w - 1]) {\n" +
+        "                nums[w] = nums[r];\n" +
+        "                w++;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return w;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, one pass. O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Comparing nums[r] with nums[r - 1] instead of nums[w - 1]. It happens to work here because the array is sorted, but it breaks the moment you adapt the code to \"allow each value at most twice\" (LeetCode 80), where you must compare against the written part.</p></details>" +
+        "<h3>3. Move Zeroes</h3>" +
+        "<p><strong>LeetCode 283 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/move-zeroes/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Move every zero to the end of the array in place, keeping the other values in their original order.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"In place\" and \"keep the order of the ones you keep\" is again the read-ahead, write-behind scan.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Collect the non-zero values into a new list, pad with zeros, and copy back. Correct, but O(n) extra memory.</p>" +
+        "<p><strong>Approach.</strong> The write pointer w marks where the next non-zero value belongs. The read pointer r scans everything. Each non-zero value is swapped into position w, and w moves on. Swapping, rather than overwriting, means the zeros get pushed back as a side effect, so no second pass is needed.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def moveZeroes(self, nums: list[int]) -&gt; None:\n" +
+        "        w = 0                          # nums[:w] holds the non-zeros, in order\n" +
+        "        for r in range(len(nums)):\n" +
+        "            if nums[r] != 0:\n" +
+        "                nums[w], nums[r] = nums[r], nums[w]\n" +
+        "                w += 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public void moveZeroes(int[] nums) {\n" +
+        "        int w = 0;                     // nums[0..w-1] holds the non-zeros, in order\n" +
+        "        for (int r = 0; r &lt; nums.length; r++) {\n" +
+        "            if (nums[r] != 0) {\n" +
+        "                int tmp = nums[w]; nums[w] = nums[r]; nums[r] = tmp;\n" +
+        "                w++;\n" +
+        "            }\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Overwriting instead of swapping and then forgetting to fill the tail with zeros. Either fix works; forgetting both leaves old values at the end.</p></details>" +
+        "<h3>4. Best Time to Buy and Sell Stock</h3>" +
+        "<p><strong>LeetCode 121 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/best-time-to-buy-and-sell-stock/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given a price for each day, find the biggest profit from buying on one day and selling on a later day (zero if no trade makes money).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>You need a pair i &lt; j that maximizes prices[j] - prices[i]. The left end of the pair only ever needs to be the cheapest day so far, so it can jump forward and never has to come back.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every buy day with every later sell day: n(n-1)/2 pairs, so about 5 billion checks at n = 100,000. Too slow.</p>" +
+        "<p><strong>Approach.</strong> Scan the days once. Keep the lowest price seen so far (the best day to have bought). On each day, the best profit from selling today is today's price minus that lowest price. Keep the largest of those. The left end of the window is the cheapest day, and it jumps to today whenever today is cheaper.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxProfit(self, prices: list[int]) -&gt; int:\n" +
+        "        lowest = prices[0]             # cheapest day to have bought, so far\n" +
+        "        best = 0\n" +
+        "        for p in prices:\n" +
+        "            lowest = min(lowest, p)\n" +
+        "            best = max(best, p - lowest)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maxProfit(int[] prices) {\n" +
+        "        int lowest = prices[0];        // cheapest day to have bought, so far\n" +
+        "        int best = 0;\n" +
+        "        for (int p : prices) {\n" +
+        "            lowest = Math.min(lowest, p);\n" +
+        "            best = Math.max(best, p - lowest);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Taking the overall maximum minus the overall minimum. The maximum might come before the minimum, and you cannot sell before you buy. On [3, 9, 1] that shortcut says 9 - 1 = 8, but the real answer is 6: buy at 3, sell at 9.</p></details>" +
+        "<h3>5. Two Sum II - Input Array Is Sorted</h3>" +
+        "<p><strong>LeetCode 167 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a sorted array, find the two positions whose values add up to a target, counting positions from 1. There is exactly one answer.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Sorted array, find a pair with a given sum. This is the pair-sum scan from the Opposite Ends section, word for word.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every pair: O(n\u00b2). Or, for each element, binary-search for its partner: O(n log n). Both ignore what the sorting gives you for free.</p>" +
+        "<p><strong>Approach.</strong> Put i at the start and j at the end. If the sum is too small, the smallest value a[i] cannot be in the answer with anything left, so drop it (i += 1). If the sum is too big, drop the largest (j -= 1). This is the section's invariant: every discarded element is proved not to be part of any answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def twoSum(self, numbers: list[int], target: int) -&gt; list[int]:\n" +
+        "        i, j = 0, len(numbers) - 1\n" +
+        "        while i &lt; j:\n" +
+        "            s = numbers[i] + numbers[j]\n" +
+        "            if s == target:\n" +
+        "                return [i + 1, j + 1]  # the judge counts positions from 1\n" +
+        "            if s &lt; target:\n" +
+        "                i += 1\n" +
+        "            else:\n" +
+        "                j -= 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int[] twoSum(int[] numbers, int target) {\n" +
+        "        int i = 0, j = numbers.length - 1;\n" +
+        "        while (i &lt; j) {\n" +
+        "            int s = numbers[i] + numbers[j];\n" +
+        "            if (s == target) return new int[]{i + 1, j + 1};  // positions from 1\n" +
+        "            if (s &lt; target) i++;\n" +
+        "            else j--;\n" +
+        "        }\n" +
+        "        return new int[0];             // unreachable: exactly one answer exists\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Returning 0-based indices. The judge counts from 1, so add one to each.</p></details>" +
+        "<h3>6. Container With Most Water</h3>" +
+        "<p><strong>LeetCode 11 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/container-with-most-water/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Vertical lines stand at each position with the given heights. Pick two lines that, with the ground, hold the most water, and return that amount.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>You are choosing a pair of positions and the score depends on the distance between them. Start as wide as possible and move inward: opposite ends.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every pair of lines: O(n\u00b2), about 5 billion pairs at n = 100,000.</p>" +
+        "<p><strong>Approach.</strong> Start with the widest container, lines 0 and n-1. The water level is set by the shorter line. Now move the shorter line inward. Why is that safe? Any container that keeps the shorter line and swaps the other one is narrower, and its level can never rise above that same short line, so none of them can win. The shorter line is finished, exactly like a discarded element in pair sum.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxArea(self, height: list[int]) -&gt; int:\n" +
+        "        i, j = 0, len(height) - 1\n" +
+        "        best = 0\n" +
+        "        while i &lt; j:\n" +
+        "            best = max(best, (j - i) * min(height[i], height[j]))\n" +
+        "            if height[i] &lt; height[j]:\n" +
+        "                i += 1                 # the shorter line can do no better\n" +
+        "            else:\n" +
+        "                j -= 1\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int maxArea(int[] height) {\n" +
+        "        int i = 0, j = height.length - 1, best = 0;\n" +
+        "        while (i &lt; j) {\n" +
+        "            best = Math.max(best, (j - i) * Math.min(height[i], height[j]));\n" +
+        "            if (height[i] &lt; height[j]) i++;   // the shorter line can do no better\n" +
+        "            else j--;\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Moving the taller line. It feels like keeping the best wall, but it throws away containers that could win. The chapter's Build exercise measures this: it gets roughly half of random inputs wrong.</p></details>" +
+        "<h3>7. 3Sum</h3>" +
+        "<p><strong>LeetCode 15 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/3sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find every distinct triple of values in an array that adds up to zero. The same triple must not be reported twice.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Three numbers with a target sum. Fix one of them and the other two are a pair-sum problem, which the Opposite Ends section's \"three pointers is two pointers with a loop around it\" covers.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Three nested loops over all triples: O(n\u00b3). With n = 3,000 that is about 4.5 billion triples.</p>" +
+        "<p><strong>Approach.</strong> Sort the array. For each position k, run the pair-sum scan on the part to its right with target -nums[k]. To avoid repeats, skip k when its value equals the previous k's value, and after recording a triple, move i past every copy of the value it used.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def threeSum(self, nums: list[int]) -&gt; list[list[int]]:\n" +
+        "        nums.sort()\n" +
+        "        out = []\n" +
+        "        for k in range(len(nums) - 2):\n" +
+        "            if k &gt; 0 and nums[k] == nums[k - 1]:\n" +
+        "                continue               # same first value, same triples\n" +
+        "            i, j = k + 1, len(nums) - 1\n" +
+        "            while i &lt; j:\n" +
+        "                s = nums[k] + nums[i] + nums[j]\n" +
+        "                if s &lt; 0:\n" +
+        "                    i += 1\n" +
+        "                elif s &gt; 0:\n" +
+        "                    j -= 1\n" +
+        "                else:\n" +
+        "                    out.append([nums[k], nums[i], nums[j]])\n" +
+        "                    i += 1\n" +
+        "                    while i &lt; j and nums[i] == nums[i - 1]:\n" +
+        "                        i += 1         # skip copies of the value used\n" +
+        "        return out</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;List&lt;Integer&gt;&gt; threeSum(int[] nums) {\n" +
+        "        Arrays.sort(nums);\n" +
+        "        List&lt;List&lt;Integer&gt;&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        for (int k = 0; k &lt; nums.length - 2; k++) {\n" +
+        "            if (k &gt; 0 &amp;&amp; nums[k] == nums[k - 1]) continue;   // same first value, same triples\n" +
+        "            int i = k + 1, j = nums.length - 1;\n" +
+        "            while (i &lt; j) {\n" +
+        "                int s = nums[k] + nums[i] + nums[j];\n" +
+        "                if (s &lt; 0) i++;\n" +
+        "                else if (s &gt; 0) j--;\n" +
+        "                else {\n" +
+        "                    out.add(List.of(nums[k], nums[i], nums[j]));\n" +
+        "                    i++;\n" +
+        "                    while (i &lt; j &amp;&amp; nums[i] == nums[i - 1]) i++;   // skip copies\n" +
+        "                }\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) time: n choices of k, each followed by one O(n) scan. The sort is O(n log n) and is dominated. O(1) extra space apart from the output and the sort.</p>" +
+        "<p><strong>The trap.</strong> Duplicates. Putting the triples in a set works but hides the real fix, and interviewers ask for it. Skip equal values for k and for i, and the output has no repeats by construction.</p></details>" +
+        "<h3>8. Sort Colors</h3>" +
+        "<p><strong>LeetCode 75 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/sort-colors/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>An array holds only 0s, 1s and 2s. Sort it in place in one pass, without calling a library sort.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Three kinds of value, in place, one pass. This is the Dutch national flag from the Dutch National Flag section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Count the 0s, 1s and 2s, then overwrite the array. That is two passes and is a fine answer, but the problem's follow-up asks for one.</p>" +
+        "<p><strong>Approach.</strong> Keep three boundaries: everything before lo is 0, everything from lo to i is 1, everything after hi is 2, and i to hi is not examined yet. Look at nums[i]. A 0 swaps to lo and both move on. A 1 is already in place, so i moves on. A 2 swaps to hi and only hi moves, because the value that came back from hi has not been examined yet.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def sortColors(self, nums: list[int]) -&gt; None:\n" +
+        "        lo, i, hi = 0, 0, len(nums) - 1\n" +
+        "        while i &lt;= hi:\n" +
+        "            if nums[i] == 0:\n" +
+        "                nums[lo], nums[i] = nums[i], nums[lo]\n" +
+        "                lo += 1\n" +
+        "                i += 1\n" +
+        "            elif nums[i] == 2:\n" +
+        "                nums[i], nums[hi] = nums[hi], nums[i]\n" +
+        "                hi -= 1                # i stays: the new nums[i] is unexamined\n" +
+        "            else:\n" +
+        "                i += 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public void sortColors(int[] nums) {\n" +
+        "        int lo = 0, i = 0, hi = nums.length - 1;\n" +
+        "        while (i &lt;= hi) {\n" +
+        "            if (nums[i] == 0) {\n" +
+        "                int t = nums[lo]; nums[lo] = nums[i]; nums[i] = t;\n" +
+        "                lo++; i++;\n" +
+        "            } else if (nums[i] == 2) {\n" +
+        "                int t = nums[hi]; nums[hi] = nums[i]; nums[i] = t;\n" +
+        "                hi--;                  // i stays: the new nums[i] is unexamined\n" +
+        "            } else {\n" +
+        "                i++;\n" +
+        "            }\n" +
+        "        }\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, at most n iterations. O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Advancing i after swapping with hi. The value that arrived from the right end has never been looked at, so it could be a 0 that then stays in the wrong place.</p></details>" +
+        "<h3>9. Permutation in String</h3>" +
+        "<p><strong>LeetCode 567 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/permutation-in-string/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether some rearrangement of the first string appears as a block of consecutive characters inside the second string.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The block you are looking for always has the same length as the first string. A fixed length means a fixed window, from the Fixed Window section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For every starting position, take the block of the right length, count its letters, and compare with the first string's counts. That is O(n\u00b7k) for a block of length k.</p>" +
+        "<p><strong>Approach.</strong> Count the letters of s1 once. Slide a window of exactly len(s1) across s2, keeping letter counts for the window: add the letter entering on the right and remove the one leaving on the left. Whenever the two count arrays are equal, the window is a rearrangement of s1.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def checkInclusion(self, s1: str, s2: str) -&gt; bool:\n" +
+        "        k = len(s1)\n" +
+        "        if k &gt; len(s2):\n" +
+        "            return False\n" +
+        "        need, have = [0] * 26, [0] * 26\n" +
+        "        for c in s1:\n" +
+        "            need[ord(c) - 97] += 1\n" +
+        "        for r, c in enumerate(s2):\n" +
+        "            have[ord(c) - 97] += 1\n" +
+        "            if r &gt;= k:\n" +
+        "                have[ord(s2[r - k]) - 97] -= 1   # the letter leaving the window\n" +
+        "            if have == need:\n" +
+        "                return True\n" +
+        "        return False</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.Arrays;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean checkInclusion(String s1, String s2) {\n" +
+        "        int k = s1.length();\n" +
+        "        if (k &gt; s2.length()) return false;\n" +
+        "        int[] need = new int[26], have = new int[26];\n" +
+        "        for (char c : s1.toCharArray()) need[c - 'a']++;\n" +
+        "        for (int r = 0; r &lt; s2.length(); r++) {\n" +
+        "            have[s2.charAt(r) - 'a']++;\n" +
+        "            if (r &gt;= k) have[s2.charAt(r - k) - 'a']--;   // the letter leaving the window\n" +
+        "            if (Arrays.equals(have, need)) return true;\n" +
+        "        }\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(26\u00b7n) = O(n) time, since comparing two 26-letter count arrays is constant work. O(1) space.</p>" +
+        "<p><strong>The trap.</strong> The off-by-one on which letter leaves. When the right end is at position r, the letter leaving is s2[r - k], and it leaves only once r \u2265 k. The Fixed Window section is about exactly this line.</p></details>" +
+        "<h3>10. Longest Substring Without Repeating Characters</h3>" +
+        "<p><strong>LeetCode 3 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-substring-without-repeating-characters/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the length of the longest block of consecutive characters in a string in which no character appears twice.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"Longest block of consecutive items such that some condition holds\", where breaking the condition can be fixed by trimming the left end. That is the variable window from the Variable Window section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every block: O(n\u00b2) blocks, each checked for repeats. Even with a set that is O(n\u00b2), about 2.5 billion steps at n = 50,000.</p>" +
+        "<p><strong>Approach.</strong> Grow the window by one character on the right. If that character is already inside the window, shrink from the left until it is not. The window is now repeat-free, so record its length. Each character enters once and leaves at most once, which is the 2n bound the Variable Window section proves.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def lengthOfLongestSubstring(self, s: str) -&gt; int:\n" +
+        "        seen = set()                   # the characters inside the window\n" +
+        "        left = best = 0\n" +
+        "        for right, c in enumerate(s):\n" +
+        "            while c in seen:\n" +
+        "                seen.remove(s[left])\n" +
+        "                left += 1\n" +
+        "            seen.add(c)\n" +
+        "            best = max(best, right - left + 1)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int lengthOfLongestSubstring(String s) {\n" +
+        "        boolean[] seen = new boolean[128];   // the characters inside the window\n" +
+        "        int left = 0, best = 0;\n" +
+        "        for (int right = 0; right &lt; s.length(); right++) {\n" +
+        "            char c = s.charAt(right);\n" +
+        "            while (seen[c]) {\n" +
+        "                seen[s.charAt(left)] = false;\n" +
+        "                left++;\n" +
+        "            }\n" +
+        "            seen[c] = true;\n" +
+        "            best = Math.max(best, right - left + 1);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time. O(min(n, \u03c3)) space for the set, where \u03c3 is the number of possible characters (128 here). Not O(1), as the chapter's cost table warns.</p>" +
+        "<p><strong>The trap.</strong> Jumping left to one past the repeat's earlier position without checking that position is still inside the window. On \"abba\" the second 'a' would drag left backwards. The shrink-while version below cannot make that mistake.</p></details>" +
+        "<h3>11. Minimum Size Subarray Sum</h3>" +
+        "<p><strong>LeetCode 209 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/minimum-size-subarray-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given positive numbers and a target, find the length of the shortest block of consecutive numbers whose sum is at least the target (0 if none).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Shortest consecutive block meeting a sum condition, and every number is positive. Positive values are what make the window legal: adding on the right only raises the sum, removing on the left only lowers it.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sum every block: O(n\u00b2) with a running sum.</p>" +
+        "<p><strong>Approach.</strong> Grow the window on the right, adding to a running total. As long as the total reaches the target, record the length and shrink from the left, subtracting as you go. You stop shrinking the moment the total drops below the target, because any shorter block ending here would be smaller still.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minSubArrayLen(self, target: int, nums: list[int]) -&gt; int:\n" +
+        "        left = total = 0\n" +
+        "        best = len(nums) + 1           # \"none found yet\"\n" +
+        "        for right, x in enumerate(nums):\n" +
+        "            total += x\n" +
+        "            while total &gt;= target:\n" +
+        "                best = min(best, right - left + 1)\n" +
+        "                total -= nums[left]\n" +
+        "                left += 1\n" +
+        "        return best if best &lt;= len(nums) else 0</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int minSubArrayLen(int target, int[] nums) {\n" +
+        "        int left = 0, total = 0, best = nums.length + 1;   // \"none found yet\"\n" +
+        "        for (int right = 0; right &lt; nums.length; right++) {\n" +
+        "            total += nums[right];\n" +
+        "            while (total &gt;= target) {\n" +
+        "                best = Math.min(best, right - left + 1);\n" +
+        "                total -= nums[left];\n" +
+        "                left++;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return best &lt;= nums.length ? best : 0;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, each element enters and leaves once. O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Using this on arrays that can contain negative numbers. Then removing an element can raise the sum, and the window gives wrong answers. The section on windows that do not shrink monotonically shows the counterexamples; Chapter 9's prefix sums are the fix.</p></details>" +
+        "<h3>12. Longest Repeating Character Replacement</h3>" +
+        "<p><strong>LeetCode 424 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-repeating-character-replacement/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>In a string of capital letters you may change at most k characters to any letter. Find the length of the longest block of identical letters you can end up with.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Longest consecutive block that can be \"fixed\" within a budget. Too many repairs needed means trim the left end: variable window.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For every block, count its most common letter; the block works if its length minus that count is at most k. O(n\u00b2) blocks.</p>" +
+        "<p><strong>Approach.</strong> In any window, the cheapest fix is to keep the most common letter and repaint the rest, so the window costs (length - most common count) repaints. Grow the window on the right. While that cost exceeds k, shrink from the left. Every window you keep is fixable, so the longest one is the answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def characterReplacement(self, s: str, k: int) -&gt; int:\n" +
+        "        count = [0] * 26               # letter counts inside the window\n" +
+        "        left = best = 0\n" +
+        "        for right, c in enumerate(s):\n" +
+        "            count[ord(c) - 65] += 1\n" +
+        "            while (right - left + 1) - max(count) &gt; k:   # repaints needed &gt; k\n" +
+        "                count[ord(s[left]) - 65] -= 1\n" +
+        "                left += 1\n" +
+        "            best = max(best, right - left + 1)\n" +
+        "        return best</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int characterReplacement(String s, int k) {\n" +
+        "        int[] count = new int[26];     // letter counts inside the window\n" +
+        "        int left = 0, best = 0;\n" +
+        "        for (int right = 0; right &lt; s.length(); right++) {\n" +
+        "            count[s.charAt(right) - 'A']++;\n" +
+        "            while ((right - left + 1) - max(count) &gt; k) {   // repaints needed &gt; k\n" +
+        "                count[s.charAt(left) - 'A']--;\n" +
+        "                left++;\n" +
+        "            }\n" +
+        "            best = Math.max(best, right - left + 1);\n" +
+        "        }\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "\n" +
+        "    private int max(int[] a) {\n" +
+        "        int m = 0;\n" +
+        "        for (int x : a) m = Math.max(m, x);\n" +
+        "        return m;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(26\u00b7n) = O(n) time, because finding the largest of 26 counts is constant work. O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Tracking the most common letter by its identity instead of its count, and getting lost when the left end removes it. Count all 26 letters and take the largest count each time, as below. (Faster versions keep a stale maximum on purpose; get this one right first.)</p></details>" +
+        "<h3>13. Trapping Rain Water</h3>" +
+        "<p><strong>LeetCode 42 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/trapping-rain-water/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Bars of the given heights stand side by side. After rain, water collects in the dips between them. Return how much water is trapped.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The water above a bar depends on the tallest bar to its left and the tallest to its right. Two sides that each carry information inward is the opposite-ends shape.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each bar, scan left for the tallest bar and right for the tallest bar; the water above it is min(left tallest, right tallest) - its height. O(n\u00b2). Storing both maxima in two arrays first makes it O(n) time and O(n) space.</p>" +
+        "<p><strong>Approach.</strong> Put i at the left end and j at the right, and remember the tallest bar seen from each side. Whichever side is lower is the one you can settle. If height[i] &lt; height[j], the right side already has a wall at least height[j] tall, so the water at i is decided by the left maximum alone: add left_max - height[i] and move i. Otherwise do the same from the right. Each bar is settled once, and never revisited, for the same reason a discarded element never is.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def trap(self, height: list[int]) -&gt; int:\n" +
+        "        i, j = 0, len(height) - 1\n" +
+        "        left_max = right_max = water = 0\n" +
+        "        while i &lt; j:\n" +
+        "            if height[i] &lt; height[j]:  # right side has a taller wall: settle i\n" +
+        "                left_max = max(left_max, height[i])\n" +
+        "                water += left_max - height[i]\n" +
+        "                i += 1\n" +
+        "            else:                      # left side has a wall at least as tall: settle j\n" +
+        "                right_max = max(right_max, height[j])\n" +
+        "                water += right_max - height[j]\n" +
+        "                j -= 1\n" +
+        "        return water</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int trap(int[] height) {\n" +
+        "        int i = 0, j = height.length - 1, leftMax = 0, rightMax = 0, water = 0;\n" +
+        "        while (i &lt; j) {\n" +
+        "            if (height[i] &lt; height[j]) {        // right side has a taller wall: settle i\n" +
+        "                leftMax = Math.max(leftMax, height[i]);\n" +
+        "                water += leftMax - height[i];\n" +
+        "                i++;\n" +
+        "            } else {                            // left side is at least as tall: settle j\n" +
+        "                rightMax = Math.max(rightMax, height[j]);\n" +
+        "                water += rightMax - height[j];\n" +
+        "                j--;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return water;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Believing the lower side is settled without saying why. Write the one sentence out: the other side has a wall at least this tall, so this side's own maximum is the binding one. That sentence is what the interviewer is checking.</p></details>" +
+        "<h3>14. Minimum Window Substring</h3>" +
+        "<p><strong>LeetCode 76 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/minimum-window-substring/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the shortest block of consecutive characters in s that contains every character of t, counting repeats (return an empty string if there is none).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Shortest consecutive block satisfying a covering condition. Adding characters can only help the cover, removing can only hurt: variable window, the \"shortest\" flavour, like Minimum Size Subarray Sum.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every block against t's letter counts: O(n\u00b2) blocks times the check.</p>" +
+        "<p><strong>Approach.</strong> Keep need[c] = how many more copies of c the window still needs, and missing = how many characters of t are not yet covered. Grow the window on the right; when a character that was still needed enters, missing drops. When missing reaches 0, the window covers t: record it if it is the shortest so far, then shrink from the left until it stops covering. A negative need[c] means the window has spare copies of c.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minWindow(self, s: str, t: str) -&gt; str:\n" +
+        "        need = [0] * 128               # copies of each character still needed\n" +
+        "        for c in t:\n" +
+        "            need[ord(c)] += 1\n" +
+        "        missing = len(t)\n" +
+        "        left, best_start, best_len = 0, 0, len(s) + 1\n" +
+        "        for right, c in enumerate(s):\n" +
+        "            if need[ord(c)] &gt; 0:\n" +
+        "                missing -= 1\n" +
+        "            need[ord(c)] -= 1          # negative means a spare copy in the window\n" +
+        "            while missing == 0:        # the window covers t: record, then shrink\n" +
+        "                if right - left + 1 &lt; best_len:\n" +
+        "                    best_start, best_len = left, right - left + 1\n" +
+        "                out = ord(s[left])\n" +
+        "                need[out] += 1\n" +
+        "                if need[out] &gt; 0:\n" +
+        "                    missing += 1       # we dropped a character we needed\n" +
+        "                left += 1\n" +
+        "        return \"\" if best_len &gt; len(s) else s[best_start:best_start + best_len]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public String minWindow(String s, String t) {\n" +
+        "        int[] need = new int[128];     // copies of each character still needed\n" +
+        "        for (char c : t.toCharArray()) need[c]++;\n" +
+        "        int missing = t.length(), left = 0, bestStart = 0, bestLen = s.length() + 1;\n" +
+        "        for (int right = 0; right &lt; s.length(); right++) {\n" +
+        "            char c = s.charAt(right);\n" +
+        "            if (need[c] &gt; 0) missing--;\n" +
+        "            need[c]--;                 // negative means a spare copy in the window\n" +
+        "            while (missing == 0) {     // the window covers t: record, then shrink\n" +
+        "                if (right - left + 1 &lt; bestLen) {\n" +
+        "                    bestStart = left;\n" +
+        "                    bestLen = right - left + 1;\n" +
+        "                }\n" +
+        "                char out = s.charAt(left);\n" +
+        "                need[out]++;\n" +
+        "                if (need[out] &gt; 0) missing++;   // we dropped a character we needed\n" +
+        "                left++;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return bestLen &gt; s.length() ? \"\" : s.substring(bestStart, bestStart + bestLen);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n + m) time for s of length n and t of length m, since each character of s enters and leaves once. O(1) space for a 128-entry count table.</p>" +
+        "<p><strong>The trap.</strong> Tracking coverage by comparing two whole count tables on every step. It works, but costs 128 per step. The single missing counter turns the \"does it cover?\" test into one comparison.</p></details>" +
+        "<h3>15. First Missing Positive</h3>" +
+        "<p><strong>LeetCode 41 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/first-missing-positive/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the smallest positive whole number that does not appear in an unsorted array, in O(n) time and O(1) extra space.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The answer is between 1 and n + 1, so every value that matters has a natural home: value v belongs at index v - 1. \"The value tells you the index\" is cyclic placement, from the Same Direction section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Sort and scan: O(n log n). Or put everything in a set and test 1, 2, 3, \u2026: O(n) time but O(n) space. The problem rules out both.</p>" +
+        "<p><strong>Approach.</strong> Walk through the array. While the current value v is between 1 and n and its home slot does not already hold v, swap it home. Values outside 1..n are ignored; they can never be the answer's neighbours. After this pass, the first index i where nums[i] != i + 1 gives the answer i + 1. If every slot is correct, the answer is n + 1.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def firstMissingPositive(self, nums: list[int]) -&gt; int:\n" +
+        "        n = len(nums)\n" +
+        "        for i in range(n):\n" +
+        "            # value v belongs at index v - 1; keep sending nums[i] home\n" +
+        "            while 1 &lt;= nums[i] &lt;= n and nums[nums[i] - 1] != nums[i]:\n" +
+        "                v = nums[i]\n" +
+        "                nums[i], nums[v - 1] = nums[v - 1], v\n" +
+        "        for i in range(n):\n" +
+        "            if nums[i] != i + 1:\n" +
+        "                return i + 1\n" +
+        "        return n + 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int firstMissingPositive(int[] nums) {\n" +
+        "        int n = nums.length;\n" +
+        "        for (int i = 0; i &lt; n; i++) {\n" +
+        "            // value v belongs at index v - 1; keep sending nums[i] home\n" +
+        "            while (nums[i] &gt;= 1 &amp;&amp; nums[i] &lt;= n &amp;&amp; nums[nums[i] - 1] != nums[i]) {\n" +
+        "                int v = nums[i];\n" +
+        "                nums[i] = nums[v - 1];\n" +
+        "                nums[v - 1] = v;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        for (int i = 0; i &lt; n; i++) {\n" +
+        "            if (nums[i] != i + 1) return i + 1;\n" +
+        "        }\n" +
+        "        return n + 1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time: every swap puts one value in its final home, so there are at most n swaps in total, even though there is a loop inside a loop. O(1) extra space.</p>" +
+        "<p><strong>The trap.</strong> Two, one per language family. Without the \"home slot already holds v\" check, a duplicate swaps with itself forever. And in Python, the one-line swap nums[i], nums[nums[i] - 1] = nums[nums[i] - 1], nums[i] is wrong: nums[i] is assigned first, so the second index is computed from the new value. Save v first, as below.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +

@@ -321,6 +321,11 @@ problems where the window cannot shrink monotonically and the pattern silently b
 
 **Rows:** B1, B2, B3, B4, B7, B8 · **Outcomes:** E4, O2, A8 · **Terms:** 15
 
+**Practice problems** *(added 2026-09-27, guide §8.4; source and harness in `practice/ch08.py`, `tools/practice.py`)* — LeetCode, all free:
+- Easy: 125 Valid Palindrome · 26 Remove Duplicates from Sorted Array · 283 Move Zeroes · 121 Best Time to Buy and Sell Stock
+- Medium: 167 Two Sum II - Input Array Is Sorted · 11 Container With Most Water · 15 3Sum · 75 Sort Colors · 567 Permutation in String · 3 Longest Substring Without Repeating Characters · 209 Minimum Size Subarray Sum · 424 Longest Repeating Character Replacement
+- Hard: 42 Trapping Rain Water · 76 Minimum Window Substring · 41 First Missing Positive
+
 ---
 
 ## Chapter 9 — Prefix Sums and Difference Arrays
