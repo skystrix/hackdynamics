@@ -1169,6 +1169,358 @@ CHAPTERS.push({
         "<p>That gap is the normal state of affairs and it is worth internalising early. The 7 is there so the combine step can be called &#920;(n) with a straight face; it is not a claim about what your data will do. Chapter 16 is about the cases where the constant, rather than the exponent, decides who wins.</p>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Longest Nice Substring</h3>" +
+        "<p><strong>LeetCode 1763 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/longest-nice-substring/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A string is nice if every letter in it appears in both upper and lower case. Return the longest nice substring (the earliest one on a tie, or \"\" if there is none).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A letter whose other case is missing from the whole string can never be inside a nice substring. So it splits the problem: the answer lies entirely to its left or entirely to its right. Splitting and solving the pieces is divide and conquer.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every substring for niceness: O(n\u00b2) substrings with an O(n) check each, O(n\u00b3), which is fine for n \u2264 100 but teaches nothing.</p>" +
+        "<p><strong>Approach.</strong> If the string is nice, return it. Otherwise find the first character whose other case does not occur in the string, solve the part before it and the part after it recursively, and return the longer answer, preferring the left one on a tie so the earliest wins.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def longestNiceSubstring(self, s: str) -&gt; str:\n" +
+        "        chars = set(s)\n" +
+        "        for i, c in enumerate(s):\n" +
+        "            if c.swapcase() not in chars:          # c can never be in a nice substring\n" +
+        "                left = self.longestNiceSubstring(s[:i])\n" +
+        "                right = self.longestNiceSubstring(s[i + 1:])\n" +
+        "                return left if len(left) &gt;= len(right) else right   # earliest on a tie\n" +
+        "        return s                                   # every letter has its partner</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashSet;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public String longestNiceSubstring(String s) {\n" +
+        "        HashSet&lt;Character&gt; chars = new HashSet&lt;&gt;();\n" +
+        "        for (char c : s.toCharArray()) chars.add(c);\n" +
+        "        for (int i = 0; i &lt; s.length(); i++) {\n" +
+        "            char c = s.charAt(i);\n" +
+        "            char other = Character.isUpperCase(c) ? Character.toLowerCase(c) : Character.toUpperCase(c);\n" +
+        "            if (!chars.contains(other)) {          // c can never be in a nice substring\n" +
+        "                String left = longestNiceSubstring(s.substring(0, i));\n" +
+        "                String right = longestNiceSubstring(s.substring(i + 1));\n" +
+        "                return left.length() &gt;= right.length() ? left : right;   // earliest on a tie\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return s;                                  // every letter has its partner\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2) in the worst case: each level does O(n) work, and a split can peel off a single character (try \"aaaa\"), like quicksort's worst case. Fine at the problem's n \u2264 100.</p>" +
+        "<p><strong>The trap.</strong> Returning the right piece when the two answers have equal length. The problem asks for the earliest, so compare with \u2265 in favour of the left.</p></details>" +
+        "<h3>2. Different Ways to Add Parentheses</h3>" +
+        "<p><strong>LeetCode 241 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/different-ways-to-add-parentheses/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given an expression of numbers and + - *, return every value you can get by adding parentheses in different ways (with repeats, in any order).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Every way of parenthesizing has a last operation to be applied. Choose it, and the left and right sides are the same problem on smaller expressions: divide at every operator, conquer each side, combine every pair of results.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> There is no simpler correct method; the number of answers itself grows like the Catalan numbers, so any solution is exponential in the number of operators.</p>" +
+        "<p><strong>Approach.</strong> If the expression is a plain number, return it. Otherwise, for each operator position, recursively compute all values of the left part and all values of the right part, and combine every left value with every right value using that operator.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def diffWaysToCompute(self, expression: str) -&gt; list[int]:\n" +
+        "        out = []\n" +
+        "        for i, c in enumerate(expression):\n" +
+        "            if c in \"+-*\":                         # c is the last operation applied\n" +
+        "                for a in self.diffWaysToCompute(expression[:i]):\n" +
+        "                    for b in self.diffWaysToCompute(expression[i + 1:]):\n" +
+        "                        out.append(a + b if c == \"+\" else a - b if c == \"-\" else a * b)\n" +
+        "        return out or [int(expression)]            # no operator: a plain number</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public List&lt;Integer&gt; diffWaysToCompute(String expression) {\n" +
+        "        List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        for (int i = 0; i &lt; expression.length(); i++) {\n" +
+        "            char c = expression.charAt(i);\n" +
+        "            if (c != '+' &amp;&amp; c != '-' &amp;&amp; c != '*') continue;   // c is the last operation\n" +
+        "            for (int a : diffWaysToCompute(expression.substring(0, i)))\n" +
+        "                for (int b : diffWaysToCompute(expression.substring(i + 1)))\n" +
+        "                    out.add(c == '+' ? a + b : c == '-' ? a - b : a * b);\n" +
+        "        }\n" +
+        "        if (out.isEmpty()) out.add(Integer.parseInt(expression));   // a plain number\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> Exponential, bounded by the Catalan numbers: about 1,430 results for 8 operators. Remembering the results for each substring (Chapter 19's memoization) avoids recomputing shared pieces.</p>" +
+        "<p><strong>The trap.</strong> Treating each digit as a number. Values can have two digits, like \"11\", so the base case is \"no operator in this piece\", not \"one character long\".</p></details>" +
+        "<h3>3. Search a 2D Matrix II</h3>" +
+        "<p><strong>LeetCode 240 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/search-a-2d-matrix-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Every row and every column of a grid is sorted in increasing order. Decide whether a target value is in the grid.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A tempting divide and conquer checks the middle cell and throws away one of four quadrants, leaving three. The Master Theorem section prices that: T(n) = 3T(n/2) + O(1) is O(n^1.58) for an n \u00d7 n grid, worse than O(m + n). A better idea discards a whole row or column per step.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Scan every cell: O(m \u00d7 n). Binary-searching every row is O(m log n).</p>" +
+        "<p><strong>Approach.</strong> Start at the top-right corner. If the value there is bigger than the target, everything below it in that column is bigger too, so drop the column (move left). If it is smaller, everything to its left in that row is smaller, so drop the row (move down). Each step removes a row or a column.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def searchMatrix(self, matrix: list[list[int]], target: int) -&gt; bool:\n" +
+        "        r, c = 0, len(matrix[0]) - 1               # top-right corner\n" +
+        "        while r &lt; len(matrix) and c &gt;= 0:\n" +
+        "            v = matrix[r][c]\n" +
+        "            if v == target:\n" +
+        "                return True\n" +
+        "            if v &gt; target:\n" +
+        "                c -= 1                             # the rest of this column is bigger\n" +
+        "            else:\n" +
+        "                r += 1                             # the rest of this row is smaller\n" +
+        "        return False</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean searchMatrix(int[][] matrix, int target) {\n" +
+        "        int r = 0, c = matrix[0].length - 1;       // top-right corner\n" +
+        "        while (r &lt; matrix.length &amp;&amp; c &gt;= 0) {\n" +
+        "            int v = matrix[r][c];\n" +
+        "            if (v == target) return true;\n" +
+        "            if (v &gt; target) c--;                   // the rest of this column is bigger\n" +
+        "            else r++;                              // the rest of this row is smaller\n" +
+        "        }\n" +
+        "        return false;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m + n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Starting at the top-left corner. There both neighbours are bigger, so a too-small value gives no direction. The top-right and bottom-left corners are the two where one move increases and the other decreases.</p></details>" +
+        "<h3>4. Beautiful Array</h3>" +
+        "<p><strong>LeetCode 932 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/beautiful-array/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Arrange 1 to n so that for no i &lt; k &lt; j is the middle value nums[k] exactly the average of nums[i] and nums[j]. Any valid arrangement is accepted.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>If all the odd numbers come first and all the even numbers after, no average can straddle the two halves, because odd + even is odd and cannot be twice anything. So only pairs inside each half matter, and each half is a smaller copy of the same problem.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try permutations until one works: O(n!).</p>" +
+        "<p><strong>Approach.</strong> Build it recursively: take a beautiful arrangement of (n + 1) // 2 numbers and map each x to 2x - 1 (the odd numbers), take a beautiful arrangement of n // 2 numbers and map each x to 2x (the even numbers), and put the odd half first. Doubling and shifting every value keeps an arrangement beautiful, because it preserves which value is an average of which.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def beautifulArray(self, n: int) -&gt; list[int]:\n" +
+        "        if n == 1:\n" +
+        "            return [1]\n" +
+        "        odds = [2 * x - 1 for x in self.beautifulArray((n + 1) // 2)]\n" +
+        "        evens = [2 * x for x in self.beautifulArray(n // 2)]\n" +
+        "        return odds + evens                        # no average straddles the halves</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public int[] beautifulArray(int n) {\n" +
+        "        if (n == 1) return new int[]{1};\n" +
+        "        int[] odd = beautifulArray((n + 1) / 2), even = beautifulArray(n / 2);\n" +
+        "        int[] out = new int[n];\n" +
+        "        int i = 0;\n" +
+        "        for (int x : odd) out[i++] = 2 * x - 1;\n" +
+        "        for (int x : even) out[i++] = 2 * x;       // no average straddles the halves\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time: T(n) = 2T(n/2) + O(n), the merge-sort recurrence. O(n log n) space as written; memoizing by n makes it O(n).</p>" +
+        "<p><strong>The trap.</strong> Trying to verify an answer by comparing it with a sample output. Many arrangements are beautiful; a checker must test the property, which is what the test for this solution does.</p></details>" +
+        "<h3>5. Longest Substring with At Least K Repeating Characters</h3>" +
+        "<p><strong>LeetCode 395 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/longest-substring-with-at-least-k-repeating-characters/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Find the length of the longest substring in which every character appears at least k times.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A character that appears fewer than k times in the whole string cannot be in any valid substring, so it splits the string into pieces that can be solved separately. The same split as Longest Nice Substring.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every substring's counts: O(n\u00b2) substrings, O(26) each with running counts, about 1.3 billion steps at n = 10,000.</p>" +
+        "<p><strong>Approach.</strong> Count the characters. If every character appears at least k times, the whole string is the answer. Otherwise split the string at every character that appears fewer than k times, solve each piece recursively, and return the largest answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>from collections import Counter\n" +
+        "\n" +
+        "class Solution:\n" +
+        "    def longestSubstring(self, s: str, k: int) -&gt; int:\n" +
+        "        count = Counter(s)\n" +
+        "        for c in count:\n" +
+        "            if count[c] &lt; k:                       # c splits the problem\n" +
+        "                return max(self.longestSubstring(piece, k) for piece in s.split(c))\n" +
+        "        return len(s)                              # every character appears k times</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int longestSubstring(String s, int k) {\n" +
+        "        int[] count = new int[26];\n" +
+        "        for (char c : s.toCharArray()) count[c - 'a']++;\n" +
+        "        for (int c = 0; c &lt; 26; c++) {\n" +
+        "            if (count[c] &gt; 0 &amp;&amp; count[c] &lt; k) {    // this letter splits the problem\n" +
+        "                int best = 0;\n" +
+        "                for (String piece : s.split(String.valueOf((char) ('a' + c))))\n" +
+        "                    best = Math.max(best, longestSubstring(piece, k));\n" +
+        "                return best;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return s.length();                         // every character appears k times\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(26 \u00d7 n): each level of recursion removes at least one distinct letter entirely, so there are at most 26 levels, each doing O(n) work in total.</p>" +
+        "<p><strong>The trap.</strong> A sliding window looks natural here and does not work directly: adding a character can make the window either more or less valid, so the window does not shrink monotonically (Chapter 8's failure case). Divide and conquer sidesteps that.</p></details>" +
+        "<h3>6. Count of Smaller Numbers After Self</h3>" +
+        "<p><strong>LeetCode 315 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/count-of-smaller-numbers-after-self/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>For each position, count how many values to its right are smaller than it.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Split the array in half. Pairs inside each half are the same problem, smaller. Pairs that cross the middle (left element, right element) can all be counted during the merge step of merge sort, the way closest pair handles the strip across the split line in the Divide and Conquer as a Paradigm section.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each position, scan everything to its right: O(n\u00b2), 5 \u00d7 10\u2079 steps at n = 100,000.</p>" +
+        "<p><strong>Approach.</strong> Merge-sort the indices by value. While merging a left half and a right half (both sorted), keep a count of how many right-half elements have already been placed. When a left-half element is placed, every right-half element placed before it is smaller and was to its right in the original array: add that count to its answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countSmaller(self, nums: list[int]) -&gt; list[int]:\n" +
+        "        counts = [0] * len(nums)\n" +
+        "\n" +
+        "        def sort(idx):                             # merge sort of indices by value\n" +
+        "            if len(idx) &lt;= 1:\n" +
+        "                return idx\n" +
+        "            mid = len(idx) // 2\n" +
+        "            left, right = sort(idx[:mid]), sort(idx[mid:])\n" +
+        "            merged, j = [], 0\n" +
+        "            for i in left:\n" +
+        "                while j &lt; len(right) and nums[right[j]] &lt; nums[i]:\n" +
+        "                    merged.append(right[j])        # smaller, and was to the right of i\n" +
+        "                    j += 1\n" +
+        "                counts[i] += j                     # crossing pairs counted in the merge\n" +
+        "                merged.append(i)\n" +
+        "            return merged + right[j:]\n" +
+        "\n" +
+        "        sort(list(range(len(nums))))\n" +
+        "        return counts</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private int[] nums, counts, tmp;\n" +
+        "\n" +
+        "    public List&lt;Integer&gt; countSmaller(int[] nums) {\n" +
+        "        int n = nums.length;\n" +
+        "        this.nums = nums;\n" +
+        "        counts = new int[n];\n" +
+        "        tmp = new int[n];\n" +
+        "        int[] idx = new int[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) idx[i] = i;\n" +
+        "        sort(idx, 0, n);                           // merge sort of indices by value\n" +
+        "        List&lt;Integer&gt; out = new ArrayList&lt;&gt;();\n" +
+        "        for (int c : counts) out.add(c);\n" +
+        "        return out;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void sort(int[] idx, int lo, int hi) {\n" +
+        "        if (hi - lo &lt;= 1) return;\n" +
+        "        int mid = (lo + hi) / 2;\n" +
+        "        sort(idx, lo, mid);\n" +
+        "        sort(idx, mid, hi);\n" +
+        "        int j = mid, k = lo;\n" +
+        "        for (int i = lo; i &lt; mid; i++) {\n" +
+        "            while (j &lt; hi &amp;&amp; nums[idx[j]] &lt; nums[idx[i]]) tmp[k++] = idx[j++];   // smaller, to the right\n" +
+        "            counts[idx[i]] += j - mid;             // crossing pairs counted in the merge\n" +
+        "            tmp[k++] = idx[i];\n" +
+        "        }\n" +
+        "        while (j &lt; hi) tmp[k++] = idx[j++];\n" +
+        "        System.arraycopy(tmp, lo, idx, lo, hi - lo);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time: T(n) = 2T(n/2) + O(n). O(n) extra space.</p>" +
+        "<p><strong>The trap.</strong> Sorting values instead of indices. The answers belong to original positions, and after sorting you cannot tell which position a value came from, especially with duplicates. Sort indices and compare their values. On equal values, place the left element first so equal values are not counted as smaller.</p></details>" +
+        "<h3>7. Reverse Pairs</h3>" +
+        "<p><strong>LeetCode 493 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/reverse-pairs/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the pairs i &lt; j with nums[i] > 2 \u00d7 nums[j].</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Count Smaller After Self with a different comparison. Pairs inside each half are counted recursively; crossing pairs are counted between two sorted halves with one forward-moving pointer, before merging them.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Check every pair: O(n\u00b2), about 1.25 \u00d7 10\u2079 at n = 50,000.</p>" +
+        "<p><strong>Approach.</strong> Merge-sort the array. After both halves are sorted and before merging, walk the left half with i while a pointer j moves forward through the right half as long as left[i] > 2 \u00d7 right[j]. Because the left half is sorted, j never needs to move back, so each crossing count costs O(n) per level. Add j to the total for each i, then merge.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def reversePairs(self, nums: list[int]) -&gt; int:\n" +
+        "        def sort(a):                               # returns (sorted a, pairs inside a)\n" +
+        "            if len(a) &lt;= 1:\n" +
+        "                return a, 0\n" +
+        "            mid = len(a) // 2\n" +
+        "            left, x = sort(a[:mid])\n" +
+        "            right, y = sort(a[mid:])\n" +
+        "            count, j = x + y, 0\n" +
+        "            for v in left:                         # crossing pairs, before merging\n" +
+        "                while j &lt; len(right) and v &gt; 2 * right[j]:\n" +
+        "                    j += 1\n" +
+        "                count += j\n" +
+        "            return sorted(left + right), count     # Timsort merges two sorted runs in O(n)\n" +
+        "\n" +
+        "        return sort(nums)[1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] tmp;\n" +
+        "\n" +
+        "    public int reversePairs(int[] nums) {\n" +
+        "        tmp = new int[nums.length];\n" +
+        "        return sort(nums, 0, nums.length);\n" +
+        "    }\n" +
+        "\n" +
+        "    private int sort(int[] a, int lo, int hi) {\n" +
+        "        if (hi - lo &lt;= 1) return 0;\n" +
+        "        int mid = (lo + hi) / 2;\n" +
+        "        int count = sort(a, lo, mid) + sort(a, mid, hi);\n" +
+        "        int j = mid;\n" +
+        "        for (int i = lo; i &lt; mid; i++) {           // crossing pairs, before merging\n" +
+        "            while (j &lt; hi &amp;&amp; (long) a[i] &gt; 2L * a[j]) j++;   // long: 2 * a[j] can overflow\n" +
+        "            count += j - mid;\n" +
+        "        }\n" +
+        "        int i = lo, k = lo;                        // standard merge\n" +
+        "        j = mid;\n" +
+        "        while (i &lt; mid || j &lt; hi)\n" +
+        "            tmp[k++] = (j &gt;= hi || (i &lt; mid &amp;&amp; a[i] &lt;= a[j])) ? a[i++] : a[j++];\n" +
+        "        System.arraycopy(tmp, lo, a, lo, hi - lo);\n" +
+        "        return count;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) extra space.</p>" +
+        "<p><strong>The trap.</strong> Overflow. Values reach 2\u00b3\u00b9 - 1, so 2 \u00d7 nums[j] does not fit in a Java int; compute it in long. And count before merging: the comparison is not the merge's own ordering, so it cannot be folded into the merge loop.</p></details>" +
+        "<h3>8. Count of Range Sum</h3>" +
+        "<p><strong>LeetCode 327 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/count-of-range-sum/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the blocks of consecutive values whose sum lies between lower and upper, inclusive.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Chapter 9 turns every block sum into a difference of two prefix sums, P[j] - P[i] with i &lt; j. The question becomes: count pairs i &lt; j with lower \u2264 P[j] - P[i] \u2264 upper. Counting ordered pairs by a condition on their values is the crossing-pairs merge step again.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every block with a running sum: O(n\u00b2), 5 \u00d7 10\u2079 at n = 100,000.</p>" +
+        "<p><strong>Approach.</strong> Build the prefix sums P (with P[0] = 0) and merge-sort them. For two sorted halves, walk each left value p with two forward-moving pointers into the right half: lo stops at the first value \u2265 p + lower, hi at the first value > p + upper. The right values in between make valid pairs with p, so add hi - lo. Both pointers only move forward because p increases.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countRangeSum(self, nums: list[int], lower: int, upper: int) -&gt; int:\n" +
+        "        P = [0]                                    # Chapter 9's prefix sums\n" +
+        "        for x in nums:\n" +
+        "            P.append(P[-1] + x)\n" +
+        "\n" +
+        "        def sort(a):                               # returns (sorted a, pairs inside a)\n" +
+        "            if len(a) &lt;= 1:\n" +
+        "                return a, 0\n" +
+        "            mid = len(a) // 2\n" +
+        "            left, x = sort(a[:mid])\n" +
+        "            right, y = sort(a[mid:])\n" +
+        "            count, lo, hi = x + y, 0, 0\n" +
+        "            for p in left:                         # crossing pairs (i in left, j in right)\n" +
+        "                while lo &lt; len(right) and right[lo] - p &lt; lower:\n" +
+        "                    lo += 1\n" +
+        "                while hi &lt; len(right) and right[hi] - p &lt;= upper:\n" +
+        "                    hi += 1\n" +
+        "                count += hi - lo\n" +
+        "            return sorted(left + right), count\n" +
+        "\n" +
+        "        return sort(P)[1]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private long[] tmp;\n" +
+        "    private int lower, upper;\n" +
+        "\n" +
+        "    public int countRangeSum(int[] nums, int lower, int upper) {\n" +
+        "        this.lower = lower;\n" +
+        "        this.upper = upper;\n" +
+        "        long[] P = new long[nums.length + 1];      // long: sums pass 2^31\n" +
+        "        for (int i = 0; i &lt; nums.length; i++) P[i + 1] = P[i] + nums[i];\n" +
+        "        tmp = new long[P.length];\n" +
+        "        return sort(P, 0, P.length);\n" +
+        "    }\n" +
+        "\n" +
+        "    private int sort(long[] a, int from, int to) {\n" +
+        "        if (to - from &lt;= 1) return 0;\n" +
+        "        int mid = (from + to) / 2;\n" +
+        "        int count = sort(a, from, mid) + sort(a, mid, to);\n" +
+        "        int lo = mid, hi = mid;\n" +
+        "        for (int i = from; i &lt; mid; i++) {         // crossing pairs (i left, j right)\n" +
+        "            while (lo &lt; to &amp;&amp; a[lo] - a[i] &lt; lower) lo++;\n" +
+        "            while (hi &lt; to &amp;&amp; a[hi] - a[i] &lt;= upper) hi++;\n" +
+        "            count += hi - lo;\n" +
+        "        }\n" +
+        "        int i = from, j = mid, k = from;           // standard merge\n" +
+        "        while (i &lt; mid || j &lt; to)\n" +
+        "            tmp[k++] = (j &gt;= to || (i &lt; mid &amp;&amp; a[i] &lt;= a[j])) ? a[i++] : a[j++];\n" +
+        "        System.arraycopy(tmp, from, a, from, to - from);\n" +
+        "        return count;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n log n) time, O(n) extra space.</p>" +
+        "<p><strong>The trap.</strong> Overflow: values reach \u00b12\u00b3\u00b9, so prefix sums need long in Java. And the prefix array has n + 1 entries, because P[0] = 0 is what counts blocks that start at position 0.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -2161,6 +2513,279 @@ CHAPTERS.push({
         "<p>A depth-first search over a path graph of 100,000 nodes is the standard demonstration. Three runs of the same traversal over the same graph:</p><ul><li><strong>Recursive, default Python limit</strong> &#8212; <code>RecursionError</code> after 998 of the 100,000 nodes</li><li><strong>Explicit stack, same limit</strong> &#8212; all 100,000 visited in 13.3&#160;ms</li><li><strong>Recursive on the JVM, default 2&#160;MB stack</strong> &#8212; <code>StackOverflowError</code> near 40,000 nodes, which is further along and still short of the end</li></ul><p>The recursive versions are not slow; they do not finish. Recursively computing the length of a 100,000-node linked list fails the same way, and the iterative loop returns 100,000 without noticing there was a question.</p>" +
 
         "<div class='callout'><strong>Interview lens.</strong> &#8220;Reverse a linked list recursively&#8221; is asked constantly, and the recursive answer is correct. The answer that gets remembered adds one sentence: <em>this is &#920;(n) stack, so it fails above roughly a thousand nodes in Python and forty thousand on the JVM &#8212; here is the iterative version, which is &#920;(1) space.</em> The question is rarely about whether you can write the recursion. It is about whether you know what it costs.</div>"
+    },
+
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Fibonacci Number</h3>" +
+        "<p><strong>LeetCode 509 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/fibonacci-number/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the n-th Fibonacci number, where F(0) = 0, F(1) = 1, and each later number is the sum of the two before it.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Write the Recurrence First section's first example. The definition is already a recursion; the question is what that recursion costs, and the answer is exponential because it forgets what it has computed.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Translate the definition directly: fib(n) = fib(n - 1) + fib(n - 2). It is correct, and it makes about 1.6\u207f calls, roughly 2.7 million at n = 30 (the problem's limit).</p>" +
+        "<p><strong>Approach.</strong> Every value depends only on the two before it, so walk upwards from the base cases keeping the last two values. This is the recursion converted to iteration, the move the Converting Recursion to Iteration section describes, and it computes each value once.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def fib(self, n: int) -&gt; int:\n" +
+        "        a, b = 0, 1                    # F(0), F(1)\n" +
+        "        for _ in range(n):\n" +
+        "            a, b = b, a + b            # slide the pair one step up\n" +
+        "        return a</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int fib(int n) {\n" +
+        "        int a = 0, b = 1;              // F(0), F(1)\n" +
+        "        for (int i = 0; i &lt; n; i++) {\n" +
+        "            int next = a + b;          // slide the pair one step up\n" +
+        "            a = b;\n" +
+        "            b = next;\n" +
+        "        }\n" +
+        "        return a;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space. The naive recursion is O(\u03c6\u207f) time with \u03c6 \u2248 1.618, and O(n) stack depth.</p>" +
+        "<p><strong>The trap.</strong> Believing the recursive version is \"O(n) because the stack is n deep\". Depth measures space, not time: the call tree has exponentially many nodes even though no path through it is longer than n.</p></details>" +
+        "<h3>2. N-th Tribonacci Number</h3>" +
+        "<p><strong>LeetCode 1137 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/n-th-tribonacci-number/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Return the n-th Tribonacci number: T(0) = 0, T(1) = 1, T(2) = 1, and each later number is the sum of the three before it.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Fibonacci with three terms instead of two. Write the recurrence, notice the naive version branches three ways, and keep the last three values instead.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> The direct recursion's call count grows like 1.84\u207f: about 4 billion calls at n = 37.</p>" +
+        "<p><strong>Approach.</strong> Keep the last three values, starting from T(0), T(1), T(2), and slide them upwards n times.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def tribonacci(self, n: int) -&gt; int:\n" +
+        "        a, b, c = 0, 1, 1              # T(0), T(1), T(2)\n" +
+        "        for _ in range(n):\n" +
+        "            a, b, c = b, c, a + b + c\n" +
+        "        return a</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int tribonacci(int n) {\n" +
+        "        int a = 0, b = 1, c = 1;       // T(0), T(1), T(2)\n" +
+        "        for (int i = 0; i &lt; n; i++) {\n" +
+        "            int next = a + b + c;\n" +
+        "            a = b;\n" +
+        "            b = c;\n" +
+        "            c = next;\n" +
+        "        }\n" +
+        "        return a;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> The three base cases. T(1) and T(2) are both 1; a version that handles only n = 0 and n = 1 as base cases computes T(2) = T(1) + T(0) + T(-1) and fails.</p></details>" +
+        "<h3>3. Power of Two</h3>" +
+        "<p><strong>LeetCode 231 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/power-of-two/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Decide whether an integer (possibly negative or zero) is a power of two.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>A clean induction: 1 is a power of two, and n > 1 is one exactly when n is even and n / 2 is one. The Recursion Is Induction section's shape: base case, then a smaller case of the same question.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Compute 1, 2, 4, 8, \u2026 up to n and check whether n appears: the same O(log n) work as the recursion.</p>" +
+        "<p><strong>Approach.</strong> If n is 1, answer true. If n is at most 0 or odd, answer false. Otherwise the answer is the same question for n / 2. Each call halves n, so there are at most 31 calls for a 32-bit integer. (Chapter 40 does it in one instruction with n &amp; (n - 1).)</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def isPowerOfTwo(self, n: int) -&gt; bool:\n" +
+        "        if n == 1:\n" +
+        "            return True                # base case: 2^0\n" +
+        "        if n &lt;= 0 or n % 2:\n" +
+        "            return False               # zero, negatives and odd numbers are out\n" +
+        "        return self.isPowerOfTwo(n // 2)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public boolean isPowerOfTwo(int n) {\n" +
+        "        if (n == 1) return true;                   // base case: 2^0\n" +
+        "        if (n &lt;= 0 || n % 2 != 0) return false;    // zero, negatives, odd numbers\n" +
+        "        return isPowerOfTwo(n / 2);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time and O(log n) stack depth, at most 31 frames.</p>" +
+        "<p><strong>The trap.</strong> Zero and negative numbers. Without the n \u2264 0 check, 0 is even, 0 / 2 is 0, and the recursion never reaches its base case.</p></details>" +
+        "<h3>4. Pow(x, n)</h3>" +
+        "<p><strong>LeetCode 50 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/powx-n/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Compute x raised to the power n, where n can be any 32-bit integer, including negative.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The Write the Recurrence First section's third example: x^n = (x^(n/2))\u00b2 for even n. The same function written with that recurrence drops from n multiplications to about log\u2082 n.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Multiply x by itself n times: O(n), and n can be about 2 billion.</p>" +
+        "<p><strong>Approach.</strong> For a negative n, compute 1 / x^(-n). For n \u2265 0: x^0 = 1; otherwise compute half = x^(n // 2) once, square it, and multiply by one extra x if n is odd. Computing half once rather than twice is what makes it logarithmic.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def myPow(self, x: float, n: int) -&gt; float:\n" +
+        "        if n &lt; 0:\n" +
+        "            return 1 / self.myPow(x, -n)\n" +
+        "        if n == 0:\n" +
+        "            return 1.0\n" +
+        "        half = self.myPow(x, n // 2)   # computed once, used twice\n" +
+        "        return half * half * (x if n % 2 else 1.0)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public double myPow(double x, int n) {\n" +
+        "        long N = n;                    // -(-2^31) does not fit in an int\n" +
+        "        return N &lt; 0 ? 1 / pow(x, -N) : pow(x, N);\n" +
+        "    }\n" +
+        "\n" +
+        "    private double pow(double x, long n) {\n" +
+        "        if (n == 0) return 1.0;\n" +
+        "        double half = pow(x, n / 2);   // computed once, used twice\n" +
+        "        return n % 2 == 1 ? half * half * x : half * half;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(log n) time and O(log n) stack depth (about 31 frames).</p>" +
+        "<p><strong>The trap.</strong> n = -2\u00b3\u00b9. In Java, negating it overflows back to -2\u00b3\u00b9, because 2\u00b3\u00b9 does not fit in an int. Convert n to long before negating. And call the recursion once per level: writing myPow(x, n/2) * myPow(x, n/2) makes two calls per level, which is O(n) again.</p></details>" +
+        "<h3>5. K-th Symbol in Grammar</h3>" +
+        "<p><strong>LeetCode 779 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/k-th-symbol-in-grammar/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Row 1 is \"0\". Each next row replaces every 0 with \"01\" and every 1 with \"10\". Return the k-th symbol (counting from 1) of row n.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Row n has 2\u207f\u207b\u00b9 symbols, over half a billion at n = 30, so building it is out. But each symbol comes from exactly one parent in the row above: write the recurrence for that parent.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Build every row up to n: O(2\u207f) time and memory.</p>" +
+        "<p><strong>Approach.</strong> The k-th symbol of row n comes from the parent at position (k + 1) // 2 in row n - 1. If k is odd it is the first child, which copies the parent; if k is even it is the second child, which flips it. Recurse on the parent until row 1, whose only symbol is 0.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def kthGrammar(self, n: int, k: int) -&gt; int:\n" +
+        "        if n == 1:\n" +
+        "            return 0\n" +
+        "        parent = self.kthGrammar(n - 1, (k + 1) // 2)\n" +
+        "        return parent if k % 2 == 1 else 1 - parent   # first child copies, second flips</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int kthGrammar(int n, int k) {\n" +
+        "        if (n == 1) return 0;\n" +
+        "        int parent = kthGrammar(n - 1, (k + 1) / 2);\n" +
+        "        return k % 2 == 1 ? parent : 1 - parent;   // first child copies, second flips\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time and O(n) stack depth.</p>" +
+        "<p><strong>The trap.</strong> Off-by-one on the parent position with 1-based k. Positions 1 and 2 share parent 1, positions 3 and 4 share parent 2: the parent is (k + 1) // 2, not k // 2.</p></details>" +
+        "<h3>6. Find the Winner of the Circular Game</h3>" +
+        "<p><strong>LeetCode 1823 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/find-the-winner-of-the-circular-game/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>n friends sit in a circle, numbered 1 to n. Counting starts at friend 1; every k-th friend counted leaves, and counting continues from the next friend. Return the last one left.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>After one friend leaves, the rest is the same game with n - 1 people, only renumbered. \"Solve the smaller version, then translate its answer\" is recursion, and this is the classic Josephus recurrence.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Simulate with a list, removing every k-th person: O(n\u00b2) with list deletions, which is fine for n \u2264 500 and a good way to check your recurrence.</p>" +
+        "<p><strong>Approach.</strong> Number the friends from 0 for the math. With one person the survivor is position 0. With n people, the first to leave is at (k - 1) mod n and counting restarts right after them, so the survivor of the n-person game is (survivor of the (n - 1)-person game + k) mod n. Build it upwards from 1 person to n, and add 1 at the end to return to 1-based numbering.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findTheWinner(self, n: int, k: int) -&gt; int:\n" +
+        "        survivor = 0                   # 0-based survivor with 1 person\n" +
+        "        for m in range(2, n + 1):      # grow the circle to m people\n" +
+        "            survivor = (survivor + k) % m\n" +
+        "        return survivor + 1            # back to 1-based numbering</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    public int findTheWinner(int n, int k) {\n" +
+        "        int survivor = 0;              // 0-based survivor with 1 person\n" +
+        "        for (int m = 2; m &lt;= n; m++) survivor = (survivor + k) % m;   // grow to m people\n" +
+        "        return survivor + 1;           // back to 1-based numbering\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time, O(1) space in the iterative form below. The recursive form is O(n) stack depth.</p>" +
+        "<p><strong>The trap.</strong> Mixing 0-based and 1-based numbering. The modular recurrence only works with positions 0 to n - 1; convert once, at the end.</p></details>" +
+        "<h3>7. Decode String</h3>" +
+        "<p><strong>LeetCode 394 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/decode-string/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Expand an encoded string where k[text] means text repeated k times, and brackets can nest, as in \"3[a2[c]]\" \u2192 \"accaccacc\".</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Nested brackets are a recursive structure: the inside of a bracket is itself an encoded string. Decode it with a function that calls itself on the inside and returns where it stopped.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Repeatedly find an innermost bracket, expand it, and rebuild the string until none remain. Correct, but each round rescans and rebuilds the whole string.</p>" +
+        "<p><strong>Approach.</strong> A helper decodes from position i until it hits \"]\" or the end, and returns the text plus the position where it stopped. Letters are appended; digits build up a count; \"[\" calls the helper on the inside, then appends that result count times and continues after the matching \"]\".</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def decodeString(self, s: str) -&gt; str:\n" +
+        "        def decode(i):                 # returns (decoded text, index where it stopped)\n" +
+        "            out, count = [], 0\n" +
+        "            while i &lt; len(s) and s[i] != \"]\":\n" +
+        "                c = s[i]\n" +
+        "                if c.isdigit():\n" +
+        "                    count = count * 10 + int(c)\n" +
+        "                    i += 1\n" +
+        "                elif c == \"[\":\n" +
+        "                    inner, i = decode(i + 1)   # the inside is the same problem\n" +
+        "                    out.append(inner * count)\n" +
+        "                    count = 0\n" +
+        "                    i += 1             # skip the matching \"]\"\n" +
+        "                else:\n" +
+        "                    out.append(c)\n" +
+        "                    i += 1\n" +
+        "            return \"\".join(out), i\n" +
+        "\n" +
+        "        return decode(0)[0]</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int i;                     // shared read position\n" +
+        "\n" +
+        "    public String decodeString(String s) {\n" +
+        "        i = 0;\n" +
+        "        return decode(s);\n" +
+        "    }\n" +
+        "\n" +
+        "    private String decode(String s) {\n" +
+        "        StringBuilder out = new StringBuilder();\n" +
+        "        int count = 0;\n" +
+        "        while (i &lt; s.length() &amp;&amp; s.charAt(i) != ']') {\n" +
+        "            char c = s.charAt(i);\n" +
+        "            if (Character.isDigit(c)) {\n" +
+        "                count = count * 10 + (c - '0');\n" +
+        "                i++;\n" +
+        "            } else if (c == '[') {\n" +
+        "                i++;\n" +
+        "                String inner = decode(s);   // the inside is the same problem\n" +
+        "                out.append(inner.repeat(count));\n" +
+        "                count = 0;\n" +
+        "                i++;                   // skip the matching ']'\n" +
+        "            } else {\n" +
+        "                out.append(c);\n" +
+        "                i++;\n" +
+        "            }\n" +
+        "        }\n" +
+        "        return out.toString();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(output length) time, since every output character is written once per enclosing repetition. Stack depth equals the nesting depth, at most 15 here.</p>" +
+        "<p><strong>The trap.</strong> Multi-digit counts like \"12[ab]\". Build the number digit by digit (count = count \u00d7 10 + digit) and reset it after each bracket.</p></details>" +
+        "<h3>8. Parsing A Boolean Expression</h3>" +
+        "<p><strong>LeetCode 1106 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/parsing-a-boolean-expression/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Evaluate a boolean expression built from t, f, !(expr), &amp;(expr,expr,\u2026) and |(expr,expr,\u2026).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>The grammar is recursive, so the natural solution is recursive. But the expression can be 20,000 characters, and \"!(!(!(\u2026)))\" nests about 6,700 deep, past Python's default limit of 1,000 frames. The Recursion Depth as a Failure Mode section's case, fixed the way Converting Recursion to Iteration describes: an explicit stack.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Repeatedly find an innermost operator group, evaluate it, and replace it with t or f: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Scan left to right with a stack. Push operators and t/f values; skip commas. On \")\", pop values until the operator, and replace the whole group with its result: ! negates its one value, &amp; is true when no value is f, | is true when some value is t. At the end the stack holds the answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def parseBoolExpr(self, expression: str) -&gt; bool:\n" +
+        "        stack = []                     # an explicit stack: no recursion depth limit\n" +
+        "        for c in expression:\n" +
+        "            if c == \",\":\n" +
+        "                continue\n" +
+        "            if c != \")\":\n" +
+        "                stack.append(c)        # operators, \"(\", \"t\" and \"f\"\n" +
+        "                continue\n" +
+        "            values = []\n" +
+        "            while stack[-1] != \"(\":\n" +
+        "                values.append(stack.pop())\n" +
+        "            stack.pop()                # the \"(\"\n" +
+        "            op = stack.pop()\n" +
+        "            if op == \"!\":\n" +
+        "                result = values[0] == \"f\"\n" +
+        "            elif op == \"&amp;\":\n" +
+        "                result = \"f\" not in values\n" +
+        "            else:\n" +
+        "                result = \"t\" in values\n" +
+        "            stack.append(\"t\" if result else \"f\")\n" +
+        "        return stack[0] == \"t\"</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.ArrayDeque;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    public boolean parseBoolExpr(String expression) {\n" +
+        "        ArrayDeque&lt;Character&gt; stack = new ArrayDeque&lt;&gt;();   // no recursion depth limit\n" +
+        "        for (char c : expression.toCharArray()) {\n" +
+        "            if (c == ',') continue;\n" +
+        "            if (c != ')') { stack.push(c); continue; }       // operators, '(', 't', 'f'\n" +
+        "            boolean seenT = false, seenF = false;\n" +
+        "            while (stack.peek() != '(') {\n" +
+        "                if (stack.pop() == 't') seenT = true; else seenF = true;\n" +
+        "            }\n" +
+        "            stack.pop();               // the '('\n" +
+        "            char op = stack.pop();\n" +
+        "            boolean result = op == '!' ? seenF : op == '&amp;' ? !seenF : seenT;\n" +
+        "            stack.push(result ? 't' : 'f');\n" +
+        "        }\n" +
+        "        return stack.peek() == 't';\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n) time: each character is pushed and popped at most once. O(n) space for the stack, which lives on the heap and has no depth limit.</p>" +
+        "<p><strong>The trap.</strong> Shipping the recursive version in Python and testing it only on shallow inputs. It is correct and fails with RecursionError on deep ones. Raising the limit with sys.setrecursionlimit works until it crashes the interpreter's own C stack; the section explains why that second limit exists.</p></details>"
     },
 
     { title: "Exercises",

@@ -10,7 +10,7 @@
 #     prints the "Practice Problems" section, ready to paste before the chapter's Exercises.
 #   python3 tools/practice.py insert courses/dsa-by-patterns/practice/ch08.py <bookData.js> 8
 #     writes it into the chapter, replacing an earlier Practice Problems section if there is one.
-import copy, importlib.util, json, os, subprocess, sys, tempfile
+import copy, importlib.util, json, os, struct, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(__file__))
 from chapter_asm import code, P
 
@@ -27,6 +27,11 @@ class CYC(LL):
 class RND:
     def __init__(self, pairs): self.pairs = [list(p) for p in pairs]
     def __repr__(self): return f"RND({self.pairs})"
+
+class Approx(float):   # brute-force answer for floating-point problems: equal within 1e-9 relative
+    def __eq__(self, o): return abs(self - o) <= 1e-9 * max(1.0, abs(self))
+    def __ne__(self, o): return not self.__eq__(o)
+    __hash__ = float.__hash__
 
 class ListNode:
     def __init__(self, val=0, next=None): self.val, self.next = val, next
@@ -58,7 +63,7 @@ public class Runner {
             Object[] args = parse(m.getParameterTypes(), ps);
             out.append(fmt(m.invoke(sol, args)));
             if (a.length < 2)          // "noargs": skip the arguments-after-the-call check
-                for (Object x : args) if (x != null && !(x instanceof Integer || x instanceof String || x instanceof Node)) out.append(" | ").append(fmt(x));
+                for (Object x : args) if (x != null && !(x instanceof Integer || x instanceof Double || x instanceof String || x instanceof Node)) out.append(" | ").append(fmt(x));
             out.append("\n");
         }
         System.out.print(out);
@@ -88,6 +93,7 @@ public class Runner {
     static int[] ints(String v) { return v.isEmpty() ? new int[0] : Arrays.stream(v.split(",")).mapToInt(Integer::parseInt).toArray(); }
     static Object parse(Class<?> t, String v) {
         if (t == int.class) return Integer.parseInt(v);
+        if (t == double.class) return Double.parseDouble(v);
         if (t == String.class) return v;
         if (t == int[].class) return ints(v);
         if (t == String[].class) return v.isEmpty() ? new String[0] : v.split(",", -1);
@@ -116,6 +122,7 @@ public class Runner {
     }
     static String fmt(Object r) {
         if (r == null) return "None";
+        if (r instanceof Double) return "d" + Double.doubleToLongBits((Double) r);   // exact bits
         if (r instanceof int[]) return Arrays.toString((int[]) r);
         if (r instanceof Object[]) { List<String> s = new ArrayList<>(); for (Object x : (Object[]) r) s.add(fmt(x)); return "[" + String.join(", ", s) + "]"; }
         if (r instanceof ListNode) {
@@ -155,6 +162,7 @@ def materialize(x):
 def fmt(x):
     if x is None: return "None"
     if isinstance(x, bool): return "true" if x else "false"
+    if isinstance(x, float): return "d" + str(struct.unpack("<q", struct.pack("<d", x))[0])   # exact bits
     if isinstance(x, (list, tuple)): return "[" + ", ".join(map(fmt, x)) + "]"
     if isinstance(x, ListNode):
         s, seen = [], {}
@@ -172,6 +180,7 @@ def fmt(x):
 def enc(x):
     if isinstance(x, bool): raise TypeError(f"unsupported argument {x!r}")
     if isinstance(x, (int, str)): return str(x)
+    if isinstance(x, float): return repr(x)
     if isinstance(x, LL): return f"{x.pos}|" + ",".join(map(str, x.vals))
     if isinstance(x, RND): return ";".join(f"{v},{r}" for v, r in x.pairs)
     if isinstance(x, list):

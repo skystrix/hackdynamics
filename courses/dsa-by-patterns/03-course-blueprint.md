@@ -168,6 +168,11 @@ all of it on the paradigm that generates recurrences in the first place.
 
 **Rows:** A3, J2, Q5 · **Outcomes:** E3 · **Terms:** 14
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch03.py`)* — LeetCode, all free. A short set: this chapter is mostly analysis.
+- Easy: 1763 Longest Nice Substring
+- Medium: 241 Different Ways to Add Parentheses · 240 Search a 2D Matrix II · 932 Beautiful Array · 395 Longest Substring with At Least K Repeating Characters
+- Hard: 315 Count of Smaller Numbers After Self · 493 Reverse Pairs · 327 Count of Range Sum
+
 ---
 
 ## Chapter 4 — Amortized Analysis: Paying in Advance
@@ -258,6 +263,11 @@ depth you will hit sooner than you think.
 - The fib(6) call tree with repeated subtrees shaded — the picture Chapter 19 repairs.
 
 **Rows:** A9, J1, F7, S3(partial) · **Outcomes:** E1, O7 · **Terms:** 13
+
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch06.py`)* — LeetCode, all free. A short set: this chapter is mostly analysis.
+- Easy: 509 Fibonacci Number · 1137 N-th Tribonacci Number · 231 Power of Two
+- Medium: 50 Pow(x, n) · 779 K-th Symbol in Grammar · 1823 Find the Winner of the Circular Game · 394 Decode String
+- Hard: 1106 Parsing A Boolean Expression
 
 ---
 
