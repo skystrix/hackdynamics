@@ -569,7 +569,7 @@ prob(num=2251, slug="number-of-flowers-in-full-bloom", title="Number of Flowers 
   method="fullBloomFlowers",
   ask="Each flower blooms over a closed range of days [start, end]. Each person arrives on some day. For each person, report how many flowers are in bloom when they arrive.",
   cue="Answer all the questions together, offline: sort the people by arrival day and sweep through time once, the way the chapter's sweep processes events in order.",
-  brute="For each person, check every flower: O(flowers × people), 2.5 × 10¹⁰ at the limits.",
+  brute="For each person, check every flower: O(flowers × people), 2.5 × 10⁹ at the limits.",
   approach="Sort the start days and, separately, the end days. Visit the people in order of arrival day t, moving two pointers forward: one counts flowers with start ≤ t, the other flowers with end &lt; t (already finished). The flowers in bloom are the difference. Write each answer at the person's original position.",
   cx="O((f + p) log(f + p)) time for the sorts, O(f + p) space.",
   trap="Losing the original order of the people. Sort a list of indices by arrival day, not the arrival days themselves, so each answer can go back to the right person. And a flower is still in bloom on its end day, so only end &lt; t counts as finished.",

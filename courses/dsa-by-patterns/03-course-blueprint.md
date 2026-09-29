@@ -290,6 +290,11 @@ change bought.
 
 **Rows:** I6 · **Outcomes:** E11, B5 · **Terms:** 14
 
+**Practice problems** *(added 2026-09-29, guide §8.4; source in `practice/ch07.py`)* — LeetCode, all free. Premium-only 323 Number of Connected Components and 261 Graph Valid Tree are excluded; 547 and 684 teach the same thing. Union-find has only one free Easy problem, so this set is Medium-heavy.
+- Easy: 1971 Find if Path Exists in Graph
+- Medium: 547 Number of Provinces · 684 Redundant Connection · 990 Satisfiability of Equality Equations · 1319 Number of Operations to Make Network Connected · 947 Most Stones Removed with Same Row or Column · 2316 Count Unreachable Pairs of Nodes in an Undirected Graph · 2492 Minimum Score of a Path Between Two Cities · 1061 Lexicographically Smallest Equivalent String
+- Hard: 685 Redundant Connection II · 1579 Remove Max Number of Edges to Keep Graph Fully Traversable · 952 Largest Component Size by Common Factor
+
 ---
 
 ## Chapter 8 — Two Pointers and Sliding Windows

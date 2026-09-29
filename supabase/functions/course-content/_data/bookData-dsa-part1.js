@@ -2538,6 +2538,686 @@ CHAPTERS.push({
         "<div class='callout'><strong>Interview lens.</strong> The tell that someone has understood this structure rather than memorised it is that they write union by rank <em>and</em> say what it costs without it. The four implementations here differ by six lines and by a factor of two thousand, and the sequence &#8212; obvious version, workload that kills it, fix, measure, repeat &#8212; is the method the rest of this course applies to larger structures.</div>"
     },
 
+    { title: "Practice Problems",
+      html:
+        "<p>These are real interview problems from LeetCode, and every one is solved by an idea from this chapter. They run from Easy, where the pattern is in plain sight, through Medium, where it is disguised, to Hard, where it needs one more idea on top. Work through them in order.</p>" +
+        "<p>Give each problem 15 minutes (Easy), 25 (Medium) or 40 (Hard) on your own before you open anything. If you are stuck, open the <strong>Hint</strong> first: it names the clue in the problem that points to the pattern. Open the <strong>Solution</strong> only if the hint did not get you moving. Each solution starts from the brute force, so you can see what the pattern saves, and it is written in LeetCode's own <code>class Solution</code> form, so you can paste it into the judge to check it.</p>" +
+        "<h3>1. Find if Path Exists in Graph</h3>" +
+        "<p><strong>LeetCode 1971 &#183; Easy</strong> &#183; <a href='https://leetcode.com/problems/find-if-path-exists-in-graph/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given an undirected graph as a list of edges, decide whether there is a path between two given nodes.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>\"Are these two things connected?\" after a batch of \"connect these two\" operations is the question the chapter's opening section poses. Union-find answers it directly.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Build an adjacency list and search from the source with BFS or DFS: O(n + m). That is a perfectly good answer here, and Chapter 33 teaches it. Union-find wins when connections keep arriving and the question keeps being asked.</p>" +
+        "<p><strong>Approach.</strong> Start with every node in its own set. Union the two ends of every edge. The answer is whether find(source) equals find(destination). This is the template the rest of the set reuses: find follows parent links to the root, halving the path as it goes; union attaches the smaller tree's root under the larger one's.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def validPath(self, n: int, edges: list[list[int]], source: int, destination: int) -&gt; bool:\n" +
+        "        parent, size = list(range(n)), [1] * n\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]   # path halving\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        def union(a, b):\n" +
+        "            a, b = find(a), find(b)\n" +
+        "            if a == b:\n" +
+        "                return\n" +
+        "            if size[a] &lt; size[b]:\n" +
+        "                a, b = b, a\n" +
+        "            parent[b] = a              # smaller tree under the larger root\n" +
+        "            size[a] += size[b]\n" +
+        "\n" +
+        "        for u, v in edges:\n" +
+        "            union(u, v)\n" +
+        "        return find(source) == find(destination)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] parent, size;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) {\n" +
+        "            parent[x] = parent[parent[x]];   // path halving\n" +
+        "            x = parent[x];\n" +
+        "        }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    private void union(int a, int b) {\n" +
+        "        a = find(a); b = find(b);\n" +
+        "        if (a == b) return;\n" +
+        "        if (size[a] &lt; size[b]) { int t = a; a = b; b = t; }\n" +
+        "        parent[b] = a;                 // smaller tree under the larger root\n" +
+        "        size[a] += size[b];\n" +
+        "    }\n" +
+        "\n" +
+        "    public boolean validPath(int n, int[][] edges, int source, int destination) {\n" +
+        "        parent = new int[n]; size = new int[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) { parent[i] = i; size[i] = 1; }\n" +
+        "        for (int[] e : edges) union(e[0], e[1]);\n" +
+        "        return find(source) == find(destination);\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O((n + m) \u03b1(n)) time, which is effectively linear, and O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Writing find recursively in Python. Without union by size or rank a chain can be 200,000 nodes deep, and Python's default recursion limit is 1,000. The loop below has no depth limit, and union by size keeps trees shallow anyway.</p></details>" +
+        "<h3>2. Number of Provinces</h3>" +
+        "<p><strong>LeetCode 547 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/number-of-provinces/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Cities are connected directly according to an n \u00d7 n matrix (1 means connected). A province is a group of cities connected directly or indirectly. Count the provinces.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Counting groups under \"connected directly or indirectly\" is counting union-find sets. Every successful union merges two groups into one, so the count drops by one.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> DFS from each unvisited city, marking everything reachable: O(n\u00b2) for a matrix, and also fine. (The premium problem \"Number of Connected Components in an Undirected Graph\" is the same question on an edge list.)</p>" +
+        "<p><strong>Approach.</strong> Start with n groups. For every pair i &lt; j with isConnected[i][j] = 1, union them; each union that actually merges two different roots lowers the group count by one. The final count is the answer.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findCircleNum(self, isConnected: list[list[int]]) -&gt; int:\n" +
+        "        n = len(isConnected)\n" +
+        "        parent, size = list(range(n)), [1] * n\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        groups = n\n" +
+        "        for i in range(n):\n" +
+        "            for j in range(i + 1, n):\n" +
+        "                if isConnected[i][j]:\n" +
+        "                    a, b = find(i), find(j)\n" +
+        "                    if a != b:         # only a real merge lowers the count\n" +
+        "                        if size[a] &lt; size[b]:\n" +
+        "                            a, b = b, a\n" +
+        "                        parent[b] = a\n" +
+        "                        size[a] += size[b]\n" +
+        "                        groups -= 1\n" +
+        "        return groups</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] parent, size;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int findCircleNum(int[][] isConnected) {\n" +
+        "        int n = isConnected.length, groups = n;\n" +
+        "        parent = new int[n]; size = new int[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) { parent[i] = i; size[i] = 1; }\n" +
+        "        for (int i = 0; i &lt; n; i++)\n" +
+        "            for (int j = i + 1; j &lt; n; j++) {\n" +
+        "                if (isConnected[i][j] == 0) continue;\n" +
+        "                int a = find(i), b = find(j);\n" +
+        "                if (a == b) continue;  // only a real merge lowers the count\n" +
+        "                if (size[a] &lt; size[b]) { int t = a; a = b; b = t; }\n" +
+        "                parent[b] = a;\n" +
+        "                size[a] += size[b];\n" +
+        "                groups--;\n" +
+        "            }\n" +
+        "        return groups;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n\u00b2 \u03b1(n)) time, since the matrix itself has n\u00b2 entries. O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Decrementing the count on every union call. When the two cities already share a root, nothing merges and the count must not change. Have union report whether it merged.</p></details>" +
+        "<h3>3. Redundant Connection</h3>" +
+        "<p><strong>LeetCode 684 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/redundant-connection/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A tree on nodes 1 to n had one extra edge added, making a cycle. Return an edge whose removal leaves a tree; if several work, return the one that appears last in the input.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Add the edges one at a time. The edge that closes the cycle is the first one whose two ends are already connected, and union-find notices that at the moment of union. (This also answers the premium \"Graph Valid Tree\": a graph is a tree exactly when no union fails and it has n - 1 edges.)</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each edge from last to first, remove it and check with a search whether the rest is a tree: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Process the edges in input order. For each edge (u, v), if find(u) == find(v), u and v were already connected, so this edge closes the cycle: return it. Otherwise union them.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findRedundantConnection(self, edges: list[list[int]]) -&gt; list[int]:\n" +
+        "        n = len(edges)\n" +
+        "        parent, size = list(range(n + 1)), [1] * (n + 1)   # nodes are 1..n\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for u, v in edges:\n" +
+        "            a, b = find(u), find(v)\n" +
+        "            if a == b:                 # already connected: this edge closes the cycle\n" +
+        "                return [u, v]\n" +
+        "            if size[a] &lt; size[b]:\n" +
+        "                a, b = b, a\n" +
+        "            parent[b] = a\n" +
+        "            size[a] += size[b]\n" +
+        "        return []</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] parent, size;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int[] findRedundantConnection(int[][] edges) {\n" +
+        "        int n = edges.length;\n" +
+        "        parent = new int[n + 1]; size = new int[n + 1];   // nodes are 1..n\n" +
+        "        for (int i = 0; i &lt;= n; i++) { parent[i] = i; size[i] = 1; }\n" +
+        "        for (int[] e : edges) {\n" +
+        "            int a = find(e[0]), b = find(e[1]);\n" +
+        "            if (a == b) return e;      // already connected: this edge closes the cycle\n" +
+        "            if (size[a] &lt; size[b]) { int t = a; a = b; b = t; }\n" +
+        "            parent[b] = a;\n" +
+        "            size[a] += size[b];\n" +
+        "        }\n" +
+        "        return new int[0];\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u03b1(n)) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Why the first failing edge is the right one. Every edge on the cycle is removable, and the cycle is only complete once its last edge in input order arrives, so the first edge that fails is exactly the last cycle edge in the input.</p></details>" +
+        "<h3>4. Satisfiability of Equality Equations</h3>" +
+        "<p><strong>LeetCode 990 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/satisfiability-of-equality-equations/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Given equations like \"a==b\" and \"b!=c\" over single-letter variables, decide whether some assignment of numbers makes all of them true.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Equality is transitive, so the == equations sort the letters into groups that must share a value: union-find over 26 letters. A != equation fails exactly when its two letters landed in the same group.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every assignment of values to the letters used. With k distinct letters that is k\u1d4f assignments, fine for four letters and hopeless for twenty-six.</p>" +
+        "<p><strong>Approach.</strong> First pass: union the two letters of every \"==\" equation. Second pass: for every \"!=\" equation, if both letters have the same root, the equations contradict each other; return false. Otherwise return true.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def equationsPossible(self, equations: list[str]) -&gt; bool:\n" +
+        "        parent = list(range(26))\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for e in equations:            # pass one: every equality\n" +
+        "            if e[1] == \"=\":\n" +
+        "                parent[find(ord(e[0]) - 97)] = find(ord(e[3]) - 97)\n" +
+        "        for e in equations:            # pass two: check the inequalities\n" +
+        "            if e[1] == \"!\" and find(ord(e[0]) - 97) == find(ord(e[3]) - 97):\n" +
+        "                return False\n" +
+        "        return True</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private final int[] parent = new int[26];\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public boolean equationsPossible(String[] equations) {\n" +
+        "        for (int i = 0; i &lt; 26; i++) parent[i] = i;\n" +
+        "        for (String e : equations)     // pass one: every equality\n" +
+        "            if (e.charAt(1) == '=') parent[find(e.charAt(0) - 'a')] = find(e.charAt(3) - 'a');\n" +
+        "        for (String e : equations)     // pass two: check the inequalities\n" +
+        "            if (e.charAt(1) == '!' &amp;&amp; find(e.charAt(0) - 'a') == find(e.charAt(3) - 'a')) return false;\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u03b1(26)) time, O(1) space for 26 letters.</p>" +
+        "<p><strong>The trap.</strong> Doing both kinds in one pass in input order. \"a!=c\" might be checked before \"a==b\" and \"b==c\" have joined a and c. All the equalities must go in first. This is the chapter's closing point: union-find cannot un-merge, so it can only answer questions about the unions made so far.</p></details>" +
+        "<h3>5. Number of Operations to Make Network Connected</h3>" +
+        "<p><strong>LeetCode 1319 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/number-of-operations-to-make-network-connected/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>n computers are joined by cables. In one operation you can unplug any cable and use it to join two computers. Find the fewest operations that connect every computer, or -1 if it is impossible.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Connecting k separate groups takes exactly k - 1 cables. Union-find counts the groups, and every cable whose union fails (both ends already connected) is a spare you can move.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Search over which cables to move: exponential, and unnecessary once you see the counting argument.</p>" +
+        "<p><strong>Approach.</strong> If there are fewer than n - 1 cables, even a perfect arrangement cannot connect n computers: return -1. Otherwise union every cable's two ends while counting groups, and return groups - 1. With at least n - 1 cables there are always enough spares.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def makeConnected(self, n: int, connections: list[list[int]]) -&gt; int:\n" +
+        "        if len(connections) &lt; n - 1:\n" +
+        "            return -1                  # not enough cables in total\n" +
+        "        parent, size = list(range(n)), [1] * n\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        groups = n\n" +
+        "        for u, v in connections:\n" +
+        "            a, b = find(u), find(v)\n" +
+        "            if a != b:\n" +
+        "                if size[a] &lt; size[b]:\n" +
+        "                    a, b = b, a\n" +
+        "                parent[b] = a\n" +
+        "                size[a] += size[b]\n" +
+        "                groups -= 1\n" +
+        "        return groups - 1</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] parent, size;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int makeConnected(int n, int[][] connections) {\n" +
+        "        if (connections.length &lt; n - 1) return -1;   // not enough cables in total\n" +
+        "        parent = new int[n]; size = new int[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) { parent[i] = i; size[i] = 1; }\n" +
+        "        int groups = n;\n" +
+        "        for (int[] c : connections) {\n" +
+        "            int a = find(c[0]), b = find(c[1]);\n" +
+        "            if (a == b) continue;\n" +
+        "            if (size[a] &lt; size[b]) { int t = a; a = b; b = t; }\n" +
+        "            parent[b] = a;\n" +
+        "            size[a] += size[b];\n" +
+        "            groups--;\n" +
+        "        }\n" +
+        "        return groups - 1;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O((n + m) \u03b1(n)) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Returning the number of spare cables instead of the number of groups minus one. You need one move per missing connection, not per spare cable.</p></details>" +
+        "<h3>6. Most Stones Removed with Same Row or Column</h3>" +
+        "<p><strong>LeetCode 947 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/most-stones-removed-with-same-row-or-column/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Stones sit at distinct grid points. You may remove a stone if another remaining stone shares its row or column. Find the most stones you can remove.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Stones that share a row or column form groups, and within a group you can always remove every stone but one. So the answer is stones minus groups, and counting groups is union-find's job.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try removal orders with backtracking: exponential. Comparing every pair of stones to build the groups is O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Instead of comparing stones with each other, union each stone's row with its column, treating rows and columns as nodes (columns shifted by 10,001 so they cannot collide with rows). Stones in the same group are then connected through shared rows and columns. Count the distinct roots among the rows and columns that were used, and return n minus that count.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def removeStones(self, stones: list[list[int]]) -&gt; int:\n" +
+        "        parent = {}\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            parent.setdefault(x, x)\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for r, c in stones:            # join the stone's row to its column\n" +
+        "            parent[find(r)] = find(c + 10001)\n" +
+        "        groups = len({find(x) for x in parent})   # only nodes a stone touched\n" +
+        "        return len(stones) - groups</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.*;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private final HashMap&lt;Integer, Integer&gt; parent = new HashMap&lt;&gt;();\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        parent.putIfAbsent(x, x);\n" +
+        "        while (parent.get(x) != x) {\n" +
+        "            parent.put(x, parent.get(parent.get(x)));\n" +
+        "            x = parent.get(x);\n" +
+        "        }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int removeStones(int[][] stones) {\n" +
+        "        for (int[] s : stones) parent.put(find(s[0]), find(s[1] + 10001));   // row to column\n" +
+        "        Set&lt;Integer&gt; roots = new HashSet&lt;&gt;();\n" +
+        "        for (int x : new ArrayList&lt;&gt;(parent.keySet())) roots.add(find(x));    // touched nodes only\n" +
+        "        return stones.length - roots.size();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u03b1(n)) time, O(n) space with a dictionary of the nodes in use.</p>" +
+        "<p><strong>The trap.</strong> Counting groups over all 20,002 possible row and column nodes. Only nodes that some stone touched belong to a group; count roots over those alone.</p></details>" +
+        "<h3>7. Count Unreachable Pairs of Nodes in an Undirected Graph</h3>" +
+        "<p><strong>LeetCode 2316 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/count-unreachable-pairs-of-nodes-in-an-undirected-graph/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Count the pairs of nodes in an undirected graph that have no path between them.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two nodes are unreachable exactly when they are in different groups. Union by size already tracks every group's size, and the pairs follow from the sizes.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For every pair, search for a path: O(n\u00b2 \u00d7 (n + m)).</p>" +
+        "<p><strong>Approach.</strong> Union all edges. Then walk the groups (one per root) in any order, keeping seen = the number of nodes in groups already visited. A group of size s forms s \u00d7 seen unreachable pairs with those earlier groups. Add it, then add s to seen.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def countPairs(self, n: int, edges: list[list[int]]) -&gt; int:\n" +
+        "        parent, size = list(range(n)), [1] * n\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for u, v in edges:\n" +
+        "            a, b = find(u), find(v)\n" +
+        "            if a != b:\n" +
+        "                if size[a] &lt; size[b]:\n" +
+        "                    a, b = b, a\n" +
+        "                parent[b] = a\n" +
+        "                size[a] += size[b]\n" +
+        "        pairs = seen = 0\n" +
+        "        for x in range(n):\n" +
+        "            if find(x) == x:           # one visit per group\n" +
+        "                pairs += size[x] * seen\n" +
+        "                seen += size[x]\n" +
+        "        return pairs</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] parent, size;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public long countPairs(int n, int[][] edges) {\n" +
+        "        parent = new int[n]; size = new int[n];\n" +
+        "        for (int i = 0; i &lt; n; i++) { parent[i] = i; size[i] = 1; }\n" +
+        "        for (int[] e : edges) {\n" +
+        "            int a = find(e[0]), b = find(e[1]);\n" +
+        "            if (a == b) continue;\n" +
+        "            if (size[a] &lt; size[b]) { int t = a; a = b; b = t; }\n" +
+        "            parent[b] = a;\n" +
+        "            size[a] += size[b];\n" +
+        "        }\n" +
+        "        long pairs = 0, seen = 0;      // long: the answer can pass 2^31\n" +
+        "        for (int x = 0; x &lt; n; x++)\n" +
+        "            if (find(x) == x) {        // one visit per group\n" +
+        "                pairs += size[x] * seen;\n" +
+        "                seen += size[x];\n" +
+        "            }\n" +
+        "        return pairs;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O((n + m) \u03b1(n)) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Overflow. With 100,000 nodes the answer can reach about 5 \u00d7 10\u2079, beyond Java's int, which is why the Java signature returns long. Multiply in long.</p></details>" +
+        "<h3>8. Minimum Score of a Path Between Two Cities</h3>" +
+        "<p><strong>LeetCode 2492 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/minimum-score-of-a-path-between-two-cities/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Cities 1 to n are joined by roads with distances. A path's score is the shortest road on it, and paths may repeat roads and cities. Find the smallest possible score of a path from city 1 to city n (one is guaranteed to exist).</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Because a path may wander anywhere and come back, it can use any road in the group that contains city 1. So the answer is the shortest road in that group: a connectivity question, not a shortest-path one.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Dijkstra-style searches over paths chase the wrong quantity and are easy to get wrong here.</p>" +
+        "<p><strong>Approach.</strong> Union the two ends of every road. Then scan the roads again and take the smallest distance among those whose ends are in the same group as city 1.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def minScore(self, n: int, roads: list[list[int]]) -&gt; int:\n" +
+        "        parent, size = list(range(n + 1)), [1] * (n + 1)\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for u, v, _ in roads:\n" +
+        "            a, b = find(u), find(v)\n" +
+        "            if a != b:\n" +
+        "                if size[a] &lt; size[b]:\n" +
+        "                    a, b = b, a\n" +
+        "                parent[b] = a\n" +
+        "                size[a] += size[b]\n" +
+        "        root = find(1)\n" +
+        "        return min(d for u, v, d in roads if find(u) == root)   # any road in city 1's group</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] parent, size;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int minScore(int n, int[][] roads) {\n" +
+        "        parent = new int[n + 1]; size = new int[n + 1];\n" +
+        "        for (int i = 0; i &lt;= n; i++) { parent[i] = i; size[i] = 1; }\n" +
+        "        for (int[] r : roads) {\n" +
+        "            int a = find(r[0]), b = find(r[1]);\n" +
+        "            if (a == b) continue;\n" +
+        "            if (size[a] &lt; size[b]) { int t = a; a = b; b = t; }\n" +
+        "            parent[b] = a;\n" +
+        "            size[a] += size[b];\n" +
+        "        }\n" +
+        "        int root = find(1), best = Integer.MAX_VALUE;\n" +
+        "        for (int[] r : roads) if (find(r[0]) == root) best = Math.min(best, r[2]);   // city 1's group\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O((n + m) \u03b1(n)) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Reading \"path\" as \"simple path\" and reaching for Dijkstra. Repeats are allowed, so the path can detour to the cheapest road in the group and return.</p></details>" +
+        "<h3>9. Lexicographically Smallest Equivalent String</h3>" +
+        "<p><strong>LeetCode 1061 &#183; Medium</strong> &#183; <a href='https://leetcode.com/problems/lexicographically-smallest-equivalent-string/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Two strings of equal length declare s1[i] and s2[i] equivalent for every i, and equivalence is transitive. Rewrite a third string using the smallest letter equivalent to each of its letters.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Equivalence classes over 26 letters: union-find again, with one twist. The root of each group should be its smallest letter, so the answer for any letter is its root.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Repeatedly spread equivalences until nothing changes (a transitive closure over 26 letters), then pick minimums.</p>" +
+        "<p><strong>Approach.</strong> For every pair (s1[i], s2[i]), find both roots and attach the larger letter's root under the smaller one. Then every root is the smallest letter in its group, and each letter of baseStr is replaced by find(letter).</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def smallestEquivalentString(self, s1: str, s2: str, baseStr: str) -&gt; str:\n" +
+        "        parent = list(range(26))\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for a, b in zip(s1, s2):\n" +
+        "            ra, rb = find(ord(a) - 97), find(ord(b) - 97)\n" +
+        "            parent[max(ra, rb)] = min(ra, rb)   # the smaller letter stays the root\n" +
+        "        return \"\".join(chr(find(ord(c) - 97) + 97) for c in baseStr)</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private final int[] parent = new int[26];\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public String smallestEquivalentString(String s1, String s2, String baseStr) {\n" +
+        "        for (int i = 0; i &lt; 26; i++) parent[i] = i;\n" +
+        "        for (int i = 0; i &lt; s1.length(); i++) {\n" +
+        "            int a = find(s1.charAt(i) - 'a'), b = find(s2.charAt(i) - 'a');\n" +
+        "            parent[Math.max(a, b)] = Math.min(a, b);   // the smaller letter stays the root\n" +
+        "        }\n" +
+        "        StringBuilder out = new StringBuilder();\n" +
+        "        for (char c : baseStr.toCharArray()) out.append((char) ('a' + find(c - 'a')));\n" +
+        "        return out.toString();\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O((n + len(baseStr)) \u03b1(26)) time, O(1) space.</p>" +
+        "<p><strong>The trap.</strong> Using union by size here. That attaches by group size, so the root is no longer the smallest letter. With only 26 letters, trees stay tiny and the ordering rule is the one that matters.</p></details>" +
+        "<h3>10. Redundant Connection II</h3>" +
+        "<p><strong>LeetCode 685 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/redundant-connection-ii/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A rooted tree on nodes 1 to n (every edge points from parent to child) had one extra directed edge added. Return the edge to remove so that a rooted tree remains; if several work, return the last one in the input.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Redundant Connection, directed. The extra edge breaks a rooted tree in one of two ways: some node gets two parents, or the edges form a directed cycle (or both). Find the two-parent node first, then let union-find detect the cycle.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> For each edge from last to first, remove it and check that one node has no parent, every other node has exactly one, and every node is reachable from the root: O(n\u00b2).</p>" +
+        "<p><strong>Approach.</strong> Scan for a node with two incoming edges; call them first and second (in input order). Then run union-find over all edges except second. If no cycle appears, second was the extra edge: return it. If a cycle appears and there was a two-parent node, first is the culprit: return it. If a cycle appears and no node has two parents, return the edge that closed the cycle, as in Redundant Connection.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def findRedundantDirectedConnection(self, edges: list[list[int]]) -&gt; list[int]:\n" +
+        "        n = len(edges)\n" +
+        "        par = [0] * (n + 1)\n" +
+        "        first = second = None\n" +
+        "        for u, v in edges:             # does some node have two parents?\n" +
+        "            if par[v]:\n" +
+        "                first, second = [par[v], v], [u, v]\n" +
+        "            else:\n" +
+        "                par[v] = u\n" +
+        "        parent = list(range(n + 1))\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for u, v in edges:\n" +
+        "            if [u, v] == second:\n" +
+        "                continue               # try the tree without the second parent edge\n" +
+        "            a, b = find(u), find(v)\n" +
+        "            if a == b:                 # a cycle remains\n" +
+        "                return first if first else [u, v]\n" +
+        "            parent[b] = a\n" +
+        "        return second</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int[] parent;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int[] findRedundantDirectedConnection(int[][] edges) {\n" +
+        "        int n = edges.length;\n" +
+        "        int[] par = new int[n + 1];\n" +
+        "        int[] first = null, second = null;\n" +
+        "        for (int[] e : edges) {        // does some node have two parents?\n" +
+        "            if (par[e[1]] != 0) { first = new int[]{par[e[1]], e[1]}; second = e; }\n" +
+        "            else par[e[1]] = e[0];\n" +
+        "        }\n" +
+        "        parent = new int[n + 1];\n" +
+        "        for (int i = 0; i &lt;= n; i++) parent[i] = i;\n" +
+        "        for (int[] e : edges) {\n" +
+        "            if (e == second) continue; // try the tree without the second parent edge\n" +
+        "            int a = find(e[0]), b = find(e[1]);\n" +
+        "            if (a == b) return first != null ? first : e;   // a cycle remains\n" +
+        "            parent[b] = a;\n" +
+        "        }\n" +
+        "        return second;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u03b1(n)) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Treating it as the undirected problem. A cycle check alone misses the case where a node has two parents but there is no directed cycle, and returning the cycle-closing edge can leave a node with two parents.</p></details>" +
+        "<h3>11. Remove Max Number of Edges to Keep Graph Fully Traversable</h3>" +
+        "<p><strong>LeetCode 1579 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/remove-max-number-of-edges-to-keep-graph-fully-traversable/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>A graph has edges usable by Alice only (type 1), by Bob only (type 2), or by both (type 3). Remove as many edges as possible while each of them can still reach every node; return -1 if that is impossible from the start.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Two union-finds, one per person. A shared edge is worth more than a private one because it serves both, so give the shared edges first pick: a greedy order, then plain union-find bookkeeping.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Try every subset of edges to keep, smallest first: O(2\u1d50).</p>" +
+        "<p><strong>Approach.</strong> Keep one union-find for Alice and one for Bob. Add every type-3 edge to both; keep it if it merged anything in either (with both starting identical, it merges in both or neither). Then add type-1 edges to Alice's and type-2 edges to Bob's, keeping each edge that merges. If either person ends with more than one group, return -1. Otherwise the answer is the number of edges not kept.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def maxNumEdgesToRemove(self, n: int, edges: list[list[int]]) -&gt; int:\n" +
+        "        def make():\n" +
+        "            return list(range(n + 1))\n" +
+        "\n" +
+        "        def find(p, x):\n" +
+        "            while p[x] != x:\n" +
+        "                p[x] = p[p[x]]\n" +
+        "                x = p[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        def union(p, a, b):            # True if it merged two groups\n" +
+        "            a, b = find(p, a), find(p, b)\n" +
+        "            if a == b:\n" +
+        "                return False\n" +
+        "            p[b] = a\n" +
+        "            return True\n" +
+        "\n" +
+        "        alice, bob = make(), make()\n" +
+        "        kept = 0\n" +
+        "        groups_a = groups_b = n\n" +
+        "        for t, u, v in edges:          # shared edges get first pick\n" +
+        "            if t == 3 and union(alice, u, v):\n" +
+        "                union(bob, u, v)\n" +
+        "                kept += 1\n" +
+        "                groups_a -= 1\n" +
+        "                groups_b -= 1\n" +
+        "        for t, u, v in edges:\n" +
+        "            if t == 1 and union(alice, u, v):\n" +
+        "                kept += 1\n" +
+        "                groups_a -= 1\n" +
+        "            elif t == 2 and union(bob, u, v):\n" +
+        "                kept += 1\n" +
+        "                groups_b -= 1\n" +
+        "        if groups_a &gt; 1 or groups_b &gt; 1:\n" +
+        "            return -1\n" +
+        "        return len(edges) - kept</code></pre>" +
+        "<pre data-lang='java' hidden><code>class Solution {\n" +
+        "    private int find(int[] p, int x) {\n" +
+        "        while (p[x] != x) { p[x] = p[p[x]]; x = p[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    private boolean union(int[] p, int a, int b) {   // true if it merged two groups\n" +
+        "        a = find(p, a); b = find(p, b);\n" +
+        "        if (a == b) return false;\n" +
+        "        p[b] = a;\n" +
+        "        return true;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int maxNumEdgesToRemove(int n, int[][] edges) {\n" +
+        "        int[] alice = new int[n + 1], bob = new int[n + 1];\n" +
+        "        for (int i = 0; i &lt;= n; i++) { alice[i] = i; bob[i] = i; }\n" +
+        "        int kept = 0, groupsA = n, groupsB = n;\n" +
+        "        for (int[] e : edges)          // shared edges get first pick\n" +
+        "            if (e[0] == 3 &amp;&amp; union(alice, e[1], e[2])) {\n" +
+        "                union(bob, e[1], e[2]);\n" +
+        "                kept++; groupsA--; groupsB--;\n" +
+        "            }\n" +
+        "        for (int[] e : edges) {\n" +
+        "            if (e[0] == 1 &amp;&amp; union(alice, e[1], e[2])) { kept++; groupsA--; }\n" +
+        "            else if (e[0] == 2 &amp;&amp; union(bob, e[1], e[2])) { kept++; groupsB--; }\n" +
+        "        }\n" +
+        "        if (groupsA &gt; 1 || groupsB &gt; 1) return -1;\n" +
+        "        return edges.length - kept;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(m \u03b1(n)) time, O(n) space.</p>" +
+        "<p><strong>The trap.</strong> Processing edges in input order. A private edge taken early can make a later shared edge look redundant for that person, and then the other person needs an extra private edge. Shared edges first is what makes the greedy optimal.</p></details>" +
+        "<h3>12. Largest Component Size by Common Factor</h3>" +
+        "<p><strong>LeetCode 952 &#183; Hard</strong> &#183; <a href='https://leetcode.com/problems/largest-component-size-by-common-factor/' target='_blank' rel='noopener'>Open the problem</a></p>" +
+        "<p>Connect two numbers in a list when they share a common factor greater than 1. Return the size of the largest connected group.</p>" +
+        "<details class='solution'><summary>Hint</summary><p>Comparing every pair of numbers is 2 \u00d7 10\u2078 gcd calls at 20,000 numbers. Instead, connect each number to its prime factors: two numbers sharing a prime end up in the same group through that prime.</p></details>" +
+        "<details class='solution'><summary>Solution</summary>" +
+        "<p><strong>Brute force.</strong> Union every pair with gcd greater than 1: O(n\u00b2 log V), too slow at the limit.</p>" +
+        "<p><strong>Approach.</strong> Make union-find nodes for the values up to the largest number. Factor each number by trial division up to its square root, and union the number with each prime factor it has. Finally count, for each number in the list, which root it belongs to, and return the largest count.</p>" +
+        "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
+        "<pre data-lang='python'><code>class Solution:\n" +
+        "    def largestComponentSize(self, nums: list[int]) -&gt; int:\n" +
+        "        parent = list(range(max(nums) + 1))\n" +
+        "\n" +
+        "        def find(x):\n" +
+        "            while parent[x] != x:\n" +
+        "                parent[x] = parent[parent[x]]\n" +
+        "                x = parent[x]\n" +
+        "            return x\n" +
+        "\n" +
+        "        for x in nums:                 # join x to each of its prime factors\n" +
+        "            y, f = x, 2\n" +
+        "            while f * f &lt;= y:\n" +
+        "                if y % f == 0:\n" +
+        "                    parent[find(f)] = find(x)\n" +
+        "                    while y % f == 0:\n" +
+        "                        y //= f\n" +
+        "                f += 1\n" +
+        "            if y &gt; 1:\n" +
+        "                parent[find(y)] = find(x)\n" +
+        "        count = {}\n" +
+        "        for x in nums:                 # count list numbers only, not factor nodes\n" +
+        "            r = find(x)\n" +
+        "            count[r] = count.get(r, 0) + 1\n" +
+        "        return max(count.values())</code></pre>" +
+        "<pre data-lang='java' hidden><code>import java.util.HashMap;\n" +
+        "\n" +
+        "class Solution {\n" +
+        "    private int[] parent;\n" +
+        "\n" +
+        "    private int find(int x) {\n" +
+        "        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n" +
+        "        return x;\n" +
+        "    }\n" +
+        "\n" +
+        "    public int largestComponentSize(int[] nums) {\n" +
+        "        int max = 0;\n" +
+        "        for (int x : nums) max = Math.max(max, x);\n" +
+        "        parent = new int[max + 1];\n" +
+        "        for (int i = 0; i &lt;= max; i++) parent[i] = i;\n" +
+        "        for (int x : nums) {           // join x to each of its prime factors\n" +
+        "            int y = x;\n" +
+        "            for (int f = 2; f * f &lt;= y; f++)\n" +
+        "                if (y % f == 0) {\n" +
+        "                    parent[find(f)] = find(x);\n" +
+        "                    while (y % f == 0) y /= f;\n" +
+        "                }\n" +
+        "            if (y &gt; 1) parent[find(y)] = find(x);\n" +
+        "        }\n" +
+        "        HashMap&lt;Integer, Integer&gt; count = new HashMap&lt;&gt;();   // list numbers only\n" +
+        "        int best = 0;\n" +
+        "        for (int x : nums) best = Math.max(best, count.merge(find(x), 1, Integer::sum));\n" +
+        "        return best;\n" +
+        "    }\n" +
+        "}</code></pre></div>" +
+        "<p><strong>Complexity.</strong> O(n \u221aV \u03b1(V)) time for values up to V = 100,000, and O(V) space.</p>" +
+        "<p><strong>The trap.</strong> Counting group sizes with the union-find's own size array. Those sizes include the prime-factor nodes, which are not numbers from the list. Count only the list's numbers per root.</p></details>"
+    },
+
     { title: "Exercises",
       html:
         "<ol>" +
@@ -7489,7 +8169,7 @@ CHAPTERS.push({
         "<p>Each flower blooms over a closed range of days [start, end]. Each person arrives on some day. For each person, report how many flowers are in bloom when they arrive.</p>" +
         "<details class='solution'><summary>Hint</summary><p>Answer all the questions together, offline: sort the people by arrival day and sweep through time once, the way the chapter's sweep processes events in order.</p></details>" +
         "<details class='solution'><summary>Solution</summary>" +
-        "<p><strong>Brute force.</strong> For each person, check every flower: O(flowers \u00d7 people), 2.5 \u00d7 10\u00b9\u2070 at the limits.</p>" +
+        "<p><strong>Brute force.</strong> For each person, check every flower: O(flowers \u00d7 people), 2.5 \u00d7 10\u2079 at the limits.</p>" +
         "<p><strong>Approach.</strong> Sort the start days and, separately, the end days. Visit the people in order of arrival day t, moving two pointers forward: one counts flowers with start \u2264 t, the other flowers with end &lt; t (already finished). The flowers in bloom are the difference. Write each answer at the person's original position.</p>" +
         "<div class='code-tabs'><div class='code-tab-bar'><button class='code-tab active' data-lang='python'>Python</button><button class='code-tab' data-lang='java'>Java</button></div>" +
         "<pre data-lang='python'><code>class Solution:\n" +
