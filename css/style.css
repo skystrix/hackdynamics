@@ -1,557 +1,469 @@
 /* ==========================================================================
    The course reader, shared by every course page.
-   Bone paper, near-black Figtree text, League Spartan headings, one
-   structural blue for the machines.
+   Same system as the public site (site.css): bone paper, League Spartan
+   headings, Figtree text, and the course's own flat colour field. Here the
+   field is the bar, the chapter's title page and the head of every machine.
+   Surfaces are told apart by fill, never by outline or shadow.
    Tokens live in tokens.css (light default, data-theme="dark" override).
-   No frameworks.
    ========================================================================== */
 
-/* Theme toggle button (in the top bar next to progress) */
-.theme-toggle {
-  background: var(--bg-2); border: 1px solid var(--line);
-  color: var(--text-dim); font-family: var(--sans); font-size: 13px; font-weight: 600;
-  height: 36px; padding: 0 14px; border-radius: var(--r-full);
-  cursor: pointer; transition: border-color .2s, box-shadow .2s;
-  flex: none;
+/* The course field: set once on <body data-course="…"> in each shell page. */
+body { --f: var(--bg-3); --fi: var(--text); }
+[data-course="db"]  { --f: var(--field-db);  --fi: var(--field-db-ink); }
+[data-course="rag"] { --f: var(--field-rag); --fi: var(--field-rag-ink); }
+[data-course="llm"] { --f: var(--field-llm); --fi: var(--field-llm-ink); }
+[data-course="dsa"] { --f: var(--field-dsa); --fi: var(--field-dsa-ink); }
+
+:root {
+  --m: clamp(16px, 2.2vw, 32px);            /* the site's one pair of margins */
+  --col: 880px;                              /* reading column: machines, figures */
+  --measure: 40rem;                          /* prose line length, about 68ch */
+  --s-small: 0.875rem;
+  --s-body: clamp(1.0625rem, 1rem + 0.25vw, 1.125rem);
+  --s-h3: 1.25rem;
+  --s-h2: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --hover: color-mix(in srgb, var(--text) 10%, var(--bg-3));
 }
-.theme-toggle:hover { border-color: var(--text-faint); box-shadow: var(--shadow-1); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-
-html { scroll-behavior: smooth; }
-
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.6;
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans); font-size: var(--s-body); line-height: 1.6;
   overflow-x: hidden;
 }
-
 ::selection { background: var(--field-rag); color: #1a1a1a; }
+:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+a { color: inherit; }
 
-/* ---------- Top bar ---------- */
+/* ---------- The bar: takes the course colour, hides while you read down ---------- */
 #topbar {
-  position: fixed; top: 0; left: 0; right: 0;
-  height: 56px;
-  display: flex; align-items: center; gap: 16px;
-  padding: 0 18px;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--line);
-  z-index: 50;
+  position: fixed; inset: 0 0 auto 0; z-index: 50;
+  height: 60px; padding: 0 var(--m);
+  display: flex; align-items: center; gap: clamp(12px, 2vw, 24px);
+  background: var(--f); color: var(--fi);
+  transition: transform .45s var(--ease-out);
 }
+body.bar-away #topbar { transform: translateY(-100%); }
+#topbar a, #topbar button { color: inherit; }
 
-#brand {
-  font-family: var(--display); font-weight: 700; font-size: 17px;
-  letter-spacing: -0.125px;
-  color: var(--text);
-  text-decoration: none;
+#toc-toggle, .theme-toggle, #account button {
+  font: 600 var(--s-small)/1 var(--sans);
+  height: 40px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--fi) 12%, transparent);
+  transition: background-color .2s, transform .2s var(--ease-out);
+  flex: none;
 }
-#brand span { color: var(--primary); }
+#toc-toggle:hover, .theme-toggle:hover, #account button:hover { background: color-mix(in srgb, var(--fi) 22%, transparent); }
+#toc-toggle:active, .theme-toggle:active, #account button:active { transform: scale(.95); }
 
 #home-link {
-  font-size: 13px; font-weight: 500;
-  color: var(--text-dim); text-decoration: none;
-  border: 1px solid var(--line); border-radius: var(--r-md);
-  padding: 4px 12px; transition: all .2s;
-  white-space: nowrap;
-  background: var(--bg-2);
+  font-family: var(--display); font-weight: 700; letter-spacing: -0.03em;
+  font-size: 1.375rem; line-height: 1; text-decoration: none; white-space: nowrap;
 }
-#home-link:hover { color: var(--text); box-shadow: var(--shadow-1); }
+#brand {
+  font-size: var(--s-small); font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+#brand::before { content: "/"; margin-right: .6em; opacity: .6; }
+#brand:hover { text-decoration: underline; text-underline-offset: .3em; }
 
-#toc-toggle {
-  background: var(--bg-2); border: 1px solid var(--line);
-  color: var(--text-dim); font-size: 17px;
-  width: 36px; height: 36px; border-radius: var(--r-md);
-  cursor: pointer; transition: all .2s;
-}
-#toc-toggle:hover { color: var(--text); box-shadow: var(--shadow-1); }
-
-#progress-wrap {
-  margin-left: auto;
-  display: flex; align-items: center; gap: 10px;
-}
+#progress-wrap { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 #progress-bar {
-  width: 140px; height: 6px;
-  background: var(--bg-3);
-  border-radius: 3px; overflow: hidden;
+  width: 120px; height: 8px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--fi) 20%, transparent);
 }
-#progress-fill {
-  height: 100%; width: 0%;
-  background: var(--primary);
-  transition: width .6s ease;
-}
-#progress-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+#progress-fill { height: 100%; width: 0%; background: var(--fi); border-radius: 999px; transition: width .6s var(--ease-out); }
+#progress-label { font-size: var(--s-small); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* ---------- Table of contents (sidebar) ---------- */
+#account { display: flex; align-items: center; gap: 8px; font-size: var(--s-small); font-weight: 600; }
+#account a { text-decoration: none; }
+#account a:hover { text-decoration: underline; text-underline-offset: .3em; }
+
+/* ---------- Contents: a stone panel, one step from the paper ---------- */
 #toc {
-  position: fixed; top: 56px; bottom: 0; left: 0;
-  width: 300px;
-  background: var(--bg);
-  border-right: 1px solid var(--line);
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
+  width: 300px; overflow-y: auto;
+  background: var(--bg-3);
   transform: translateX(-100%);
-  transition: transform .3s ease;
-  z-index: 40;
-  overflow-y: auto;
+  transition: transform .3s var(--ease-out);
 }
-/* Visibility is driven by body.sidebar-toggled, which always means "the
-   opposite of this breakpoint's default": narrow screens hide the sidebar by
-   default (toggled = reveal the overlay); wide screens (media query below)
-   dock it and show it by default (toggled = hide it). The narrow "reveal" and
-   wide "hide" rules are scoped to their own breakpoints so they never collide
-   at equal specificity — every state is decided by specificity, not order. */
+/* body.sidebar-toggled means "the opposite of this breakpoint's default":
+   narrow screens hide the panel (toggled = show it as an overlay), wide
+   screens dock it (toggled = hide it). Each state is chosen by matching. */
 @media (max-width: 1023.98px) {
   body.sidebar-toggled #toc { transform: translateX(0); }
 }
-#toc-inner { padding: 20px 14px 60px; }
+#toc-inner { padding: 84px 12px 64px; }
 
 #toc .toc-part {
-  font-size: 11px; font-weight: 600;
-  letter-spacing: 1px; text-transform: uppercase;
-  color: var(--text-faint);
-  margin: 20px 8px 8px;
+  font-size: var(--s-small); font-weight: 700; line-height: 1.35;
+  color: var(--text);
+  margin: 28px 10px 8px;
 }
+#toc .toc-part:first-child { margin-top: 0; }
 #toc a {
-  display: flex; align-items: baseline; gap: 8px;
-  padding: 7px 10px; border-radius: var(--r-sm);
-  color: var(--text-dim); text-decoration: none;
-  font-size: 14px;
-  transition: all .15s;
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 10px; border-radius: 8px;
+  color: var(--text-secondary); text-decoration: none;
+  font-size: 0.9375rem; line-height: 1.4;
+  transition: background-color .15s;
 }
-#toc a:hover { color: var(--text); background: var(--bg-3); }
-#toc a.active { color: var(--primary); background: var(--tint-primary); font-weight: 500; }
-#toc a .n { font-size: 12px; font-weight: 600; color: var(--text-faint); min-width: 20px; }
-#toc a.active .n { color: var(--primary); }
-#toc a.done .n::after { content: " ✓"; color: var(--green); }
+#toc a:hover { background: var(--hover); color: var(--text); }
+#toc a.active { background: var(--f); color: var(--fi); font-weight: 600; }
+/* LLM's field is ink, which in dark mode sits one step from this panel */
+[data-course="llm"] #toc a.active { background: var(--text); color: var(--bg); }
+#toc a .n { font-size: var(--s-small); font-weight: 600; min-width: 22px; font-variant-numeric: tabular-nums; opacity: .7; }
+#toc a.active .n { opacity: 1; }
+#toc a.done .n::after { content: " ✓"; } /* taste-skill-ignore: a status mark (quiz passed), not decoration */
+.toc-opt, .toc-lock { font-size: 0.8125rem; opacity: .7; }
 
 #toc-backdrop {
   position: fixed; inset: 0; z-index: 35;
-  background: rgba(0,0,0,.25);
-  opacity: 0; pointer-events: none;
-  transition: opacity .3s;
+  background: rgba(0,0,0,.3);
+  opacity: 0; visibility: hidden; transition: opacity .3s, visibility .3s;
 }
-body.sidebar-toggled #toc-backdrop { opacity: 1; pointer-events: auto; }
+body.sidebar-toggled #toc-backdrop { opacity: 1; visibility: visible; }
 
-/* Wide screens: the sidebar is docked into its own column and present by
-   default; the content shifts right to make room. The hamburger hides it and
-   reclaims the space. No dimming backdrop is ever needed in this mode. */
-@media (min-width: 1024px) {
-  #toc-backdrop { display: none; }
-  /* Docked and present by default; hidden only when the hamburger adds
-     .sidebar-toggled. The two states are made mutually exclusive with :not()
-     so each is chosen by *matching* rather than a specificity tie-break — and
-     both outrank the plain `#toc`/`#app` base rules (1,1,1 > 1,0,0). When the
-     class is present, #toc falls back to its base translateX(-100%) (hidden)
-     and #app to its base margin:0 auto (recentred). */
-  body:not(.sidebar-toggled) #toc { transform: translateX(0); }
-  body:not(.sidebar-toggled) #app { margin-left: max(300px, calc((100vw - 880px) / 2)); }
-  #app { transition: margin-left .3s ease; }
-}
-
-/* ---------- Main layout ---------- */
+/* ---------- Reading area ---------- */
 #app {
   position: relative; z-index: 1;
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 96px 22px 120px;
+  padding: 76px var(--m) 140px;
+}
+#app > * { max-width: var(--col); margin-inline: auto; }
+#app > .hero, #app > .ch-hero { max-width: none; }
+
+@media (min-width: 1024px) {
+  #toc-backdrop { display: none; }
+  body:not(.sidebar-toggled) #toc { transform: translateX(0); }
+  body:not(.sidebar-toggled) #app { margin-left: 300px; }
+  #app { transition: margin-left .3s var(--ease-out); }
 }
 
-/* ---------- Home / journey map ---------- */
-.hero { text-align: center; padding: 40px 0 30px; }
-.hero h1 {
-  font-family: var(--display);
-  font-size: clamp(36px, 6vw, 60px);
-  line-height: 0.95;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--text);
+/* ---------- Posters: the course map's opener and each chapter's title page ----------
+   A full field of the course colour, edge to edge under the bar (which wears
+   the same colour), its words on the reading column's left edge. */
+#app > .hero, #app > .ch-hero {
+  margin: -76px calc(-1 * var(--m)) 0;
+  /* % padding reads #app's width: this lands the text on the column's edge */
+  padding: 124px max(var(--m), calc((100% - var(--col)) / 2 + var(--m))) clamp(40px, 5vw, 72px);
+  min-height: min(72svh, 720px);
+  background: var(--f); color: var(--fi);
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 24px;
 }
-.hero p.sub {
-  margin: 18px auto 0; max-width: 620px;
-  color: var(--text-dim); font-size: 17px;
+.hero h1, .ch-hero h1 {
+  font-family: var(--display); font-weight: 700;
+  font-size: clamp(2.75rem, 6.4vw, 6.5rem);
+  letter-spacing: -0.04em; line-height: .9;
+  text-wrap: balance; max-width: 16ch;
 }
+.ch-hero h1.long  { font-size: clamp(2rem, 4.6vw, 4.5rem); max-width: 20ch; }
+.ch-hero h1.xlong { font-size: clamp(1.625rem, 3.4vw, 3.25rem); max-width: 26ch; }
+.hero .sub, .ch-hero .intro {
+  font-size: clamp(1.0625rem, 1rem + 0.4vw, 1.3125rem); line-height: 1.5;
+  max-width: 44rem;
+}
+/* chapter and part sit at the poster's foot, under the words they name */
+.ch-hero .ch-meta { font-size: var(--s-small); font-weight: 600; order: 1; }
+.ch-hero .optional-note { font-size: var(--s-small); max-width: 44rem; }
 .hero .cta {
-  display: inline-block; margin-top: 30px;
-  padding: 12px 32px; border-radius: var(--r-full);
-  font-weight: 500; font-size: 16px; text-decoration: none;
-  color: var(--on-primary);
-  background: var(--primary);
-  transition: background .15s, transform .15s;
+  align-self: flex-start;
+  display: inline-flex; align-items: center;
+  font: 600 var(--s-body)/1 var(--sans);
+  padding: .95em 1.6em; border-radius: 999px; text-decoration: none;
+  background: var(--fi); color: var(--f);
+  transition: opacity .2s, transform .2s var(--ease-out);
 }
-.hero .cta:hover { background: var(--primary-active); }
-.hero .cta:active { transform: scale(.97); }
+.hero .cta:hover { opacity: .86; }
+/* the opener's live machine sits on the field; its head steps to stone so it
+   does not vanish into a field of its own colour */
+.hero .viz { margin: 32px 0 0; max-width: var(--col); color: var(--text); }
+.hero .viz-head { background: var(--bg-3); color: var(--text); }
+.hero-cap { font-size: var(--s-small); font-weight: 600; margin-top: -12px; }
+.hero-cap a { text-decoration-thickness: 2px; text-underline-offset: .2em; }
+.hero .cta:active { transform: scale(.96); }
 
+/* ---------- Course map: parts as headings, chapters as plain rows ---------- */
 .part-head {
-  margin: 54px 0 6px;
-  font-size: 12px; font-weight: 600;
-  letter-spacing: 1px; text-transform: uppercase;
-  color: var(--text-faint);
+  font-family: var(--display); font-weight: 700;
+  font-size: var(--s-h2); letter-spacing: -0.03em; line-height: 1;
+  margin-top: clamp(72px, 8vw, 120px);
+  text-wrap: balance;
 }
-.part-desc { color: var(--text-dim); margin-bottom: 18px; font-size: 15px; }
-
-/* Journey map: chapter cards connected by a quiet spine */
-.journey { position: relative; padding-left: 26px; }
-.journey::before {
-  content: "";
-  position: absolute; left: 7px; top: 8px; bottom: 8px;
-  width: 2px;
-  background: var(--line);
+/* measure-wide, but on the column's left edge (a % margin reads #app's width) */
+#app > .part-desc {
+  max-width: var(--measure); margin: 16px auto 28px max(0px, calc((100% - var(--col)) / 2));
+  color: var(--text-secondary);
 }
+.journey { display: grid; gap: 6px; }
 .ch-card {
-  position: relative;
-  display: block;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-  margin-bottom: 14px;
+  display: grid; grid-template-columns: 3.25rem 1fr auto; column-gap: 16px; row-gap: 2px;
+  padding: 16px 18px; border-radius: 12px;
   text-decoration: none; color: var(--text);
-  transition: transform .2s, box-shadow .2s;
+  transition: background-color .2s;
 }
-.ch-card::before { /* node on the spine */
-  content: "";
-  position: absolute; left: -26px; top: 26px;
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--bg); border: 2px solid var(--text-faint);
-  transform: translateX(2px);
+.ch-card:hover { background: var(--bg-3); }
+.ch-card .num {
+  grid-row: 1 / 3;
+  font-family: var(--display); font-weight: 700; font-size: 1.75rem; line-height: 1;
+  font-variant-numeric: tabular-nums; padding-top: 2px;
 }
-.ch-card.visited::before { background: var(--primary); border-color: var(--primary); }
-.ch-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-1);
+.ch-card.visited .num { color: var(--text-dim); }
+.ch-card h3 { font-size: var(--s-h3); font-weight: 600; line-height: 1.3; }
+.ch-card p { grid-column: 2; color: var(--text-secondary); font-size: 1rem; max-width: var(--measure); }
+.ch-card .badges {
+  grid-column: 3; grid-row: 1 / 3;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  font-size: var(--s-small); white-space: nowrap; color: var(--text-dim);
 }
-.ch-card .num { font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--primary); }
-.ch-card h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.25px; margin: 2px 0 4px; color: var(--text); }
-.ch-card p { color: var(--text-dim); font-size: 14.5px; }
-.ch-card .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
-.badge {
-  font-size: 11px; font-weight: 600; letter-spacing: .125px;
-  padding: 3px 9px; border-radius: var(--r-full);
-  border: 1px solid var(--line); color: var(--text-dim);
-  background: var(--bg-2);
-}
-.badge.viz { color: var(--primary); }
-.badge.quiz-done { color: var(--green); }
-.badge.optional { color: var(--text-dim); border-style: dashed; }
-.toc-opt { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; opacity: .6; }
-.ch-hero .optional-note { margin-top: 10px; font-size: 14px; color: var(--text-dim); border-left: 2px dashed var(--line); padding-left: 10px; }
+.badge.quiz-done { color: var(--text); font-weight: 600; }
+.ch-card.locked { opacity: .82; }
 
-/* ---------- Chapter page ---------- */
-.ch-hero { padding: 30px 0 10px; }
-.ch-hero .kicker {
-  font-size: 12px; font-weight: 600; letter-spacing: 1px;
-  text-transform: uppercase; color: var(--text-faint);
+/* ---------- Chapter: sections sit on the paper, separated by space ---------- */
+section.block { margin-top: clamp(72px, 8vw, 120px); }
+/* Each part of a section rises as it enters the screen. Scroll-driven, so it
+   needs no script and nothing can be left hidden; browsers without view
+   timelines simply show everything. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    section.block > *, .ch-nav > a, .journey > a, #app > .part-head, #app > .part-desc {
+      animation: rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
 }
-.ch-hero h1 {
-  font-family: var(--display);
-  font-size: clamp(32px, 5vw, 46px); font-weight: 700;
-  letter-spacing: -0.03em; color: var(--text); margin: 6px 0 14px; line-height: 1;
-}
-.ch-hero .intro { color: var(--text-dim); font-size: 17px; }
-
-section.block {
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 26px 28px;
-  margin: 26px 0;
-  /* scroll-reveal: starts hidden, .revealed animates in */
-  opacity: 0; transform: translateY(24px);
-  transition: opacity .6s ease, transform .6s ease;
-}
-section.block.revealed { opacity: 1; transform: none; }
+@keyframes rise { from { opacity: 0; transform: translateY(28px); } }
+.ch-hero + section.block { margin-top: clamp(56px, 6vw, 88px); }
 
 section.block h2 {
-  font-family: var(--display);
-  font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
-  color: var(--text);
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
+  font-family: var(--display); font-weight: 700;
+  font-size: var(--s-h2); letter-spacing: -0.03em; line-height: 1.02;
+  margin-bottom: 24px; text-wrap: balance;
 }
-section.block h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.25px; color: var(--text); margin: 18px 0 8px; }
-section.block p { margin: 12px 0; }
-section.block ul, section.block ol { margin: 12px 0 12px 24px; }
-section.block li { margin: 6px 0; }
-section.block strong { color: var(--text); font-weight: 600; }
-section.block em { color: var(--text); font-style: italic; }
+section.block h3 {
+  font-size: var(--s-h3); font-weight: 700; line-height: 1.3;
+  margin: 36px 0 8px; max-width: var(--measure);
+}
+section.block > p, section.block > ul, section.block > ol,
+section.block > details, section.block > .callout { max-width: var(--measure); }
+section.block p { margin: 14px 0; }
+section.block ul, section.block ol { margin: 14px 0 14px 1.4em; }
+section.block li { margin: 8px 0; padding-left: 4px; }
+section.block strong { font-weight: 700; }
+section.block a { text-decoration-thickness: 2px; text-underline-offset: .2em; }
 
-/* Inline code & code blocks */
+/* Inline code & code blocks (monospace lives only here) */
 code {
-  font-family: var(--mono); font-size: .85em;
-  background: var(--bg-3);
-  padding: 2px 6px; border-radius: var(--r-xs);
-  color: var(--orange);
+  font-family: var(--mono); font-size: .86em;
+  background: var(--bg-3); color: var(--text);
+  padding: 2px 6px; border-radius: 4px;
 }
 pre {
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 16px 18px;
+  background: var(--bg-3); border-radius: 12px;
+  padding: 18px 20px; margin: 16px 0;
   overflow-x: auto;
-  margin: 14px 0;
+  font-size: 0.875rem; line-height: 1.65;
 }
-pre code { background: none; border: none; padding: 0; color: var(--text-secondary); font-size: 13.5px; line-height: 1.6; }
+pre code { background: none; padding: 0; color: var(--text); font-size: 0.875rem; line-height: 1.65; }
 
-/* Language tabs on Part V code examples (Java ⇄ Go) */
-.code-tab-bar { display: flex; gap: 6px; margin: 14px 0 0; }
+/* Language tabs on code examples (Java ⇄ Go, Python ⇄ Java) */
+.code-tab-bar { display: flex; gap: 6px; margin: 18px 0 0; }
 .code-tab {
-  background: var(--bg-2); border: 1px solid var(--line); color: var(--text-dim);
-  font-family: var(--sans); font-size: 12px; font-weight: 500; padding: 4px 14px;
-  border-radius: var(--r-md); cursor: pointer; transition: all .2s;
+  font: 600 var(--s-small)/1 var(--sans);
+  height: 34px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--bg-3); color: var(--text);
+  transition: background-color .15s, transform .15s var(--ease-out);
 }
-.code-tab:hover { color: var(--text); box-shadow: var(--shadow-1); }
-.code-tab.active { color: var(--primary); border-color: var(--primary); background: var(--tint-primary); }
+.code-tab:hover { background: var(--hover); }
+.code-tab:active { transform: scale(.95); }
+.code-tab.active { background: var(--text); color: var(--bg); }
 .code-tabs pre { margin-top: 8px; }
 .code-tabs pre[hidden] { display: none; }
 
-/* Call-out boxes */
+/* Call-outs: a block of the course's colour */
 .callout {
-  border: 1px solid rgba(221, 91, 0, .3);
-  background: var(--tint-orange);
-  border-radius: var(--r-md);
-  padding: 14px 18px;
-  margin: 14px 0;
-  font-size: 15px;
+  background: var(--f); color: var(--fi);
+  border-radius: 12px; padding: 20px 24px; margin: 20px 0;
 }
-.callout::before { content: "◆ "; color: var(--orange); }
+.callout code { background: color-mix(in srgb, var(--fi) 14%, transparent); color: inherit; }
+.callout a { color: inherit; }
 
-/* Practice problems: hint and solution stay closed until the learner asks */
+/* Practice problems: hint and solution stay closed until asked */
 details.solution {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-2);
-  margin: 10px 0;
-  padding: 0 16px;
+  background: var(--bg-2); border-radius: 12px;
+  margin: 10px 0; padding: 0 20px;
 }
 details.solution > summary {
-  cursor: pointer;
-  padding: 10px 0;
-  font-size: 14px; font-weight: 600;
-  color: var(--primary);
+  cursor: pointer; padding: 14px 0;
+  font-size: 1rem; font-weight: 700;
 }
-details.solution[open] { padding-bottom: 6px; }
-details.solution[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+details.solution > summary:hover { text-decoration: underline; text-underline-offset: .25em; }
+details.solution[open] { padding-bottom: 10px; }
+details.solution pre { background: var(--bg-3); }
 
-/* Visualization frames and #viz-tip live in tokens.css (shared with the home page). */
+/* ---------- Figures: a light well, the caption under it ---------- */
+.fig {
+  background: var(--bg-2); border-radius: 12px;
+  margin: 28px 0 12px; padding: clamp(16px, 2vw, 28px);
+}
+.fig svg { display: block; width: 100%; height: auto; }
+.fig .fig-cap {
+  margin-top: 16px; max-width: var(--measure);
+  font-size: var(--s-small); line-height: 1.55; color: var(--text-secondary);
+}
 
-/* ---------- Key terms ---------- */
-.terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 10px; }
+/* Machine frames and #viz-tip live in tokens.css (shared with the home page). */
+
+/* ---------- Key terms: a deck of flashcards ---------- */
+.terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
 .term {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 12px 14px;
-  cursor: pointer;
-  transition: border-color .2s, box-shadow .2s;
+  background: var(--bg-2); border-radius: 12px;
+  padding: 16px 18px; cursor: pointer;
+  transition: background-color .2s, transform .2s var(--ease-out);
 }
-.term:hover { box-shadow: var(--shadow-1); }
-.term b { display: block; color: var(--primary); font-size: 14px; font-weight: 600; }
-.term span { display: none; font-size: 13.5px; color: var(--text-dim); margin-top: 6px; }
-.term.open span { display: block; }
-.term::after { content: "tap to reveal"; font-size: 10px; color: var(--text-faint); }
-.term.open::after { content: ""; }
+.term:hover { background: var(--bg-3); }
+.term:active { transform: scale(.98); }
+.term b { display: block; font-family: var(--display); font-size: 1.25rem; letter-spacing: -0.02em; line-height: 1.1; }
+.term span { display: none; font-size: 0.9375rem; color: var(--text-secondary); margin-top: 8px; }
+.term.open { background: var(--f); color: var(--fi); }
+.term.open span { display: block; color: inherit; }
+.term::after { content: "Show"; display: block; margin-top: 10px; font-size: var(--s-small); font-weight: 600; color: var(--text-dim); }
+.term.open::after { content: none; }
 
-/* ---------- Quiz ---------- */
-.quiz { margin-top: 8px; }
+/* ---------- Quiz: flat answers that flip to green or coral ---------- */
 .quiz .q-card {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-  margin: 14px 0;
+  background: var(--bg-2); border-radius: 12px;
+  padding: clamp(18px, 2.4vw, 28px); margin: 12px 0;
 }
-.quiz .q-num { font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--text-faint); }
-.quiz .q-text { font-size: 16px; font-weight: 500; color: var(--text); margin: 6px 0 12px; }
-.quiz .opts { display: grid; gap: 8px; }
-.quiz .opt {
-  text-align: left;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  color: var(--text);
-  border-radius: var(--r-md);
-  padding: 10px 14px;
-  font-size: 15px; font-family: var(--sans);
+.quiz .q-num { font-size: var(--s-small); font-weight: 600; color: var(--text-dim); }
+.quiz .q-text { font-size: var(--s-h3); font-weight: 600; line-height: 1.4; margin: 6px 0 16px; max-width: var(--measure); }
+.quiz .opts { display: grid; gap: 6px; }
+.quiz .opt, .quiz .order-item {
+  display: block; width: 100%; text-align: left;
+  font: 500 1rem/1.45 var(--sans);
+  background: var(--bg-3); color: var(--text);
+  border: 0; border-radius: 10px; padding: 12px 16px; margin: 0;
   cursor: pointer;
-  transition: all .15s;
+  transition: background-color .15s, transform .15s var(--ease-out);
 }
-.quiz .opt:hover { box-shadow: var(--shadow-1); }
-.quiz .opt.sel { border-color: var(--primary); background: var(--tint-primary); }
-.quiz .opt.correct { border-color: var(--green); background: var(--tint-green); }
-.quiz .opt.wrong { border-color: var(--pink); background: var(--tint-red); }
+.quiz .opt:hover:not(:disabled), .quiz .order-item:hover { background: var(--hover); }
+.quiz .opt:active:not(:disabled), .quiz .order-item:active { transform: scale(.99); }
+.quiz .opt.sel { background: var(--text); color: var(--bg); }
+.quiz .opt.correct { background: var(--field-dsa); color: var(--field-dsa-ink); }
+.quiz .opt.wrong { background: var(--field-db); color: var(--field-db-ink); }
 .quiz .opt:disabled { cursor: default; }
+.quiz .order-item + .order-item { margin-top: 6px; }
+.quiz .order-item.picked { background: var(--bg-2); color: var(--text-dim); }
+.quiz .order-item .seq { font-weight: 700; margin-right: 8px; }
 .quiz .why {
-  display: none;
-  margin-top: 10px; padding: 10px 14px;
-  border-left: 3px solid var(--orange);
-  background: var(--tint-orange);
-  border-radius: 0 var(--r-md) var(--r-md) 0;
-  font-size: 14px; color: var(--text-secondary);
+  display: none; margin-top: 12px; padding: 14px 18px;
+  background: var(--bg); border-radius: 10px;
+  font-size: 0.9375rem; color: var(--text); max-width: var(--measure);
 }
 .quiz .why.show { display: block; }
+.quiz button:not(.opt):not(.order-item) {
+  font: 600 var(--s-small)/1 var(--sans);
+  height: 40px; padding: 0 18px; margin-top: 10px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--text); color: var(--bg);
+  transition: opacity .2s, transform .2s var(--ease-out);
+}
+.quiz button:not(.opt):not(.order-item):hover { opacity: .86; }
 .quiz .blank-input {
-  font-family: var(--mono); font-size: 15px;
-  background: var(--bg-2); color: var(--text);
-  border: 1px solid var(--line); border-radius: var(--r-xs);
-  padding: 9px 12px; width: 220px; max-width: 100%;
+  font: 500 1rem var(--sans);
+  background: var(--bg-3); color: var(--text);
+  border: 0; border-radius: 999px; padding: 10px 16px; width: 260px; max-width: 100%;
+  margin-right: 8px;
 }
-.quiz .blank-input:focus { outline: none; border-color: var(--primary); box-shadow: var(--shadow-1); }
-.quiz .order-item {
-  display: block; width: 100%; text-align: left;
-  background: var(--bg-2); border: 1px solid var(--line);
-  color: var(--text); border-radius: var(--r-md);
-  padding: 10px 14px; margin: 6px 0;
-  font-size: 15px; cursor: pointer;
-}
-.quiz .order-item.picked { border-color: var(--primary); color: var(--text-dim); }
-.quiz .order-item .seq { font-weight: 600; color: var(--primary); margin-right: 8px; }
+.quiz .blank-input:focus { outline: 3px solid var(--text); outline-offset: 0; }
 .quiz .result {
-  margin-top: 16px; padding: 16px 20px;
-  border-radius: var(--radius); text-align: center;
-  font-size: 16px;
-  border: 1px solid var(--line);
-  background: var(--bg);
+  margin-top: 16px; padding: 24px 28px; border-radius: 12px;
+  background: var(--f); color: var(--fi); font-size: 1.0625rem;
 }
-.quiz .result b { color: var(--primary); font-size: 22px; }
+.quiz .result b { font-family: var(--display); font-size: 3rem; letter-spacing: -0.03em; line-height: 1; }
 
-/* ---------- Chapter footer nav ---------- */
-.ch-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 40px; }
+/* ---------- Chapter close: the next chapter is a tile of the course colour ---------- */
+.ch-nav {
+  display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px;
+  margin-top: clamp(72px, 8vw, 120px);
+}
 .ch-nav a {
-  flex: 1;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  text-decoration: none; color: var(--text);
-  transition: box-shadow .2s;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 28px;
+  min-height: 180px; padding: clamp(20px, 2.4vw, 28px);
+  border-radius: 12px; text-decoration: none;
+  background: var(--bg-3); color: var(--text);
+  transition: transform .3s var(--ease-out), background-color .2s;
 }
-.ch-nav a:hover { box-shadow: var(--shadow-1); }
-.ch-nav a.next { text-align: right; }
-.ch-nav .dir { font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--text-faint); display: block; }
-.ch-nav .t { color: var(--primary); font-size: 15px; font-weight: 500; }
-
-/* Confetti canvas overlays everything briefly on quiz success */
-#confetti {
-  position: fixed; inset: 0; z-index: 90; pointer-events: none;
+.ch-nav a:hover { transform: translateY(-4px); }
+.ch-nav a:active { transform: scale(.98); }
+.ch-nav a.next { background: var(--f); color: var(--fi); }
+.ch-nav .dir { font-size: var(--s-small); font-weight: 600; order: 1; }
+.ch-nav .t {
+  font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; line-height: 1;
+  font-size: clamp(1.375rem, 1rem + 1.2vw, 2rem); text-wrap: balance;
 }
+.ch-nav a:not(.next) .t { font-size: 1.375rem; }
 
-/* ---------- Paywall gate overlay ---------- */
+#confetti { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+
+/* ---------- Loading overlay and sign-in card (gate.js) ---------- */
 body.gated { overflow: hidden; }
 #auth-gate {
   position: fixed; inset: 0; z-index: 200;
   display: flex; align-items: center; justify-content: center;
-  padding: 24px;
-  background: var(--bg);
+  padding: 24px; background: var(--bg);
 }
 .gate-card {
   width: 100%; max-width: 460px; text-align: center;
-  background: var(--bg-2); border: 1px solid var(--line);
-  border-radius: var(--r-xl); padding: 38px 34px;
-  box-shadow: var(--shadow-2);
+  background: var(--bg-2); border-radius: 12px; padding: 40px 34px;
 }
-.gate-brand {
-  font-weight: 700; font-size: 15px;
-  letter-spacing: -0.125px; color: var(--text); margin-bottom: 18px;
-}
-.gate-brand b { color: var(--primary); }
-.gate-tag {
-  display: inline-block; font-size: 11px; font-weight: 600;
-  letter-spacing: 1px; padding: 4px 11px; border-radius: var(--r-full);
-  border: 1px solid var(--line); color: var(--primary); margin-bottom: 16px;
-  background: var(--bg-2);
-}
-.gate-card h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.625px; color: var(--text); margin-bottom: 10px; border: none; padding: 0; }
-.gate-card h1::before { content: none; }
-.gate-card p { color: var(--text-dim); font-size: 15px; margin: 10px 0; }
+.gate-brand { font-family: var(--display); font-weight: 700; font-size: 1.375rem; letter-spacing: -0.03em; margin-bottom: 18px; }
+.gate-tag { display: inline-block; font-size: var(--s-small); font-weight: 600; margin-bottom: 14px; }
+.gate-card h1 { font-family: var(--display); font-size: 2rem; letter-spacing: -0.03em; line-height: 1; margin-bottom: 12px; }
+.gate-card p { color: var(--text-secondary); font-size: 1rem; margin: 10px 0; }
 .gate-card strong { color: var(--text); }
-.gate-card code {
-  font-family: var(--mono); font-size: 12.5px; color: var(--orange);
-  background: var(--bg-3); padding: 1px 6px; border-radius: var(--r-xs);
-}
-.gate-fine { font-size: 13px; color: var(--text-dim); }
+.gate-fine { font-size: var(--s-small); color: var(--text-dim); }
 .gate-btn {
-  display: inline-block; margin-top: 22px; padding: 12px 30px;
-  border: none; border-radius: var(--r-full); cursor: pointer; text-decoration: none;
-  font-family: var(--sans); font-weight: 500; font-size: 15px; color: var(--on-primary);
-  background: var(--primary);
-  transition: background .15s, transform .15s;
+  display: inline-block; margin-top: 22px; padding: 14px 28px;
+  border: 0; border-radius: 999px; cursor: pointer; text-decoration: none;
+  font: 600 1rem/1 var(--sans); background: var(--text); color: var(--bg);
+  transition: opacity .2s, transform .2s var(--ease-out);
 }
-.gate-btn:hover { background: var(--primary-active); }
-.gate-btn:active { transform: scale(.97); }
-.gate-btn:disabled { opacity: .7; cursor: default; transform: none; }
-/* Secondary plan (one-time) — same size, quieter, so the monthly plan leads. */
-.gate-btn-alt {
-  margin-left: 10px;
-  background: var(--bg-2); color: var(--text);
-  border: 1px solid var(--line);
-}
-.gate-btn-alt:hover { background: var(--bg-3); }
+.gate-btn:hover { opacity: .86; }
+.gate-btn:active { transform: scale(.96); }
+.gate-btn:disabled { opacity: .6; cursor: default; transform: none; }
+.gate-btn-alt { margin-left: 10px; background: var(--bg-3); color: var(--text); }
 .gate-links { margin-top: 22px; display: flex; justify-content: center; gap: 20px; }
-.gate-links a { color: var(--text-dim); text-decoration: none; font-size: 14px; }
-.gate-links a:hover { color: var(--primary); }
+.gate-links a { color: var(--text-secondary); font-size: var(--s-small); font-weight: 600; text-decoration: none; }
+.gate-links a:hover { text-decoration: underline; text-underline-offset: .3em; }
 .gate-spinner {
   width: 34px; height: 34px; margin: 6px auto 16px;
-  border: 3px solid var(--line); border-top-color: var(--primary);
+  border: 4px solid var(--bg-3); border-top-color: var(--text);
   border-radius: 50%; animation: gate-spin .8s linear infinite;
 }
 @keyframes gate-spin { to { transform: rotate(360deg); } }
-
-/* Inline sign-in card shown inside a locked chapter (not the full-screen overlay). */
 .gate-inline { max-width: 560px; margin: 30px auto; }
 
-/* Locked-chapter markers on the journey map + TOC. */
-.ch-card.locked { opacity: .82; }
-.ch-card.locked:hover { opacity: 1; }
-.badge.locked { color: var(--primary); border-color: var(--primary); }
-.toc-lock { font-size: 11px; opacity: .6; }
-#toc a.locked .n { opacity: .5; }
-
-/* ---------- Account chip in the top bar ---------- */
-#account {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--text-dim);
+/* ---------- Narrow screens ---------- */
+@media (max-width: 860px) {
+  #brand { display: none; }
 }
-#account button {
-  background: var(--bg-2); border: 1px solid var(--line); color: var(--text-dim);
-  font-family: var(--sans); font-size: 12px; font-weight: 500; padding: 4px 10px;
-  border-radius: var(--r-md); cursor: pointer; transition: all .2s;
-}
-#account button:hover { color: var(--text); box-shadow: var(--shadow-1); }
-#account a { color: var(--text-dim); text-decoration: none; }
-#account a:hover { color: var(--primary); }
-
-/* ---------- Static figure diagrams ---------- */
-/* Framed like .viz but for inline SVG illustrations with a caption.
-   Sits as a soft "image well" on the white card. */
-.fig {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  margin: 18px 0 8px;
-  padding: 16px 16px 12px;
-}
-.fig svg { display: block; width: 100%; height: auto; }
-.fig .fig-cap {
-  margin-top: 10px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-dim);
-}
-.fig .fig-cap::before { content: "▣ "; color: var(--primary); }
-
-/* ---------- Responsive ---------- */
 @media (max-width: 720px) {
-  body { font-size: 15px; }
-  #app { padding: 84px 14px 90px; }
-  section.block { padding: 20px 16px; }
-  #progress-bar { width: 80px; }
-  .ch-nav { flex-direction: column; }
-  .ch-nav a.next { text-align: left; }
+  #progress-bar { width: 64px; }
+  .ch-card { grid-template-columns: 2.5rem 1fr; padding: 14px 12px; }
+  .ch-card .num { font-size: 1.375rem; }
+  .ch-card .badges { grid-column: 2; grid-row: auto; flex-direction: row; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+  .ch-nav { grid-template-columns: 1fr; }
+  .ch-nav a { min-height: 120px; }
+  .ch-nav a.next { order: -1; }
+}
+@media (max-width: 520px) {
+  #progress-bar { display: none; }
+  #account { display: none; }
+  #toc-toggle, .theme-toggle { padding: 0 12px; }
 }
 
-/* Respect users who prefer less motion */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  section.block { transition: none; opacity: 1; transform: none; }
+  #topbar, #toc, #app, .ch-nav a, .term { transition: none; }
 }

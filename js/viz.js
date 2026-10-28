@@ -122,7 +122,7 @@
     // downward "query path" arrow
     S("path", { d: "M 20 20 L 20 330 L 14 318 M 20 330 L 26 318", stroke: C.cyan,
       "stroke-width": 2, fill: "none", opacity: 0.6 }, svg);
-    T(svg, 20, 348, "query path", { fill: C.dim, size: 10 });
+    T(svg, 6, 348, "query path", { fill: C.dim, size: 10, anchor: "start" });
     f.say("Hover or tap any component to see what it does. A query travels top → bottom.");
   };
 

@@ -24,9 +24,9 @@
 
     function finish() {
       var pct = score / questions.length;
-      var msg = pct === 1 ? "Flawless. The machine salutes you. 🏆"
-              : pct >= 0.7 ? "Strong grasp — keep descending. ⚡"
-              : "Worth a re-read — the internals reward persistence.";
+      var msg = pct === 1 ? "Every one right."
+              : pct >= 0.7 ? "Most of it is in. Read the explanations on the ones you missed."
+              : "Worth a second read of this chapter, then try again.";
       var div = document.createElement("div");
       div.className = "result";
       div.innerHTML = "<b>" + score + " / " + questions.length + "</b><br>" + msg;
@@ -39,7 +39,7 @@
     questions.forEach(function (q, i) {
       var card = document.createElement("div");
       card.className = "q-card";
-      card.innerHTML = '<div class="q-num">QUESTION ' + (i + 1) + " / " + questions.length + "</div>" +
+      card.innerHTML = '<div class="q-num">Question ' + (i + 1) + " of " + questions.length + "</div>" +
                        '<div class="q-text">' + q.q + "</div>";
       var why = document.createElement("div");
       why.className = "why";
@@ -118,7 +118,7 @@
     var picked = [];
     var hint = document.createElement("div");
     hint.className = "q-num";
-    hint.textContent = "TAP THE STEPS IN ORDER (FIRST → LAST)";
+    hint.textContent = "Tap the steps in order, first to last.";
     card.appendChild(hint);
 
     shuffled.forEach(function (item) {

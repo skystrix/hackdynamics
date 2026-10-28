@@ -108,7 +108,7 @@
       [["General A", 70], ["General B", 630]].forEach(function (g) {
         ctx.strokeStyle = C.blue; ctx.fillStyle = C.bg;
         ctx.beginPath(); ctx.arc(g[1], 90, 34, 0, 7); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = C.text; ctx.font = "12px ui-monospace,Menlo,monospace"; ctx.textAlign = "center";
+        ctx.fillStyle = C.text; ctx.font = "500 12px Figtree, sans-serif"; ctx.textAlign = "center";
         ctx.fillText(g[0], g[1], 94);
       });
       // valley
@@ -182,7 +182,7 @@
       ctx.fillStyle = C.bg;
       ctx.beginPath(); ctx.arc(70, 70, 30, 0, 7); ctx.fill(); ctx.stroke();
       ctx.fillStyle = suspected ? C.red : C.green;
-      ctx.font = "11px ui-monospace,Menlo,monospace"; ctx.textAlign = "center";
+      ctx.font = "500 11px Figtree, sans-serif"; ctx.textAlign = "center";
       ctx.fillText(alive ? "node" : "node (dead)", 70, 68);
       ctx.fillText(suspected ? "SUSPECTED" : "trusted", 70, 84);
 
@@ -444,7 +444,7 @@
         ctx.strokeStyle = n.hot ? C.gold : C.dim;
         ctx.beginPath(); ctx.arc(n.x, n.y, 6, 0, 7); ctx.fill();
       });
-      ctx.fillStyle = C.text; ctx.font = "12px ui-monospace,Menlo,monospace"; ctx.textAlign = "center";
+      ctx.fillStyle = C.text; ctx.font = "500 12px Figtree, sans-serif"; ctx.textAlign = "center";
       ctx.fillText("round " + round + " — informed: " + hotN + "/" + NODES +
         (hotN === NODES ? "  ✓ fully disseminated in ~log(N) rounds!" : ""), 350, 275);
     }

@@ -72,7 +72,7 @@
   if (!window.HDAuth || !HDAuth.isConfigured()) {
     show(
       '<div class="gate-card">' +
-        '<div class="gate-brand">HACK<b>DYNAMICS</b></div>' +
+        '<div class="gate-brand">HackDynamics</div>' +
         '<h1>Almost there</h1>' +
         '<p>Sign-in isn\'t configured yet. Add your Supabase keys in ' +
         '<code>js/supabase-config.js</code> and run the SQL in ' +
@@ -108,7 +108,7 @@
     if (!container) return;
     container.innerHTML =
       '<div class="gate-card gate-inline">' +
-        '<span class="gate-tag">SIGN-IN CHAPTER</span>' +
+        '<span class="gate-tag">Sign-in chapter</span>' +
         '<h1>Sign in to read this chapter</h1>' +
         '<p>Create a free account or log in to read ' + UNLOCK_LINE + '.</p>' +
         '<a class="gate-btn" href="' + loginHref("#/") + '">Log in</a>' +

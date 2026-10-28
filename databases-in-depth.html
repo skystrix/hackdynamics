@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Inside the Database Machine — An Interactive Journey</title>
 <meta name="description" content="An interactive, visual journey through how databases work under the hood: storage engines, B-Trees, LSM-Trees, transactions, replication, and consensus.">
-<link rel="stylesheet" href="css/tokens.css">
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/tokens.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=6">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/auth.js"></script>
@@ -18,16 +18,16 @@
 -->
 <script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
 </head>
-<body class="gated">
+<body class="gated" data-course="db">
   <!-- Loading overlay: gate.js fetches the course, then reveals the page for
        everyone. Every chapter is currently open to all. -->
   <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
 
   <!-- Top bar: brand, global progress, TOC toggle -->
   <header id="topbar">
-    <button id="toc-toggle" aria-label="Toggle table of contents">☰</button>
-    <a href="#/" id="brand">DB<span>·</span>INTERNALS</a>
-    <a href="index.html" id="home-link">← Home</a>
+    <button id="toc-toggle" aria-label="Toggle table of contents">Contents</button>
+    <a href="index.html" id="home-link">HackDynamics</a>
+    <a href="#/" id="brand">Databases in Depth</a>
     <div id="progress-wrap" title="Your journey progress">
       <div id="progress-bar"><div id="progress-fill"></div></div>
       <span id="progress-label">0%</span>
@@ -51,12 +51,12 @@
     (js/app.js).
   -->
   <!-- Engines -->
-  <script src="js/viz.js"></script>
-  <script src="js/viz2.js"></script>
+  <script src="js/viz.js?v=2"></script>
+  <script src="js/viz2.js?v=2"></script>
   <script src="js/viz3.js"></script>
   <script src="js/viz4.js"></script>
-  <script src="js/quiz.js"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/quiz.js?v=2"></script>
+  <script src="js/app.js?v=4"></script>
   <!-- Paywall: must run after the DOM and HDAuth exist -->
   <script src="js/gate.js"></script>
 </body>

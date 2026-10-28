@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAG In Depth — Retrieval-Augmented Generation, Opened Up</title>
 <meta name="description" content="An interactive, depth-first course on Retrieval-Augmented Generation: chunking, embeddings, HNSW and IVF, hybrid search, reranking, context assembly, agentic retrieval, GraphRAG, and evaluation.">
-<link rel="stylesheet" href="css/tokens.css">
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/tokens.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=6">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/auth.js"></script>
@@ -30,16 +30,16 @@ window.HD_COURSE = {
 </script>
 <script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
 </head>
-<body class="gated">
+<body class="gated" data-course="rag">
   <!-- Loading overlay: gate.js fetches the course, then reveals the page for
        everyone. Every chapter is currently open to all. -->
   <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
 
   <!-- Top bar: brand, global progress, TOC toggle -->
   <header id="topbar">
-    <button id="toc-toggle" aria-label="Toggle table of contents">☰</button>
-    <a href="#/" id="brand">RAG<span>·</span>IN DEPTH</a>
-    <a href="index.html" id="home-link">← Home</a>
+    <button id="toc-toggle" aria-label="Toggle table of contents">Contents</button>
+    <a href="index.html" id="home-link">HackDynamics</a>
+    <a href="#/" id="brand">RAG in Depth</a>
     <div id="progress-wrap" title="Your journey progress">
       <div id="progress-bar"><div id="progress-fill"></div></div>
       <span id="progress-label">0%</span>
@@ -72,8 +72,8 @@ window.HD_COURSE = {
   <script src="js/viz-rag4.js"></script>
   <script src="js/viz-rag5.js"></script>
   <script src="js/viz-rag6.js"></script>
-  <script src="js/quiz.js"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/quiz.js?v=2"></script>
+  <script src="js/app.js?v=4"></script>
   <!-- Paywall: must run after the DOM and HDAuth exist -->
   <script src="js/gate.js"></script>
 </body>

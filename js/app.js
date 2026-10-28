@@ -1,7 +1,7 @@
 /* ==========================================================================
    app.js — SPA engine
    Hash-based router (#/ = journey map, #/ch/N = chapter N), TOC sidebar,
-   progress tracking (localStorage), scroll-reveal, lazy viz mounting,
+   progress tracking (localStorage), lazy viz mounting,
    and the ambient particle background. No dependencies.
    ========================================================================== */
 
@@ -62,7 +62,7 @@
         html += '<a href="#/ch/' + ch.num + '" class="' + cls.join(" ") + '">' +
                 '<span class="n">' + ch.num + "</span>" + ch.title +
                 (ch.optional ? ' <span class="toc-opt">optional</span>' : "") +
-                (ch.locked ? ' <span class="toc-lock">🔒</span>' : "") + "</a>";
+                (ch.locked ? ' <span class="toc-lock">locked</span>' : "") + "</a>";
       });
     });
     $("#toc-inner").innerHTML = html;
@@ -96,15 +96,21 @@
     });
   });
 
-  /* ---------- scroll-reveal + lazy visualization mounting ---------- */
-  // One observer reveals .block sections; another mounts a viz only when it
-  // approaches the viewport (keeps heavy canvases from running off-screen).
-  var revealObs = new IntersectionObserver(function (entries) {
-    entries.forEach(function (en) {
-      if (en.isIntersecting) { en.target.classList.add("revealed"); revealObs.unobserve(en.target); }
-    });
-  }, { threshold: 0.08 });
+  // The bar steps out of the way while you read down and returns on the way up.
+  var lastY = 0;
+  addEventListener("scroll", function () {
+    var y = scrollY;
+    document.body.classList.toggle("bar-away", y > lastY && y > 160);
+    lastY = y;
+  }, { passive: true });
 
+  // Chapter titles run from 9 to 90 characters; size the poster title by
+  // length so every one stays on two or three lines.
+  function titleClass(t) { return t.length > 44 ? "xlong" : t.length > 24 ? "long" : ""; }
+
+  /* ---------- lazy visualization mounting ---------- */
+  // Mount a machine only when it approaches the viewport (keeps heavy
+  // canvases from running off-screen). Section entrances are pure CSS.
   var vizObs = new IntersectionObserver(function (entries) {
     entries.forEach(function (en) {
       if (!en.isIntersecting) return;
@@ -131,12 +137,13 @@
         "transactions, replication, and consensus — explained with living, interactive machinery. " +
         "No login. No server. Just you and the internals.") + "</p>" +
       '<a class="cta" href="#/ch/1">' + (COURSE.heroCta || "Begin the descent ↓") + "</a>" +
+      heroMachine() +
       "</div>";
 
     PARTS.forEach(function (part) {
       var chs = CHAPTERS.filter(function (c) { return c.part === part.num; });
       if (!chs.length) return;   // a part whose chapters aren't written yet
-      html += '<div class="part-head">Part ' + part.num + " — " + part.title + "</div>" +
+      html += '<h2 class="part-head">Part ' + part.num + ": " + part.title + "</h2>" +
               '<p class="part-desc">' + part.desc + "</p>" +
               '<div class="journey">';
       chs.forEach(function (ch) {
@@ -151,20 +158,36 @@
         var quizDone = progress.quiz[ch.num] !== undefined;
         html += '<a class="ch-card' + (progress.visited[ch.num] ? " visited" : "") +
                 (ch.locked ? " locked" : "") + '" href="#/ch/' + ch.num + '">' +
-                '<span class="num">CHAPTER ' + ch.num + (ch.locked ? " 🔒" : "") + "</span>" +
+                '<span class="num">' + ch.num + "</span>" +
                 "<h3>" + ch.title + "</h3>" +
                 "<p>" + ch.blurb + "</p>" +
                 '<div class="badges">' +
-                (ch.optional ? '<span class="badge optional">optional · advanced</span>' : "") +
-                (vizCount ? '<span class="badge viz">⚡ ' + vizCount + " interactive</span>" : "") +
-                '<span class="badge">' + quizCount + " quiz questions</span>" +
-                (ch.locked ? '<span class="badge locked">🔒 sign in</span>' : "") +
-                (quizDone ? '<span class="badge quiz-done">✓ quiz ' + progress.quiz[ch.num] + "/" + quizCount + "</span>" : "") +
+                (ch.optional ? '<span class="badge optional">Optional</span>' : "") +
+                (vizCount ? '<span class="badge machines">' + vizCount + (vizCount === 1 ? " machine" : " machines") + "</span>" : "") +
+                (quizDone ? '<span class="badge quiz-done">Quiz ' + progress.quiz[ch.num] + " of " + quizCount + "</span>"
+                          : '<span class="badge">' + quizCount + " questions</span>") +
+                (ch.locked ? '<span class="badge locked">Sign in to read</span>' : "") +
                 "</div></a>";
       });
       html += "</div>";
     });
     app.innerHTML = html;
+    app.querySelectorAll(".viz[data-viz]").forEach(function (el) { vizObs.observe(el); });
+  }
+
+  // The course map opens with one live machine from the course, the same one
+  // the home page pictures for it. Its title and chapter come from the data.
+  function heroMachine() {
+    var name = { db: "hashring", rag: "hnswSearch", llm: "llmAttention", dsa: "dsaTwoPointers" }[COURSE_KEY];
+    if (!name || !window.VIZ || !VIZ[name]) return "";
+    var hit;
+    CHAPTERS.some(function (c) {
+      return (c.sections || []).some(function (s) { if (s.viz === name) { hit = { ch: c, sec: s }; return true; } });
+    });
+    if (!hit) return "";
+    return '<div class="viz" data-ui data-viz="' + name + '"><div class="viz-head">' + hit.sec.vizTitle + "</div>" +
+           '<div class="viz-mount"></div></div>' +
+           '<p class="hero-cap">From chapter ' + hit.ch.num + ', <a href="#/ch/' + hit.ch.num + '">' + hit.ch.title + "</a>.</p>";
   }
 
   function chapterView(num) {
@@ -177,8 +200,8 @@
     if (ch.locked) {
       var lhtml =
         '<div class="ch-hero">' +
-        '<div class="kicker">PART ' + part.num + " · " + part.title.toUpperCase() + " · CHAPTER " + ch.num + "</div>" +
-        "<h1>" + ch.title + " 🔒</h1>" +
+        '<p class="ch-meta">Chapter ' + ch.num + " · Part " + part.num + ", " + part.title + "</p>" +
+        "<h1 class=\"" + titleClass(ch.title) + "\">" + ch.title + "</h1>" +
         '<p class="intro">' + ch.blurb + "</p>" +
         (ch.optional ? '<p class="optional-note">Optional, advanced reading. Interviews rarely go this deep, so skip it on a first pass and come back when you want the depth.</p>' : "") +
         "</div>" +
@@ -186,8 +209,8 @@
       var lprev = CHAPTERS.find(function (c) { return c.num === num - 1; });
       var lnext = CHAPTERS.find(function (c) { return c.num === num + 1; });
       lhtml += '<div class="ch-nav">' +
-        (lprev ? '<a href="#/ch/' + lprev.num + '"><span class="dir">← PREVIOUS</span><span class="t">' + lprev.title + "</span></a>" : "<span></span>") +
-        (lnext ? '<a class="next" href="#/ch/' + lnext.num + '"><span class="dir">NEXT →</span><span class="t">' + lnext.title + "</span></a>" : "<span></span>") +
+        (lprev ? '<a href="#/ch/' + lprev.num + '"><span class="dir">← Previous chapter</span><span class="t">' + lprev.title + "</span></a>" : "<span></span>") +
+        (lnext ? '<a class="next" href="#/ch/' + lnext.num + '"><span class="dir">Next chapter →</span><span class="t">' + lnext.title + "</span></a>" : "<span></span>") +
         "</div>";
       app.innerHTML = lhtml;
       if (window.HDGate) HDGate.renderLogin($("#chapter-login"));
@@ -199,8 +222,8 @@
 
     var html =
       '<div class="ch-hero">' +
-      '<div class="kicker">PART ' + part.num + " · " + part.title.toUpperCase() + " · CHAPTER " + ch.num + "</div>" +
-      "<h1>" + ch.title + "</h1>" +
+      '<p class="ch-meta">Chapter ' + ch.num + " · Part " + part.num + ", " + part.title + "</p>" +
+      '<h1 class="' + titleClass(ch.title) + '">' + ch.title + "</h1>" +
       '<p class="intro">' + ch.blurb + "</p>" +
       (ch.optional ? '<p class="optional-note">Optional, advanced reading. Interviews rarely go this deep, so skip it on a first pass and come back when you want the depth.</p>' : "") +
       "</div>";
@@ -212,8 +235,8 @@
               // A chapter may name a machine this course hasn't built yet;
               // draw the frame only when the machine is registered.
               (sec.viz && window.VIZ && VIZ[sec.viz]
-                ? '<div class="viz" data-viz="' + sec.viz + '">' +
-                  '<div class="viz-head">INTERACTIVE — ' + (sec.vizTitle || sec.viz) + "</div>" +
+                ? '<div class="viz" data-ui data-viz="' + sec.viz + '">' +
+                  '<div class="viz-head">' + (sec.vizTitle || sec.viz) + "</div>" +
                   '<div class="viz-mount"></div></div>'
                 : "") +
               "</section>";
@@ -221,28 +244,27 @@
 
     // Key terms (tap-to-reveal flashcards)
     if (ch.terms && ch.terms.length) {
-      html += '<section class="block"><h2>Key Terms</h2><div class="terms">' +
+      html += '<section class="block"><h2>Key terms</h2><div class="terms">' +
         ch.terms.map(function (t) {
           return '<div class="term"><b>' + t.t + "</b><span>" + t.d + "</span></div>";
         }).join("") + "</div></section>";
     }
 
     // Quiz
-    html += '<section class="block"><h2>Knowledge Check</h2><div class="quiz" id="quiz-root"></div></section>';
+    html += '<section class="block"><h2>Check yourself</h2><div class="quiz" id="quiz-root"></div></section>';
 
     // Prev / next navigation
     var prev = CHAPTERS.find(function (c) { return c.num === num - 1; });
     var next = CHAPTERS.find(function (c) { return c.num === num + 1; });
     html += '<div class="ch-nav">' +
-      (prev ? '<a href="#/ch/' + prev.num + '"><span class="dir">← PREVIOUS</span><span class="t">' + prev.title + "</span></a>" : "<span></span>") +
-      (next ? '<a class="next" href="#/ch/' + next.num + '"><span class="dir">NEXT →</span><span class="t">' + next.title + "</span></a>"
-            : '<a class="next" href="#/"><span class="dir">FINISH →</span><span class="t">Back to the map</span></a>') +
+      (prev ? '<a href="#/ch/' + prev.num + '"><span class="dir">← Previous chapter</span><span class="t">' + prev.title + "</span></a>" : "<span></span>") +
+      (next ? '<a class="next" href="#/ch/' + next.num + '"><span class="dir">Next chapter →</span><span class="t">' + next.title + "</span></a>"
+            : '<a class="next" href="#/"><span class="dir">Finished →</span><span class="t">Back to the map</span></a>') +
       "</div>";
 
     app.innerHTML = html;
 
-    // Wire up reveals, lazy viz, terms, quiz
-    app.querySelectorAll("section.block").forEach(function (el) { revealObs.observe(el); });
+    // Wire up lazy viz, terms, quiz
     app.querySelectorAll(".viz[data-viz]").forEach(function (el) { vizObs.observe(el); });
     app.querySelectorAll(".term").forEach(function (el) {
       el.addEventListener("click", function () { el.classList.toggle("open"); });
