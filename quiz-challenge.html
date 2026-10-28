@@ -6,35 +6,24 @@
 <title>The Database Internals Challenge — HackDynamics</title>
 <meta name="description" content="Eight questions from inside the database machine: B-Trees, the write-ahead log, LSM tombstones, quorums, Raft. Score yourself, then get the chapters for what you missed.">
 <meta property="og:title" content="The Database Internals Challenge">
-<meta property="og:description" content="8 questions. Every answer comes with the why. Most engineers score 4.">
+<meta property="og:description" content="Eight questions from inside the database machine. Every answer comes with the why.">
 <link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/site.css">
 <script src="js/theme.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg); color: var(--text);
-    font-family: var(--sans); font-size: 16px; line-height: 1.6;
-    min-height: 100vh; display: flex; flex-direction: column;
-  }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; width: 100%; }
-  .topnav { background: var(--bg-2); border-bottom: 1px solid var(--line); }
-  .topnav .wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; padding-bottom: 14px; max-width: 1020px; }
-  .brand { font-weight: 700; font-size: 16px; letter-spacing: -0.125px; color: var(--text); text-decoration: none; }
-  .brand b { color: var(--primary); }
-  nav a { font-size: 15px; font-weight: 500; color: var(--text-dim); text-decoration: none; margin-left: 26px; }
-  nav a:hover { color: var(--text); }
+  body { min-height: 100svh; display: flex; flex-direction: column; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 var(--m); width: 100%; }
   main { flex: 1; }
-  .page-head { text-align: center; padding: 64px 0 28px; }
-  .eyebrow { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--teal); margin-bottom: 14px; }
-  h1 { font-size: 40px; line-height: 1.15; letter-spacing: -0.6px; font-weight: 700; text-wrap: balance; }
-  .lede { color: var(--text-dim); font-size: 17px; margin-top: 14px; max-width: 34em; margin-left: auto; margin-right: auto; }
+  .page-head { padding: 140px 0 32px; }
+  h1 { font-size: var(--s-head); }
+  .lede { font-size: var(--s-lead); line-height: 1.3; margin-top: 20px; max-width: 32ch; }
   .quiz { margin: 8px 0 40px; }
-  .quiz .q-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px 20px; margin: 14px 0; box-shadow: var(--shadow-1); }
-  .quiz .q-num { font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--text-faint); }
-  .quiz .q-text { font-size: 17px; font-weight: 500; color: var(--text); margin: 6px 0 12px; }
+  .quiz .q-card { background: var(--bg-3); border-radius: 12px; padding: 20px 22px; margin: 14px 0; }
+  .quiz .q-num { font-size: var(--s-small); font-weight: 600; color: var(--text-dim); }
+  .quiz .q-text { font-size: var(--s-lead); line-height: 1.25; font-weight: 600; color: var(--text); margin: 6px 0 12px; }
   .quiz .opts { display: grid; gap: 8px; }
-  .quiz .opt { text-align: left; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: var(--r-md); padding: 10px 14px; font-size: 15px; font-family: var(--sans); cursor: pointer; transition: all .15s; }
-  .quiz .opt:hover { box-shadow: var(--shadow-1); }
+  .quiz .opt { text-align: left; background: var(--bg-2); border: 2px solid var(--bg-2); color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: var(--s-body); font-family: var(--sans); cursor: pointer; transition: border-color .15s, background-color .15s; }
+  .quiz .opt:hover { border-color: var(--text); }
   .quiz .opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .quiz .opt.sel { border-color: var(--primary); background: var(--tint-primary); }
   .quiz .opt.correct { border-color: var(--green); background: var(--tint-green); }
@@ -42,43 +31,41 @@
   .quiz .opt:disabled { cursor: default; }
   .quiz .why { display: none; margin-top: 10px; padding: 10px 14px; border-left: 3px solid var(--orange); background: var(--tint-orange); border-radius: 0 var(--r-md) var(--r-md) 0; font-size: 14px; color: var(--text-secondary); }
   .quiz .why.show { display: block; }
-  .quiz .result { margin-top: 16px; padding: 16px 20px; border-radius: var(--r-lg); text-align: center; font-size: 16px; border: 1px solid var(--line); background: var(--bg-2); }
-  .quiz .result b { color: var(--primary); font-size: 22px; }
+  .quiz .result { margin-top: 16px; padding: 18px 22px; border-radius: 12px; font-size: var(--s-body); background: var(--field-rag); color: #1a1a1a; }
+  .quiz .result b { font-family: var(--display); font-size: var(--s-lead); }
   /* email capture, shown after the last answer */
-  .capture { display: none; background: var(--indigo); color: #fff; border-radius: var(--r-xl); padding: 28px 28px 24px; margin-bottom: 56px; }
+  .capture { display: none; background: var(--field-llm); color: var(--field-llm-ink); border-radius: 12px; padding: 28px 28px 24px; margin-bottom: 56px; }
   .capture.show { display: block; }
-  .capture h2 { font-size: 22px; letter-spacing: -0.3px; margin-bottom: 6px; text-wrap: balance; }
+  .capture h2 { font-size: var(--s-lead); line-height: 1.05; margin-bottom: 10px; }
   .capture p { color: rgba(255,255,255,.8); font-size: 15px; max-width: 40em; }
   .capture form { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
   .capture input[type=email] { flex: 1 1 240px; font: inherit; font-size: 15px; padding: 10px 14px; border-radius: var(--r-md); border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; }
   .capture input[type=email]::placeholder { color: rgba(255,255,255,.5); }
   .capture input[type=email]:focus { outline: 2px solid var(--sky); outline-offset: 1px; }
-  .capture button { font: inherit; font-size: 15px; font-weight: 600; padding: 10px 18px; border-radius: var(--r-md); border: 0; background: var(--sky); color: #08142b; cursor: pointer; }
+  .capture button { font: inherit; font-size: 15px; font-weight: 600; padding: 10px 18px; border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
   .capture button:hover { filter: brightness(1.05); }
   .capture .fine { font-size: 13px; color: rgba(255,255,255,.55); margin-top: 12px; }
   .capture .fine a { color: rgba(255,255,255,.85); }
-  .free { text-align: center; color: var(--text-dim); font-size: 15px; padding-bottom: 64px; }
-  .free a { color: var(--primary); text-decoration: none; font-weight: 500; }
-  footer { border-top: 1px solid var(--line); color: var(--text-faint); font-size: 13px; padding: 18px 0; text-align: center; }
-  @media (max-width: 560px) { h1 { font-size: 30px; } .page-head { padding-top: 40px; } }
+  .free { font-size: var(--s-body); padding-bottom: 64px; }
+  .free a { font-weight: 600; text-decoration: underline 2px; text-underline-offset: .25em; }
+  footer { font-size: var(--s-small); padding: 18px var(--m) 28px; }
+  @media (max-width: 560px) { .page-head { padding-top: 100px; } }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 <script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
 </head>
 <body>
-<header class="topnav">
-  <div class="wrap">
-    <a class="brand" href="index.html">HACK<b>DYNAMICS</b></a>
-    <nav><a href="databases-in-depth.html">Course</a><a href="courses.html">All courses</a></nav>
-  </div>
-</header>
+<nav class="bar" data-field="bone" aria-label="Site">
+  <a class="wordmark" href="index.html">HackDynamics</a>
+  <a href="databases-in-depth.html">The course</a>
+  <a href="courses.html">All courses</a>
+</nav>
 
 <main>
   <div class="wrap">
     <div class="page-head">
-      <span class="eyebrow">Database internals · 8 questions</span>
-      <h1>Can you reason from inside the machine?</h1>
-      <p class="lede">Eight questions pulled straight from <em>Databases in Depth</em>. Every answer comes with the <em>why</em>. Most engineers score 4.</p>
+      <h1>The database internals challenge</h1>
+      <p class="lede">Eight questions from Databases in Depth: B-trees, the write-ahead log, LSM tombstones, quorums and Raft. Every answer explains itself.</p>
     </div>
 
     <div id="quiz" class="quiz"></div>
@@ -101,7 +88,7 @@
   </div>
 </main>
 
-<footer>© HackDynamics · hackdynamics.com</footer>
+<footer>Code: MIT. Course text: CC BY-SA 4.0. © HackDynamics contributors.</footer>
 
 <script src="js/quiz.js"></script>
 <script>

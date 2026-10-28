@@ -31,7 +31,9 @@ progress is kept in your browser's `localStorage`.
 
 | Path | What it is |
 |---|---|
-| `index.html`, `courses.html` | Home page and course catalogue |
+| `index.html`, `courses.html`, `login.html` | Home page, course catalogue, optional sign-in. Styled by `css/site.css` |
+| `css/tokens.css` | Colours, type and machine-frame styles shared by every page, light and dark |
+| `assets/shots/` | Screenshots of real course machines used on the home page and catalogue |
 | `databases-in-depth.html` … `dsa-by-patterns.html` | One page per course. Each sets `window.HD_COURSE` and shares the same shell |
 | `js/app.js` | The course shell: journey map, chapter renderer, progress, lazy machine mounting |
 | `js/gate.js` | Fetches the course text, then boots `app.js` |

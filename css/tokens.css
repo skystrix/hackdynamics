@@ -1,94 +1,179 @@
 /* ==========================================================================
-   tokens.css — the HackDynamics design system (Notion-style).
-   Single source of truth for every page: warm paper canvas, near-black Inter
-   type, one structural blue, sticker-palette accents for decoration/status.
+   tokens.css — the HackDynamics design system.
+   Poster palette: bone paper, near-black ink, and four flat course colours
+   (coral red, yellow, green, black) used as whole fields on the public pages.
+   Inside the course reader the machines keep their own semantic hues
+   (primary blue, teal, orange, pink, green) so 239 machines stay legible.
+   Type: League Spartan for display, Figtree for text.
    Light is the default; html[data-theme="dark"] re-binds the same tokens.
-   Derived from DESIGN-notion.md.
    ========================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@700&family=Figtree:wght@400;500;600;700&display=swap');
 
 :root {
   /* surfaces */
-  --bg: #f6f5f4;              /* warm paper canvas */
-  --bg-2: #ffffff;            /* cards, panels, nav */
-  --bg-3: #efedeb;            /* chips, code blocks, raised wells */
-  --line: #e6e6e6;            /* hairline borders */
+  --bg: #e6e0d2;              /* bone paper */
+  --bg-2: #f2f1ed;            /* panels, reading wells */
+  --bg-3: #dcd5c5;            /* chips, code blocks, raised wells */
+  --line: #cdc5b3;            /* reader hairlines (app screens only) */
 
   /* ink */
-  --text: rgba(0, 0, 0, .95);
-  --text-secondary: #31302e;
-  --text-dim: #615d59;
-  --text-faint: #a39e98;
+  --text: #1a1a1a;
+  --text-secondary: #2e2c28;
+  --text-dim: #5f5b52;
+  --text-faint: #8a8476;
 
-  /* the one structural accent */
-  --primary: #0075de;
-  --primary-active: #005bab;
+  /* the reader's structural accent */
+  --primary: #0058b0;
+  --primary-active: #00468c;
   --on-primary: #ffffff;
-  --indigo: #213183;          /* the single dark "night" hero band */
+  --indigo: #1a1a1a;
 
-  /* sticker palette (decoration + status; never structural fills) */
-  --teal: #2a9d99;
-  --orange: #dd5b00;
-  --pink: #ff64c8;
-  --green: #1aae39;
-  --purple: #d6b6f6;
-  --sky: #62aef0;
-  --red: var(--pink);         /* error alias — status via sticker palette, no red */
+  /* course fields: flat, theme-invariant, each with its own ink */
+  --field-db: #ed4b44;   --field-db-ink: #0f0f0f;
+  --field-rag: #f2c21a;  --field-rag-ink: #1a1a1a;
+  --field-llm: #1a1a1a;  --field-llm-ink: #e6e0d2;
+  --field-dsa: #18bc42;  --field-dsa-ink: #1a1a1a;
+  --accent: #18bc42;     --accent-ink: #1a1a1a;
+
+  /* machine palette (decoration + status inside the reader) */
+  --teal: #1f7f79;
+  --orange: #c45200;
+  --pink: #c8327f;
+  --green: #148a32;
+  --purple: #b98be6;
+  --sky: #3d8fd6;
+  --red: var(--pink);
 
   /* soft tints (accent fills at low strength; re-bound for dark) */
-  --tint-primary: rgba(0, 117, 222, .09);
-  --tint-teal: rgba(42, 157, 153, .12);
-  --tint-green: rgba(26, 174, 57, .10);
-  --tint-orange: rgba(221, 91, 0, .08);
-  --tint-red: rgba(255, 100, 200, .12);
-  --tint-neutral: rgba(0, 0, 0, .045);
+  --tint-primary: rgba(0, 88, 176, .10);
+  --tint-teal: rgba(31, 127, 121, .13);
+  --tint-green: rgba(20, 138, 50, .12);
+  --tint-orange: rgba(196, 82, 0, .10);
+  --tint-red: rgba(200, 50, 127, .12);
+  --tint-neutral: rgba(26, 26, 26, .06);
 
   /* type */
-  --sans: "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --display: "League Spartan", "Figtree", system-ui, sans-serif;
+  --sans: "Figtree", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* radius scale */
-  --r-xs: 4px;   /* form fields, chips */
-  --r-sm: 5px;   /* menu rows, list rows */
-  --r-md: 8px;   /* utility buttons, small cards */
-  --r-lg: 12px;  /* feature cards, tiles */
-  --r-xl: 16px;  /* large containers, image wells */
+  --r-xs: 4px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 12px;
   --r-full: 9999px;
   --radius: var(--r-lg);
 
-  /* barely-there layered elevation */
-  --shadow-1: 0 0.2px 1px rgba(0,0,0,.01), 0 0.8px 3px rgba(0,0,0,.02),
-              0 2px 8px rgba(0,0,0,.027), 0 4px 18px rgba(0,0,0,.04);
-  --shadow-2: 0 1px 2px rgba(0,0,0,.02), 0 3px 8px rgba(0,0,0,.03),
-              0 8px 20px rgba(0,0,0,.04), 0 16px 36px rgba(0,0,0,.045),
-              0 23px 52px rgba(0,0,0,.05);
+  /* elevation: only for things that float (tooltips, menus) */
+  --shadow-1: 0 0 0 1px rgba(26, 26, 26, .06);
+  --shadow-2: 0 8px 28px rgba(26, 26, 26, .16);
 }
 
 html[data-theme="dark"] {
-  --bg: #191919;
-  --bg-2: #202020;
-  --bg-3: #2a2a2a;
-  --line: #373737;
-  --text: rgba(255, 255, 255, .92);
-  --text-secondary: #cfcecb;
-  --text-dim: #9b9998;
-  --text-faint: #6f6d6b;
-  --primary: #4da3f5;
-  --primary-active: #77b9f7;
-  --on-primary: #ffffff;
+  --bg: #161615;
+  --bg-2: #1f1e1c;
+  --bg-3: #2a2925;
+  --line: #3a3833;
+  --text: #ece6d8;
+  --text-secondary: #d6d0c2;
+  --text-dim: #a6a090;
+  --text-faint: #767163;
+  --primary: #5aa9f5;
+  --primary-active: #82bef7;
+  --on-primary: #0f0f0f;
   --teal: #3fbfba;
   --orange: #f0904a;
   --pink: #ff7fd1;
   --green: #3ecb5e;
-  --tint-primary: rgba(77, 163, 245, .16);
+  --tint-primary: rgba(90, 169, 245, .16);
   --tint-teal: rgba(63, 191, 186, .16);
   --tint-green: rgba(62, 203, 94, .16);
   --tint-orange: rgba(240, 144, 74, .15);
   --tint-red: rgba(255, 127, 209, .16);
-  --tint-neutral: rgba(255, 255, 255, .06);
-  --shadow-1: 0 0 0 1px rgba(255,255,255,.04);
-  --shadow-2: 0 8px 30px rgba(0,0,0,.5);
+  --tint-neutral: rgba(236, 230, 216, .07);
+  --shadow-1: 0 0 0 1px rgba(255, 255, 255, .05);
+  --shadow-2: 0 8px 30px rgba(0, 0, 0, .5);
+  /* the black course field would vanish on a black page: lift it one step */
+  --field-llm: #2c2b28;
 }
+
+/* ==========================================================================
+   Machine frames, shared by the course reader and the home page.
+   ========================================================================== */
+.viz {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 18px 0 6px;
+  overflow: hidden;
+}
+.viz-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px; font-weight: 600;
+  color: var(--text-dim); letter-spacing: 1px;
+  background: var(--bg);
+}
+.viz-head::before { content: "●"; color: var(--green); font-size: 9px; }
+.viz-body { padding: 16px; position: relative; }
+.viz-body svg { display: block; width: 100%; height: auto; }
+.viz-body canvas { display: block; width: 100%; }
+.viz-controls {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 0 16px 14px;
+}
+.viz button, .quiz button {
+  font-family: var(--sans); font-size: 13px; font-weight: 500;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.viz button:hover, .quiz button:hover { box-shadow: var(--shadow-1); border-color: var(--text-faint); }
+/* tabs() and toggle() both set aria-pressed; without this the selected tab of
+   every machine in both courses looked identical to the unselected ones. */
+.viz button[aria-pressed="true"] {
+  border-color: var(--primary); color: var(--primary); background: var(--bg-3);
+}
+.viz button:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.viz input[type="text"], .viz input[type="number"] {
+  font-family: var(--mono); font-size: 13px;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-xs);
+  padding: 6px 10px; width: 110px;
+}
+.viz input[type="text"]:focus, .viz input[type="number"]:focus {
+  outline: none; border-color: var(--primary); box-shadow: var(--shadow-1);
+}
+.viz input[type="range"] { accent-color: var(--primary); }
+.viz .viz-note {
+  font-size: 13px; color: var(--text-dim);
+  padding: 0 16px 14px;
+  min-height: 18px;
+}
+.viz label { font-size: 12px; font-weight: 500; color: var(--text-dim); }
+
+/* Tooltip used by visualizations (hover/tap reveals) */
+#viz-tip {
+  position: fixed; z-index: 100;
+  max-width: 280px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-2);
+  border-radius: var(--r-md);
+  padding: 10px 13px;
+  font-size: 13.5px; line-height: 1.5;
+  pointer-events: none;
+  opacity: 0; transition: opacity .15s;
+}
+#viz-tip.show { opacity: 1; }
+#viz-tip b { color: var(--primary); display: block; margin-bottom: 3px; }
 
 /* ==========================================================================
    SVG re-ink. The old dark-theme hexes act as semantic IDs: every diagram —

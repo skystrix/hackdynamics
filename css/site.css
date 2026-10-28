@@ -1,0 +1,166 @@
+/* ==========================================================================
+   site.css — the public pages (home, catalogue, sign-in).
+   "Colour chapters": every section is a flat field of one course colour,
+   floor to ceiling, on one 12-column grid with one pair of margins.
+   Colours and faces come from tokens.css. The course reader uses style.css.
+   ========================================================================== */
+
+:root {
+  --m: clamp(16px, 2.2vw, 32px);           /* the one pair of outer margins */
+  --gap: clamp(16px, 2.2vw, 32px);
+  --s-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --s-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --s-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --s-head: clamp(2rem, 1.3rem + 2.8vw, 3.5rem);
+  --s-display: clamp(2.75rem, 8.4vw, 8.25rem);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --f: var(--bg); --fi: var(--text);       /* current field and its ink */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans); font-size: var(--s-body); line-height: 1.5;
+  overflow-x: hidden;
+}
+::selection { background: var(--field-rag); color: #1a1a1a; }
+img { display: block; max-width: 100%; height: auto; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+
+h1, h2, .display {
+  font-family: var(--display); font-weight: 700;
+  letter-spacing: -0.04em; line-height: 0.88;
+  text-wrap: balance;
+}
+h3 { font-size: var(--s-body); font-weight: 600; line-height: 1.3; }
+code { font-family: var(--mono); font-size: .9em; }
+
+/* ---------- Fields: one flat colour each, with its own ink ---------- */
+[data-field] { background: var(--f); color: var(--fi); }
+[data-field="db"]   { --f: var(--field-db);  --fi: var(--field-db-ink); }
+[data-field="rag"]  { --f: var(--field-rag); --fi: var(--field-rag-ink); }
+[data-field="llm"],
+[data-field="black"] { --f: var(--field-llm); --fi: var(--field-llm-ink); }
+[data-field="dsa"]  { --f: var(--field-dsa); --fi: var(--field-dsa-ink); }
+[data-field="bone"] { --f: var(--bg);        --fi: var(--text); }
+[data-field="surface"] { --f: var(--bg-3);   --fi: var(--text); }
+[data-field="accent"]  { --f: var(--accent); --fi: var(--accent-ink); }
+
+.field {
+  min-height: 90svh;
+  padding: clamp(96px, 11vw, 176px) var(--m);
+}
+
+/* ---------- Buttons: one shape (pill), flat, in the field's ink ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: .6em;
+  font: 600 var(--s-body)/1 var(--sans);
+  padding: .95em 1.6em;
+  border: 0; border-radius: 999px; cursor: pointer;
+  text-decoration: none;
+  background: var(--fi); color: var(--f);
+  transition: transform .2s var(--ease-out), opacity .2s;
+}
+.btn:hover { opacity: .86; }
+.btn:active { transform: scale(.96); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+
+.link {
+  color: inherit; font-weight: 600;
+  text-decoration: underline; text-decoration-thickness: 2px;
+  text-underline-offset: .22em;
+  transition: text-underline-offset .2s var(--ease-out);
+}
+.link:hover { text-underline-offset: .38em; }
+
+.theme-toggle {
+  font: 600 var(--s-small)/1 var(--sans);
+  height: 44px; padding: 0 12px; border-radius: 999px; border: 0; cursor: pointer;
+  background: transparent; color: inherit;
+  text-decoration: underline 2px transparent; text-underline-offset: .3em;
+  transition: text-decoration-color .2s, transform .2s var(--ease-out);
+}
+.theme-toggle:hover { text-decoration-color: currentColor; }
+.theme-toggle:active { transform: scale(.94); }
+
+.wordmark {
+  font-family: var(--display); font-weight: 700; letter-spacing: -0.03em;
+  font-size: var(--s-lead); line-height: 1; text-decoration: none; color: inherit;
+}
+
+/* ---------- The bar: wordmark, a few links, one action. Takes the
+   colours of the field beneath it (the page's signature move). ---------- */
+.bar {
+  position: fixed; inset: 0 0 auto 0; z-index: 30;
+  height: 60px; padding: 0 var(--m);
+  display: flex; align-items: center; gap: clamp(14px, 2vw, 28px);
+  background: var(--f); color: var(--fi);
+  transition: background-color .3s ease, color .3s ease, transform .45s var(--ease-out);
+}
+.bar.away { transform: translateY(-100%); }
+.bar .wordmark { margin-right: auto; }
+.bar a:not(.wordmark) { font-size: var(--s-small); font-weight: 600; text-decoration: none; }
+.bar a:not(.wordmark):hover { text-decoration: underline; text-underline-offset: .3em; }
+@media (max-width: 720px) { .bar .wide { display: none; } }
+
+/* ---------- Entrances: parts of a section arrive in reading order ---------- */
+html.js [data-rise] {
+  opacity: 0; transform: translateY(28px);
+  transition: opacity .8s var(--ease-out), transform .8s var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 80ms);
+}
+html.js [data-rise].in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  html.js [data-rise] { opacity: 1; transform: none; transition: none; }
+  .bar, .btn, .theme-toggle, .link { transition: none; }
+}
+
+/* ---------- Footer: a board of filled tiles ---------- */
+.board {
+  display: grid; grid-template-columns: repeat(12, 1fr);
+  gap: 8px; padding: 10px; background: var(--bg);
+}
+.tile {
+  padding: clamp(20px, 2vw, 28px); border-radius: 12px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 16px;
+  min-height: 220px;
+}
+.tile p { font-size: var(--s-body); }
+.tile .lead { font-size: var(--s-lead); line-height: 1.2; max-width: 22ch; }
+.tile .small { font-size: var(--s-small); }
+.tile ul { list-style: none; display: grid; gap: 6px; }
+.tile ul a { text-decoration: none; }
+.tile ul a:hover { text-decoration: underline; text-underline-offset: .25em; }
+.t-statement { grid-column: 1 / 5; }
+.t-nav { grid-column: 5 / 8; }
+.t-numbers { grid-column: 8 / 10; }
+.t-repo { grid-column: 10 / 13; }
+.t-name {
+  grid-column: 1 / 9; min-height: 320px;
+  align-items: center; justify-content: center;
+}
+.t-name .display { font-size: clamp(3rem, 9vw, 8.25rem); line-height: .9; }
+.t-go {
+  grid-column: 9 / 13; min-height: 320px; text-decoration: none;
+  transition: transform .3s var(--ease-out);
+}
+.t-go:hover { transform: translateY(-4px); }
+.t-go:active { transform: scale(.98); }
+.t-go svg { align-self: flex-end; width: 64px; height: 64px; transition: transform .3s var(--ease-out); }
+.t-go:hover svg { transform: translate(6px, -6px); }
+.numbers { display: grid; gap: 2px; font-size: var(--s-body); }
+.numbers b { font-family: var(--display); font-size: var(--s-lead); letter-spacing: -0.02em; }
+@media (max-width: 860px) {
+  .board { grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; }
+  .t-name { grid-column: 1 / -1; order: -2; min-height: 160px; }
+  .t-go { grid-column: 1 / -1; order: -1; min-height: 160px; }
+  .t-nav, .t-repo, .t-numbers, .t-statement { grid-column: auto; min-height: 0; }
+  .t-go svg { width: 44px; height: 44px; }
+}
+@media (max-width: 420px) {
+  .t-nav, .t-repo, .t-numbers, .t-statement { grid-column: 1 / -1; }
+}

@@ -17,7 +17,7 @@
     // Toggle buttons show the mode you'd switch TO.
     var btns = document.querySelectorAll(".theme-toggle");
     for (var i = 0; i < btns.length; i++) {
-      btns[i].textContent = theme === "light" ? "☾" : "☀";
+      btns[i].textContent = theme === "light" ? "Dark" : "Light";
       btns[i].setAttribute("aria-label",
         theme === "light" ? "Switch to dark mode" : "Switch to light mode");
     }

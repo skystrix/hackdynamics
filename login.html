@@ -5,127 +5,111 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sign in — HackDynamics</title>
 <meta name="description" content="Sign in or create your HackDynamics account.">
+<script>document.documentElement.classList.add("js");</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/site.css">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/auth.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg); color: var(--text);
-    font-family: var(--sans); line-height: 1.6;
-    min-height: 100vh; display: flex; flex-direction: column;
-  }
-  ::selection { background: rgba(0, 117, 222, .15); }
-  header {
-    position: relative; z-index: 1;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 20px 24px; max-width: 1020px; margin: 0 auto; width: 100%;
-  }
-  .brand {
-    font-weight: 700; font-size: 16px;
-    letter-spacing: -0.125px; color: var(--text); text-decoration: none;
-  }
-  .brand b { color: var(--primary); }
-  .theme-toggle {
-    background: var(--bg-2); border: 1px solid var(--line); color: var(--text-dim);
-    font-size: 15px; width: 36px; height: 36px; border-radius: var(--r-full); cursor: pointer;
-    transition: border-color .2s, box-shadow .2s;
-  }
-  .theme-toggle:hover { border-color: var(--text-faint); box-shadow: var(--shadow-1); }
+  body { min-height: 100svh; display: flex; flex-direction: column; }
   main {
-    position: relative; z-index: 1; flex: 1;
-    display: flex; align-items: center; justify-content: center; padding: 30px 20px 70px;
+    flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px; padding: 70px 10px 10px;
   }
-  .card {
-    width: 100%; max-width: 420px;
-    background: var(--bg-2); border: 1px solid var(--line);
-    border-radius: var(--r-xl); padding: 34px 32px;
-    box-shadow: var(--shadow-2);
+  .side {
+    border-radius: 12px; padding: clamp(28px, 4vw, 56px);
+    display: flex; flex-direction: column; justify-content: space-between; gap: 32px;
+    min-height: min(78svh, 720px);
   }
-  .kicker {
-    display: inline-block;
-    font-size: 11px; font-weight: 600; letter-spacing: 1px;
-    text-transform: uppercase; color: var(--primary);
-    border: 1px solid var(--line); border-radius: var(--r-full);
-    padding: 3px 10px; margin-bottom: 14px;
+  .side h1 { font-size: var(--s-display); max-width: 9ch; }
+  .side .sub { font-size: var(--s-lead); line-height: 1.3; max-width: 26ch; }
+  .formside {
+    display: flex; align-items: center;
+    padding: clamp(28px, 4vw, 56px);
   }
-  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.625px; margin-bottom: 6px; color: var(--text); }
-  h1 em { font-style: normal; color: var(--primary); }
-  .sub { color: var(--text-dim); font-size: 15px; margin-bottom: 26px; }
-  label { display: block; font-size: 13px; font-weight: 500; color: var(--text-dim); margin: 14px 0 6px; }
+  .card { width: 100%; }
+  .side figure img { width: 100%; max-width: 560px; border-radius: 12px; }
+  .side figcaption { font-size: var(--s-small); margin-top: 10px; }
+  label { display: block; font-size: var(--s-small); font-weight: 600; margin: 18px 0 8px; }
   input {
-    width: 100%; font-family: var(--sans); font-size: 15px;
+    width: 100%; font: 400 var(--s-body)/1.2 var(--sans);
     background: var(--bg-2); color: var(--text);
-    border: 1px solid var(--line); border-radius: var(--r-xs); padding: 10px 12px;
-    transition: border-color .2s, box-shadow .2s;
+    border: 2px solid var(--bg-2); border-radius: 12px; padding: 14px 16px;
+    transition: border-color .2s;
   }
-  input::placeholder { color: var(--text-faint); }
-  input:focus { outline: none; border-color: var(--primary); box-shadow: var(--shadow-1); }
-  .btn {
-    width: 100%; margin-top: 22px; padding: 12px;
-    border: none; border-radius: var(--r-full); cursor: pointer;
-    font-family: var(--sans); font-weight: 500; font-size: 15.5px; color: var(--on-primary);
-    background: var(--primary);
-    transition: background .15s, transform .15s;
-  }
-  .btn:hover { background: var(--primary-active); }
-  .btn:active { transform: scale(.98); }
-  .btn:disabled { opacity: .6; cursor: default; transform: none; }
-  .toggle { margin-top: 20px; text-align: center; font-size: 14px; color: var(--text-dim); }
-  .toggle a { color: var(--primary); text-decoration: none; cursor: pointer; font-weight: 500; }
-  .msg { margin-top: 18px; padding: 11px 14px; border-radius: var(--r-md); font-size: 13.5px; display: none; }
+  input::placeholder { color: var(--text-dim); }
+  input:focus { outline: none; border-color: var(--text); }
+  .card .btn { width: 100%; justify-content: center; margin-top: 26px; }
+  .btn:disabled { opacity: .55; cursor: default; transform: none; }
+  .toggle { margin-top: 20px; font-size: var(--s-small); }
+  .toggle a { font-weight: 600; text-decoration: underline 2px; text-underline-offset: .25em; cursor: pointer; }
+  .msg { margin-top: 18px; padding: 12px 14px; border-radius: 12px; font-size: var(--s-small); display: none; color: #1a1a1a; }
   .msg.show { display: block; }
-  .msg.err { background: var(--tint-red); border: 1px solid var(--pink); color: var(--text); }
-  .msg.ok { background: var(--tint-green); border: 1px solid var(--green); color: var(--text); }
-  .notice {
-    margin-top: 18px; padding: 12px 14px; border-radius: var(--r-md); font-size: 13px;
-    background: var(--tint-orange); border: 1px solid rgba(221, 91, 0, .3); color: var(--text-dim);
+  .msg.err { background: var(--field-db); }
+  .msg.ok { background: var(--field-dsa); }
+  .notice { margin-top: 18px; padding: 12px 14px; border-radius: 12px; font-size: var(--s-small); background: var(--bg-3); }
+  .notice code { font-family: var(--mono); font-size: 13px; }
+  @media (max-width: 860px) {
+    main { grid-template-columns: minmax(0, 1fr); padding-top: 66px; }
+    .side { min-height: 0; }
   }
-  .notice code { font-family: var(--mono); font-size: 12px; color: var(--orange); }
-  footer { position: relative; z-index: 1; text-align: center; padding: 20px; font-size: 12.5px; color: var(--text-dim); }
 </style>
 <script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
 </head>
 <body>
 
-<header>
-  <a class="brand" href="index.html">HACK<b>DYNAMICS</b></a>
-  <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
-</header>
+<nav class="bar" data-field="bone" aria-label="Site">
+  <a class="wordmark" href="index.html">HackDynamics</a>
+  <a href="courses.html">Courses</a>
+  <a href="https://github.com/skystrix/hackdynamics">GitHub</a>
+  <button class="theme-toggle" aria-label="Toggle color theme">Dark</button>
+</nav>
 
 <main>
-  <div class="card">
-    <div class="kicker" id="kicker">Members</div>
-    <h1 id="title">Welcome <em>back</em></h1>
-    <p class="sub" id="subtitle">Log in to continue to your course.</p>
-
-    <form id="auth-form" novalidate>
-      <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
-      <label for="password">Password</label>
-      <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" minlength="6" required>
-      <button class="btn" id="submit" type="submit">Log in</button>
-    </form>
-
-    <div class="toggle" id="forgot-row"><a id="forgot-link">Forgot your password?</a></div>
-
-    <div class="msg" id="msg"></div>
-
-    <div class="toggle" id="toggle">
-      New here? <a id="toggle-link">Create an account</a>
+  <section class="side" data-field="db">
+    <div>
+      <h1 id="title" data-rise>Welcome back</h1>
+      <p class="sub" id="subtitle" data-rise style="--i:1">Log in to carry your progress between devices. You never need an account to read.</p>
     </div>
+    <figure data-rise style="--i:2">
+      <img src="assets/shots/step-map.webp" width="1760" height="1520" alt="The journey map of RAG in Depth with the progress bar at the top.">
+      <figcaption>Each course's map remembers which chapters you have read.</figcaption>
+    </figure>
+  </section>
 
-    <div class="notice" id="notice" style="display:none">
-      Sign-in isn't configured yet. Add your Supabase keys in
-      <code>js/supabase-config.js</code> and run <code>SUPABASE_SETUP.md</code>.
+  <section class="formside">
+    <div class="card">
+      <form id="auth-form" novalidate data-rise style="--i:2">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required>
+        <button class="btn" id="submit" type="submit">Log in</button>
+      </form>
+
+      <div class="toggle" id="forgot-row"><a id="forgot-link">Forgot your password?</a></div>
+
+      <div class="msg" id="msg"></div>
+
+      <div class="toggle" id="toggle">
+        New here? <a id="toggle-link">Create an account</a>
+      </div>
+
+      <div class="notice" id="notice" style="display:none">
+        Sign-in isn't configured yet. Add your Supabase keys in
+        <code>js/supabase-config.js</code> and run <code>SUPABASE_SETUP.md</code>.
+      </div>
     </div>
-  </div>
+  </section>
 </main>
 
-<footer>Built with obsession, for people who ask how.</footer>
-
 <script>
+requestAnimationFrame(function () {
+  document.querySelectorAll("[data-rise]").forEach(function (el) { el.classList.add("in"); });
+});
 (function () {
   "use strict";
   var mode = "login"; // or "signup"
@@ -177,8 +161,7 @@
     clearMsg();
     // Reset mode: set a new password using the recovery token, no email field.
     if (mode === "reset") {
-      document.getElementById("kicker").textContent = "Reset";
-      document.getElementById("title").innerHTML = "Choose a new <em>password</em>";
+      document.getElementById("title").textContent = "New password";
       document.getElementById("subtitle").textContent = "Enter a new password for your account.";
       email.style.display = "none";
       email.previousElementSibling.style.display = "none"; // its <label>
@@ -193,11 +176,10 @@
     email.style.display = ""; email.previousElementSibling.style.display = "";
     document.getElementById("toggle").style.display = "";
     forgotRow.style.display = isSignup ? "none" : "";
-    document.getElementById("kicker").textContent = isSignup ? "Join" : "Members";
-    document.getElementById("title").innerHTML = isSignup ? "Create your <em>account</em>" : "Welcome <em>back</em>";
+    document.getElementById("title").textContent = isSignup ? "Create an account" : "Welcome back";
     document.getElementById("subtitle").textContent = isSignup
-      ? "A free account for HackDynamics."
-      : "Log in to continue to your course.";
+      ? "Free. It only saves your progress so you can pick up on another device."
+      : "Log in to carry your progress between devices. You never need an account to read.";
     submit.textContent = isSignup ? "Create account" : "Log in";
     pw.setAttribute("autocomplete", isSignup ? "new-password" : "current-password");
     document.getElementById("toggle").innerHTML = isSignup

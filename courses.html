@@ -4,155 +4,79 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Courses — HackDynamics</title>
-<meta name="description" content="Every HackDynamics course: Databases in Depth and RAG In Depth are live, with Operating Systems, Networking and Compilers in the works. Search and filter the full catalogue.">
+<meta name="description" content="Every HackDynamics course: Databases in Depth, RAG in Depth, LLM in Depth and DSA by Patterns are complete and free. Operating systems, networking and compilers are being written.">
+<script>document.documentElement.classList.add("js");</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/site.css">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/auth.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg); color: var(--text);
-    font-family: var(--sans); font-size: 16px; line-height: 1.6;
-    min-height: 100vh; display: flex; flex-direction: column;
+  .intro { padding: calc(60px + clamp(72px, 9vw, 144px)) var(--m) clamp(48px, 5vw, 80px); }
+  .intro-grid {
+    display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--gap); align-items: end;
   }
-  ::selection { background: rgba(0, 117, 222, .15); }
-  .wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; width: 100%; }
+  .intro h1 { grid-column: 1 / 8; font-size: var(--s-display); }
+  .intro .lead { grid-column: 8 / 13; font-size: var(--s-lead); line-height: 1.3; }
 
-  /* ---------- Header (matches the landing page) ---------- */
-  .topnav { background: var(--bg-2); border-bottom: 1px solid var(--line); }
-  .topnav .wrap {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-top: 14px; padding-bottom: 14px;
-  }
-  .brand {
-    font-weight: 700; font-size: 16px; letter-spacing: -0.125px;
-    color: var(--text); text-decoration: none;
-  }
-  .brand b { color: var(--primary); }
-  nav { display: flex; align-items: center; }
-  nav a {
-    font-size: 15px; font-weight: 500; color: var(--text-dim);
-    text-decoration: none; margin-left: 26px; transition: color .2s;
-  }
-  nav a:hover { color: var(--text); }
-  nav a#nav-auth {
-    border: 1px solid var(--line); border-radius: var(--r-md);
-    padding: 4px 14px; background: var(--bg-2); color: var(--text);
-  }
-  nav a#nav-auth:hover { box-shadow: var(--shadow-1); }
-  .theme-toggle {
-    background: var(--bg-2); border: 1px solid var(--line); color: var(--text-dim);
-    font-size: 15px; width: 36px; height: 36px; border-radius: var(--r-full);
-    cursor: pointer; margin-left: 26px; vertical-align: middle;
-    transition: border-color .2s, box-shadow .2s;
-  }
-  .theme-toggle:hover { border-color: var(--text-faint); box-shadow: var(--shadow-1); }
-
-  main { flex: 1; }
-
-  /* ---------- Page head ---------- */
-  .page-head { text-align: center; padding: 64px 0 32px; }
-  .eyebrow {
-    display: inline-block;
-    font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
-    color: var(--primary); background: var(--bg-2);
-    border: 1px solid var(--line); border-radius: var(--r-full);
-    padding: 4px 12px; margin-bottom: 20px;
-  }
-  .page-head h1 {
-    font-size: clamp(32px, 5.5vw, 44px); font-weight: 700;
-    letter-spacing: -1.4px; line-height: 1.06; color: var(--text);
-  }
-  .page-head p {
-    margin: 16px auto 0; max-width: 560px; font-size: 17px; color: var(--text-dim);
-  }
-
-  /* ---------- Search + filter ---------- */
   .controls {
-    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-    justify-content: space-between; margin: 0 0 8px;
+    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center;
+    margin-top: clamp(40px, 5vw, 72px);
   }
-  .search { position: relative; flex: 1 1 260px; }
+  .search { flex: 1 1 320px; }
   .search input {
-    width: 100%; font-family: var(--sans); font-size: 15px; color: var(--text);
-    background: var(--bg-2); border: 1px solid var(--line);
-    border-radius: var(--r-full); padding: 10px 16px 10px 38px;
-    transition: border-color .15s, box-shadow .15s;
+    width: 100%; font: 400 var(--s-body)/1.2 var(--sans); color: var(--text);
+    background: var(--bg-2); border: 2px solid var(--bg-2); border-radius: 999px;
+    padding: 14px 22px;
+    transition: border-color .2s;
   }
-  .search input:focus {
-    outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint-primary);
-  }
-  .search::before {
-    content: "⌕"; position: absolute; left: 15px; top: 50%; transform: translateY(-52%);
-    font-size: 18px; color: var(--text-faint); pointer-events: none;
-  }
+  .search input::placeholder { color: var(--text-dim); }
+  .search input:focus { outline: none; border-color: var(--text); }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip {
-    font-family: var(--sans); font-size: 13px; font-weight: 500;
-    color: var(--text-dim); background: var(--bg-2);
-    border: 1px solid var(--line); border-radius: var(--r-full);
-    padding: 8px 14px; cursor: pointer; transition: all .15s;
+    font: 600 var(--s-small)/1 var(--sans); color: var(--text);
+    background: var(--bg-3); border: 0; border-radius: 999px;
+    padding: 14px 18px; cursor: pointer;
+    transition: background-color .2s, color .2s, transform .2s var(--ease-out);
   }
-  .chip:hover { color: var(--text); border-color: var(--text-faint); }
-  .chip[aria-pressed="true"] {
-    color: var(--on-primary); background: var(--primary); border-color: var(--primary);
-  }
-  .count { font-size: 13px; color: var(--text-faint); margin: 14px 0 18px; }
+  .chip:hover { background: var(--bg-2); }
+  .chip:active { transform: scale(.95); }
+  .chip[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+  .count { font-size: var(--s-small); margin-top: 16px; }
 
-  /* ---------- Course cards ---------- */
-  .list { display: grid; gap: 18px; }
-  .card {
-    display: block; text-decoration: none; color: inherit;
-    background: var(--bg-2); border: 1px solid var(--line);
-    border-radius: var(--r-xl); padding: 26px 28px;
-    box-shadow: var(--shadow-1); transition: box-shadow .2s, border-color .2s, transform .2s;
+  /* One band per course, in the course's colour. */
+  .row {
+    display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--gap);
+    padding: clamp(40px, 5vw, 72px) var(--m);
+    text-decoration: none; align-items: start;
   }
-  a.card:hover {
-    border-color: var(--primary); box-shadow: var(--shadow-2); transform: translateY(-2px);
+  .row h2 { grid-column: 1 / 5; font-size: var(--s-head); line-height: .92; }
+  .row .desc { grid-column: 5 / 9; }
+  .row figure { grid-column: 9 / 13; }
+  .row figure img { width: 100%; border-radius: 12px; background: var(--bg-2); transition: transform .4s var(--ease-out); }
+  a.row:hover figure img { transform: scale(1.02); }
+  .row .desc p { font-size: var(--s-body); max-width: 52ch; }
+  .row .go { display: inline-block; margin-top: 18px; font-weight: 600; }
+  .row .meta {
+    list-style: none; display: flex; flex-wrap: wrap; gap: 4px 18px;
+    font-size: var(--s-small); margin-top: 18px;
   }
-  .card.soon { background: transparent; box-shadow: none; }
-  .card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-  .tag {
-    font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
-    border-radius: var(--r-full); padding: 3px 9px;
-    color: var(--green); background: var(--tint-green);
-  }
-  .tag.soon { color: var(--text-dim); background: var(--tint-neutral); }
-  .card h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.25px; }
-  .card p { font-size: 15px; color: var(--text-secondary); margin-bottom: 14px; }
-  .card.soon p { color: var(--text-dim); }
-  .stats { display: flex; flex-wrap: wrap; gap: 8px; }
-  .stat {
-    font-size: 12px; color: var(--text-dim); background: var(--bg-3);
-    border-radius: var(--r-full); padding: 4px 11px;
-  }
-  .go { font-size: 13px; font-weight: 600; color: var(--primary); margin-top: 16px; display: inline-block; }
+  .row .meta b { font-family: var(--display); font-size: var(--s-lead); letter-spacing: -0.02em; }
+  .row .go { display: inline-block; margin-top: 20px; text-decoration: underline 2px; text-underline-offset: .25em; transition: text-underline-offset .2s var(--ease-out); }
+  a.row:hover .go { text-underline-offset: .4em; }
+  a.row:hover h2 { text-decoration: underline; text-decoration-thickness: 4px; text-underline-offset: .12em; }
+  .row[hidden] { display: none; }
 
-  .empty {
-    text-align: center; padding: 48px 24px; color: var(--text-dim);
-    border: 1px dashed var(--line); border-radius: var(--r-xl);
-  }
-  .empty b { color: var(--text); }
+  .empty { padding: clamp(48px, 6vw, 96px) var(--m); font-size: var(--s-lead); }
+  .empty[hidden] { display: none; }
+  .under { padding: clamp(48px, 6vw, 96px) var(--m); font-size: var(--s-lead); max-width: 40ch; }
 
-  .under { text-align: center; font-size: 14px; color: var(--text-dim); margin-top: 36px; }
-  .under a { color: var(--primary); text-decoration: none; font-weight: 500; }
-
-  /* ---------- Footer ---------- */
-  footer { border-top: 1px solid var(--line); margin-top: 72px; padding: 34px 0 46px; }
-  footer .wrap {
-    display: flex; justify-content: space-between; align-items: baseline;
-    flex-wrap: wrap; gap: 12px;
-  }
-  footer .fbrand { font-size: 13px; font-weight: 700; letter-spacing: -0.125px; color: var(--text-secondary); }
-  footer .fbrand b { color: var(--primary); }
-  footer .fnote { font-size: 13px; color: var(--text-dim); }
-  footer .fnote em { font-style: italic; }
-
-  @media (max-width: 720px) {
-    .page-head { padding: 44px 0 26px; }
-    /* Stacked, the flex-basis would become a HEIGHT and stretch the search box
-       to 260px — the icon rides its centre, so it must go back to auto. */
+  @media (max-width: 860px) {
+    .intro h1, .intro .lead { grid-column: 1 / -1; }
+    .row { grid-template-columns: 1fr; gap: 16px; }
+    .row h2, .row .desc, .row figure { grid-column: 1; }
     .controls { flex-direction: column; align-items: stretch; }
     .search { flex: 0 0 auto; }
   }
@@ -161,201 +85,176 @@
 </head>
 <body>
 
-<header class="topnav">
-  <div class="wrap">
-    <a class="brand" href="index.html">HACK<b>DYNAMICS</b></a>
-    <nav>
-      <a href="courses.html">courses</a>
-      <a id="nav-auth" href="login.html">Log in</a>
-      <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
-    </nav>
-  </div>
-</header>
+<nav class="bar" id="bar" data-field="bone" aria-label="Site">
+  <a class="wordmark" href="index.html">HackDynamics</a>
+  <a href="courses.html" aria-current="page">Courses</a>
+  <a class="wide" href="index.html#open">Open source</a>
+  <a href="https://github.com/skystrix/hackdynamics">GitHub</a>
+  <button class="theme-toggle" aria-label="Toggle color theme">Dark</button>
+</nav>
 
 <main>
-  <div class="wrap">
-
-    <div class="page-head">
-      <span class="eyebrow">The catalogue</span>
-      <h1>Every course, in one place.</h1>
-      <p>Four are live and complete. Three are being built the same way — slowly,
-         and all the way down. Every one is free.</p>
+  <section class="intro" data-field="bone">
+    <div class="intro-grid">
+      <h1 data-rise>Every course</h1>
+      <p class="lead" data-rise style="--i:1">Four complete courses and three being written. All of them free and open source, with a machine and a quiz in every chapter.</p>
     </div>
 
     <div class="controls">
       <div class="search">
         <input id="q" type="search" aria-label="Search courses"
-               placeholder="Search — try “B-Tree”, “HNSW”, “Java”…"
+               placeholder="Search a topic: B-tree, HNSW, LoRA, Dijkstra"
                autocomplete="off" spellcheck="false">
       </div>
       <div class="chips" role="group" aria-label="Filter by availability">
         <button class="chip" data-filter="all" aria-pressed="true">All</button>
-        <button class="chip" data-filter="live" aria-pressed="false">Available now</button>
-        <button class="chip" data-filter="soon" aria-pressed="false">In the works</button>
+        <button class="chip" data-filter="live" aria-pressed="false">Ready to read</button>
+        <button class="chip" data-filter="soon" aria-pressed="false">Being written</button>
       </div>
     </div>
-
     <p class="count" id="count" aria-live="polite"></p>
+  </section>
 
-    <!-- Cards are plain HTML, not rendered from JS: the catalogue stays
-         readable to crawlers and to anyone with JS off. The script below only
-         hides and shows what is already here. data-tags carries the words
-         people search for that the visible copy doesn't happen to contain. -->
-    <div class="list" id="list">
+  <!-- Rows are plain HTML, not rendered from JS: the catalogue stays readable
+       to crawlers and with JS off. The script only hides and shows them.
+       data-tags carries search words the visible copy doesn't contain. -->
+  <div id="list">
 
-      <a class="card" href="databases-in-depth.html" data-status="live"
-         data-tags="sql postgres mysql storage engine b-tree lsm tree wal acid isolation mvcc index query planner sharding paxos raft consensus java capstone pocketdb distributed systems">
-        <div class="card-top">
-          <h2>Databases in Depth</h2>
-          <span class="tag">Available now</span>
-        </div>
-        <p>From bytes on a platter to planet-scale consensus. Storage engines, B-Trees and
-           LSM-Trees, transactions and recovery, replication, Paxos and Raft, and the
-           operator's world of scaling — then you build a real database from scratch in Java.</p>
-        <div class="stats">
-          <span class="stat">32 chapters</span>
-          <span class="stat">28 interactive machines</span>
-          <span class="stat">46 diagrams</span>
-          <span class="stat">160 quiz questions</span>
-        </div>
-        <span class="go">Open the course →</span>
-      </a>
-
-      <a class="card" href="rag-in-depth.html" data-status="live"
-         data-tags="retrieval augmented generation llm ai embeddings vector search chunking bm25 inverted index hnsw ivf product quantization hybrid rerank cross-encoder evaluation agentic graphrag python typescript pocketrag">
-        <div class="card-top">
-          <h2>RAG In Depth</h2>
-          <span class="tag">Available now</span>
-        </div>
-        <p>Everything between a question and a grounded answer. Chunking and embeddings,
-           BM25 and the inverted index, HNSW, IVF and product quantization, hybrid search,
-           reranking, agentic and graph retrieval — then how to measure whether any of it works.</p>
-        <div class="stats">
-          <span class="stat">36 chapters</span>
-          <span class="stat">262 diagrams</span>
-          <span class="stat">329 quiz questions</span>
-        </div>
-        <span class="go">Open the course →</span>
-      </a>
-
-      <a class="card" href="llm-in-depth.html" data-status="live"
-         data-tags="llm large language model transformer attention tokenizer bpe embeddings pretraining scaling laws chinchilla decoding sampling fine-tuning lora qlora dpo rlhf quantization kv cache vllm inference serving flash attention speculative decoding evaluation prompt injection pytorch python c capstone pocketlm">
-        <div class="card-top">
-          <h2>LLM In Depth</h2>
-          <span class="tag">Available now</span>
-        </div>
-        <p>What a language model actually is, one layer at a time. Tokenizers and the traps
-           in them, attention and the block, what pretraining costs, scaling laws, decoding
-           and tool use, fine-tuning, LoRA and DPO, quantization and the serving arithmetic,
-           evaluation and security — then you build PocketLM, a working model, in Python and C.</p>
-        <div class="stats">
-          <span class="stat">41 chapters</span>
-          <span class="stat">81 interactive machines</span>
-          <span class="stat">174 diagrams</span>
-          <span class="stat">462 quiz questions</span>
-        </div>
-        <span class="go">Open the course →</span>
-      </a>
-
-      <a class="card" href="dsa-by-patterns.html" data-status="live"
-         data-tags="dsa data structures algorithms leetcode interview patterns two pointers sliding window prefix sum binary search sorting hashing hash table heap priority queue trie union find segment tree fenwick graph bfs dfs dijkstra topological sort minimum spanning tree dynamic programming dp greedy backtracking big o complexity amortized np-hard python java">
-        <div class="card-top">
-          <h2>DSA By Patterns</h2>
-          <span class="tag">Available now</span>
-        </div>
-        <p>Data structures and algorithms as mechanisms, not recipes. Why two pointers touches
-           each element once, why a hash table goes quadratic on chosen inputs, why build-heap
-           is linear and knapsack is not polynomial — then a procedure for the problem that
-           matches no pattern. Every routine in Python and Java, tested against brute force.</p>
-        <div class="stats">
-          <span class="stat">49 chapters</span>
-          <span class="stat">88 interactive machines</span>
-          <span class="stat">111 diagrams</span>
-          <span class="stat">492 quiz questions</span>
-        </div>
-        <span class="go">Open the course →</span>
-      </a>
-
-      <div class="card soon" data-status="soon"
-           data-tags="os kernel processes threads scheduler virtual memory paging filesystem syscall linux concurrency">
-        <div class="card-top">
-          <h2>Operating Systems in Depth</h2>
-          <span class="tag soon">In the works</span>
-        </div>
-        <p>Processes, schedulers, virtual memory, filesystems, and the syscall boundary —
-           the machine your machine runs on.</p>
+    <a class="row" href="databases-in-depth.html" data-field="db" data-status="live"
+       data-tags="sql postgres mysql storage engine b-tree lsm tree wal acid isolation mvcc index query planner sharding paxos raft consensus java capstone pocketdb distributed systems">
+      <h2 data-rise>Databases in Depth</h2>
+      <div class="desc" data-rise style="--i:1">
+        <p>How a database stores rows, finds them fast and keeps them through a crash: pages, B-trees and LSM-trees, the write-ahead log, transactions, replication, Paxos and Raft. Then you write PocketDB in Java.</p>
+        <ul class="meta"><li><b>32</b> chapters</li><li><b>28</b> machines</li><li><b>165</b> questions</li></ul>
+        <span class="go">Read chapter 1</span>
       </div>
+      <figure data-rise style="--i:2"><img src="assets/shots/db-hashring.webp" width="1552" height="900" loading="lazy" alt="The consistent-hashing machine from Databases in Depth: three nodes on a ring, keys coloured by owner."></figure>
+    </a>
 
-      <div class="card soon" data-status="soon"
-           data-tags="networking tcp ip udp quic http3 dns tls routing bgp congestion control packets sockets">
-        <div class="card-top">
-          <h2>Networking in Depth</h2>
-          <span class="tag soon">In the works</span>
-        </div>
-        <p>From voltage on a wire to HTTP/3 — routing, congestion, TLS, and why the
-           internet works anyway.</p>
+    <a class="row" href="rag-in-depth.html" data-field="rag" data-status="live"
+       data-tags="retrieval augmented generation llm ai embeddings vector search chunking bm25 inverted index hnsw ivf product quantization hybrid rerank cross-encoder evaluation agentic graphrag python typescript pocketrag">
+      <h2 data-rise>RAG in Depth</h2>
+      <div class="desc" data-rise style="--i:1">
+        <p>Everything between a question and a grounded answer: chunking, embeddings, BM25, HNSW, IVF and product quantization, hybrid search, reranking, agents and graphs, and how to measure any of it. Then you build PocketRAG.</p>
+        <ul class="meta"><li><b>36</b> chapters</li><li><b>42</b> machines</li><li><b>402</b> questions</li></ul>
+        <span class="go">Read chapter 1</span>
       </div>
+      <figure data-rise style="--i:2"><img src="assets/shots/rag-hnsw.webp" width="1552" height="1046" loading="lazy" alt="The HNSW machine from RAG in Depth: three graph layers and a search reaching recall 0.900."></figure>
+    </a>
 
-      <div class="card soon" data-status="soon"
-           data-tags="compiler lexer parser ast type checker ir ssa optimizer codegen llvm interpreter vm">
-        <div class="card-top">
-          <h2>Compilers in Depth</h2>
-          <span class="tag soon">In the works</span>
-        </div>
-        <p>Lexers, parsers, type checkers, IRs, and optimizers — the road from source
-           text to machine code.</p>
+    <a class="row" href="llm-in-depth.html" data-field="llm" data-status="live"
+       data-tags="llm large language model transformer attention tokenizer bpe embeddings pretraining scaling laws chinchilla decoding sampling fine-tuning lora qlora dpo rlhf quantization kv cache vllm inference serving flash attention speculative decoding evaluation prompt injection pytorch python c capstone pocketlm">
+      <h2 data-rise>LLM in Depth</h2>
+      <div class="desc" data-rise style="--i:1">
+        <p>What a language model is, one layer at a time: tokenizers, attention and the block, pretraining and scaling laws, decoding and tool use, LoRA and DPO, quantization and serving, evaluation and security. Then you build PocketLM in Python and C.</p>
+        <ul class="meta"><li><b>41</b> chapters</li><li><b>81</b> machines</li><li><b>462</b> questions</li></ul>
+        <span class="go">Read chapter 1</span>
       </div>
+      <figure data-rise style="--i:2"><img src="assets/shots/llm-attention.webp" width="1552" height="1157" loading="lazy" alt="The attention machine from LLM in Depth: a causal weight matrix for 'the cat sat on the mat because it was warm'."></figure>
+    </a>
 
+    <a class="row" href="dsa-by-patterns.html" data-field="dsa" data-status="live"
+       data-tags="dsa data structures algorithms leetcode interview patterns two pointers sliding window prefix sum binary search sorting hashing hash table heap priority queue trie union find segment tree fenwick graph bfs dfs dijkstra topological sort minimum spanning tree dynamic programming dp greedy backtracking big o complexity amortized np-hard python java">
+      <h2 data-rise>DSA by Patterns</h2>
+      <div class="desc" data-rise style="--i:1">
+        <p>Data structures and algorithms as mechanisms, not recipes. Why two pointers touches each element once, why a hash table goes quadratic on chosen inputs, why knapsack is not polynomial. Every routine in Python and Java, tested against brute force.</p>
+        <ul class="meta"><li><b>49</b> chapters</li><li><b>88</b> machines</li><li><b>492</b> questions</li></ul>
+        <span class="go">Read chapter 1</span>
+      </div>
+      <figure data-rise style="--i:2"><img src="assets/shots/dsa-two-pointers.webp" width="1552" height="885" loading="lazy" alt="The two-pointers machine from DSA by Patterns: a sorted array with a pointer at each end."></figure>
+    </a>
+
+    <div class="row" data-field="surface" data-status="soon"
+         data-tags="os kernel processes threads scheduler virtual memory paging filesystem syscall linux concurrency">
+      <h2 data-rise>Operating Systems in Depth</h2>
+      <div class="desc" data-rise style="--i:1"><p>Processes, schedulers, virtual memory, file systems and the system-call boundary: the machine your programs run on.</p><ul class="meta"><li>Being written</li></ul></div>
     </div>
 
-    <p class="empty" id="empty" hidden>
-      Nothing matches that. <b>Try a topic</b> — “transactions”, “embeddings”, “TLS” —
-      or clear the search.
-    </p>
+    <div class="row" data-field="bone" data-status="soon"
+         data-tags="networking tcp ip udp quic http3 dns tls routing bgp congestion control packets sockets">
+      <h2 data-rise>Networking in Depth</h2>
+      <div class="desc" data-rise style="--i:1"><p>From a voltage on a wire to HTTP/3: routing, congestion control, TLS, and why the internet works anyway.</p><ul class="meta"><li>Being written</li></ul></div>
+    </div>
 
-    <p class="under" id="under">Every course is free.</p>
+    <div class="row" data-field="surface" data-status="soon"
+         data-tags="compiler lexer parser ast type checker ir ssa optimizer codegen llvm interpreter vm">
+      <h2 data-rise>Compilers in Depth</h2>
+      <div class="desc" data-rise style="--i:1"><p>Lexers, parsers, type checkers, intermediate forms and optimisers: the road from source text to machine code.</p><ul class="meta"><li>Being written</li></ul></div>
+    </div>
 
   </div>
+
+  <p class="empty" id="empty" data-field="bone" hidden>
+    Nothing matches that. Try a topic such as transactions, embeddings or TLS, or clear the search.
+  </p>
+
+  <p class="under" data-field="bone">Want a course that isn't here? <a class="link" href="https://github.com/skystrix/hackdynamics/issues">Open an issue on GitHub</a> and say what it should cover.</p>
 </main>
 
-<footer>
-  <div class="wrap">
-    <span class="fbrand">HACK<b>DYNAMICS</b></span>
-    <span class="fnote">Built with obsession, <em>for people who ask how.</em></span>
+<footer class="board" data-field="bone">
+  <div class="tile t-statement" data-field="surface">
+    <p class="lead">Computer science, explained down to the moving parts.</p>
+    <p class="small">Code: MIT. Course text: CC BY-SA 4.0. © HackDynamics contributors.</p>
   </div>
+  <div class="tile t-nav" data-field="surface">
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="databases-in-depth.html">Databases in Depth</a></li>
+      <li><a href="rag-in-depth.html">RAG in Depth</a></li>
+      <li><a href="llm-in-depth.html">LLM in Depth</a></li>
+      <li><a href="dsa-by-patterns.html">DSA by Patterns</a></li>
+      <li><a id="nav-auth" href="login.html">Log in</a></li>
+    </ul>
+  </div>
+  <div class="tile t-numbers" data-field="surface">
+    <div class="numbers">
+      <span><b>158</b> chapters</span>
+      <span><b>239</b> machines</span>
+      <span><b>1,521</b> questions</span>
+    </div>
+  </div>
+  <div class="tile t-repo" data-field="surface">
+    <p>Issues and pull requests welcome.</p>
+    <a class="link lead" href="https://github.com/skystrix/hackdynamics">Read the source on GitHub</a>
+  </div>
+  <div class="tile t-name" data-field="black">
+    <p class="display" aria-hidden="true">HackDynamics</p>
+  </div>
+  <a class="tile t-go" href="databases-in-depth.html" data-field="accent">
+    <p class="lead">Start with Databases in Depth</p>
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" aria-hidden="true"><path d="M14 50 50 14M22 14h28v28"/></svg>
+  </a>
 </footer>
 
 <script>
-/* Search + filter over the cards already in the DOM. No templating, no data
-   array to keep in sync with the markup — the markup IS the data. */
+/* Search + filter over the rows already in the DOM. The markup IS the data. */
 (function () {
   "use strict";
-  var cards = [].slice.call(document.querySelectorAll("#list .card"));
+  var rows = [].slice.call(document.querySelectorAll("#list .row"));
   var input = document.getElementById("q");
   var chips = [].slice.call(document.querySelectorAll(".chip"));
   var count = document.getElementById("count");
   var empty = document.getElementById("empty");
   var filter = "all";
 
-  // Match against the visible text AND data-tags, so "HNSW" finds RAG even
-  // when a synonym is what's printed on the card.
-  var haystack = cards.map(function (c) {
-    return (c.textContent + " " + (c.dataset.tags || "")).toLowerCase();
+  // Match the visible text AND data-tags, so "HNSW" finds RAG either way.
+  var haystack = rows.map(function (r) {
+    return (r.textContent + " " + (r.dataset.tags || "")).toLowerCase();
   });
 
   function apply() {
     var q = input.value.trim().toLowerCase();
     var shown = 0;
-    cards.forEach(function (card, i) {
-      var hit = (filter === "all" || card.dataset.status === filter) &&
+    rows.forEach(function (row, i) {
+      var hit = (filter === "all" || row.dataset.status === filter) &&
                 (!q || haystack[i].indexOf(q) !== -1);
-      card.hidden = !hit;
+      row.hidden = !hit;
       if (hit) shown++;
     });
     empty.hidden = shown > 0;
-    count.textContent = shown === cards.length
-      ? cards.length + " courses"
-      : shown + " of " + cards.length + " courses";
+    count.textContent = shown === rows.length
+      ? rows.length + " courses"
+      : shown + " of " + rows.length + " courses";
   }
 
   input.addEventListener("input", apply);
@@ -367,18 +266,29 @@
     });
   });
   apply();
+
+  var rise = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); rise.unobserve(e.target); } });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  document.querySelectorAll("[data-rise]").forEach(function (el) { rise.observe(el); });
+
+  /* The bar takes the colours of the band under it. */
+  var bar = document.getElementById("bar");
+  var under = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) bar.dataset.field = e.target.dataset.field || "bone"; });
+  }, { rootMargin: "-30px 0px -95% 0px" });
+  document.querySelectorAll("main [data-field], footer").forEach(function (f) { under.observe(f); });
 })();
 
-/* Nav mirrors sign-in state, same as the other pages. Cosmetic only. */
+/* Footer mirrors sign-in state. Cosmetic only. */
 (function () {
   "use strict";
   if (!window.HDAuth || !HDAuth.isConfigured()) return;
-  var navAuth = document.getElementById("nav-auth");
+  var a = document.getElementById("nav-auth");
   HDAuth.status().then(function (st) {
     if (!st.session) return;
-    navAuth.textContent = "Log out";
-    navAuth.href = "#";
-    navAuth.addEventListener("click", function (e) {
+    a.textContent = "Log out"; a.href = "#";
+    a.addEventListener("click", function (e) {
       e.preventDefault();
       HDAuth.signOut().then(function () { location.reload(); });
     });

@@ -3,706 +3,598 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HackDynamics — Computer science, down to the moving parts</title>
-<meta name="description" content="HackDynamics builds the best computer science courses on the internet: interactive, depth-first, free. Start with Databases in Depth.">
+<title>HackDynamics — free, open-source computer science courses</title>
+<meta name="description" content="Free, open-source courses on databases, RAG, language models and algorithms. Every chapter has a machine you can run and a quiz that checks you. No sign-up.">
+<meta property="og:title" content="HackDynamics — computer science you can drive">
+<meta property="og:description" content="Four free, open-source courses: 158 chapters, 239 interactive machines, 1,521 quiz questions.">
+<meta property="og:image" content="https://www.hackdynamics.com/assets/shots/llm-attention.webp">
+<script>document.documentElement.classList.add("js");</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/site.css">
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/auth.js"></script>
-<!--
-  HackDynamics landing page.
-  Notion-style system (DESIGN-notion.md): warm paper canvas, Inter type,
-  one structural blue, and a single deep-indigo "night" hero band.
-  Tokens live in css/tokens.css; page styles are inline. No build step.
--->
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html { scroll-behavior: smooth; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 16px;
-    line-height: 1.6;
-    overflow-x: hidden;
-  }
-
-  ::selection { background: rgba(0, 117, 222, .15); }
-
-  .wrap {
-    max-width: 1020px;
-    margin: 0 auto;
-    padding: 0 24px;
-  }
-
-  /* ---------- Header: slim white nav bar ---------- */
-  .topnav {
-    background: var(--bg-2);
-    border-bottom: 1px solid var(--line);
-  }
-  .topnav .wrap {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-top: 14px; padding-bottom: 14px;
-  }
-  .brand {
-    font-weight: 700;
-    font-size: 16px;
-    letter-spacing: -0.125px;
-    color: var(--text);
-    text-decoration: none;
-  }
-  .brand b { color: var(--primary); font-weight: 700; }
-  nav { display: flex; align-items: center; }
-  nav a {
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--text-dim);
-    text-decoration: none;
-    margin-left: 26px;
-    transition: color .2s;
-  }
-  nav a:hover { color: var(--text); }
-  nav a#nav-auth {
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    padding: 4px 14px;
-    background: var(--bg-2);
-    color: var(--text);
-  }
-  nav a#nav-auth:hover { box-shadow: var(--shadow-1); }
-
-  /* ---------- Hero: the one dark "night" band ---------- */
-  .hero-band {
-    position: relative;
-    background: var(--indigo);
-    overflow: hidden;
-  }
-  #sky {
-    position: absolute; inset: 0;
-    pointer-events: none;
-    opacity: .6;
-  }
+  /* ---------- Hero: the view (a live machine) beside a swatch column ---------- */
   .hero {
-    position: relative; z-index: 1;
-    padding: 108px 0 96px;
-    text-align: left;
-    max-width: 780px;
+    display: grid; grid-template-columns: minmax(0, 10fr) minmax(0, 2fr); gap: 10px;
+    padding: 10px; min-height: 100svh;
   }
-  .kicker {
-    display: inline-block;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--indigo);
-    background: #ffffff;
-    border-radius: var(--r-full);
-    padding: 5px 12px;
-    margin-bottom: 24px;
+  .panel {
+    position: relative; border-radius: 12px; min-width: 0;
+    background: var(--bg-3); color: var(--text);
+    display: flex; flex-direction: column;
+    padding: 22px 28px 36px;
+    min-height: calc(100svh - 20px);
   }
-  h1 {
-    font-size: clamp(40px, 7vw, 64px);
-    line-height: 1.0;
-    font-weight: 700;
-    letter-spacing: -2.125px;
-    color: #ffffff;
+  .topline { display: flex; align-items: center; gap: 20px; }
+  .topline .wordmark { margin-right: auto; }
+  .topline a:not(.wordmark) { font-size: var(--s-small); font-weight: 600; text-decoration: none; }
+  .topline a:not(.wordmark):hover { text-decoration: underline; text-underline-offset: .3em; }
+  .hero h1 {
+    font-size: clamp(3rem, 6.6vw, 7rem);
+    text-align: center; margin: clamp(24px, 5vh, 64px) auto 0;
   }
-  h1 em { font-style: normal; color: var(--sky); }
-  .hero p {
-    margin-top: 26px;
-    max-width: 560px;
-    font-size: 18px;
-    color: rgba(255, 255, 255, .72);
+  .machine {
+    flex: 1; display: flex; flex-direction: column; justify-content: center;
+    width: 100%; min-width: 0; max-width: 860px; margin: clamp(8px, 2vh, 24px) auto;
   }
-  .hero p strong { color: #ffffff; font-weight: 600; }
+  .machine .viz-mount { min-width: 0; }
+  .machine .viz-body svg { max-height: 38svh; width: auto; max-width: 100%; margin: 0 auto; }
+  /* The B-tree from Chapter 5, sitting straight on the panel. */
+  .machine.viz { background: transparent; border: 0; margin-top: 0; overflow: visible; }
+  .machine .viz-body { padding: 0; }
+  .machine .viz-controls { justify-content: center; padding: 6px 0 4px; }
+  .machine .viz-note { text-align: center; padding: 0; font-size: var(--s-small); color: var(--text); }
+  .machine .viz button { font-size: 14px; }
+  .machine .viz-controls button, .machine .viz-controls input { font-size: 14px; padding: 8px 14px; }
+  .foot .machine-cap { justify-self: end; text-align: right; font-size: var(--s-small); max-width: 30ch; }
+  .foot {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 24px;
+  }
+  .foot p { font-size: var(--s-body); max-width: 34ch; }
+  .foot .btn { justify-self: center; }
 
-  .hero-cta {
-    margin-top: 42px;
-    display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  .swatches {
+    display: grid; grid-template-rows: repeat(5, 1fr);
+    border-radius: 12px; overflow: hidden;
   }
-  .btn {
-    display: inline-flex; align-items: center; gap: 10px;
-    padding: 13px 30px;
-    border-radius: var(--r-full);
-    font-weight: 500;
-    font-size: 16px;
-    text-decoration: none;
-    color: #ffffff;
-    background: #0075de; /* hero band is theme-invariant, so the CTA is too */
-    transition: background .15s, transform .15s;
-  }
-  .btn:hover { background: #005bab; }
-  .btn:active { transform: scale(.97); }
-  .btn .arr { transition: transform .2s; }
-  .btn:hover .arr { transform: translateX(4px); }
-  .hero-note {
-    font-size: 13px;
-    color: rgba(255, 255, 255, .55);
-  }
-  .hero-note b { color: rgba(255, 255, 255, .85); font-weight: 500; }
-
-  /* ---------- Section headers ---------- */
-  section { padding: 70px 0; }
-  .sec-head {
-    display: flex; align-items: baseline; gap: 16px;
-    margin-bottom: 14px;
-  }
-  .sec-head .idx {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    color: var(--text-faint);
-  }
-  .sec-head h2 {
-    font-size: 32px;
-    font-weight: 700;
-    letter-spacing: -0.8px;
-    color: var(--text);
-  }
-  .sec-sub { color: var(--text-dim); max-width: 620px; margin-bottom: 42px; }
-  .sec-sub em { font-style: italic; }
-
-  /* ---------- Featured course card ---------- */
-  .course-featured {
-    position: relative;
-    display: grid;
-    grid-template-columns: 1.25fr 1fr;
-    gap: 0;
-    background: var(--bg-2);
-    border: 1px solid var(--line);
-    border-radius: var(--r-xl);
-    overflow: hidden;
-    text-decoration: none;
-    color: var(--text);
-    transition: box-shadow .25s, transform .25s;
-  }
-  .course-featured:hover {
-    box-shadow: var(--shadow-1);
-    transform: translateY(-3px);
-  }
-  .course-featured + .course-featured { margin-top: 22px; }
-  .cf-body { padding: 42px 44px 38px; }
-  .tag {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    padding: 4px 11px;
-    border-radius: var(--r-full);
-    border: 1px solid var(--line);
-    background: var(--bg-2);
-    color: var(--green);
-    margin-bottom: 20px;
-  }
-  .tag.soon { color: var(--text-faint); }
-  .cf-body h3 {
-    font-size: 32px;
-    font-weight: 700;
-    letter-spacing: -0.8px;
-    line-height: 1.15;
-    color: var(--text);
-    margin-bottom: 14px;
-  }
-  .cf-body .desc {
-    color: var(--text-dim);
-    font-size: 15px;
-    margin-bottom: 26px;
-  }
-  .cf-body .desc strong { color: var(--text); font-weight: 600; }
-  .stats {
-    display: flex; flex-wrap: wrap; gap: 10px;
-    margin-bottom: 30px;
-  }
-  .stat {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: .125px;
-    color: var(--primary);
-    border: 1px solid var(--line);
-    background: var(--bg-2);
-    border-radius: var(--r-full);
-    padding: 4px 12px;
-  }
-  .cf-go {
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    color: var(--primary);
-  }
-  .cf-go .arr { display: inline-block; transition: transform .2s; }
-  .course-featured:hover .cf-go .arr { transform: translateX(6px); }
-
-  /* Featured card's right pane: a living B-Tree motif on a paper well */
-  .cf-art {
-    position: relative;
-    border-left: 1px solid var(--line);
-    background: var(--bg);
-    display: flex; align-items: center; justify-content: center;
-    min-height: 300px;
-  }
-  .cf-art svg { width: 88%; height: auto; }
-  .cf-art .pulse { animation: pulse 3.2s ease-in-out infinite; }
-  .cf-art .pulse.d1 { animation-delay: .5s; }
-  .cf-art .pulse.d2 { animation-delay: 1s; }
-  @keyframes pulse {
-    0%, 100% { opacity: .45; }
-    50% { opacity: 1; }
-  }
-
-  /* ---------- Upcoming course cards ---------- */
-  .course-grid {
-    margin-top: 22px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 22px;
-  }
-  .all-courses { margin-top: 26px; text-align: center; }
-  .all-courses a {
-    font-size: 15px; font-weight: 500; color: var(--primary); text-decoration: none;
-  }
-  .all-courses a:hover { text-decoration: underline; }
-  .course-card {
-    background: var(--bg-2);
-    border: 1px solid var(--line);
-    border-radius: var(--r-lg);
-    padding: 28px 26px 24px;
-    position: relative;
-    overflow: hidden;
-    transition: box-shadow .25s, transform .25s;
-  }
-  .course-card:hover { box-shadow: var(--shadow-1); transform: translateY(-2px); }
-  /* sticker-palette dot: the decorative color note on each card */
-  .course-card::before {
-    content: "";
+  .swatches a {
+    padding: 20px; font-size: var(--s-body); font-weight: 600; text-decoration: none;
     display: block;
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    margin-bottom: 14px;
   }
-  .course-card:nth-of-type(1)::before { background: var(--purple); }
-  .course-card:nth-of-type(2)::before { background: var(--teal); }
-  .course-card:nth-of-type(3)::before { background: var(--pink); }
-  .course-card h4 {
-    font-size: 19px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 8px;
-    letter-spacing: -0.25px;
-  }
-  .course-card p {
-    font-size: 14px;
-    color: var(--text-dim);
-  }
-  .course-card .num {
-    position: absolute;
-    right: 18px; top: 12px;
-    font-size: 40px;
-    color: var(--line);
-    font-weight: 700;
-  }
+  .swatches a span { display: inline-block; transition: transform .3s var(--ease-out); }
+  .swatches a:hover span { transform: translateX(8px); }
 
-  /* ---------- Manifesto ---------- */
-  .creed {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 40px;
+  /* ---------- A course: one field, its name, its picture, its parts ---------- */
+  .course-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 24px; flex-wrap: wrap;
   }
-  .creed > div { border-top: 1px solid var(--line); padding-top: 22px; }
-  .creed h4 {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin-bottom: 12px;
+  .course-head h2 { font-size: var(--s-display); }
+  .course-head .meta { font-size: var(--s-body); font-weight: 600; }
+  .course-body {
+    display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--gap);
+    margin-top: clamp(40px, 5vw, 72px); align-items: start;
   }
-  .creed p { font-size: 15px; color: var(--text-dim); }
-  .creed p strong { color: var(--text); font-weight: 600; }
-
-  /* ---------- Footer ---------- */
-  footer {
-    border-top: 1px solid var(--line);
-    margin-top: 40px;
-    padding: 34px 0 46px;
-    display: flex; justify-content: space-between; align-items: baseline;
-    flex-wrap: wrap; gap: 12px;
-  }
-  footer .fbrand { font-size: 13px; font-weight: 700; letter-spacing: -0.125px; color: var(--text-secondary); }
-  footer .fbrand b { color: var(--primary); }
-  footer .fnote { font-size: 13px; color: var(--text-dim); }
-  footer .fnote em { font-style: italic; }
-
-  /* ---------- Scroll reveal ---------- */
-  .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
-  .reveal.in { opacity: 1; transform: none; }
-
-  /* ---------- Theme toggle ---------- */
-  .theme-toggle {
+  .shot { grid-column: 1 / 8; }
+  .course-text { grid-column: 8 / 13; display: grid; gap: 28px; align-content: start; }
+  .course:nth-of-type(odd) .shot { grid-column: 6 / 13; grid-row: 1; }
+  .course:nth-of-type(odd) .course-text { grid-column: 1 / 6; grid-row: 1; }
+  .shot img {
+    width: 100%; border-radius: 12px;
     background: var(--bg-2);
-    border: 1px solid var(--line);
-    color: var(--text-dim);
-    font-size: 15px;
-    width: 36px; height: 36px;
-    border-radius: var(--r-full);
-    cursor: pointer;
-    margin-left: 26px;
-    vertical-align: middle;
-    transition: border-color .2s, box-shadow .2s;
   }
-  .theme-toggle:hover { border-color: var(--text-faint); box-shadow: var(--shadow-1); }
+  .shot figcaption { font-size: var(--s-small); margin-top: 12px; max-width: 60ch; }
+  .course-text .lead { font-size: var(--s-lead); line-height: 1.3; }
+  .course-text .btn { justify-self: start; }
 
-  /* ---------- Responsive ---------- */
-  @media (max-width: 860px) {
-    .course-featured { grid-template-columns: 1fr; }
-    .cf-art { border-left: none; border-top: 1px solid var(--line); min-height: 220px; }
-    .course-grid { grid-template-columns: 1fr; }
-    .creed { grid-template-columns: 1fr; gap: 26px; }
-    .hero { padding: 76px 0 64px; }
+  .parts {
+    list-style: none; margin-top: clamp(56px, 6vw, 96px);
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 64px; row-gap: 36px;
+  }
+  .parts li { display: grid; grid-template-columns: 1fr auto; column-gap: 16px; row-gap: 6px; }
+  .parts h3 { font-size: var(--s-body); }
+  .parts .n { font-size: var(--s-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .parts p { grid-column: 1 / -1; font-size: var(--s-body); max-width: 46ch; }
+
+  /* One moving picture: each course picture drifts with the scroll. */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .shot img { animation: drift linear both; animation-timeline: view(); }
+      @keyframes drift { from { transform: translateY(40px) scale(1.03); } to { transform: translateY(-40px) scale(1); } }
+    }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    .reveal { transition: none; opacity: 1; transform: none; }
-    .cf-art .pulse { animation: none; }
+  /* ---------- How a chapter works: two fields, one slider ---------- */
+  .how {
+    position: relative; display: grid; grid-template-columns: 1fr 1fr;
+    min-height: 88svh; padding: 0;
+  }
+  .how-clause {
+    padding: clamp(96px, 11vw, 176px) var(--m) 180px;
+    display: flex; flex-direction: column; gap: 28px;
+  }
+  .how-clause h2 { font-size: var(--s-head); line-height: .95; max-width: 12ch; min-height: 2em; }
+  .how-clause p { font-size: var(--s-lead); line-height: 1.3; max-width: 26ch; }
+  .how-view {
+    display: grid; place-items: center;
+    padding: 96px var(--m) 180px;
+  }
+  .stage-imgs { display: grid; width: min(100%, 560px); }
+  .stage-imgs img {
+    grid-area: 1 / 1; width: 100%; border-radius: 12px; align-self: center;
+    transition: opacity .2s ease;
+  }
+  html.js .stage-imgs img:not(.on) { opacity: 0; }
+  .how-slider {
+    position: absolute; left: var(--m); right: calc(50% + var(--m)); bottom: 40px;
+  }
+  .track { position: relative; height: 32px; }
+  .track::before, .track .fill {
+    content: ""; position: absolute; left: 0; top: 12px; height: 8px;
+  }
+  .track::before { right: 0; background: currentColor; opacity: .18; }
+  .track .fill { width: var(--p, 0%); background: currentColor; transition: width .2s var(--ease-out); }
+  .how-slider input {
+    -webkit-appearance: none; appearance: none; position: absolute; inset: 0;
+    width: 100%; height: 32px; margin: 0; background: transparent; cursor: pointer;
+  }
+  .how-slider input::-webkit-slider-runnable-track { height: 32px; background: transparent; }
+  .how-slider input::-moz-range-track { height: 32px; background: transparent; }
+  .how-slider input::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 32px; height: 32px;
+    background: var(--accent); border: 0; border-radius: 0;
+    transition: transform .2s var(--ease-out);
+  }
+  .how-slider input::-moz-range-thumb { width: 32px; height: 32px; background: var(--accent); border: 0; border-radius: 0; }
+  .how-slider input:active::-webkit-slider-thumb { transform: scale(1.15); }
+  .how-slider input:focus-visible { outline: 3px solid currentColor; outline-offset: 4px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .stage-names {
+    list-style: none; display: grid; grid-template-columns: repeat(4, 1fr);
+    margin-top: 10px; font-size: var(--s-body); font-weight: 600;
+  }
+  .stage-names li { opacity: .55; transition: opacity .2s; }
+  .stage-names li:nth-child(2) { text-align: center; padding-right: 16%; }
+  .stage-names li:nth-child(3) { text-align: center; padding-left: 16%; }
+  .stage-names li:last-child { text-align: right; }
+  .stage-names li.on { opacity: 1; }
+  .stage-names button { all: unset; cursor: pointer; }
+
+  /* ---------- Open source: a statement in two columns ---------- */
+  .open h2 { font-size: var(--s-display); }
+  .statement {
+    margin-top: clamp(48px, 6vw, 88px);
+    columns: 2; column-gap: 32px;
+    font-size: clamp(1.25rem, 1.1rem + 0.7vw, 1.75rem); line-height: 1.22;
+    text-align: justify; hyphens: auto;
+  }
+  .statement mark {
+    color: #1a1a1a; padding: 0 .1em;
+    -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  }
+  .hl-y { background: var(--field-rag); }
+  .hl-r { background: var(--field-db); }
+  .hl-g { background: var(--field-dsa); }
+  .hl-b { background: var(--bg); }
+  .statement a mark { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: .2em; }
+  .statement a:hover mark { background: var(--bg); }
+
+  /* ---------- Being written: one poster line each ---------- */
+  .next h2 { font-size: var(--s-head); }
+  .poster { list-style: none; margin: clamp(40px, 5vw, 72px) 0; }
+  .poster li {
+    font-family: var(--display); font-weight: 700; letter-spacing: -0.04em;
+    font-size: var(--s-display); line-height: .92; text-transform: lowercase;
+  }
+  .next-text {
+    display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--gap);
+  }
+  .next-text p { grid-column: 1 / 7; font-size: var(--s-lead); line-height: 1.3; }
+  .next-text ul { grid-column: 8 / 13; list-style: none; display: grid; gap: 14px; font-size: var(--s-body); }
+  .next-text ul b { font-weight: 600; }
+
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px; }
+    .field { min-height: 0; }
+    .panel { min-height: 64svh; padding: 18px 16px 24px; }
+    .hero h1 { font-size: 10.4vw; }
+    .machine .viz-body { overflow-x: auto; }
+    .machine .viz-body svg { min-width: 560px; max-height: none; }
+    .foot { grid-template-columns: 1fr; justify-items: start; gap: 18px; }
+    .foot .btn { justify-self: start; }
+    .foot .machine-cap { justify-self: start; text-align: left; }
+    .swatches { grid-template-rows: none; }
+    .swatches a { padding: 14px 16px; }
+    .course-body { grid-template-columns: 1fr; }
+    .shot, .course-text,
+    .course:nth-of-type(odd) .shot, .course:nth-of-type(odd) .course-text { grid-column: 1; grid-row: auto; }
+    .parts { grid-template-columns: 1fr; }
+    .how { grid-template-columns: 1fr; }
+    .how-view { order: -1; min-height: 46svh; padding: 64px var(--m) 24px; }
+    .how-slider { position: static; order: 0; padding: 18px var(--m) 0; }
+    .track, .how-slider input, .how-slider input::-webkit-slider-runnable-track { height: 40px; }
+    .track::before, .track .fill { top: 16px; }
+    .how-slider input::-webkit-slider-thumb { width: 40px; height: 40px; }
+    .how-clause { padding: 24px var(--m) 96px; }
+    .how-clause h2 { font-size: var(--s-head); }
+    .stage-names { grid-template-columns: 1fr 1fr; gap: 6px; }
+    .stage-names li:nth-child(n) { text-align: left; padding: 0; }
+    .statement { columns: 1; text-align: left; hyphens: manual; font-size: 20px; line-height: 1.25; }
+    .next-text p, .next-text ul { grid-column: 1 / -1; }
   }
 </style>
 <script defer data-website-id="dfid_X1DU2Hz5qz3tMjdZrFWUW" data-domain="hackdynamics.com" src="https://datafa.st/js/script.js"></script>
 </head>
 <body>
 
-<header class="topnav">
-  <div class="wrap">
-    <a class="brand" href="#">HACK<b>DYNAMICS</b></a>
-    <nav>
-      <a href="courses.html">courses</a>
-      <a href="#creed">why</a>
-      <a id="nav-auth" href="login.html">Log in</a>
-      <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
-    </nav>
+<nav class="bar away" id="bar" aria-label="Site">
+  <a class="wordmark" href="#top">HackDynamics</a>
+  <a href="courses.html">Courses</a>
+  <a class="wide" href="#how">How it works</a>
+  <a class="wide" href="#open">Open source</a>
+  <a href="https://github.com/skystrix/hackdynamics">GitHub</a>
+  <button class="theme-toggle" aria-label="Toggle color theme">Dark</button>
+</nav>
+
+<header class="hero" id="top">
+  <div class="panel">
+    <div class="topline">
+      <a class="wordmark" href="index.html">HackDynamics</a>
+      <a href="courses.html">Courses</a>
+      <a href="https://github.com/skystrix/hackdynamics">GitHub</a>
+      <button class="theme-toggle" aria-label="Toggle color theme">Dark</button>
+    </div>
+
+    <h1>Computer science<br> you can drive</h1>
+
+    <div class="machine viz" data-ui data-viz="btree" aria-label="Interactive B-tree">
+      <div class="viz-mount"></div>
+    </div>
+
+    <div class="foot">
+      <p>Free, open-source courses on databases, RAG, language models and algorithms. Every chapter has a machine and a quiz.</p>
+      <a class="btn primary" href="#databases">Choose a course</a>
+      <p class="machine-cap">Live above: the B-tree from Chapter 5 of Databases in Depth.</p>
+    </div>
   </div>
+
+  <nav class="swatches" aria-label="Courses">
+    <a href="#databases" data-field="db"><span>Databases</span></a>
+    <a href="#rag" data-field="rag"><span>RAG</span></a>
+    <a href="#llm" data-field="llm"><span>LLMs</span></a>
+    <a href="#dsa" data-field="dsa"><span>Algorithms</span></a>
+    <a href="#open" data-field="black"><span>Open source</span></a>
+  </nav>
 </header>
 
-<div class="hero-band">
-  <canvas id="sky" aria-hidden="true"></canvas>
-  <div class="wrap">
-    <div class="hero">
-      <div class="kicker">The best CS courses on the internet</div>
-      <h1>Computer science,<br>down to <em>the moving parts.</em></h1>
-      <p>Most courses show you the controls. Ours hand you a screwdriver.
-         <strong>Interactive, depth-first courses</strong> that open the machine,
-         let you drive it, and quiz you until it sticks.</p>
-      <div class="hero-cta">
-        <a class="btn" id="hero-cta" href="databases-in-depth.html">Start the first course <span class="arr">→</span></a>
-        <span class="hero-note" id="hero-note"><b>email sign-in</b> · runs in your browser</span>
+<main>
+
+  <section class="field course" id="databases" data-field="db">
+    <div class="course-head">
+      <h2 data-rise>Databases in Depth</h2>
+      <p class="meta" data-rise style="--i:1">32 chapters · 28 machines · 165 questions</p>
+    </div>
+    <div class="course-body">
+      <figure class="shot" data-rise style="--i:2">
+        <img src="assets/shots/db-hashring.webp" width="1552" height="900" loading="lazy"
+             alt="The consistent-hashing machine: three nodes on a ring, 24 keys coloured by the node that owns them, eight keys each.">
+        <figcaption>Chapter 21's hash ring. Add a node and watch how few keys have to move.</figcaption>
+      </figure>
+      <div class="course-text">
+        <p class="lead" data-rise style="--i:3">How a database stores your rows, finds them fast and keeps them through a crash. Then how many machines agree on one answer. In the last part you write a real database in plain Java.</p>
+        <a class="btn" href="databases-in-depth.html" data-rise style="--i:4">Read chapter 1</a>
       </div>
+    </div>
+    <ul class="parts">
+      <li data-rise><h3>Foundations and storage engines</h3><span class="n">11 chapters</span>
+        <p>Data models, how bytes sit on disk, B-trees, LSM-trees and every other index, and how a write survives a crash halfway through.</p></li>
+      <li data-rise style="--i:1"><h3>Query engines and analytics</h3><span class="n">2 chapters</span>
+        <p>How a declarative query becomes a physical plan, and why analytical engines look nothing like transactional ones.</p></li>
+      <li data-rise><h3>Distributed systems</h3><span class="n">7 chapters</span>
+        <p>Unreliable networks, failure detection, replication, and the algorithms that let separate machines agree at all.</p></li>
+      <li data-rise style="--i:1"><h3>Databases in the real world</h3><span class="n">6 chapters</span>
+        <p>Scaling patterns, reliability and security, cloud-native designs, and a field guide to choosing a database.</p></li>
+      <li data-rise><h3>Build your own database</h3><span class="n">6 chapters</span>
+        <p>PocketDB in Java: a page cache, slotted pages, a B⁺-tree, a write-ahead log you can kill -9, MVCC, a SQL parser and a server.</p></li>
+    </ul>
+  </section>
+
+  <section class="field course" id="rag" data-field="rag">
+    <div class="course-head">
+      <h2 data-rise>RAG in Depth</h2>
+      <p class="meta" data-rise style="--i:1">36 chapters · 42 machines · 402 questions</p>
+    </div>
+    <div class="course-body">
+      <figure class="shot" data-rise style="--i:2">
+        <img src="assets/shots/rag-hnsw.webp" width="1552" height="1046" loading="lazy"
+             alt="The HNSW machine: three graph layers of 24, 115 and 400 nodes, a greedy search path, and recall@10 of 0.900 after 41 distance computations.">
+        <figcaption>Chapter 11's HNSW index. Run a search, read the recall, raise ef and run it again.</figcaption>
+      </figure>
+      <div class="course-text">
+        <p class="lead" data-rise style="--i:3">Everything between a question and a grounded answer: chunking, embeddings, BM25, HNSW, hybrid search, reranking, and how to tell whether any of it works. You finish by building PocketRAG in Python and TypeScript.</p>
+        <a class="btn" href="rag-in-depth.html" data-rise style="--i:4">Read chapter 1</a>
+      </div>
+    </div>
+    <ul class="parts">
+      <li data-rise><h3>The machine and why it exists</h3><span class="n">3 chapters</span>
+        <p>The six stages between a question and an answer, and when to retrieve, fine-tune or buy a bigger context window.</p></li>
+      <li data-rise style="--i:1"><h3>From documents to an index</h3><span class="n">10 chapters</span>
+        <p>The search engine: chunks, vectors and postings, and the graphs and codebooks that find neighbours in microseconds.</p></li>
+      <li data-rise><h3>From question to answer</h3><span class="n">11 chapters</span>
+        <p>Query rewriting, rank fusion, reranking, packing a context the model will read, citing or refusing, agents and graphs.</p></li>
+      <li data-rise style="--i:1"><h3>Making it real</h3><span class="n">7 chapters</span>
+        <p>Measuring retrieval and faithfulness, where the milliseconds and dollars go, and how a poisoned document takes over an agent.</p></li>
+      <li data-rise><h3>Build it: PocketRAG</h3><span class="n">5 chapters</span>
+        <p>Ingest, BM25, HNSW from scratch, hybrid retrieval with cited answers, an honest benchmark against pgvector, an agent loop.</p></li>
+    </ul>
+  </section>
+
+  <section class="field course" id="llm" data-field="llm">
+    <div class="course-head">
+      <h2 data-rise>LLM in Depth</h2>
+      <p class="meta" data-rise style="--i:1">41 chapters · 81 machines · 462 questions</p>
+    </div>
+    <div class="course-body">
+      <figure class="shot" data-rise style="--i:2">
+        <img src="assets/shots/llm-attention.webp" width="1552" height="1157" loading="lazy"
+             alt="The attention machine: the sentence 'the cat sat on the mat because it was warm', a causal weight matrix, and the softmax row for 'it' putting 0.319 on 'mat' and 0.267 on 'cat'.">
+        <figcaption>Chapter 5's attention head. Click a word to see what it attends to, then switch off the scaling.</figcaption>
+      </figure>
+      <div class="course-text">
+        <p class="lead" data-rise style="--i:3">What a language model is, one layer at a time: tokenizers, attention and the transformer block, pretraining, decoding, fine-tuning, quantization and serving. The last part builds PocketLM, a working model, in Python and C.</p>
+        <a class="btn" href="llm-in-depth.html" data-rise style="--i:4">Read chapter 1</a>
+      </div>
+    </div>
+    <ul class="parts">
+      <li data-rise><h3>What a language model is</h3><span class="n">4 chapters</span>
+        <p>A function that scores every next token, the tokenizer bugs nobody blames it for, and the geometry of embeddings.</p></li>
+      <li data-rise style="--i:1"><h3>Inside the block</h3><span class="n">7 chapters</span>
+        <p>Attention, heads, rotary positions, the residual stream, and the arithmetic that prices a model before you download it.</p></li>
+      <li data-rise><h3>Making a model</h3><span class="n">6 chapters</span>
+        <p>Corpus filtering and deduplication, the loss and the optimizer, scaling laws, and what the GPU decides.</p></li>
+      <li data-rise style="--i:1"><h3>Making it useful</h3><span class="n">8 chapters</span>
+        <p>Sampling, structured output, tool calls, fine-tuning, LoRA on one GPU, preference learning and thinking time.</p></li>
+      <li data-rise><h3>Fast, correct and safe</h3><span class="n">9 chapters</span>
+        <p>Prefill and decode, memory bandwidth, batching, quantization, evaluation, attacks, and what to watch at 3am.</p></li>
+      <li data-rise style="--i:1"><h3>Build it: PocketLM</h3><span class="n">7 chapters</span>
+        <p>A BPE tokenizer, a block from scratch, a pretraining run, open weights matched logit for logit, and an inference engine in C.</p></li>
+    </ul>
+  </section>
+
+  <section class="field course" id="dsa" data-field="dsa">
+    <div class="course-head">
+      <h2 data-rise>DSA by Patterns</h2>
+      <p class="meta" data-rise style="--i:1">49 chapters · 88 machines · 492 questions</p>
+    </div>
+    <div class="course-body">
+      <figure class="shot" data-rise style="--i:2">
+        <img src="assets/shots/dsa-two-pointers.webp" width="1552" height="885" loading="lazy"
+             alt="The two-pointers machine: a sorted array with left and right pointers, the regions each invariant has ruled out shaded.">
+        <figcaption>Chapter 8's two pointers. The shaded regions are what each invariant has already ruled out.</figcaption>
+      </figure>
+      <div class="course-text">
+        <p class="lead" data-rise style="--i:3">Data structures and algorithms as mechanisms, not recipes. Why two pointers touches each element once, why build-heap is linear, and what to do when a problem matches no pattern. Every routine in Python and Java.</p>
+        <a class="btn" href="dsa-by-patterns.html" data-rise style="--i:4">Read chapter 1</a>
+      </div>
+    </div>
+    <ul class="parts">
+      <li data-rise><h3>The machine and the measure</h3><span class="n">12 chapters</span>
+        <p>What a step is, why a scan is linear, and the patterns everyone else calls tricks, proved instead of memorised.</p></li>
+      <li data-rise style="--i:1"><h3>Order and lookup</h3><span class="n">5 chapters</span>
+        <p>Sorting and searching: the bound no comparison sort beats, and what your standard library does instead.</p></li>
+      <li data-rise><h3>The paradigms</h3><span class="n">6 chapters</span>
+        <p>Backtracking, dynamic programming and greedy: try and prune, remember, or commit and prove it was safe.</p></li>
+      <li data-rise style="--i:1"><h3>Hierarchies and ranges</h3><span class="n">8 chapters</span>
+        <p>From the first tree traversal to a segment tree that answers a range query over a million values in twenty steps.</p></li>
+      <li data-rise><h3>Graphs</h3><span class="n">8 chapters</span>
+        <p>One traversal, one relaxation step and one residual network. The hard part is seeing that it is a graph.</p></li>
+      <li data-rise style="--i:1"><h3>The edges and the engineer</h3><span class="n">10 chapters</span>
+        <p>Strings, numbers and geometry, where problems stop being solvable, and what to do in the interview room.</p></li>
+    </ul>
+  </section>
+
+  <section class="how" id="how" aria-labelledby="stage-title">
+    <div class="how-clause" data-field="bone">
+      <h2 id="stage-title" aria-live="polite">First, read the mechanism</h2>
+      <p id="stage-text">Each chapter explains one mechanism in plain prose, with real numbers and code that runs.</p>
+    </div>
+    <div class="how-view" data-field="db">
+      <div class="stage-imgs" data-ui>
+        <img class="on" src="assets/shots/step-read.webp" width="1672" height="1240" loading="lazy"
+             alt="The opening of Chapter 8 of DSA by Patterns, 'Two Pointers and Sliding Windows', with its first section and a Python code sample.">
+        <img src="assets/shots/step-machine.webp" width="1552" height="1137" loading="lazy"
+             alt="The next-token machine from Chapter 1 of LLM in Depth: an editable prompt and the probability of each candidate next token.">
+        <img src="assets/shots/step-quiz.webp" width="1556" height="860" loading="lazy"
+             alt="A quiz question on why HNSW uses layers, answered correctly, with the explanation shown underneath.">
+        <img src="assets/shots/step-map.webp" width="1760" height="1520" loading="lazy"
+             alt="The journey map of RAG in Depth, showing Part 1 and Chapter 1 with the progress bar at the top.">
+      </div>
+    </div>
+    <div class="how-slider">
+      <label for="stage" class="sr-only">How a chapter works, stage</label>
+      <div class="track" id="track"><span class="fill"></span>
+        <input id="stage" type="range" min="0" max="3" step="1" value="0"></div>
+      <ol class="stage-names">
+        <li class="on"><button type="button" data-stage="0">Read</button></li>
+        <li><button type="button" data-stage="1">Drive</button></li>
+        <li><button type="button" data-stage="2">Quiz</button></li>
+        <li><button type="button" data-stage="3">Return</button></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="field open" id="open" data-field="black">
+    <h2 data-rise>Free and open source</h2>
+    <p class="statement" data-rise style="--i:1">
+      HackDynamics is <mark class="hl-y">free and open source</mark>. The code is under the
+      <mark class="hl-g">MIT licence</mark> and the course text under
+      <mark class="hl-r">CC BY-SA 4.0</mark>, so you can read it, translate it, fork it or teach
+      from it. There is no paywall, no card and <mark class="hl-y">no sign-up</mark>; an account
+      only carries your progress between devices. The site is plain HTML, CSS and JavaScript with
+      no build step. Clone the repository, run <code>python3 -m http.server</code> and the whole
+      thing opens on your own machine. All 239 machines live in the js folder, and every chapter
+      is one JavaScript file you can edit. The most useful thing you can send us is
+      <mark class="hl-g">a correction</mark>: a wrong fact, a broken machine, a quiz with two right
+      answers.
+      <a href="https://github.com/skystrix/hackdynamics"><mark class="hl-b">Read the source on GitHub.</mark></a>
+    </p>
+  </section>
+
+  <section class="field next" id="next" data-field="rag">
+    <h2 data-rise>Being written now</h2>
+    <ul class="poster">
+      <li data-rise style="--i:1">Operating systems</li>
+      <li data-rise style="--i:2">Networking</li>
+      <li data-rise style="--i:3">Compilers</li>
+    </ul>
+    <div class="next-text">
+      <p data-rise>Each is written the way the first four were: one mechanism per chapter, a machine beside the text, a quiz at the end. Open an issue to say which one you want first.</p>
+      <ul data-rise style="--i:1">
+        <li><b>Operating systems:</b> processes, schedulers, virtual memory, file systems and the system-call boundary.</li>
+        <li><b>Networking:</b> from a voltage on a wire to HTTP/3, through routing, congestion control and TLS.</li>
+        <li><b>Compilers:</b> lexers, parsers, type checkers, intermediate forms and optimisers, down to machine code.</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="board" data-field="bone">
+  <div class="tile t-statement" data-field="surface">
+    <p class="lead">Computer science, explained down to the moving parts.</p>
+    <p class="small">Code: MIT. Course text: CC BY-SA 4.0. © HackDynamics contributors.</p>
+  </div>
+  <div class="tile t-nav" data-field="surface">
+    <ul>
+      <li><a href="courses.html">All courses</a></li>
+      <li><a href="databases-in-depth.html">Databases in Depth</a></li>
+      <li><a href="rag-in-depth.html">RAG in Depth</a></li>
+      <li><a href="llm-in-depth.html">LLM in Depth</a></li>
+      <li><a href="dsa-by-patterns.html">DSA by Patterns</a></li>
+      <li><a id="nav-auth" href="login.html">Log in</a></li>
+    </ul>
+  </div>
+  <div class="tile t-numbers" data-field="surface">
+    <div class="numbers">
+      <span><b>158</b> chapters</span>
+      <span><b>239</b> machines</span>
+      <span><b>1,521</b> questions</span>
     </div>
   </div>
-</div>
+  <div class="tile t-repo" data-field="surface">
+    <p>Issues and pull requests welcome.</p>
+    <a class="link lead" href="https://github.com/skystrix/hackdynamics">Read the source on GitHub</a>
+  </div>
+  <div class="tile t-name" data-field="black">
+    <p class="display" aria-hidden="true">HackDynamics</p>
+  </div>
+  <a class="tile t-go" href="courses.html" data-field="accent">
+    <p class="lead">See every course</p>
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" aria-hidden="true"><path d="M14 50 50 14M22 14h28v28"/></svg>
+  </a>
+</footer>
 
-<div class="wrap">
-
-  <section id="courses" class="reveal">
-    <div class="sec-head"><span class="idx">01</span><h2>The courses</h2></div>
-    <p class="sec-sub">One at a time, built with obsession. Each course is a complete journey —
-       <em>not a playlist of fragments.</em></p>
-
-    <a class="course-featured" href="databases-in-depth.html">
-      <div class="cf-body">
-        <span class="tag">AVAILABLE NOW</span>
-        <h3>Databases in Depth</h3>
-        <p class="desc">From bytes on a platter to planet-scale consensus. Storage engines,
-           B-Trees and LSM-Trees, transactions and recovery, replication, Paxos and Raft,
-           the operator's world of scaling and reliability — then you <strong>build a real
-           database from scratch in Java</strong> to make all of it permanent.
-           <strong>Junior-engineer to CTO depth,</strong> with living machinery you can drive.</p>
-        <div class="stats">
-          <span class="stat">32 chapters</span>
-          <span class="stat">28 interactive machines</span>
-          <span class="stat">46 diagrams</span>
-          <span class="stat">160 quiz questions</span>
-        </div>
-        <span class="cf-go">BEGIN THE DESCENT <span class="arr">→</span></span>
-      </div>
-      <div class="cf-art" aria-hidden="true">
-        <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
-          <line x1="150" y1="52" x2="82"  y2="108" stroke="#18243c" stroke-width="2"/>
-          <line x1="150" y1="52" x2="218" y2="108" stroke="#18243c" stroke-width="2"/>
-          <line x1="82"  y1="128" x2="48"  y2="178" stroke="#18243c" stroke-width="2"/>
-          <line x1="82"  y1="128" x2="116" y2="178" stroke="#18243c" stroke-width="2"/>
-          <line x1="218" y1="128" x2="184" y2="178" stroke="#18243c" stroke-width="2"/>
-          <line x1="218" y1="128" x2="252" y2="178" stroke="#18243c" stroke-width="2"/>
-          <rect x="112" y="34" width="76" height="30" rx="7" fill="#101a2e" stroke="#ffd166" stroke-width="2" class="pulse"/>
-          <rect x="46"  y="102" width="72" height="28" rx="7" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d1"/>
-          <rect x="182" y="102" width="72" height="28" rx="7" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d1"/>
-          <rect x="22"  y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
-          <rect x="90"  y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
-          <rect x="158" y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
-          <rect x="226" y="172" width="56" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse d2"/>
-        </svg>
-      </div>
-    </a>
-
-    <a class="course-featured" href="rag-in-depth.html">
-      <div class="cf-body">
-        <span class="tag">ALL 36 CHAPTERS LIVE</span>
-        <h3>RAG In Depth</h3>
-        <p class="desc">Everything between a question and a grounded answer. Chunking and
-           embeddings, the inverted index and BM25, <strong>HNSW, IVF and product
-           quantization</strong>, hybrid search and rank fusion, reranking, context
-           assembly, agentic and graph retrieval — then how to actually measure whether
-           any of it works. <strong>Built from the papers,</strong> not from blog posts.</p>
-        <div class="stats">
-          <span class="stat">36 chapters</span>
-          <span class="stat">262 diagrams</span>
-          <span class="stat">329 quiz questions</span>
-        </div>
-        <span class="cf-go">OPEN THE PIPELINE <span class="arr">→</span></span>
-      </div>
-      <div class="cf-art" aria-hidden="true">
-        <!-- the pipeline motif: question → retriever → chunks → answer -->
-        <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
-          <line x1="150" y1="52" x2="150" y2="80" stroke="#18243c" stroke-width="2"/>
-          <line x1="150" y1="110" x2="60"  y2="140" stroke="#18243c" stroke-width="2"/>
-          <line x1="150" y1="110" x2="150" y2="140" stroke="#18243c" stroke-width="2"/>
-          <line x1="150" y1="110" x2="240" y2="140" stroke="#18243c" stroke-width="2"/>
-          <line x1="60"  y1="166" x2="150" y2="188" stroke="#18243c" stroke-width="2"/>
-          <line x1="150" y1="166" x2="150" y2="188" stroke="#18243c" stroke-width="2"/>
-          <line x1="240" y1="166" x2="150" y2="188" stroke="#18243c" stroke-width="2"/>
-          <rect x="106" y="26" width="88" height="28" rx="7" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse"/>
-          <rect x="112" y="82" width="76" height="28" rx="7" fill="#101a2e" stroke="#ffd166" stroke-width="2" class="pulse d1"/>
-          <rect x="26"  y="140" width="68" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d2"/>
-          <rect x="116" y="140" width="68" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d2"/>
-          <rect x="206" y="140" width="68" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d2"/>
-          <rect x="106" y="186" width="88" height="26" rx="6" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse"/>
-        </svg>
-      </div>
-    </a>
-
-    <a class="course-featured" href="llm-in-depth.html">
-      <div class="cf-body">
-        <span class="tag">ALL 41 CHAPTERS LIVE</span>
-        <h3>LLM In Depth</h3>
-        <p class="desc">What a language model actually is, one layer at a time. Tokenizers
-           and the traps in them, <strong>attention and the block</strong>, what pretraining
-           costs, scaling laws, decoding and tool use, fine-tuning, LoRA and DPO,
-           quantization and the serving arithmetic, evaluation and security — then you
-           build <strong>PocketLM</strong>, a working model, in Python and C.</p>
-        <div class="stats">
-          <span class="stat">41 chapters</span>
-          <span class="stat">81 interactive machines</span>
-          <span class="stat">462 quiz questions</span>
-        </div>
-        <span class="cf-go">OPEN THE MACHINE <span class="arr">→</span></span>
-      </div>
-      <div class="cf-art" aria-hidden="true">
-        <!-- the motif: a token stream into a block, out as a distribution -->
-        <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
-          <line x1="150" y1="54" x2="150" y2="84" stroke="#18243c" stroke-width="2"/>
-          <line x1="150" y1="126" x2="150" y2="150" stroke="#18243c" stroke-width="2"/>
-          <rect x="20"  y="28" width="54" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse"/>
-          <rect x="82"  y="28" width="54" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d1"/>
-          <rect x="144" y="28" width="54" height="26" rx="6" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d2"/>
-          <rect x="206" y="28" width="54" height="26" rx="6" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse"/>
-          <rect x="76"  y="84" width="148" height="42" rx="8" fill="#101a2e" stroke="#ffd166" stroke-width="2" class="pulse d1"/>
-          <rect x="40"  y="180" width="22" height="26" rx="4" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse"/>
-          <rect x="72"  y="164" width="22" height="42" rx="4" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse d1"/>
-          <rect x="104" y="150" width="22" height="56" rx="4" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse d2"/>
-          <rect x="136" y="172" width="22" height="34" rx="4" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse"/>
-          <rect x="168" y="188" width="22" height="18" rx="4" fill="#101a2e" stroke="#18243c" stroke-width="2"/>
-          <rect x="200" y="194" width="22" height="12" rx="4" fill="#101a2e" stroke="#18243c" stroke-width="2"/>
-          <rect x="232" y="198" width="22" height="8"  rx="4" fill="#101a2e" stroke="#18243c" stroke-width="2"/>
-        </svg>
-      </div>
-    </a>
-
-    <a class="course-featured" href="dsa-by-patterns.html">
-      <div class="cf-body">
-        <span class="tag">NEW — ALL 49 CHAPTERS LIVE</span>
-        <h3>DSA By Patterns</h3>
-        <p class="desc">Data structures and algorithms as mechanisms, not recipes. Why two
-           pointers touches each element once, why a hash table goes quadratic on inputs an
-           adversary picked, why build-heap is linear and knapsack is not polynomial — then
-           <strong>a procedure for the problem that matches no pattern</strong>. Every
-           routine in <strong>Python and Java</strong>, tested against brute force.</p>
-        <div class="stats">
-          <span class="stat">49 chapters</span>
-          <span class="stat">88 interactive machines</span>
-          <span class="stat">111 diagrams</span>
-          <span class="stat">492 quiz questions</span>
-        </div>
-        <span class="cf-go">SEE WHY IT WORKS <span class="arr">→</span></span>
-      </div>
-      <div class="cf-art" aria-hidden="true">
-        <!-- the motif: a tree above a sorted array, two pointers closing in -->
-        <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
-          <line x1="150" y1="46" x2="96"  y2="84" stroke="#18243c" stroke-width="2"/>
-          <line x1="150" y1="46" x2="204" y2="84" stroke="#18243c" stroke-width="2"/>
-          <rect x="124" y="22" width="52" height="26" rx="7" fill="#101a2e" stroke="#ffd166" stroke-width="2" class="pulse"/>
-          <rect x="70"  y="82" width="52" height="26" rx="7" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d1"/>
-          <rect x="178" y="82" width="52" height="26" rx="7" fill="#101a2e" stroke="#4f7cff" stroke-width="2" class="pulse d1"/>
-          <rect x="22"  y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse"/>
-          <rect x="56"  y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#18243c" stroke-width="2"/>
-          <rect x="90"  y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#18243c" stroke-width="2"/>
-          <rect x="124" y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse d2"/>
-          <rect x="158" y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#3ddc97" stroke-width="2" class="pulse d2"/>
-          <rect x="192" y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#18243c" stroke-width="2"/>
-          <rect x="226" y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#18243c" stroke-width="2"/>
-          <rect x="260" y="136" width="30" height="30" rx="4" fill="#101a2e" stroke="#2de2ff" stroke-width="2" class="pulse"/>
-          <path d="M37 196 L29 208 L45 208 Z" fill="#2de2ff" class="pulse"/>
-          <path d="M275 196 L267 208 L283 208 Z" fill="#2de2ff" class="pulse"/>
-          <line x1="52" y1="202" x2="110" y2="202" stroke="#2de2ff" stroke-width="2" stroke-dasharray="4 5"/>
-          <line x1="260" y1="202" x2="202" y2="202" stroke="#2de2ff" stroke-width="2" stroke-dasharray="4 5"/>
-        </svg>
-      </div>
-    </a>
-
-    <div class="course-grid">
-      <div class="course-card reveal">
-        <span class="num">05</span>
-        <span class="tag soon">IN THE WORKS</span>
-        <h4>Operating Systems in Depth</h4>
-        <p>Processes, schedulers, virtual memory, filesystems, and the syscall boundary —
-           the machine your machine runs on.</p>
-      </div>
-      <div class="course-card reveal">
-        <span class="num">06</span>
-        <span class="tag soon">IN THE WORKS</span>
-        <h4>Networking in Depth</h4>
-        <p>From voltage on a wire to HTTP/3 — routing, congestion, TLS, and why the
-           internet works anyway.</p>
-      </div>
-      <div class="course-card reveal">
-        <span class="num">07</span>
-        <span class="tag soon">IN THE WORKS</span>
-        <h4>Compilers in Depth</h4>
-        <p>Lexers, parsers, type checkers, IRs, and optimizers — the road from source
-           text to machine code.</p>
-      </div>
-    </div>
-
-    <p class="all-courses"><a href="courses.html">See every course, search the catalogue →</a></p>
-  </section>
-
-  <section id="creed" class="reveal">
-    <div class="sec-head"><span class="idx">02</span><h2>How we teach</h2></div>
-    <p class="sec-sub">Three rules, no exceptions.</p>
-    <div class="creed">
-      <div>
-        <h4>Depth first</h4>
-        <p>No hand-waving. If a B-Tree splits, you'll watch it split.
-           <strong>Every claim traces down to the bytes</strong> — worked examples,
-           real numbers, the actual algorithms.</p>
-      </div>
-      <div>
-        <h4>Living machinery</h4>
-        <p>Diagrams you can read, simulations you can drive, quizzes that push back.
-           <strong>You don't watch these courses — you operate them.</strong></p>
-      </div>
-      <div>
-        <h4>Zero friction</h4>
-        <p>Every course is free — no card, no sign-up.
-           <strong>Open a page and start learning.</strong> Everything runs in your
-           browser, and your progress stays there.</p>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    <span class="fbrand">HACK<b>DYNAMICS</b></span>
-    <span class="fnote">Built with obsession, <em>for people who ask how.</em></span>
-  </footer>
-
-</div>
-
+<script src="js/viz.js"></script>
 <script>
 (function () {
   "use strict";
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* Scroll reveal */
-  var obs = new IntersectionObserver(function (entries) {
-    entries.forEach(function (en) {
-      if (en.isIntersecting) { en.target.classList.add("in"); obs.unobserve(en.target); }
-    });
-  }, { threshold: 0.12 });
-  document.querySelectorAll(".reveal").forEach(function (el) { obs.observe(el); });
+  /* Tooltip the machines call (the reader defines the same one in app.js). */
+  var tip = document.createElement("div");
+  tip.id = "viz-tip";
+  document.body.appendChild(tip);
+  window.vizTip = {
+    show: function (x, y, title, body) {
+      tip.innerHTML = "<b>" + title + "</b>" + body;
+      tip.classList.add("show");
+      var w = Math.min(280, innerWidth - 20);
+      tip.style.left = Math.min(x + 14, innerWidth - w - 10) + "px";
+      tip.style.top = Math.min(y + 14, innerHeight - 120) + "px";
+    },
+    hide: function () { tip.classList.remove("show"); }
+  };
 
-  /* Starfield constellation, confined to the indigo hero band. The band is
-     theme-invariant (the one dark "night" moment), so one palette suffices. */
-  var cv = document.getElementById("sky"), ctx = cv.getContext("2d");
-  var band = cv.parentElement;
-  var pts = [], N = 46, raf;
-  var PAL = { link: "#62aef0", linkA: .12, dot: "#ffffff", accent: "#d6b6f6", dotA: .55 };
-  function resize() { cv.width = band.clientWidth; cv.height = band.clientHeight; }
-  function spawn() {
-    return {
-      x: Math.random() * cv.width,
-      y: Math.random() * cv.height,
-      vx: (Math.random() - .5) * .16,
-      vy: (Math.random() - .5) * .16,
-      r: Math.random() * 1.3 + .4
-    };
+  /* The live thing: the real B-tree machine from the Databases course. */
+  var m = document.querySelector(".machine");
+  if (window.VIZ && VIZ.btree) {
+    VIZ.btree(m);
+    // Grow it to three levels so the first view shows splits already made.
+    var key = m.querySelector("input"), ins = m.querySelector(".viz-controls button");
+    [33, 51, 12, 77, 60, 3, 95, 29, 84, 46].forEach(function (k) { key.value = k; ins.click(); });
+    m.querySelector(".viz-note").textContent = "46 just went in. Type a key from 1 to 99 and press insert; when a node fills, it splits.";
   }
-  function tick() {
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    for (var i = 0; i < N; i++) {
-      var p = pts[i];
-      p.x += p.vx; p.y += p.vy;
-      if (p.x < -10) p.x = cv.width + 10; if (p.x > cv.width + 10) p.x = -10;
-      if (p.y < -10) p.y = cv.height + 10; if (p.y > cv.height + 10) p.y = -10;
-      // links to near neighbors
-      for (var j = i + 1; j < N; j++) {
-        var q = pts[j], dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
-        if (d2 < 16900) { // 130px
-          ctx.globalAlpha = (1 - d2 / 16900) * PAL.linkA;
-          ctx.strokeStyle = PAL.link;
-          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
-        }
-      }
-      ctx.globalAlpha = PAL.dotA;
-      ctx.fillStyle = i % 7 === 0 ? PAL.accent : PAL.dot;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832); ctx.fill();
+  var body = m.querySelector(".viz-body");
+  if (body && body.scrollWidth > body.clientWidth) body.scrollLeft = (body.scrollWidth - body.clientWidth) / 2;
+
+  /* Entrances: once, as each part reaches 90% down the screen. */
+  var rise = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); rise.unobserve(e.target); } });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  document.querySelectorAll("[data-rise]").forEach(function (el) { rise.observe(el); });
+
+  /* The bar takes the colours of the field under it. */
+  var bar = document.getElementById("bar");
+  var hero = document.getElementById("top");
+  new IntersectionObserver(function (es) {
+    bar.classList.toggle("away", es[0].isIntersecting);
+  }, { rootMargin: "-60px 0px 0px 0px" }).observe(hero);
+  // The split section counts as its left field (the clause).
+  var fields = [].slice.call(document.querySelectorAll("main > [data-field], .how-clause, footer"));
+  var ticking = false;
+  function paint() {
+    ticking = false;
+    for (var i = 0; i < fields.length; i++) {
+      var r = fields[i].getBoundingClientRect();
+      if (r.top <= 40 && r.bottom > 40) { bar.dataset.field = fields[i].dataset.field; return; }
     }
-    ctx.globalAlpha = 1;
-    raf = requestAnimationFrame(tick);
   }
-  resize();
-  for (var i = 0; i < N; i++) pts.push(spawn());
-  window.addEventListener("resize", resize);
-  document.addEventListener("visibilitychange", function () {
-    if (document.hidden) cancelAnimationFrame(raf); else tick();
+  addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(paint); } }, { passive: true });
+  paint();
+
+  /* How a chapter works: one slider drives both fields. */
+  var stages = [
+    ["First, read the mechanism", "Each chapter explains one mechanism in plain prose, with real numbers and code that runs."],
+    ["Then drive the machine", "Beside the text sits a machine you operate. Change the input, break it, watch what moves."],
+    ["Then answer the quiz", "Every chapter ends with questions, and each answer explains itself, right or wrong."],
+    ["Come back where you stopped", "Your progress is kept in your browser, so the map shows what you have read. No account needed."]
+  ];
+  var range = document.getElementById("stage");
+  var title = document.getElementById("stage-title");
+  var text = document.getElementById("stage-text");
+  var imgs = document.querySelectorAll(".stage-imgs img");
+  var names = document.querySelectorAll(".stage-names li");
+  function show(i) {
+    i = +i;
+    range.value = i;
+    document.getElementById("track").style.setProperty("--p", (i / 3 * 100) + "%");
+    title.textContent = stages[i][0];
+    text.textContent = stages[i][1];
+    imgs.forEach(function (im, k) { im.classList.toggle("on", k === i); });
+    names.forEach(function (n, k) { n.classList.toggle("on", k === i); });
+  }
+  range.addEventListener("input", function () { show(range.value); });
+  document.querySelectorAll("[data-stage]").forEach(function (b) {
+    b.addEventListener("click", function () { show(b.dataset.stage); });
   });
-  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) tick();
-})();
-</script>
+  show(0);
 
-<script>
-/* Reflect sign-in state in the nav and hero CTA. Purely cosmetic — the course
-   page's gate is what actually enforces access. */
-(function () {
-  "use strict";
-  if (!window.HDAuth || !HDAuth.isConfigured()) return; // leave defaults ("log in")
-  var navAuth = document.getElementById("nav-auth");
-  var cta = document.getElementById("hero-cta");
-  var note = document.getElementById("hero-note");
-
-  HDAuth.status().then(function (st) {
-    if (!st.session) return; // logged out: defaults are correct
-    var email = (st.profile && st.profile.email) ||
-      (st.session.user && st.session.user.email) || "your account";
-
-    navAuth.textContent = "Log out";
-    navAuth.href = "#";
-    navAuth.addEventListener("click", function (e) {
-      e.preventDefault();
-      HDAuth.signOut().then(function () { location.reload(); });
+  /* Footer mirrors sign-in state. Cosmetic only. */
+  if (window.HDAuth && HDAuth.isConfigured()) {
+    HDAuth.status().then(function (st) {
+      if (!st.session) return;
+      var a = document.getElementById("nav-auth");
+      a.textContent = "Log out"; a.href = "#";
+      a.addEventListener("click", function (e) {
+        e.preventDefault();
+        HDAuth.signOut().then(function () { location.reload(); });
+      });
     });
-
-    cta.href = (window.HD_CONFIG && HD_CONFIG.COURSES_URL) || "courses.html";
-    cta.innerHTML = 'Go to your courses <span class="arr">→</span>';
-    note.innerHTML = "signed in as <b>" + email.replace(/[&<>]/g, "") + "</b>";
-  });
+  }
 })();
 </script>
 </body>

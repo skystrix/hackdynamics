@@ -1,7 +1,7 @@
 /* ==========================================================================
-   Inside the Database Machine — Interactive Journey
-   Notion-style system (see DESIGN-notion.md): warm paper canvas, near-black
-   Inter type, one structural blue, hairlines + barely-there shadows.
+   The course reader, shared by every course page.
+   Bone paper, near-black Figtree text, League Spartan headings, one
+   structural blue for the machines.
    Tokens live in tokens.css (light default, data-theme="dark" override).
    No frameworks.
    ========================================================================== */
@@ -9,8 +9,8 @@
 /* Theme toggle button (in the top bar next to progress) */
 .theme-toggle {
   background: var(--bg-2); border: 1px solid var(--line);
-  color: var(--text-dim); font-size: 15px;
-  width: 36px; height: 36px; border-radius: var(--r-full);
+  color: var(--text-dim); font-family: var(--sans); font-size: 13px; font-weight: 600;
+  height: 36px; padding: 0 14px; border-radius: var(--r-full);
   cursor: pointer; transition: border-color .2s, box-shadow .2s;
   flex: none;
 }
@@ -29,7 +29,7 @@ body {
   overflow-x: hidden;
 }
 
-::selection { background: rgba(0, 117, 222, .15); }
+::selection { background: var(--field-rag); color: #1a1a1a; }
 
 /* ---------- Top bar ---------- */
 #topbar {
@@ -43,7 +43,7 @@ body {
 }
 
 #brand {
-  font-weight: 700; font-size: 15px;
+  font-family: var(--display); font-weight: 700; font-size: 17px;
   letter-spacing: -0.125px;
   color: var(--text);
   text-decoration: none;
@@ -160,10 +160,11 @@ body.sidebar-toggled #toc-backdrop { opacity: 1; pointer-events: auto; }
 /* ---------- Home / journey map ---------- */
 .hero { text-align: center; padding: 40px 0 30px; }
 .hero h1 {
-  font-size: clamp(34px, 6vw, 56px);
-  line-height: 1.04;
+  font-family: var(--display);
+  font-size: clamp(36px, 6vw, 60px);
+  line-height: 0.95;
   font-weight: 700;
-  letter-spacing: -1.875px;
+  letter-spacing: -0.03em;
   color: var(--text);
 }
 .hero p.sub {
@@ -243,8 +244,9 @@ body.sidebar-toggled #toc-backdrop { opacity: 1; pointer-events: auto; }
   text-transform: uppercase; color: var(--text-faint);
 }
 .ch-hero h1 {
-  font-size: clamp(30px, 5vw, 40px); font-weight: 700;
-  letter-spacing: -1px; color: var(--text); margin: 6px 0 14px; line-height: 1.1;
+  font-family: var(--display);
+  font-size: clamp(32px, 5vw, 46px); font-weight: 700;
+  letter-spacing: -0.03em; color: var(--text); margin: 6px 0 14px; line-height: 1;
 }
 .ch-hero .intro { color: var(--text-dim); font-size: 17px; }
 
@@ -261,7 +263,8 @@ section.block {
 section.block.revealed { opacity: 1; transform: none; }
 
 section.block h2 {
-  font-size: 24px; font-weight: 700; letter-spacing: -0.625px;
+  font-family: var(--display);
+  font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
   color: var(--text);
   margin-bottom: 14px;
   padding-bottom: 10px;
@@ -331,79 +334,7 @@ details.solution > summary {
 details.solution[open] { padding-bottom: 6px; }
 details.solution[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 
-/* ---------- Visualization frames ---------- */
-.viz {
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  margin: 18px 0 6px;
-  overflow: hidden;
-}
-.viz-head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  font-size: 11.5px; font-weight: 600;
-  color: var(--text-dim); letter-spacing: 1px;
-  background: var(--bg);
-}
-.viz-head::before { content: "●"; color: var(--green); font-size: 9px; }
-.viz-body { padding: 16px; position: relative; }
-.viz-body svg { display: block; width: 100%; height: auto; }
-.viz-body canvas { display: block; width: 100%; }
-.viz-controls {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-  padding: 0 16px 14px;
-}
-.viz button, .quiz button {
-  font-family: var(--sans); font-size: 13px; font-weight: 500;
-  background: var(--bg-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 6px 14px;
-  cursor: pointer;
-  transition: all .15s;
-}
-.viz button:hover, .quiz button:hover { box-shadow: var(--shadow-1); border-color: var(--text-faint); }
-/* tabs() and toggle() both set aria-pressed; without this the selected tab of
-   every machine in both courses looked identical to the unselected ones. */
-.viz button[aria-pressed="true"] {
-  border-color: var(--primary); color: var(--primary); background: var(--bg-3);
-}
-.viz button:disabled { opacity: .4; cursor: default; box-shadow: none; }
-.viz input[type="text"], .viz input[type="number"] {
-  font-family: var(--mono); font-size: 13px;
-  background: var(--bg-2); color: var(--text);
-  border: 1px solid var(--line); border-radius: var(--r-xs);
-  padding: 6px 10px; width: 110px;
-}
-.viz input[type="text"]:focus, .viz input[type="number"]:focus {
-  outline: none; border-color: var(--primary); box-shadow: var(--shadow-1);
-}
-.viz input[type="range"] { accent-color: var(--primary); }
-.viz .viz-note {
-  font-size: 13px; color: var(--text-dim);
-  padding: 0 16px 14px;
-  min-height: 18px;
-}
-.viz label { font-size: 12px; font-weight: 500; color: var(--text-dim); }
-
-/* Tooltip used by visualizations (hover/tap reveals) */
-#viz-tip {
-  position: fixed; z-index: 100;
-  max-width: 280px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-2);
-  border-radius: var(--r-md);
-  padding: 10px 13px;
-  font-size: 13.5px; line-height: 1.5;
-  pointer-events: none;
-  opacity: 0; transition: opacity .15s;
-}
-#viz-tip.show { opacity: 1; }
-#viz-tip b { color: var(--primary); display: block; margin-bottom: 3px; }
+/* Visualization frames and #viz-tip live in tokens.css (shared with the home page). */
 
 /* ---------- Key terms ---------- */
 .terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 10px; }
