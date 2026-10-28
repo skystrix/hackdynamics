@@ -1,83 +1,98 @@
-# Inside the Database Machine — An Interactive Journey
+# HackDynamics
 
-A completely static, client-side learning site on how databases work under the hood:
-storage engines, B-Trees, file formats, transactions and recovery, log-structured storage,
-failure detection, leader election, replication, anti-entropy, distributed transactions,
-and consensus. All explanatory text is original writing.
+Free, open-source computer science courses that go all the way down. Each course is
+long-form text with interactive "machines" you can drive, a quiz per chapter, and a
+build-it-yourself capstone. Live at **[hackdynamics.com](https://www.hackdynamics.com)**.
+
+No paywall, no card, no sign-up needed to read.
 
 ## The courses
 
-Four courses are live. Each is its own page; the shell (`js/app.js`, `js/gate.js`) is
-shared and keyed off `window.HD_COURSE` set by the page.
+| Course | Page | Chapters | Machines | Quiz questions |
+|---|---|---|---|---|
+| Databases in Depth | [`databases-in-depth.html`](databases-in-depth.html) | 32 | 28 | 165 |
+| RAG In Depth | [`rag-in-depth.html`](rag-in-depth.html) | 36 | 42 | 402 |
+| LLM In Depth | [`llm-in-depth.html`](llm-in-depth.html) | 41 | 81 | 462 |
+| DSA By Patterns | [`dsa-by-patterns.html`](dsa-by-patterns.html) | 49 | 88 | 492 |
 
-| Course | Page | Content | Machines |
-|---|---|---|---|
-| Databases in Depth | [`databases-in-depth.html`](databases-in-depth.html) | `?course=db` | `js/viz*.js` |
-| RAG In Depth | [`rag-in-depth.html`](rag-in-depth.html) | `?course=rag` | `js/viz-rag*.js` |
-| LLM In Depth | [`llm-in-depth.html`](llm-in-depth.html) | `?course=llm` | `js/viz-llm1.js` |
-| DSA By Patterns | [`dsa-by-patterns.html`](dsa-by-patterns.html) | `?course=dsa` | none yet (Phase 5) |
+## Run it locally
 
-Chapter text is no longer static: it is served by the `course-content` Edge Function
-(`supabase/functions/course-content/`), which returns full chapters to premium members
-and free chapters plus locked stubs to everyone else. Registering a new course means
-adding its data files to `tools/pack-content.mjs` and a page that sets `HD_COURSE.key` to
-match; deploy with `tools/deploy-content.sh`, which packs the data (gzip, ~2.6 MB instead of
-~7 MB) before uploading.
+No build step and no dependencies for the site itself:
 
-> The sections below describe the original databases course and predate that move; the
-> `js/bookData-*.js` paths in them now live under the Edge Function's `_data/`.
+```sh
+python3 -m http.server 8000
+```
 
-## Running it
+Then open http://localhost:8000. Course pages load their chapter text from the
+production `course-content` function (see below), so this shows the live content. Your
+progress is kept in your browser's `localStorage`.
 
-No build step, no server, no dependencies. Either:
+## How it fits together
 
-- **Open [`index.html`](index.html) directly** in any modern browser (`file://` works), or
-- serve the folder: `python3 -m http.server 8000` → http://localhost:8000
-
-Works fully offline. Progress (chapters visited, quiz scores) is stored in `localStorage` —
-no login, no backend.
-
-## What's inside
-
-| Path | Purpose |
+| Path | What it is |
 |---|---|
-| `index.html` | App shell: top bar, TOC sidebar, particle background, script loading |
-| `css/style.css` | Dark neon theme, responsive layout, animations |
-| `js/bookData-part1.js` | Storage-engine chapters: sections, key terms, quizzes |
-| `js/bookData-part2.js` | Distributed-systems chapters |
-| `js/bookData-additions1.js` | Data models, indexing beyond B-Trees, query processing, columnar analytics |
-| `js/bookData-additions2.js` | Part IV: scaling, operations & security, cloud-native, the great databases, choosing |
-| `js/bookData-additions3.js` | The classic CS curriculum: ER modeling & normalization theory, relational algebra & SQL |
-| `js/app.js` | Hash-routed SPA: journey map, chapter renderer, progress, scroll reveals, lazy viz mounting |
-| `js/viz.js` | Interactive visualizations (B-Tree splits, slotted pages, CLOCK cache, ARIES, LSM, Bloom filters…) |
-| `js/viz2.js` | Interactive visualizations (Two Generals, φ-accrual, bully election, quorums, gossip, Merkle, 2PC, Raft) |
-| `js/viz3.js` | Interactive visualizations (data models, inverted index, hash join, compression encodings, hash ring, DB picker) |
-| `js/viz4.js` | Interactive visualizations (normalization stepper, SQL logical pipeline, precedence graph) |
-| `js/quiz.js` | Quiz engine: multiple choice, fill-in-the-blank, tap-in-order; instant feedback + confetti |
+| `index.html`, `courses.html` | Home page and course catalogue |
+| `databases-in-depth.html` … `dsa-by-patterns.html` | One page per course. Each sets `window.HD_COURSE` and shares the same shell |
+| `js/app.js` | The course shell: journey map, chapter renderer, progress, lazy machine mounting |
+| `js/gate.js` | Fetches the course text, then boots `app.js` |
+| `js/quiz.js` | Quiz engine: multiple choice, fill-in-the-blank, tap-in-order |
+| `js/viz*.js` | The interactive machines, one set of files per course (`viz-rag-kit.js` holds shared helpers) |
+| `js/auth.js`, `login.html` | Optional email sign-in (Supabase) |
+| `supabase/functions/course-content/_data/` | **The chapter text, quizzes, terms and figures** (`bookData-*.js`) |
+| `supabase/functions/course-content/` | Edge Function that serves a course as JSON (`?course=db\|rag\|llm\|dsa`) |
+| `supabase/functions/razorpay-*` | Payment functions, not used right now (kept for a future donations page) |
+| `courses/<course>/` | Design documents per course: source map, charter, blueprint, QA report; DSA practice problems |
+| `resources/` | Runnable scripts behind the RAG course's measurements, and the PocketRAG capstone |
+| `tools/` | Authoring and deploy tools (below) |
 
-## The curriculum
+Chapter text is served by a function rather than as static files so that login-only
+chapters stay possible later. Today every chapter is public.
 
-Four parts, 25 chapters: **Foundations & Storage Engines** (data models, ER modeling &
-normalization theory, relational algebra & SQL, B-Trees, file formats, transactions &
-recovery — including serializability theory and locking, B-Tree variants, log-structured
-storage, indexing beyond B-Trees) · **Query Engines & Analytics** (query processing &
-optimization, columnar engines) · **Distributed Systems** (failure detection, leader
-election, replication & consistency, anti-entropy, distributed transactions, consensus) ·
-**Databases in the Real World** (scaling patterns, operations & security, modern hardware &
-cloud-native, a field guide to PostgreSQL / MySQL / SQLite / MongoDB / Cassandra / DynamoDB /
-Redis / RocksDB / Spanner / CockroachDB / ClickHouse / Snowflake / DuckDB, and how to choose).
+## Working on a chapter
 
-## The 27 interactive visualizations
+The chapter files are plain JavaScript that push to `CHAPTERS`. After editing one:
 
-DBMS architecture explorer · row vs column layout · B-Tree insert/split · slotted page
-(insert/delete/defragment) · binary search stepper · CLOCK page cache · WAL + ARIES recovery ·
-copy-on-write B-Tree · LSM memtable/flush/compaction · Bloom filter · Two Generals ·
-heartbeat/φ-accrual failure detector · bully leader election · tunable R/W quorums ·
-gossip dissemination · Merkle anti-entropy · two-phase commit (with failure injection) ·
-Raft election + log replication · data-model morphing · inverted index builder · hash join
-animation · compression encodings playground · consistent-hashing ring · workload-based
-database picker · normalization stepper (1NF→3NF) · SQL logical-pipeline stepper ·
-precedence-graph serializability tester.
+```sh
+# Counts, banned words, quiz-answer balance, broken refs for chapter N
+node tools/chapcheck.js supabase/functions/course-content/_data/bookData-part1.js 1
 
-All visualizations are hand-rolled SVG/canvas (no libraries), mounted lazily when scrolled
-into view and paused off-screen for performance.
+# Overlapping or out-of-bounds shapes in a chapter's SVG figures
+node tools/figcheck.js supabase/functions/course-content/_data/bookData-part1.js 1
+
+# Render every chapter in a file to one static HTML page (text and figures, no machines)
+node tools/render-chapter.js "$PWD/supabase/functions/course-content/_data/bookData-part1.js" /tmp/preview.html
+```
+
+To see edited chapters in the real course page, run Supabase locally (needs Docker):
+`supabase start`, `node tools/pack-content.mjs`, `supabase functions serve course-content`,
+then point `SUPABASE_URL` in `js/supabase-config.js` at the API URL `supabase start`
+printed. Don't commit that change.
+
+Other tools:
+
+- `tools/practice.py check courses/dsa-by-patterns/practice/ch08.py`: fuzzes each DSA
+  practice solution against a brute force, in Python and Java.
+- `tools/extract-code.js <bookData.js> <chapter>`: writes a chapter's code blocks to files
+  so you can run them.
+- `tools/chapter_asm.py`: helper for assembling a new chapter's `CHAPTERS.push({...})` block.
+- `tools/deploy-content.sh`: packs the course data and deploys `course-content`
+  (maintainers only).
+
+Writing a whole new course follows [`COURSE_CREATION_GUIDE.md`](COURSE_CREATION_GUIDE.md).
+
+## Self-hosting
+
+The site is static: any static host works (production runs on Vercel, see
+`vercel.json` and `.vercelignore`). Sign-in and course content need a Supabase project:
+[`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) has the table and policy SQL, and
+`js/supabase-config.js` holds the public project URL and anon key.
+
+## Contributing
+
+Fixes, corrections and new chapters are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## License
+
+- **Code** (site, machines, functions, tools, `resources/`): [MIT](LICENSE).
+- **Course content** (chapter text, quizzes, figures, course documents):
+  [CC BY-SA 4.0](LICENSE-CONTENT). Code samples inside chapters may also be used under MIT.

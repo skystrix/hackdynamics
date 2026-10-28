@@ -150,7 +150,7 @@ should print a number). If not: `brew install supabase/tap/supabase`.
 
 ### B1. Log in and link the project
 ```bash
-cd hackdynamics
+cd hackdynamics          # the repo root
 supabase login          # opens a browser to authorize the CLI
 supabase link --project-ref gfmeewpztjxhuemrymzi
 ```

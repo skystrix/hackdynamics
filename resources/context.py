@@ -22,6 +22,7 @@ your provider's token-counting endpoint.
 """
 
 import itertools
+import os
 import re
 import statistics
 
@@ -33,8 +34,8 @@ from hybrid import rrf_scores, order_of
 ENC = tiktoken.get_encoding("cl100k_base")
 n_tok = lambda s: len(ENC.encode(s))
 
-BOOK = ("resources/"
-        "RAG_In_Depth/essential-graphrag.pdf")
+BOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "RAG_In_Depth",
+                    "essential-graphrag.pdf")
 
 SYSTEM = (
     "You are Larkspur Airlines' support assistant. Answer only from the "
