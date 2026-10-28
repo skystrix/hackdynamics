@@ -10,7 +10,7 @@
 <script src="js/theme.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/auth.js"></script>
-<!-- Razorpay Standard Checkout — used by the upgrade wall in js/gate.js -->
+<!-- Razorpay Standard Checkout — not used right now; kept for the donations page (js/gate.js) -->
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <!--
   Which course this shell serves. gate.js asks the course-content function for
@@ -33,7 +33,7 @@ window.HD_COURSE = {
 </head>
 <body class="gated">
   <!-- Loading overlay: gate.js fetches the course, then reveals the page for
-       everyone. Free chapters render in full; locked ones show an upgrade CTA. -->
+       everyone. Every chapter is currently open to all. -->
   <div id="auth-gate"><div class="gate-card"><div class="gate-spinner"></div><p>Loading…</p></div></div>
 
   <!-- Top bar: brand, global progress, TOC toggle -->
@@ -60,8 +60,7 @@ window.HD_COURSE = {
 
   <!--
     Book content is NOT loaded here. It's served by the `course-content` Edge
-    Function (?course=dsa), which returns full chapters to premium members and
-    free chapters + locked stubs to everyone else.
+    Function (?course=dsa), which currently returns every chapter to everyone.
 
     Machines (Phase 5): js/viz-dsa1.js holds the six in the free chapters and
     the shared DSAKIT helpers, js/viz-dsa2.js and viz-dsa3.js the rest of

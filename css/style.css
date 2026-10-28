@@ -566,7 +566,7 @@ body.gated { overflow: hidden; }
 }
 @keyframes gate-spin { to { transform: rotate(360deg); } }
 
-/* Inline upgrade card shown inside a locked chapter (not the full-screen overlay). */
+/* Inline sign-in card shown inside a locked chapter (not the full-screen overlay). */
 .gate-inline { max-width: 560px; margin: 30px auto; }
 
 /* Locked-chapter markers on the journey map + TOC. */

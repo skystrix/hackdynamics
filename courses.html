@@ -166,7 +166,6 @@
     <a class="brand" href="index.html">HACK<b>DYNAMICS</b></a>
     <nav>
       <a href="courses.html">courses</a>
-      <a href="pricing.html">pricing</a>
       <a id="nav-auth" href="login.html">Log in</a>
       <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
     </nav>
@@ -180,7 +179,7 @@
       <span class="eyebrow">The catalogue</span>
       <h1>Every course, in one place.</h1>
       <p>Four are live and complete. Three are being built the same way — slowly,
-         and all the way down. One membership opens all of them.</p>
+         and all the way down. Every one is free.</p>
     </div>
 
     <div class="controls">
@@ -314,7 +313,7 @@
       or clear the search.
     </p>
 
-    <p class="under" id="under">One membership opens every course. <a href="pricing.html">See pricing</a></p>
+    <p class="under" id="under">Every course is free.</p>
 
   </div>
 </main>
@@ -383,10 +382,6 @@
       e.preventDefault();
       HDAuth.signOut().then(function () { location.reload(); });
     });
-    if (st.isPremium) {
-      document.getElementById("under").innerHTML =
-        "You're a premium member — every course below is unlocked.";
-    }
   });
 })();
 </script>

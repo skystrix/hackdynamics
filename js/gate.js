@@ -1,14 +1,10 @@
 /* ==========================================================================
-   gate.js — course loader + upgrade flow.
+   gate.js — course loader.
 
-   The course page is now open to everyone: we always fetch from the
-   course-content Edge Function (with the signed-in user's token when there is
-   one, without it otherwise) and reveal the page. What comes back is already
-   gated server-side — premium members get every chapter, everyone else gets
-   the free chapters in full plus locked stubs for the rest. So there is no
-   whole-page paywall here anymore; the lock lives on individual chapters, and
-   app.js calls HDGate.renderUpgrade() to draw the upgrade CTA inside a locked
-   chapter. (Real protection is the Edge Function — see its header.)
+   Fetches the course from the course-content Edge Function (with the
+   signed-in user's token when there is one) and reveals the page. Today every
+   caller gets every chapter. If login-only chapters come back, they arrive as
+   locked stubs and app.js calls HDGate.renderLogin() inside them.
    ========================================================================== */
 (function () {
   "use strict";
@@ -33,8 +29,7 @@
     accountChip(status);
   }
 
-  // Top-bar account chip: log-in link for guests, email + log-out otherwise,
-  // with a ✦ premium marker for members.
+  // Top-bar account chip: log-in link for guests, email + log-out otherwise.
   function accountChip(status) {
     var slot = document.getElementById("account");
     if (!slot) return;
@@ -45,7 +40,7 @@
     var email = (status.profile && status.profile.email) ||
       (status.session.user && status.session.user.email) || "";
     slot.innerHTML =
-      (status.isPremium ? '<span title="' + escapeHtml(email) + '">✦ premium</span>' : "") +
+      '<span>' + escapeHtml(email) + '</span>' +
       '<button id="account-logout">Log out</button>';
     var out = document.getElementById("account-logout");
     if (out) out.addEventListener("click", function () {
@@ -53,8 +48,8 @@
     });
   }
 
-  // Fetch the course text. Passes the token when signed in so premium members
-  // get the full payload; a guest request goes tokenless and gets the preview.
+  // Fetch the course text. Passes the token when signed in, so login-only
+  // chapters can be served later; today everyone gets every chapter.
   function loadCourse(session) {
     var headers = session ? { "Authorization": "Bearer " + session.access_token } : {};
     return fetch(cfg.SUPABASE_URL + "/functions/v1/course-content?course=" +
@@ -106,52 +101,24 @@
     if (r) r.addEventListener("click", function (e) { e.preventDefault(); location.reload(); });
   });
 
-  /* ---------- upgrade CTA for a locked chapter (called by app.js) ---------- */
-  // Renders into `container`. Guests are pointed to log in first (checkout needs
-  // an account); signed-in non-members get the two plan buttons + Razorpay.
-  function renderUpgrade(container) {
+  /* ---------- sign-in card for a locked chapter (called by app.js) ---------- */
+  // Nothing is locked while everything is public; this is for login-only
+  // chapters later, which course-content would send to signed-out callers.
+  function renderLogin(container) {
     if (!container) return;
-    var st = STATUS;
-    var plans = (cfg.PLANS) || {};
-    var monthly = plans.monthly || { label: "₹499 / month" };
-    var yearly = plans.yearly || { label: "₹2499 for 1 year" };
-
-    if (!st || !st.session) {
-      container.innerHTML =
-        '<div class="gate-card gate-inline">' +
-          '<span class="gate-tag">PREMIUM CHAPTER</span>' +
-          '<h1>This chapter is for members</h1>' +
-          '<p>Some chapters are free. Log in or create a free account to ' +
-          'unlock ' + UNLOCK_LINE + '.</p>' +
-          '<a class="gate-btn" href="' + loginHref("#/") + '">Log in to unlock</a>' +
-          '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a></div>' +
-        '</div>';
-      return;
-    }
-
-    var email = (st.profile && st.profile.email) || (st.session.user && st.session.user.email) || "";
     container.innerHTML =
       '<div class="gate-card gate-inline">' +
-        '<span class="gate-tag">PREMIUM CHAPTER</span>' +
-        '<h1>Unlock the full course</h1>' +
-        '<p>You\'re signed in as <strong>' + escapeHtml(email) + '</strong>. ' +
-        'Either plan unlocks every course on HackDynamics, including ' +
-        UNLOCK_LINE + '.</p>' +
-        '<button class="gate-btn" data-plan="monthly">Subscribe — ' + escapeHtml(monthly.label) + '</button>' +
-        '<button class="gate-btn gate-btn-alt" data-plan="yearly">Best value — ' + escapeHtml(yearly.label) + '</button>' +
-        '<p class="gate-fine" id="gate-pay-msg"></p>' +
-        '<div class="gate-links"><a href="' + (cfg.PRICING_URL || "pricing.html") + '">Compare plans</a></div>' +
+        '<span class="gate-tag">SIGN-IN CHAPTER</span>' +
+        '<h1>Sign in to read this chapter</h1>' +
+        '<p>Create a free account or log in to read ' + UNLOCK_LINE + '.</p>' +
+        '<a class="gate-btn" href="' + loginHref("#/") + '">Log in</a>' +
       '</div>';
-    container.querySelectorAll("[data-plan]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        startCheckout(st, container, b, b.getAttribute("data-plan"));
-      });
-    });
   }
 
-  window.HDGate = { renderUpgrade: renderUpgrade, status: function () { return STATUS; } };
+  window.HDGate = { renderLogin: renderLogin, status: function () { return STATUS; } };
 
   /* ---------- Razorpay Standard Checkout ----------------------------------
+     Not wired to any button right now: kept for the donations page.
      The browser names the PLAN, never the price or the payer: create-order
      derives both from the caller's Supabase token server-side. It returns
      either an order (one-time) or a subscription (monthly); we open the modal

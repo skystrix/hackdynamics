@@ -158,7 +158,7 @@
                 (ch.optional ? '<span class="badge optional">optional · advanced</span>' : "") +
                 (vizCount ? '<span class="badge viz">⚡ ' + vizCount + " interactive</span>" : "") +
                 '<span class="badge">' + quizCount + " quiz questions</span>" +
-                (ch.locked ? '<span class="badge locked">🔒 premium</span>' : "") +
+                (ch.locked ? '<span class="badge locked">🔒 sign in</span>' : "") +
                 (quizDone ? '<span class="badge quiz-done">✓ quiz ' + progress.quiz[ch.num] + "/" + quizCount + "</span>" : "") +
                 "</div></a>";
       });
@@ -172,8 +172,8 @@
     if (!ch) { location.hash = "#/"; return; }
     var part = PARTS.find(function (p) { return p.num === ch.part; });
 
-    // Locked chapter: only its metadata was served. Show the hero + an upgrade
-    // panel (drawn by gate.js) in place of the body/quiz, plus prev/next nav.
+    // Locked chapter: only its metadata was served. Show the hero + a sign-in
+    // sign-in card (drawn by gate.js) in place of the body/quiz, plus prev/next nav.
     if (ch.locked) {
       var lhtml =
         '<div class="ch-hero">' +
@@ -182,7 +182,7 @@
         '<p class="intro">' + ch.blurb + "</p>" +
         (ch.optional ? '<p class="optional-note">Optional, advanced reading. Interviews rarely go this deep, so skip it on a first pass and come back when you want the depth.</p>' : "") +
         "</div>" +
-        '<div id="chapter-upgrade"></div>';
+        '<div id="chapter-login"></div>';
       var lprev = CHAPTERS.find(function (c) { return c.num === num - 1; });
       var lnext = CHAPTERS.find(function (c) { return c.num === num + 1; });
       lhtml += '<div class="ch-nav">' +
@@ -190,7 +190,7 @@
         (lnext ? '<a class="next" href="#/ch/' + lnext.num + '"><span class="dir">NEXT →</span><span class="t">' + lnext.title + "</span></a>" : "<span></span>") +
         "</div>";
       app.innerHTML = lhtml;
-      if (window.HDGate) HDGate.renderUpgrade($("#chapter-upgrade"));
+      if (window.HDGate) HDGate.renderLogin($("#chapter-login"));
       return;
     }
 
@@ -281,9 +281,8 @@
     hide: function () { tip.classList.remove("show"); }
   };
 
-  // Course content is paid material, fetched by gate.js from the course-content
-  // Edge Function only after premium is verified. It hands us PARTS + CHAPTERS
-  // and calls this to render.
+  // Course content is fetched by gate.js from the course-content Edge
+  // Function. It hands us PARTS + CHAPTERS and calls this to render.
   window.HDApp = {
     boot: function () {
       CHAPTERS.sort(function (a, b) { return a.num - b.num; });

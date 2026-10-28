@@ -15,13 +15,14 @@ Hack Dynamics (https://www.hackdynamics.com) teaches computer science from the i
 long, depth-first, text courses with interactive "machines" you can drive, a quiz per
 chapter, and a build-it-yourself capstone. Three courses are live and complete:
 
-| Key | Course | Size | Free chapters (no payment) | Capstone |
+| Key | Course | Size | Best first chapters | Capstone |
 |---|---|---|---|---|
 | `llm` | LLM In Depth | 41 chapters, 81 machines, 462 quiz questions | 1, 2, 5 | PocketLM, a working model in Python and C |
 | `rag` | RAG In Depth | 36 chapters, 262 diagrams, 329 quiz questions | 1, 2, 3, 4 | PocketRAG: ingest, BM25, HNSW, rerank, eval |
 | `db` | Databases in Depth | 32 chapters, 28 machines, 160 quiz questions | 1, 2, 3, 4, 5 | PocketDB: pager, B⁺-tree, WAL, MVCC, SQL in Java |
 
-One membership opens everything: ₹499/month or ₹2,499/year. Operating Systems,
+Everything is free and open source: every chapter, machine and quiz, no payment and no
+sign-up. Never mention a price. Operating Systems,
 Networking and Compilers are "in the works" (never promise dates).
 
 The audience, in priority order:
@@ -97,7 +98,7 @@ stand behind. This is also what makes them read as human: specific, true, and ow
    one sentence from a chapter. Never paste a section, a machine, or a full quiz set.
 6. **No manipulation.** No fake urgency ("only today"), no fake scarcity, no "comment YES
    and I'll DM you", no engagement bait, no fear ("you'll fail your interview"), no
-   discount that isn't live on `pricing.html`.
+   price or discount talk at all (everything is free).
 7. **Never claim to be human or deny using tools.** Just write well.
 
 ---
@@ -151,7 +152,7 @@ hook's core fact within 30 days.
 
 Product mentions per day: slot 9 always; slot 8 may; slot 1's LinkedIn first comment may
 link a free chapter **on Monday and Thursday only**. That is at most **3 of 10**, and only
-one of them is overtly promotional. Price mentions: **Friday slot 9 only.**
+one of them is overtly promotional. Price mentions: **never** (everything is free).
 
 | # | IST | Name | Platform | Job |
 |---|---|---|---|---|
@@ -268,10 +269,10 @@ one of them is overtly promotional. Price mentions: **Friday slot 9 only.**
 - Rotate by day: (a) a free chapter: what the reader will be able to do after it, with one
   mechanism from it as the hook; (b) a machine: what you can drive in it and what you see
   ("drag the prompt length and watch time-to-first-token stay flat while…"); (c) a
-  capstone: what you end up having built; (d) **Friday only:** the offer, plainly: "Three
-  complete courses, 109 chapters, one membership, ₹499/month or ₹2,499/year." Plus one
+  capstone: what you end up having built; (d) **Friday only:** the offer, plainly: "Every
+  course on HackDynamics is free and open source: no card, no sign-up." Plus one
   reason it's worth it.
-- Link in the **reply** with UTM (§7), preferring free chapters.
+- Link in the **reply** with UTM (§7), preferring the best first chapters (§1 table).
 - Also restate, under *Reply 2*, the slot 5 answer text so the founder remembers to post it
   under the 14:00 poll.
 
@@ -324,12 +325,12 @@ one of them is overtly promotional. Price mentions: **Friday slot 9 only.**
 
 - Base: `https://www.hackdynamics.com`
 - Course pages: `llm-in-depth.html`, `rag-in-depth.html`, `databases-in-depth.html`,
-  catalogue `courses.html`, pricing `pricing.html`.
+  catalogue `courses.html`.
 - A chapter: `https://www.hackdynamics.com/llm-in-depth.html?utm_source=x&utm_medium=social&utm_campaign=s9-llm-ch5#/ch/5`
   The query string goes **before** the `#`. `utm_source` is `x` or `linkedin`;
   `utm_campaign` is `s<slot>-<course>-ch<n>`.
-- Prefer free chapters (§1 table). Link a paid chapter only when it's the one the post is
-  about, and then say it's part of the course.
+- Prefer the best first chapters (§1 table); any chapter is fine when it's the one the
+  post is about.
 
 ---
 

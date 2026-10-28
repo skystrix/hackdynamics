@@ -378,7 +378,6 @@
     <nav>
       <a href="courses.html">courses</a>
       <a href="#creed">why</a>
-      <a href="pricing.html">pricing</a>
       <a id="nav-auth" href="login.html">Log in</a>
       <button class="theme-toggle" aria-label="Toggle color theme">☾</button>
     </nav>
@@ -603,10 +602,9 @@
       </div>
       <div>
         <h4>Zero friction</h4>
-        <p>Every course opens with free chapters — no card, no sign-up.
+        <p>Every course is free — no card, no sign-up.
            <strong>Open a page and start learning.</strong> Everything runs in your
-           browser, and your progress stays there. Go further with one membership
-           and an email sign-in.</p>
+           browser, and your progress stays there.</p>
       </div>
     </div>
   </section>
@@ -701,13 +699,9 @@
       HDAuth.signOut().then(function () { location.reload(); });
     });
 
-    if (st.isPremium) {
-      cta.href = (window.HD_CONFIG && HD_CONFIG.COURSES_URL) || "courses.html";
-      cta.innerHTML = 'Go to your courses <span class="arr">→</span>';
-      note.innerHTML = "signed in as <b>" + email.replace(/[&<>]/g, "") + "</b>";
-    } else {
-      note.innerHTML = "signed in · <b>premium unlocks the course</b>";
-    }
+    cta.href = (window.HD_CONFIG && HD_CONFIG.COURSES_URL) || "courses.html";
+    cta.innerHTML = 'Go to your courses <span class="arr">→</span>';
+    note.innerHTML = "signed in as <b>" + email.replace(/[&<>]/g, "") + "</b>";
   });
 })();
 </script>

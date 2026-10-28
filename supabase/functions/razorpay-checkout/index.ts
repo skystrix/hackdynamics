@@ -39,8 +39,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// The one-time price lives HERE, not in the browser. Keep in sync with
-// PLANS.yearly in js/supabase-config.js (that copy is only for display).
+// The one-time price lives HERE, not in the browser. (The display copy in
+// js/supabase-config.js went away with the pricing page.)
 const YEARLY_PAISE = 249900; // ₹2499.00
 const CURRENCY = "INR";
 // How long one yearly payment buys. Must match the same constant in
