@@ -1,0 +1,26 @@
+name: Content fix
+description: A wrong fact, typo, unclear explanation or broken quiz question in a chapter
+labels: [content]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Course, chapter and section (a link to the page is best)
+      placeholder: DSA By Patterns, ch 12, "Sliding window"
+    validations:
+      required: true
+  - type: textarea
+    id: wrong
+    attributes:
+      label: What's wrong
+      description: Quote the sentence, figure or quiz question.
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: What it should say, and how you know
+      description: A source, a test you ran, or your reasoning.
+    validations:
+      required: true
