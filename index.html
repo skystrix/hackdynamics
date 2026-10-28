@@ -37,19 +37,59 @@
     font-size: clamp(3rem, 6.6vw, 7rem);
     text-align: center; margin: clamp(24px, 5vh, 64px) auto 0;
   }
-  .machine {
-    flex: 1; display: flex; flex-direction: column; justify-content: center;
-    width: 100%; min-width: 0; max-width: 860px; margin: clamp(8px, 2vh, 24px) auto;
+  /* The live B-tree, drawn in the page's language (js/hero-tree.js). */
+  .tree {
+    flex: 1; min-width: 0; width: 100%;
+    display: flex; flex-direction: column; justify-content: center; gap: 14px;
+    margin: clamp(16px, 3vh, 36px) 0 clamp(12px, 2vh, 24px);
   }
-  .machine .viz-mount { min-width: 0; }
-  .machine .viz-body svg { max-height: 38svh; width: auto; max-width: 100%; margin: 0 auto; }
-  /* The B-tree from Chapter 5, sitting straight on the panel. */
-  .machine.viz { background: transparent; border: 0; margin-top: 0; overflow: visible; }
-  .machine .viz-body { padding: 0; }
-  .machine .viz-controls { justify-content: center; padding: 6px 0 4px; }
-  .machine .viz-note { text-align: center; padding: 0; font-size: var(--s-small); color: var(--text); }
-  .machine .viz button { font-size: 14px; }
-  .machine .viz-controls button, .machine .viz-controls input { font-size: 14px; padding: 8px 14px; }
+  .tree-stage { overflow-x: auto; overflow-y: hidden; }
+  #tree { display: block; width: 100%; max-height: 34svh; margin: 0 auto; overflow: visible; }
+  #tree .tile rect { fill: var(--text); }
+  #tree .tile text {
+    font: 700 30px var(--display); letter-spacing: -0.02em;
+    text-anchor: middle; fill: var(--bg-3);
+  }
+  #tree .tile.path rect { fill: var(--accent); }
+  #tree .tile.split rect { fill: var(--field-db); }
+  #tree .tile.new rect { fill: var(--field-rag); }
+  #tree .tile:is(.path, .split, .new) text { fill: #1a1a1a; }
+  #tree .tile.new { animation: pop .5s var(--ease-out); transform-box: fill-box; transform-origin: center; }
+  @keyframes pop { from { scale: .55; } to { scale: 1; } }
+  #tree .edges path { fill: none; stroke: var(--text); stroke-width: 4; stroke-linecap: round; }
+  #tree .edges circle { fill: var(--text); }
+  #tree .edges .on { stroke: var(--accent); fill: var(--accent); }
+  #tree .edges path.on { fill: none; stroke-width: 6; }
+  #tree .node, #tree .edges path, #tree .edges circle {
+    transition: transform .5s var(--ease-out), opacity .4s ease, d .5s var(--ease-out);
+  }
+  #tree .lvl text { font: 600 22px var(--sans); text-anchor: end; fill: var(--text); }
+
+  .tree-controls {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 18px;
+  }
+  .tree-controls input {
+    width: 9.5em; font: 600 var(--s-body)/1 var(--sans); color: var(--text);
+    background: var(--bg); border: 2px solid var(--bg); border-radius: 999px;
+    padding: .85em 1.2em; transition: border-color .2s;
+  }
+  .tree-controls input::placeholder { color: var(--text-dim); }
+  .tree-controls input:focus { outline: none; border-color: var(--text); }
+  .tree-controls input::-webkit-inner-spin-button, .tree-controls input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .tree-controls input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  .tree-controls .btn { padding: .85em 1.4em; }
+  .tree-controls .link { background: none; border: 0; padding: 0; font: 600 var(--s-small) var(--sans); cursor: pointer; }
+  .tree-note { text-align: center; font-size: var(--s-small); max-width: 62ch; margin: 0 auto; min-height: 1.5em; }
+  .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--s-small); margin-left: 12px; }
+  .legend li::before {
+    content: ""; display: inline-block; width: .9em; height: .9em; border-radius: 3px;
+    margin-right: .45em; vertical-align: -.1em; background: var(--c);
+  }
+  html:not(.js) .tree-controls { display: none; }
+  @media (prefers-reduced-motion: reduce) {
+    #tree .node, #tree .edges path, #tree .edges circle { transition: none; }
+    #tree .tile.new { animation: none; }
+  }
   .foot .machine-cap { justify-self: end; text-align: right; font-size: var(--s-small); max-width: 30ch; }
   .foot {
     display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 24px;
@@ -202,8 +242,7 @@
     .field { min-height: 0; }
     .panel { min-height: 64svh; padding: 18px 16px 24px; }
     .hero h1 { font-size: 10.4vw; }
-    .machine .viz-body { overflow-x: auto; }
-    .machine .viz-body svg { min-width: 560px; max-height: none; }
+    #tree { max-height: none; }
     .foot { grid-template-columns: 1fr; justify-items: start; gap: 18px; }
     .foot .btn { justify-self: start; }
     .foot .machine-cap { justify-self: start; text-align: left; }
@@ -251,14 +290,29 @@
 
     <h1>Computer science<br> you can drive</h1>
 
-    <div class="machine viz" data-ui data-viz="btree" aria-label="Interactive B-tree">
-      <div class="viz-mount"></div>
-    </div>
+    <figure class="tree" aria-labelledby="tree-note">
+      <div class="tree-stage">
+        <svg id="tree" role="img" aria-label="A B-tree of order 4, at most three keys per node" viewBox="-158 -8 1072 352"><g class="edges"><path class="" d="M 433 64 L 210 136" style="d: path(&quot;M 433 64 L 210 136&quot;);"></path><circle r="7" class="" style="transform: translate(433px, 64px);"></circle><path class="" d="M 190 200 L 96 272" style="d: path(&quot;M 190 200 L 96 272&quot;);"></path><circle r="7" class="" style="transform: translate(190px, 200px);"></circle><path class="" d="M 230 200 L 324 272" style="d: path(&quot;M 230 200 L 324 272&quot;);"></path><circle r="7" class="" style="transform: translate(230px, 200px);"></circle><path class="on" d="M 473 64 L 681 136" style="d: path(&quot;M 473 64 L 681 136&quot;);"></path><circle r="7" class="on" style="transform: translate(473px, 64px);"></circle><path class="on" d="M 628 200 L 552 272" style="d: path(&quot;M 628 200 L 552 272&quot;);"></path><circle r="7" class="on" style="transform: translate(628px, 200px);"></circle><path class="" d="M 681 200 L 747 272" style="d: path(&quot;M 681 200 L 747 272&quot;);"></path><circle r="7" class="" style="transform: translate(681px, 200px);"></circle><path class="" d="M 734 200 L 876 272" style="d: path(&quot;M 734 200 L 876 272&quot;);"></path><circle r="7" class="" style="transform: translate(734px, 200px);"></circle></g><g class="nodes"><g class="node" style="transform: translate(423px, 0px);"><g class="tile path" transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">42</text></g></g><g class="node" style="transform: translate(180px, 136px);"><g class="tile " transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">17</text></g></g><g class="node" style="transform: translate(0px, 272px);"><g class="tile " transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">3</text></g><g class="tile " transform="translate(66,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">7</text></g><g class="tile " transform="translate(132,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">12</text></g></g><g class="node" style="transform: translate(228px, 272px);"><g class="tile " transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">25</text></g><g class="tile " transform="translate(66,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">29</text></g><g class="tile " transform="translate(132,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">33</text></g></g><g class="node" style="transform: translate(618px, 136px);"><g class="tile path" transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">68</text></g><g class="tile path" transform="translate(66,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">90</text></g></g><g class="node" style="transform: translate(456px, 272px);"><g class="tile new" transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">46</text></g><g class="tile path" transform="translate(66,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">51</text></g><g class="tile path" transform="translate(132,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">60</text></g></g><g class="node" style="transform: translate(684px, 272px);"><g class="tile " transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">77</text></g><g class="tile " transform="translate(66,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">84</text></g></g><g class="node" style="transform: translate(846px, 272px);"><g class="tile " transform="translate(0,0)"><rect width="60" height="64" rx="10"></rect><text x="30" y="43">95</text></g></g></g><g class="lvl" aria-hidden="true"><text x="-28" y="38">root</text><text x="-28" y="174">internal</text><text x="-28" y="310">leaves</text></g></svg>
+      </div>
+      <form class="tree-controls" id="tree-form" autocomplete="off">
+        <label class="sr-only" for="tree-key">A key from 1 to 99</label>
+        <input id="tree-key" type="number" inputmode="numeric" min="1" max="99" placeholder="A key, 1–99">
+        <button class="btn" type="submit">Insert</button>
+        <button class="link" type="button" id="tree-five">Add five random</button>
+        <button class="link" type="button" id="tree-reset">Reset</button>
+        <ul class="legend" aria-hidden="true">
+          <li style="--c: var(--field-rag)">new key</li>
+          <li style="--c: var(--accent)">its path</li>
+          <li style="--c: var(--field-db)">split</li>
+        </ul>
+      </form>
+      <p class="tree-note" id="tree-note" aria-live="polite">An order-4 B-tree: at most three keys in a node.</p>
+    </figure>
 
     <div class="foot">
       <p>Free, open-source courses on databases, RAG, language models and algorithms. Every chapter has a machine and a quiz.</p>
       <a class="btn primary" href="#databases">Choose a course</a>
-      <p class="machine-cap">Live above: the B-tree from Chapter 5 of Databases in Depth.</p>
+      <p class="machine-cap">This is the B-tree you build in Chapter 5 of Databases in Depth.</p>
     </div>
   </div>
 
@@ -498,38 +552,11 @@
   </a>
 </footer>
 
-<script src="js/viz.js"></script>
+<script src="js/hero-tree.js"></script>
 <script>
 (function () {
   "use strict";
   var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  /* Tooltip the machines call (the reader defines the same one in app.js). */
-  var tip = document.createElement("div");
-  tip.id = "viz-tip";
-  document.body.appendChild(tip);
-  window.vizTip = {
-    show: function (x, y, title, body) {
-      tip.innerHTML = "<b>" + title + "</b>" + body;
-      tip.classList.add("show");
-      var w = Math.min(280, innerWidth - 20);
-      tip.style.left = Math.min(x + 14, innerWidth - w - 10) + "px";
-      tip.style.top = Math.min(y + 14, innerHeight - 120) + "px";
-    },
-    hide: function () { tip.classList.remove("show"); }
-  };
-
-  /* The live thing: the real B-tree machine from the Databases course. */
-  var m = document.querySelector(".machine");
-  if (window.VIZ && VIZ.btree) {
-    VIZ.btree(m);
-    // Grow it to three levels so the first view shows splits already made.
-    var key = m.querySelector("input"), ins = m.querySelector(".viz-controls button");
-    [33, 51, 12, 77, 60, 3, 95, 29, 84, 46].forEach(function (k) { key.value = k; ins.click(); });
-    m.querySelector(".viz-note").textContent = "46 just went in. Type a key from 1 to 99 and press insert; when a node fills, it splits.";
-  }
-  var body = m.querySelector(".viz-body");
-  if (body && body.scrollWidth > body.clientWidth) body.scrollLeft = (body.scrollWidth - body.clientWidth) / 2;
 
   /* Entrances: once, as each part reaches 90% down the screen. */
   var rise = new IntersectionObserver(function (es) {
