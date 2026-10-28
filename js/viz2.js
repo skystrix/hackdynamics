@@ -607,7 +607,7 @@
      ======================================================================== */
   VIZ.raft = function (el) {
     var f = frame(el);
-    var svg = S("svg", { viewBox: "0 0 700 360" }, f.body);
+    var svg = S("svg", { viewBox: "0 0 700 372" }, f.body);
     var N = 5, nodes, term, flights, msg, pendingEntry;
 
     function reset() {
@@ -700,7 +700,7 @@
 
     function render() {
       svg.innerHTML = "";
-      T(svg, 350, 14, "TERM " + term, { fill: C.gold, size: 13 });
+      T(svg, 30, 20, "TERM " + term, { fill: C.gold, size: 13, anchor: "start" });
       // flights (drawn each frame by the loop; here draw static baseline)
       nodes.forEach(function (n) {
         var col = !n.alive ? C.red : n.role === "leader" ? C.gold : n.role === "candidate" ? C.cyan : C.blue;
@@ -727,8 +727,7 @@
     }
     var msgEl = null;
     function msgText() {
-      wrap(msg, 92).forEach(function (l, i) { T(svg, 350, 348 - (1 - i) * 0, l, { size: 11, fill: C.gold }); });
-      // (single-line messages; wrap keeps them safe if long)
+      wrap(msg, 92).forEach(function (l, i) { T(svg, 350, 348 + i * 14, l, { size: 11, fill: C.gold }); });
     }
 
     // animation loop: move message dots, then trigger arrivals

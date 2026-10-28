@@ -766,7 +766,7 @@
     }
     function render(msg) {
       svg.innerHTML = "";
-      T(svg, 350, 16, "MEMORY", { fill: C.gold, size: 11 });
+      T(svg, 660, 84, "MEMORY", { fill: C.gold, size: 11 });
       drawRun(mem, 350 - Math.max(mem.length * 34 + 12, 60) / 2, 28, "memtable (mutable, sorted) — " + mem.length + "/" + MEMCAP, true);
       // memory/disk divider
       S("line", { x1: 20, y1: 96, x2: 680, y2: 96, stroke: C.line, "stroke-dasharray": "6 5" }, svg);
@@ -777,8 +777,10 @@
         y += 66;
       });
       if (!runs.length) T(svg, 350, 150, "no disk runs yet — flush the memtable", { fill: C.dim, size: 11 });
-      var lines = wrap(msg || "", 90);
-      lines.forEach(function (l, i) { T(svg, 350, 300 + i * 14, l, { size: 11, fill: C.gold }); });
+      // status sits below the last run; the canvas grows as runs pile up
+      var lines = wrap(msg || "", 90), my = Math.max(300, y - 4);
+      lines.forEach(function (l, i) { T(svg, 350, my + i * 14, l, { size: 11, fill: C.gold }); });
+      svg.setAttribute("viewBox", "0 0 700 " + Math.max(330, my + lines.length * 14 + 6));
     }
     function wrap(s, n) {
       var words = s.split(" "), out = [], line = "";
