@@ -15,3 +15,7 @@ SUPABASE_SETUP.md
 _preview.html
 README.md
 .DS_Store
+
+# Internal: marketing plans, metrics, drafts, and local tool config.
+marketing/
+.claude/
