@@ -1,0 +1,29 @@
+name: Broken machine or site bug
+description: An interactive machine, figure or page that doesn't work or shows the wrong thing
+labels: [bug]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Link to the page, and the machine or figure name
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did and what happened
+      description: Steps to reproduce. A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Chrome 131 on macOS, Safari on iPhone, ...
